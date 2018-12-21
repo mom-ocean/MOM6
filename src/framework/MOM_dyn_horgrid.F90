@@ -148,10 +148,10 @@ type, public :: dyn_horgrid_type
     Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked [Z ~> m].
     Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv [Z ~> m].
   real, allocatable, dimension(:,:) :: &
-    CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
+    CoriolisBu    !< The Coriolis parameter at corner points [s-1].
   real, allocatable, dimension(:,:) :: &
-    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
-    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [s-1 m-1].
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [s-1 m-1].
 
   ! These variables are global sums that are useful for 1-d diagnostics
   real :: areaT_global  !< Global sum of h-cell area in m2

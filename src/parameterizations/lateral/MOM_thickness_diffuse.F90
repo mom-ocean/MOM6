@@ -464,7 +464,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: Work_u(SZIB_(G), SZJ_(G)) ! The work being done by the thickness
   real :: Work_v(SZI_(G), SZJB_(G)) ! diffusion integrated over a cell, in W.
   real :: Work_h        ! The work averaged over an h-cell in W m-2.
-  real :: I4dt          ! 1 / 4 dt in s-1.
+  real :: I4dt          ! 1 / 4 dt [s-1].
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
                         ! interface times the grid spacing [kg m-3].

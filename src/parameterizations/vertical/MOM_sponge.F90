@@ -88,7 +88,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
                              Iresttime_i_mean, int_height_i_mean)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in) :: Iresttime  !< The inverse of the restoring time, in s-1.
+                           intent(in) :: Iresttime  !< The inverse of the restoring time [s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                            intent(in) :: int_height !< The interface heights to damp back toward [Z ~> m].
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
@@ -97,7 +97,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure
   real, dimension(SZJ_(G)), &
                  optional, intent(in) :: Iresttime_i_mean !< The inverse of the restoring time for
-                                                          !! the zonal mean properties, in s-1.
+                                                          !! the zonal mean properties [s-1].
   real, dimension(SZJ_(G),SZK_(G)+1), &
                  optional, intent(in) :: int_height_i_mean !< The interface heights toward which to
                                                            !! damp the zonal mean heights [Z ~> m].
@@ -376,7 +376,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   real :: damp     ! The timestep times the local damping  coefficient [nondim].
   real :: I1pdamp  ! I1pdamp is 1/(1 + damp). [nondim]
   real :: damp_1pdamp ! damp_1pdamp is damp/(1 + damp). [nondim]
-  real :: Idt      ! 1.0/dt, in s-1.
+  real :: Idt      ! 1.0/dt [s-1].
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 

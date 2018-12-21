@@ -90,7 +90,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
 
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units [Z ~> m].
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
   real :: H0(SZK_(G))               ! Resting layer thicknesses in depth units [Z ~> m].
   real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
   real :: damp, e_dense, damp_new, slat, wlon, lenlat, lenlon, nlat
@@ -102,7 +102,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
 
   eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
-!  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
+!  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
 !  wherever there is no sponge, and the subroutines that are called  !
 !  will automatically set up the sponges only where Idamp is positive!
 !  and mask2dT is 1.                                                   !

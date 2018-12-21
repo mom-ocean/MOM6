@@ -98,7 +98,7 @@ type, public :: set_diffusivity_CS ; private
 
   real :: TKE_itide_max !< maximum internal tide conversion (W m-2)
                         !! available to mix above the BBL
-  real :: omega         !< Earth's rotation frequency (s-1)
+  real :: omega         !< Earth's rotation frequency [s-1]
   logical :: ML_radiation !< allow a fraction of TKE available from wind work
                           !! to penetrate below mixed layer base with a vertical
                           !! decay scale determined by the minimum of
@@ -1184,7 +1184,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   real    :: dRl, dRbot     ! temporaries holding density differences (kg/m3)
   real    :: cdrag_sqrt     ! square root of the drag coefficient (nondimensional)
   real    :: ustar_h        ! value of ustar at a thickness point [Z s-1 ~> m s-1].
-  real    :: absf           ! average absolute Coriolis parameter around a thickness point (1/s)
+  real    :: absf           ! average absolute Coriolis parameter around a thickness point [s-1]
   real    :: R0_g           ! Rho0 / G_Earth (kg s2 Z-1 m-4)
   real    :: I_rho0         ! 1 / RHO0
   real    :: delta_Kd       ! increment to Kd from the bottom boundary layer mixing [Z2 s-1 ~> m2 s-1].

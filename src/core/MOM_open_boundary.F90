@@ -156,9 +156,9 @@ type, public :: OBC_segment_type
                                                             !! the OB segment [m s-1].
   real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment (m).
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
-                                                            !! segment (s-1)
+                                                            !! segment [s-1]
   real, pointer, dimension(:,:,:) :: grad_tan=>NULL()       !< The gradient of the tangential flow along the
-                                                            !! segment (s-1)
+                                                            !! segment [s-1]
   real, pointer, dimension(:,:,:) :: grad_gradient=>NULL()  !< The gradient of the gradient of tangential flow along the
                                                             !! segment (m-1 s-1)
   real, pointer, dimension(:,:,:) :: rx_normal=>NULL()      !< The rx_old_u value for radiation coeff
@@ -172,7 +172,7 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: nudged_tangential_vel=>NULL() !< The layer velocity tangential to the OB segment
                                                             !! that values should be nudged towards [m s-1].
   real, pointer, dimension(:,:,:) :: nudged_tangential_grad=>NULL() !< The layer dvdx or dudy towards which nudging
-                                                            !! can occur (s-1).
+                                                            !! can occur [s-1].
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
   real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed (m-3)

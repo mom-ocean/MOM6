@@ -433,7 +433,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   ! Local variables
   real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
   real :: S2            ! Interface slope squared (non-dim)
-  real :: N2            ! Brunt-Vaisala frequency (1/s)
+  real :: N2            ! Brunt-Vaisala frequency [s-1]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
@@ -590,7 +590,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: S2            ! Interface slope squared (non-dim)
-  real :: N2            ! Brunt-Vaisala frequency (1/s)
+  real :: N2            ! Brunt-Vaisala frequency [s-1]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   real :: Z_to_L        ! A conversion factor between from units for e to the

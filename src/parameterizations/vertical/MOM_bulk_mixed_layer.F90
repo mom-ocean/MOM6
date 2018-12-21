@@ -303,8 +303,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   real :: Irho0         ! 1.0 / rho_0
   real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1)
   real :: Ih            !   The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
-  real :: Idt           !   The inverse of the timestep in s-1.
-  real :: Idt_diag      !   The inverse of the timestep used for diagnostics in s-1.
+  real :: Idt           !   The inverse of the timestep [s-1].
+  real :: Idt_diag      !   The inverse of the timestep used for diagnostics [s-1].
   real :: RmixConst
 
   real, dimension(SZI_(G)) :: &
@@ -3143,7 +3143,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
   real :: max_det_rem(SZI_(G)) ! Remaining permitted detrainment [H ~> m or kg m-2].
   real :: detrain(SZI_(G))    ! The thickness of fluid to detrain
                               ! from the mixed layer [H ~> m or kg m-2].
-  real :: Idt                 ! The inverse of the timestep in s-1.
+  real :: Idt                 ! The inverse of the timestep [s-1].
   real :: dT_dR, dS_dR, dRml, dR0_dRcv, dT_dS_wt2
   real :: I_denom             ! A work variable with units of psu2 m6 kg-2.
   real :: Sdown, Tdown

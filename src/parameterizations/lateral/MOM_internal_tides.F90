@@ -432,7 +432,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
             En_initial = sum(CS%En(i,j,:,fr,m)) ! for debugging
-            ! Calculate effective decay rate (s-1) if breaking occurs over a time step
+            ! Calculate effective decay rate [s-1] if breaking occurs over a time step
             loss_rate = (1/Fr2_max - 1.0)/dt
             do a=1,CS%nAngle
               ! Determine effective dissipation rate (Wm-2)
@@ -759,7 +759,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   real :: f2              ! The squared Coriolis parameter [s-2].
   real :: favg            ! The average Coriolis parameter at a point [s-1].
   real :: df2_dy, df2_dx  ! The x- and y- gradients of the squared Coriolis parameter, in s-2 m-1.
-  real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter, in s-1 m-1.
+  real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [s-1 m-1].
   real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself in m-1.
   real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself in m-1.
   real :: Angle_size, dt_Angle_size, angle
