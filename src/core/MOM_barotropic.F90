@@ -114,7 +114,7 @@ type, public :: barotropic_CS ; private
           !< The barotropic solvers estimate of the zonal velocity that will be the initial
           !! condition for the next call to btstep [m s-1].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubtav
-          !< The barotropic zonal velocity averaged over the baroclinic time step, m s-1.
+          !< The barotropic zonal velocity averaged over the baroclinic time step [m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: IDatv
           !< Inverse of the basin depth at v grid points [Z-1 ~> m-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: lin_drag_v
@@ -127,7 +127,7 @@ type, public :: barotropic_CS ; private
           !< The barotropic solvers estimate of the zonal velocity that will be the initial
           !! condition for the next call to btstep [m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vbtav
-          !< The barotropic meridional velocity averaged over the  baroclinic time step, m s-1.
+          !< The barotropic meridional velocity averaged over the  baroclinic time step [m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_cor
           !< The difference between the free surface height from the barotropic calculation and the sum
           !! of the layer thicknesses. This difference is imposed as a forcing term in the barotropic
@@ -138,18 +138,18 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
     ua_polarity, &  !< Test vector components for checking grid polarity.
     va_polarity, &  !< Test vector components for checking grid polarity.
-    bathyT          !< A copy of bathyT (ocean bottom depth) with wide halos, in depth units
+    bathyT          !< A copy of bathyT (ocean bottom depth) with wide halos [Z ~> m]
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: IareaT
                     !<   This is a copy of G%IareaT with wide halos, but will
                     !! still utilize the macro IareaT when referenced, m-2.
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
     D_u_Cor, &      !<   A simply averaged depth at u points [Z ~> m].
-    dy_Cu, &        !<   A copy of G%dy_Cu with wide halos, in m.
-    IdxCu           !<   A copy of G%IdxCu with wide halos, in m-1.
+    dy_Cu, &        !<   A copy of G%dy_Cu with wide halos [m].
+    IdxCu           !<   A copy of G%IdxCu with wide halos [m-1].
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMBW_) :: &
     D_v_Cor, &      !<   A simply averaged depth at v points [Z ~> m].
-    dx_Cv, &        !<   A copy of G%dx_Cv with wide halos, in m.
-    IdyCv           !<   A copy of G%IdyCv with wide halos, in m-1.
+    dx_Cv, &        !<   A copy of G%dx_Cv with wide halos [m].
+    IdyCv           !<   A copy of G%IdyCv with wide halos [m-1].
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
     q_D             !< f / D at PV points [Z-1 s-1 ~> m-1 s-1].
 
@@ -159,8 +159,7 @@ type, public :: barotropic_CS ; private
   type(BT_OBC_type) :: BT_OBC !< A structure with all of this modules fields
                               !! for applying open boundary conditions.
 
-  real    :: Rho0            !<   The density used in the Boussinesq
-                             !! approximation [kg m-3 ~> m or kg m-2].
+  real    :: Rho0            !< The density used in the Boussinesq approximation [kg m-3].
   real    :: dtbt            !< The barotropic time step [s].
   real    :: dtbt_fraction   !<   The fraction of the maximum time-step that
                              !! should used.  The default is 0.98.
@@ -210,11 +209,10 @@ type, public :: barotropic_CS ; private
   logical :: dynamic_psurf   !< If true, add a dynamic pressure due to a viscous
                              !! ice shelf, for instance.
   real    :: Dmin_dyn_psurf  !< The minimum depth to use in limiting the size
-                             !! of the dynamic surface pressure for stability,
-                             !! in m.
+                             !! of the dynamic surface pressure for stability [m].
   real    :: ice_strength_length  !< The length scale at which the damping rate
                              !! due to the ice strength should be the same as if
-                             !! a Laplacian were applied, in m.
+                             !! a Laplacian were applied [m].
   real    :: const_dyn_psurf !< The constant that scales the dynamic surface
                              !! pressure, nondim.  Stable values are < ~1.0.
                              !! The default is 0.9.
@@ -596,7 +594,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                       ! than physical problem would suggest.
   real :: Instep      ! The inverse of the number of barotropic time steps
                       ! to take.
-  real :: wt_end      ! The weighting of the final value of eta_PF, ND.
+  real :: wt_end      ! The weighting of the final value of eta_PF [nondim]
   integer :: nstep    ! The number of barotropic time steps to take.
   type(time_type) :: &
     time_bt_start, &  ! The starting time of the barotropic steps.
@@ -2394,18 +2392,18 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: uhbt    !< the zonal barotropic transport
                                                                   !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt_trans !< the zonal barotropic velocity used in
-                                                                  !! transport, m s-1.
+                                                                  !! transport [m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt     !< the meridional barotropic velocity [m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vhbt    !< the meridional barotropic transport
                                                                   !! [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt_trans !< the meridional BT velocity used in transports,
-                                                                  !! m s-1.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt_trans !< the meridional BT velocity used in
+                                                                  !! transports [m s-1].
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta     !< The barotropic free surface height anomaly or
                                                                   !! column mass anomaly [H ~> m or kg m-2].
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic step,
-                                                                  !! m s-1.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of vbt in a barotropic step,
-                                                                  !! m s-1.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic
+                                                                  !! step [m s-1].
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of vbt in a barotropic
+                                                                  !! step [m s-1].
   type(BT_OBC_type),                     intent(in)    :: BT_OBC  !< A structure with the private barotropic arrays
                                                                   !! related to the open boundary conditions,
                                                                   !! set by set_up_BT_OBC.
@@ -2440,7 +2438,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                       ! that does the mass transport [m s-1].
   real :: H_u         ! The total thickness at the u-point [H ~> m or kg m-2].
   real :: H_v         ! The total thickness at the v-point [H ~> m or kg m-2].
-  real :: cfl         ! The CFL number at the point in question, ND.
+  real :: cfl         ! The CFL number at the point in question [nondim]
   real :: u_inlet
   real :: v_inlet
   real :: h_in
@@ -3636,7 +3634,8 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G        !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in) :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta      !< The free surface height that is to be corrected, in m.
+  real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta      !< The free surface height that is to be
+                                                             !! corrected [H ~> m or kg m-2].
   logical,                            intent(in) :: set_cor  !< A flag to indicate whether to set the corrective
                                                              !! fluxes (and update the slowly varying part of eta_cor)
                                                              !! (.true.) or whether to incrementally update the

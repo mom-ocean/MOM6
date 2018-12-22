@@ -168,12 +168,12 @@ type, public :: MOM_control_struct ; private
                     !< A running time integral of the sea surface height [s m].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ave_ssh_ibc
                     !< time-averaged (over a forcing time step) sea surface height
-                    !! with a correction for the inverse barometer (meter)
+                    !! with a correction for the inverse barometer [m]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_av_bc
                     !< free surface height or column mass time averaged over the last
                     !! baroclinic dynamics time step [H ~> m or kg m-2]
   real, dimension(:,:), pointer :: &
-    Hml => NULL()   !< active mixed layer depth, in m
+    Hml => NULL()   !< active mixed layer depth [m]
   real :: time_in_cycle !< The running time of the current time-stepping cycle
                     !! in calls that step the dynamics, and also the length of
                     !! the time integral of ssh_rint [s].
@@ -2912,7 +2912,7 @@ subroutine extract_surface_state(CS, sfc_state)
        sfc_state%melt_potential(i,j) = 0.0
 
        if (G%mask2dT(i,j)>0.) then
-         ! instantaneous melt_potential, in J/m^2
+         ! instantaneous melt_potential [J m-2]
          sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * delT(i)
        endif
       enddo
@@ -3072,9 +3072,9 @@ end subroutine get_MOM_state_elements
 !> Find the global integrals of various quantities.
 subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
   type(MOM_control_struct), pointer :: CS !< MOM control structure
-  real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat, in J.
-  real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt, in kg.
-  real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass, in kg.
+  real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat [J].
+  real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt [kg].
+  real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass [kg].
   logical, optional, intent(in)  :: on_PE_only !< If present and true, only sum on the local PE.
 
   if (present(mass)) &

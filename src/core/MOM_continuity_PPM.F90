@@ -43,7 +43,7 @@ type, public :: continuity_PPM_CS ; private
                              !! discrepancies between the barotropic solution and
                              !! the sum of the layer thicknesses when calculating
                              !! the auxiliary corrected velocities [H ~> m or kg m-2].
-  real :: CFL_limit_adjust   !< The maximum CFL of the adjusted velocities, ND.
+  real :: CFL_limit_adjust   !< The maximum CFL of the adjusted velocities [nondim]
   logical :: aggress_adjust  !< If true, allow the adjusted velocities to have a
                              !! relative CFL change up to 0.5.  False by default.
   logical :: vol_CFL         !< If true, use the ratio of the open face lengths
@@ -285,7 +285,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                   ! the time step [s-1].
   real :: I_dt    ! 1.0 / dt [s-1].
   real :: du_lim  ! The velocity change that give a relative CFL of 1 [m s-1].
-  real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
+  real :: dx_E, dx_W ! Effective x-grid spacings to the east and west [m].
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, local_open_BC, is_simple
@@ -562,7 +562,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, j, &
           !! ratio of face areas to the cell areas when estimating the CFL number.
   type(ocean_OBC_type), optional, pointer     :: OBC !< Open boundaries control structure.
   ! Local variables
-  real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
+  real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
@@ -639,7 +639,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
   type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
 
   ! Local variables
-  real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
+  real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   real :: h_avg  ! The average thickness of a flux [H ~> m or kg m-2].
@@ -918,7 +918,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        !! which I values to work on.
   ! Local variables
   real, dimension(SZIB_(G)) :: &
-    du0, &        ! The barotropic velocity increment that gives 0 transport, m s-1.
+    du0, &        ! The barotropic velocity increment that gives 0 transport [m s-1].
     duL, duR, &   ! The barotropic velocity increments that give the westerly
                   ! (duL) and easterly (duR) test velocities.
     zeros, &      ! An array of full of 0's.
@@ -934,10 +934,10 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     FAmt_0, &     ! test velocities [H m ~> m2 or kg m-1].
     uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
     uhtot_R       ! and easterly (uhtot_R) test velocities [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real :: FA_0    ! The effective face area with 0 barotropic transport, in m H.
-  real :: FA_avg  ! The average effective face area, in m H, nominally given by
+  real :: FA_0    ! The effective face area with 0 barotropic transport [m H ~> m2 or kg m].
+  real :: FA_avg  ! The average effective face area [m H ~> m2 or kg m], nominally given by
                   ! the realized transport divided by the barotropic velocity.
-  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem, ND.  This
+  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]  This
                        ! limiting is necessary to keep the inverse of visc_rem
                        ! from leading to large CFL numbers.
   real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
@@ -945,7 +945,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        ! flow direction.  This is necessary to keep the inverse
                        ! of visc_rem from leading to large CFL numbers.
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
-                  ! flow is truly upwind, ND.
+                  ! flow is truly upwind [nondim]
   real :: Idt     ! The inverse of the time step [s-1].
   logical :: domore
   integer :: i, k, nz
@@ -1382,7 +1382,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, J, &
          !! ratio of face areas to the cell areas when estimating the CFL number.
   type(ocean_OBC_type), optional, pointer :: OBC !< Open boundaries control structure.
   ! Local variables
-  real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
+  real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h, i.e. [H ~> m or kg m-2].
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
@@ -1460,7 +1460,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
   type(ocean_OBC_type),            optional, pointer :: OBC !< Open boundaries control structure.
 
   ! Local variables
-  real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
+  real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   real :: h_avg  ! The average thickness of a flux [H ~> m or kg m-2].
@@ -1756,7 +1756,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
   real :: FA_0    ! The effective face area with 0 barotropic transport [H m ~> m2 or kg m-1].
   real :: FA_avg  ! The average effective face area [H m ~> m2 or kg m-1], nominally given by
                   ! the realized transport divided by the barotropic velocity.
-  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem, ND.  This
+  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]  This
                        ! limiting is necessary to keep the inverse of visc_rem
                        ! from leading to large CFL numbers.
   real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
@@ -1764,7 +1764,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
                        ! flow direction.  This is necessary to keep the inverse
                        ! of visc_rem from leading to large CFL numbers.
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
-                  ! flow is truly upwind, ND.
+                  ! flow is truly upwind [nondim]
   real :: Idt     ! The inverse of the time step [s-1].
   logical :: domore
   integer :: i, k, nz
@@ -2246,7 +2246,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   type(continuity_PPM_CS), pointer       :: CS   !< Module's control structure.
 !> This include declares and sets the variable "version".
 #include "version_variable.h"
-  real :: tol_eta_m  ! An unscaled version of tol_eta, in m.
+  real :: tol_eta_m  ! An unscaled version of tol_eta [m].
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
 
   if (associated(CS)) then

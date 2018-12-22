@@ -82,7 +82,7 @@ end type surface
 type, public :: thermo_var_ptrs
 !   If allocated, the following variables have nz layers.
   real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
-  real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [ppt].
+  real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
                          !! equation of state to use.
   real :: P_Ref          !<   The coordinate-density reference pressure [Pa].
@@ -94,7 +94,7 @@ type, public :: thermo_var_ptrs
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity, in [gSalt/kg].
+                         !! actually the absolute salinity in units of [gSalt/kg].
 !  These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
