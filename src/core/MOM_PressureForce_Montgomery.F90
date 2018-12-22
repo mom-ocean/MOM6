@@ -398,7 +398,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                              ! forces from astronomical sources and self-
                              ! attraction and loading, in depth units [Z ~> m].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density, in Pa (usually 2e7 Pa = 2000 dbar).
+                             ! density [Pa] (usually 2e7 Pa = 2000 dbar).
   real :: I_Rho0             ! 1/Rho0 [m3 kg-1].
   real :: G_Rho0             ! G_Earth / Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer

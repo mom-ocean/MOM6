@@ -138,7 +138,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
                 ! and use the indexing of the corresponding u point.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Area_h, &   ! The ocean area at h points, in m2.  Area_h is used to find the
+    Area_h, &   ! The ocean area at h points [m2].  Area_h is used to find the
                 ! average thickness in the denominator of q.  0 for land points.
     KE          ! Kinetic energy per unit mass [m2 s-2], KE = (u^2 + v^2)/2.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -179,7 +179,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real :: absolute_vorticity     ! Absolute vorticity [s-1].
   real :: relative_vorticity     ! Relative vorticity [s-1].
   real :: Ih                     ! Inverse of thickness [H-1 ~> m-1 or m2 kg-1].
-  real :: max_Ihq, min_Ihq       ! The maximum and minimum of the nearby Ihq.
+  real :: max_Ihq, min_Ihq       ! The maximum and minimum of the nearby Ihq [H-1 ~> m-1 or m2 kg-1].
   real :: hArea_q                ! The sum of area times thickness of the cells
                                  ! surrounding a q point [H m2 ~> m3 or kg].
   real :: h_neglect              ! A thickness that is so small it is usually
