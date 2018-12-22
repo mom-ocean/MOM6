@@ -251,10 +251,10 @@ type, public :: ocean_OBC_type
   real, pointer, dimension(:,:,:) :: cff_normal => NULL()  !< Array storage for restarts
   real :: silly_h  !< A silly value of thickness outside of the domain that
                    !! can be used to test the independence of the OBCs to
-                   !! this external data, in m.
+                   !! this external data [H ~> m or kg m-2].
   real :: silly_u  !< A silly value of velocity outside of the domain that
                    !! can be used to test the independence of the OBCs to
-                   !! this external data, in m/s.
+                   !! this external data [m s-1].
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.

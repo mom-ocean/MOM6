@@ -183,7 +183,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: U_bg_sq          ! The square of an assumed background
                            ! velocity, for calculating the mean
                            ! magnitude near the bottom for use in the
-                           ! quadratic bottom drag, in m2 s-2.
+                           ! quadratic bottom drag [m2 s-2].
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot            ! Running sum of thicknesses times the
@@ -242,7 +242,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: ustH             ! ustar converted to units of H s-1 [H s-1 ~> m s-1 or kg m-2 s-1].
   real :: root             ! A temporary variable [H s-1 ~> m s-1 or kg m-2 s-1].
 
-  real :: Cell_width       ! The transverse width of the velocity cell, in m.
+  real :: Cell_width       ! The transverse width of the velocity cell [m].
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
                            ! velocity magnitude to give the Rayleigh drag velocity, times
                            ! a lateral to vertical distance conversion factor [Z L-1 ~> 1].
@@ -1074,7 +1074,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: u_at_v    ! The zonal velocity at a meridonal velocity point [m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
                     ! on the mixed layer thickness and density difference across
-                    ! the base of the mixed layer, in m2 s-2.
+                    ! the base of the mixed layer [m2 s-2].
   real :: RiBulk    ! The bulk Richardson number below which water is in the
                     ! viscous mixed layer, including reduction for turbulent
                     ! decay. Nondimensional.
@@ -1097,7 +1097,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                       ! the present layer [H ~> m or kg m-2].
   real :: U_bg_sq   ! The square of an assumed background velocity, for
                     ! calculating the mean magnitude near the top for use in
-                    ! the quadratic surface drag, in m2 s-2.
+                    ! the quadratic surface drag [m2 s-2].
   real :: h_tiny    ! A very small thickness [H ~> m or kg m-2]. Layers that are less than
                     ! h_tiny can not be the deepest in the viscous mixed layer.
   real :: absf      ! The absolute value of f averaged to velocity points, s-1.
