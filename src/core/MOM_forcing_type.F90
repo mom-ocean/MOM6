@@ -187,7 +187,7 @@ type, public :: mech_forcing
     taux  => NULL(), & !< zonal wind stress [Pa]
     tauy  => NULL(), & !< meridional wind stress [Pa]
     ustar => NULL(), & !< surface friction velocity scale [Z s-1 ~> m s-1].
-    net_mass_src => NULL() !< The net mass source to the ocean, in kg m-2 s-1.
+    net_mass_src => NULL() !< The net mass source to the ocean [kg m-2 s-1].
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
@@ -203,19 +203,19 @@ type, public :: mech_forcing
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
-    area_berg  => NULL(), &    !< area of ocean surface covered by icebergs (m2/m2)
-    mass_berg  => NULL()       !< mass of icebergs (kg/m2)
+    area_berg  => NULL(), &    !< fractional area of ocean surface covered by icebergs [m2 m-2]
+    mass_berg  => NULL()       !< mass of icebergs per unit ocean area [kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: frac_shelf_u  => NULL() !< Fractional ice shelf coverage of u-cells,
-                !! nondimensional from 0 to 1. This is only associated if ice shelves are enabled,
+                !! nondimensional from 0 to 1 [nondim]. This is only associated if ice shelves are enabled,
                 !! and is exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: frac_shelf_v  => NULL() !< Fractional ice shelf coverage of v-cells,
-                !! nondimensional from 0 to 1. This is only associated if ice shelves are enabled,
+                !! nondimensional from 0 to 1 [nondim]. This is only associated if ice shelves are enabled,
                 !! and is exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: &
-    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points (m3/s)
-    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points (m3/s)
+    rigidity_ice_u => NULL(), & !< Depth-integrated lateral viscosity of ice shelves or sea ice at u-points [m3 s-1]
+    rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at v-points [m3 s-1]
   real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
                                 !! have been averaged [s].
   logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
@@ -404,11 +404,11 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real :: htot(SZI_(G))       ! total ocean depth [H ~> m or kg m-2]
   real :: Pen_sw_tot(SZI_(G)) ! sum across all bands of Pen_SW [degC H ~> degC m or degC kg m-2].
   real :: pen_sw_tot_rate(SZI_(G)) ! Similar but sum but as a rate (no dt in calculation)
-  real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited (1/H)
+  real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
   real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
   real :: J_m2_to_H           ! converts J/m^2 to H units (m for Bouss and kg/m^2 for non-Bouss)
-  real :: Irho0               ! 1.0 / Rho0
-  real :: I_Cp                ! 1.0 / C_p
+  real :: Irho0               ! 1.0 / Rho0 [m3 kg-1]
+  real :: I_Cp                ! 1.0 / C_p [kg decC J-1]
   logical :: calculate_diags  ! Indicate to calculate/update diagnostic arrays
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
@@ -799,13 +799,13 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
                                                                        !! (1) downwelling (penetrative) SW,
                                                                        !! (2) evaporation heat content,
                                                                        !! (since do not yet know temperature of evap).
-                                                                       !! Units of net_heat are (degC H).
+                                                                       !! [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: net_salt          !< surface salt flux into the ocean accumulated
-                                                                       !! over a time step (ppt H)
+                                                                       !! over a time step [ppt H ~> ppt m or ppt kg m-2]
   real, dimension(:,:,:),           intent(out)   :: pen_SW_bnd        !< penetrating shortwave flux, split into bands.
-                                                                       !! Units (degC H) & array size nsw x SZI_(G),
-                                                                       !! where nsw=number of SW bands in pen_SW_bnd.
-                                                                       !! This heat flux is not in net_heat.
+                                                                       !! [degC H ~> degC m or degC kg m-2] array size
+                                                                       !! nsw x SZI_(G), where nsw=number of SW bands in
+                                                                       !! pen_SW_bnd. This heat flux is not in net_heat.
   type(thermo_var_ptrs),            intent(inout) :: tv                !< structure containing pointers to available
                                                                        !! thermodynamic fields. Here it is used to keep
                                                                        !! track of the heat flux associated with net
@@ -839,25 +839,28 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(forcing),                            intent(inout) :: fluxes         !< surface fluxes
   type(optics_type),                        pointer       :: optics         !< penetrating SW optics
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h              !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Temp           !< prognostic temp (degC)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Salt           !< salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Temp           !< prognostic temp [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Salt           !< salinity [ppt]
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy flux (m^2/s^3)
-  real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux (K H/s)
-  real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux (ppt H/s)
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy flux [m2 s-3]
+  real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux
+                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux
+                                                                      !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip calculating
                                                                             !! diagnostics inside extractFluxes1d()
   ! local variables
   integer                                   :: nsw, start, npts, k
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
-  real, dimension( SZI_(G) )                :: netH       ! net FW flux (m/s for Bouss)
-  real, dimension( SZI_(G) )                :: netEvap    ! net FW flux leaving ocean via evaporation (m/s for Bouss)
-  real, dimension( SZI_(G) )                :: netHeat    ! net temp flux (K m/s)
+  real, dimension( SZI_(G) )                :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension( SZI_(G) )                :: netEvap    ! net FW flux leaving ocean via evaporation
+                                                          ! [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension( SZI_(G) )                :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
   real, dimension( optics%nbands, SZI_(G) ) :: penSWbnd   ! SW penetration bands
   real, dimension( SZI_(G) )                :: pressure   ! pressurea the surface [Pa]
-  real, dimension( SZI_(G) )                :: dRhodT     ! density partial derivative wrt temp
-  real, dimension( SZI_(G) )                :: dRhodS     ! density partial derivative wrt saln
+  real, dimension( SZI_(G) )                :: dRhodT     ! density partial derivative wrt temp [kg m-3 degC-1]
+  real, dimension( SZI_(G) )                :: dRhodS     ! density partial derivative wrt saln [kg m-3 ppt-1]
   real, dimension(SZI_(G),SZK_(G)+1)        :: netPen
 
   logical :: useRiverHeatContent
@@ -929,17 +932,19 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(forcing),                              intent(inout) :: fluxes !< surface fluxes
   type(optics_type),                          pointer       :: optics !< SW ocean optics
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity [ppt]
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoy flux (m^2/s^3)
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux (K H)
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux (ppt H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoy flux [m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux
+                                                                              !! [degC H ~> degC m or degC kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux
+                                                                              !! [ppt H ~> ppt m or ppt kg m-2]
   logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip calculating
                                                                               !! diagnostics inside extractFluxes1d()
   ! local variables
-  real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
-  real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
+  real, dimension( SZI_(G) ) :: netT ! net temperature flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
+  real, dimension( SZI_(G) ) :: netS ! net saln flux !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   integer :: j
 
   netT(G%isc:G%iec) = 0. ; netS(G%isc:G%iec) = 0.
@@ -1936,7 +1941,7 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
   logical,       optional, intent(in)    :: skip_pres !< If present and true, do not copy pressure fields.
 
-  real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  real :: taux2, tauy2 ! Squared wind stress components [Pa2].
   logical :: do_pres
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -2064,7 +2069,7 @@ subroutine copy_back_forcing_fields(fluxes, forces, G)
   type(mech_forcing),      intent(inout) :: forces   !< A structure with the driving mechanical forces
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
 
-  real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  real :: taux2, tauy2 ! Squared wind stress components [Pa2].
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
