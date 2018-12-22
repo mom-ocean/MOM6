@@ -166,7 +166,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
 
-  ! Calculates interface heights, e, in m.
+  ! Calculates interface heights, e, in [Z ~> m].
   call find_eta(h, tv, G, GV, US, e, halo_size=1)
 
   ! Set the diffusivities.
@@ -1225,10 +1225,10 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                ! region where the detangling is applied [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     Kh_lay_u   ! The tentative interface height diffusivity for each layer at
-               ! u points, in m2 s-1.
+               ! u points [m2 s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     Kh_lay_v   ! The tentative interface height diffusivity for each layer at
-               ! v points, in m2 s-1.
+               ! v points [m2 s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     de_bot     ! The distances from the bottom of the region where the
                ! detangling is applied [H ~> m or kg m-2].
@@ -1241,7 +1241,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                     ! normalized by the arithmetic mean thickness.
   real :: Kh_scale  ! A ratio by which Kh_u_CFL is scaled for maximally jagged
                     ! layers [nondim].
-  real :: Kh_det    ! The detangling diffusivity, in m2 s-1.
+  real :: Kh_det    ! The detangling diffusivity [m2 s-1].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
 
@@ -1252,8 +1252,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   real :: IRsl      ! The (limited) inverse of Rsl [nondim]. 1 < IRsl <= 1e9.
   real :: dH        ! The thickness gradient divided by the damping timescale
                     ! and the ratio of the face length to the adjacent cell
-                    ! areas for comparability with the diffusivities, in m2 s-1.
-  real :: adH       ! The absolute value of dH, in m2 s-1.
+                    ! areas for comparability with the diffusivities [m2 s-1].
+  real :: adH       ! The absolute value of dH [m2 s-1].
   real :: sign      ! 1 or -1, with the same sign as the layer thickness gradient.
   real :: sl_K      ! The sign-corrected slope of the interface above [nondim].
   real :: sl_Kp1    ! The sign-corrected slope of the interface below [nondim].
@@ -1263,22 +1263,22 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                     ! the damping timescale [s-1].
   real :: Fn_R      ! A function of Rsl, such that Rsl < Fn_R < 1.
   real :: denom, I_denom ! A denominator and its inverse, various units.
-  real :: Kh_min    ! A local floor on the diffusivity, in m2 s-1.
-  real :: Kh_max    ! A local ceiling on the diffusivity, in m2 s-1.
+  real :: Kh_min    ! A local floor on the diffusivity [m2 s-1].
+  real :: Kh_max    ! A local ceiling on the diffusivity [m2 s-1].
   real :: wt1, wt2  ! Nondimensional weights.
   !   Variables used only in testing code.
   ! real, dimension(SZK_(G)) :: uh_here
   ! real, dimension(SZK_(G)+1) :: Sfn
-  real :: dKh       ! An increment in the diffusivity, in m2 s-1.
+  real :: dKh       ! An increment in the diffusivity [m2 s-1].
 
   real, dimension(SZIB_(G),SZK_(G)+1) :: &
-    Kh_bg, &        ! The background (floor) value of Kh, in m2 s-1.
-    Kh, &           ! The tentative value of Kh, in m2 s-1.
-    Kh_detangle, &  ! The detangling diffusivity that could be used, in m2 s-1.
+    Kh_bg, &        ! The background (floor) value of Kh [m2 s-1].
+    Kh, &           ! The tentative value of Kh [m2 s-1].
+    Kh_detangle, &  ! The detangling diffusivity that could be used [m2 s-1].
     Kh_min_max_p, & ! The smallest ceiling that can be placed on Kh(I,K)
-                    ! based on the value of Kh(I,K+1), in m2 s-1.
+                    ! based on the value of Kh(I,K+1) [m2 s-1].
     Kh_min_max_m, & ! The smallest ceiling that can be placed on Kh(I,K)
-                    ! based on the value of Kh(I,K-1), in m2 s-1.
+                    ! based on the value of Kh(I,K-1) [m2 s-1].
     ! The following are variables that define the relationships between
     ! successive values of Kh.
     ! Search for Kh that satisfy...
@@ -1287,13 +1287,13 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
     !    Kh(I,K) <= Kh_max_m(I,K)*Kh(I,K-1) + Kh0_max_m(I,K)
     !    Kh(I,K) <= Kh_max_p(I,K)*Kh(I,K+1) + Kh0_max_p(I,K)
     Kh_min_m , &   ! See above [nondim].
-    Kh0_min_m , &  ! See above, in m2 s-1.
+    Kh0_min_m , &  ! See above [m2 s-1].
     Kh_max_m , &   ! See above [nondim].
-    Kh0_max_m, &   ! See above, in m2 s-1.
+    Kh0_max_m, &   ! See above [m2 s-1].
     Kh_min_p , &   ! See above [nondim].
-    Kh0_min_p , &  ! See above, in m2 s-1.
+    Kh0_min_p , &  ! See above [m2 s-1].
     Kh_max_p , &   ! See above [nondim].
-    Kh0_max_p      ! See above, in m2 s-1.
+    Kh0_max_p      ! See above [m2 s-1].
   real, dimension(SZIB_(G)) :: &
     Kh_max_max  ! The maximum diffusivity permitted in a column.
   logical, dimension(SZIB_(G)) :: &

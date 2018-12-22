@@ -692,14 +692,14 @@ end subroutine Update_Stokes_Drift
 !! using the data_override procedures.
 subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
   use NETCDF
-  type(time_type),          intent(in) :: day_center !< Center of timestep (s)
+  type(time_type),          intent(in) :: day_center !< Center of timestep
   type(wave_parameters_CS), pointer    :: CS         !< Wave structure
   type(ocean_grid_type), intent(inout) :: G          !< Grid structure
   type(verticalGrid_type),  intent(in) :: GV         !< Vertical grid structure
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   ! Local variables
-  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! Stokes drift of band at h-points, in m/s
+  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [m s-1]
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [m s-1]
   real    :: Top, MidPoint
   integer :: b
   integer :: i, j

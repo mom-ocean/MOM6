@@ -44,9 +44,9 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u   !< Zonal velocity, in m/s.
+                           intent(in)    :: u   !< Zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v   !< Meridional velocity, in m/s.
+                           intent(in)    :: v   !< Meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: hin !< Initial layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
@@ -79,10 +79,10 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that
-          !! give uhbt as the depth-integrated transport, in m/s.
+          !! give uhbt as the depth-integrated transport [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(out)   :: v_cor !< The meridional velocities that
-          !! give vhbt as the depth-integrated transport, in m/s.
+          !! give vhbt as the depth-integrated transport [m s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt_aux !< A second summed zonal
           !! volume flux in m3/s.
@@ -91,10 +91,10 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
           !! volume flux in m3/s.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(inout) :: u_cor_aux !< The zonal velocities
-          !! that give uhbt_aux as the depth-integrated transport, in m/s.
+          !! that give uhbt_aux as the depth-integrated transport [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(inout) :: v_cor_aux !< The meridional velocities
-          !! that give vhbt_aux as the depth-integrated transport, in m/s.
+          !! that give vhbt_aux as the depth-integrated transport [m s-1].
   type(BT_cont_type), &
                  optional, pointer       :: BT_cont !< A structure with elements
           !! that describe the effective open face areas as a function of barotropic flow.

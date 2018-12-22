@@ -16,10 +16,10 @@ type, public :: rho_CS ; private
   !> Number of layers
   integer :: nk
 
-  !> Minimum thickness allowed for layers, in m
+  !> Minimum thickness allowed for layers, often in [H ~> m or kg m-2]
   real :: min_thickness = 0.
 
-  !> Reference pressure for density calculations, in Pa
+  !> Reference pressure for density calculations [Pa]
   real :: ref_pressure
 
   !> If true, integrate for interface positions from the top downward.
@@ -73,7 +73,7 @@ end subroutine end_coord_rho
 !> This subroutine can be used to set the parameters for the coord_rho module
 subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS)
   type(rho_CS),      pointer    :: CS !< Coordinate control structure
-  real,    optional, intent(in) :: min_thickness !< Minimum allowed thickness, in m
+  real,    optional, intent(in) :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface
                                       !! positions from the top downward.  If false, integrate
                                       !! from the bottom upward, as does the rest of the model.
@@ -189,18 +189,18 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   type(rho_CS),          intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
   integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
-  real, dimension(nz),   intent(in)    :: T  !< T for column
-  real, dimension(nz),   intent(in)    :: S  !< S for column
+  real,                  intent(in)    :: depth !< Depth of ocean bottom [Z ~> m]
+  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses in Z coordinates [Z ~> m]
+  real, dimension(nz),   intent(in)    :: T  !< T for column [degC]
+  real, dimension(nz),   intent(in)    :: S  !< S for column [ppt]
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions
-                                             !! in the same units as h
+                                             !! in the same units as h [Z ~> m]
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations
-                                             !! in the same units as h
+                                             !! in the same units as h [Z ~> m]
   ! Local variables
   integer   :: k, m
   integer   :: count_nonzero_layers
@@ -349,9 +349,9 @@ end subroutine copy_finite_thicknesses
 subroutine old_inflate_layers_1d( min_thickness, nk, h )
 
   ! Argument
-  real,               intent(in)    :: min_thickness !< Minimum allowed thickness, in m
+  real,               intent(in)    :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
   integer,            intent(in)    :: nk  !< Number of layers in the grid
-  real, dimension(:), intent(inout) :: h   !< Layer thicknesses, in m
+  real, dimension(:), intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variable
   integer   :: k
