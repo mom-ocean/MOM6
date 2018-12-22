@@ -60,94 +60,94 @@ type, public :: hor_visc_CS ; private
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
-                             !! viscosity, in m2 s-1. The default is 0.0
+                             !! viscosity [m2 s-1]. The default is 0.0
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
                              !! Default is False to maintain answers with legacy experiments
                              !! but should be changed to True for new experiments.
   logical :: anisotropic     !< If true, allow anisotropic component to the viscosity.
-  real    :: Kh_aniso        !< The anisotropic viscosity in m2 s-1.
+  real    :: Kh_aniso        !< The anisotropic viscosity [m2 s-1].
   logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
                              !! of state. This is set depending on ANISOTROPIC_MODE.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
-                      !< The background Laplacian viscosity at h points, in units
-                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !< The background Laplacian viscosity at h points [m2 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_2d
-                      !< The background Laplacian viscosity at h points, in units
-                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !< The background Laplacian viscosity at h points [m2 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Ah_bg_xx
-                      !< The background biharmonic viscosity at h points, in units
-                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !< The background biharmonic viscosity at h points [m4 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm_Const2_xx
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear, in m4 s.  This value is
+                      !! square of the velocity shear [m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
                       !< The amount by which stresses through h points are reduced
                       !! due to partial barriers. Nondimensional.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [m2 s-1].
+    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [m4 s-1].
     n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
     n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
-                      !< The background Laplacian viscosity at q points, in units
-                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !< The background Laplacian viscosity at q points [m2 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Ah_bg_xy
-                      !< The background biharmonic viscosity at q points, in units
-                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !< The background biharmonic viscosity at q points [m4 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm_Const2_xy
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear, in m4 s.  This value is
+                      !! square of the velocity shear [m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
                       !< The amount by which stresses through q points are reduced
-                      !! due to partial barriers. Nondimensional.
+                      !! due to partial barriers [nondim].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity [m2 s-1].
+    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity [m4 s-1].
     n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points
     n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h,   & !< Pre-calculated dx^2 at h points, in m2
-    dy2h,   & !< Pre-calculated dy^2 at h points, in m2
-    dx_dyT, & !< Pre-calculated dx/dy at h points, nondim
-    dy_dxT    !< Pre-calculated dy/dx at h points, nondim
+    dx2h,   & !< Pre-calculated dx^2 at h points [m2]
+    dy2h,   & !< Pre-calculated dy^2 at h points [m2]
+    dx_dyT, & !< Pre-calculated dx/dy at h points [nondim]
+    dy_dxT    !< Pre-calculated dy/dx at h points [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q,    & !< Pre-calculated dx^2 at q points, in m2
-    dy2q,    & !< Pre-calculated dy^2 at q points, in m2
-    dx_dyBu, & !< Pre-calculated dx/dy at q points, nondim
-    dy_dxBu    !< Pre-calculated dy/dx at q points, nondim
+    dx2q,    & !< Pre-calculated dx^2 at q points [m2]
+    dy2q,    & !< Pre-calculated dy^2 at q points [m2]
+    dx_dyBu, & !< Pre-calculated dx/dy at q points [nondim]
+    dy_dxBu    !< Pre-calculated dy/dx at q points [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Idx2dyCu, & !< 1/(dx^2 dy) at u points, in m-3
-    Idxdy2u     !< 1/(dx dy^2) at u points, in m-3
+    Idx2dyCu, & !< 1/(dx^2 dy) at u points [m-3]
+    Idxdy2u     !< 1/(dx dy^2) at u points [m-3]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Idx2dyCv, & !< 1/(dx^2 dy) at v points, in m-3
-    Idxdy2v     !< 1/(dx dy^2) at v points, in m-3
+    Idx2dyCv, & !< 1/(dx^2 dy) at v points [m-3]
+    Idxdy2v     !< 1/(dx dy^2) at v points [m-3]
 
   ! The following variables are precalculated time-invariant combinations of
   ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac_Const_xx,  & !< Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xx,  & !< Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xx, & !< Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xx    !< Biharmonic metric-dependent constants (nondim)
+    Laplac_Const_xx,  & !< Laplacian  metric-dependent constants [nondim]
+    Biharm_Const_xx,  & !< Biharmonic metric-dependent constants [nondim]
+    Laplac3_Const_xx, & !< Laplacian  metric-dependent constants [nondim]
+    Biharm5_Const_xx    !< Biharmonic metric-dependent constants [nondim]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac_Const_xy,  & !< Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xy,  & !< Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xy, & !< Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xy    !< Biharmonic metric-dependent constants (nondim)
+    Laplac_Const_xy,  & !< Laplacian  metric-dependent constants [nondim]
+    Biharm_Const_xy,  & !< Biharmonic metric-dependent constants [nondim]
+    Laplac3_Const_xy, & !< Laplacian  metric-dependent constants [nondim]
+    Biharm5_Const_xy    !< Biharmonic metric-dependent constants [nondim]
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
@@ -199,49 +199,49 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    u0, &   ! Laplacian of u (m-1 s-1)
+    u0, &   ! Laplacian of u [m-1 s-1]
     h_u     ! Thickness interpolated to u points [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    v0, &   ! Laplacian of v (m-1 s-1)
+    v0, &   ! Laplacian of v [m-1 s-1]
     h_v     ! Thickness interpolated to v points [H ~> m or kg m-2].
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
-    str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
-    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
-    div_xx, &     ! horizontal divergence (du/dx + dv/dy) (1/sec) including metric terms
-    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
+    sh_xx, &      ! horizontal tension (du/dx - dv/dy) including metric terms [s-1]
+    str_xx,&      ! str_xx is the diagonal term in the stress tensor [H m2 s-2 ~> m3 s-2 or kg s-2]
+    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution [H m2 s-2 ~> m3 s-2 or kg s-2]
+    div_xx, &     ! horizontal divergence (du/dx + dv/dy) including metric terms [s-1]
+    FrictWorkIntz ! depth integrated energy dissipated by lateral friction [W m-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [s-1]
-    sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
-    str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
-    bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
-    vort_xy       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
+    sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) including metric terms [s-1]
+    str_xy, &     ! str_xy is the cross term in the stress tensor [H m2 s-2 ~> m3 s-2 or kg s-2]
+    bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution [H m2 s-2 ~> m3 s-2 or kg s-2]
+    vort_xy       ! vertical vorticity (dv/dx - du/dy) including metric terms [s-1]
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
-    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 sec-1) including metric terms
+    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) including metric terms [m-1 s-1]
+    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) including metric terms [m-1 s-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
-    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 sec-1) including metric terms
+    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) including metric terms [m-1 s-1]
+    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) including metric terms [m-1 s-1]
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
-    Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
-    Kh_q      ! Laplacian viscosity at corner points (m2/s)
+    Ah_q, &   ! biharmonic viscosity at corner points [m4 s-1]
+    Kh_q      ! Laplacian viscosity at corner points [m2 s-1]
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
-    Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
-    FrictWork        ! energy dissipated by lateral friction (W/m2)
+    Ah_h, &          ! biharmonic viscosity at thickness points [m4 s-1]
+    Kh_h, &          ! Laplacian viscosity at thickness points [m2 s-1]
+    FrictWork        ! energy dissipated by lateral friction [W m-2]
 
-  real :: Ah         ! biharmonic viscosity (m4/s)
-  real :: Kh         ! Laplacian  viscosity (m2/s)
-  real :: AhSm       ! Smagorinsky biharmonic viscosity (m4/s)
-  real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
-  real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
-  real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
+  real :: Ah         ! biharmonic viscosity [m4 s-1]
+  real :: Kh         ! Laplacian  viscosity [m2 s-1]
+  real :: AhSm       ! Smagorinsky biharmonic viscosity [m4 s-1]
+  real :: KhSm       ! Smagorinsky Laplacian viscosity  [m2 s-1]
+  real :: AhLth      ! 2D Leith biharmonic viscosity [m4 s-1]
+  real :: KhLth      ! 2D Leith Laplacian viscosity  [m2 s-1]
   real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
                      ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
                      ! This is set equal to zero if modified Leith is not used.
@@ -257,12 +257,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
   real :: hrat_min   ! minimum thicknesses at the 4 neighboring
                      ! velocity points divided by the thickness at the stress
-                     ! point (h or q point) (nondimensional)
+                     ! point (h or q point) [nondim]
   real :: visc_bound_rem ! fraction of overall viscous bounds that
-                         ! remain to be applied (nondim)
+                         ! remain to be applied [nondim]
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
-                    ! Laplacian viscosity is rescaled
-  real :: RoScl     ! The scaling function for MEKE source term
+                    ! Laplacian viscosity is rescaled [nondim]
+  real :: RoScl     ! The scaling function for MEKE source term [nondim]
   real :: FatH      ! abs(f) at h-point for MEKE source term [s-1]
   real :: local_strain ! Local variable for interpolating computed strain rates [s-1].
 
@@ -976,8 +976,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: BoundCorConst    ! constant (s2/m2)
   real :: Ah_Limit         ! coefficient [s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
-  real :: Kh               ! Lapacian horizontal viscosity (m2/s)
-  real :: Ah               ! biharmonic horizontal viscosity (m4/s)
+  real :: Kh               ! Lapacian horizontal viscosity [m2 s-1]
+  real :: Ah               ! biharmonic horizontal viscosity [m4 s-1]
   real :: Kh_vel_scale     ! this speed [m s-1] times grid spacing gives Lap visc
   real :: Ah_vel_scale     ! this speed [m s-1] times grid spacing cubed gives bih visc
   real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
@@ -991,7 +991,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value
                            ! the quadratically varying biharmonic viscosity
                            ! balances Coriolis acceleration [m s-1]
-  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity (m2/s)
+  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity [m2 s-1]
   real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat
   logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS
   logical :: get_all       ! If true, read and log all parameters, regardless of
@@ -1618,8 +1618,8 @@ end subroutine hor_visc_init
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   type(hor_visc_CS), pointer :: CS !< Control structure for horizontal viscosity
-  real,              intent(in) :: n1 !< i-component of direction vector (nondim)
-  real,              intent(in) :: n2 !< j-component of direction vector (nondim)
+  real,              intent(in) :: n1 !< i-component of direction vector [nondim]
+  real,              intent(in) :: n2 !< j-component of direction vector [nondim]
   ! Local variables
   real :: recip_n2_norm
 

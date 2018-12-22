@@ -431,7 +431,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     u, &        ! The zonal velocity after a timestep of mixing [m s-1].
     v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
-    T, &        ! The potential temperature after a timestep of mixing, in C.
+    T, &        ! The potential temperature after a timestep of mixing [degC].
     Sal, &      ! The salinity after a timestep of mixing [PSU].
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [m Z s-1 ~> m2 s-1].
@@ -1415,7 +1415,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                   ! TKE of the layer above when all the kappas below are 0.
                   ! e1 is nondimensional, and 0 < e1 < 1.
   real :: tke_src       ! The net source of TKE due to mixing against the shear
-                        ! and stratification, in m2 s-3.  (For convenience,
+                        ! and stratification [m2 s-3].  (For convenience,
                         ! a term involving the non-dissipation of q0 is also
                         ! included here.)
   real :: bQ, bK        ! The inverse of the pivot in the tridiagonal equations [Z-1 ~> m-1].

@@ -270,7 +270,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     u, &            !   The zonal velocity [m s-1].
     v               !   The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
-    Kd, &           ! The diapycnal diffusivity, in m2 s-1.
+    Kd, &           ! The diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
     pres, &         ! Interface pressures [Pa].
     pres_Z, &       ! Interface pressures with a rescaling factor to convert interface height
                     ! movements into changes in column potential energy [J m-2 Z-1 ~> J m-3].
@@ -1632,13 +1632,13 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
 
   real :: hps ! The sum of the two effective pivot thicknesses [H ~> m or kg m-2].
   real :: bdt1 ! A product of the two pivot thicknesses plus a diffusive term [H2 ~> m2 or kg2 m-4].
-  real :: dT_c ! The core term in the expressions for the temperature changes [degC H ~> degC m or degC kg m-2]2.
-  real :: dS_c ! The core term in the expressions for the salinity changes, in psu H2.
+  real :: dT_c ! The core term in the expressions for the temperature changes [degC H2 ~> degC m2 or degC kg2 m-4].
+  real :: dS_c ! The core term in the expressions for the salinity changes [ppt H2 ~> ppt m2 or ppt kg2 m-4].
   real :: PEc_core ! The diffusivity-independent core term in the expressions
-                   ! for the potential energy changes, J m-3.
+                   ! for the potential energy changes [J m-3].
   real :: ColHt_core ! The diffusivity-independent core term in the expressions
-                     ! for the column height changes, J m-3.
-  real :: ColHt_chg  ! The change in the column height, in m.
+                     ! for the column height changes [J m-3].
+  real :: ColHt_chg  ! The change in the column height [H ~> m or kg m-2].
   real :: y1   ! A local temporary term, in units of H-3 or H-4 in various contexts.
 
   !   The expression for the change in potential energy used here is derived
@@ -1777,7 +1777,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 ! reversed.
 
   real :: b1            ! b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: b1Kd          ! Temporary array (nondim.)
+  real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
   real :: dColHt_dKd    ! The partial derivative of column thickness with diffusivity [s Z-1 ~> s m-1].
@@ -1857,7 +1857,7 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
   type(energetic_PBL_CS),           pointer     :: CS  !< Control structure for ePBL
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
   type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer, in m
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer [m or other units]
   real,                   optional, intent(in)  :: m_to_MLD_units !< A conversion factor to the desired units for MLD
   ! Local variables
   real :: scale  ! A dimensional rescaling factor
@@ -2019,16 +2019,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
   type(energetic_PBL_CS),  pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                  for this module
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_energetic_PBL"  ! This module's name.
   real :: omega_frac_dflt
   integer :: isd, ied, jsd, jed

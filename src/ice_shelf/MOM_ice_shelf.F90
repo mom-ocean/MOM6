@@ -79,14 +79,14 @@ type, public :: ice_shelf_CS ; private
   type(ocean_grid_type), pointer :: ocn_grid => NULL() !< A pointer to the ocean model grid
                                           !! The rest is private
   real ::   flux_factor = 1.0             !< A factor that can be used to turn off ice shelf
-                                          !! melting (flux_factor = 0).
+                                          !! melting (flux_factor = 0) [nondim].
   character(len=128) :: restart_output_dir = ' ' !< The directory in which to write restart files
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
   type(ice_shelf_dyn_CS), pointer :: dCS => NULL() !< The control structure for the ice-shelf dynamics.
 
   real, pointer, dimension(:,:) :: &
-    utide   => NULL()  !< tidal velocity, in m/s
+    utide   => NULL()  !< tidal velocity [m s-1]
 
   real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z s-1 ~> m s-1].
   real :: cdrag        !< drag coefficient under ice shelves , non-dimensional.
@@ -217,8 +217,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     p_int      !< The pressure at the ice-ocean interface [Pa].
 
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
-    exch_vel_t, &  !< Sub-shelf thermal exchange velocity, in m/s
-    exch_vel_s     !< Sub-shelf salt exchange velocity, in m/s
+    exch_vel_t, &  !< Sub-shelf thermal exchange velocity [m s-1]
+    exch_vel_s     !< Sub-shelf salt exchange velocity [m s-1]
 
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
     mass_flux  !< total mass flux of freshwater across

@@ -85,9 +85,9 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                                  !! call to PointAccel_init.
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [m s-1].
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
-                                                 !! step, in m2 s-1.
+                                                 !! step divided by the Boussinesq density [m2 s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, Z s-1.
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
@@ -416,9 +416,9 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                                  !! call to PointAccel_init.
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [m s-1].
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
-                                                 !! step, in m2 s-1.
+                                                 !! step divided by the Boussinesq density [m2 s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc, Z s-1.
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].

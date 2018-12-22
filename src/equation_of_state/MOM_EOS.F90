@@ -819,11 +819,11 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
                                              !! in [kg m-3 degC-1]
   real   , optional, intent(in) :: dRho_dS   !< Partial derivative of density with salinity
                                              !! in [kg m-3 ppt-1]
-  real   , optional, intent(in) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 in deg C.
-  real   , optional, intent(in) :: dTFr_dS   !< The derivative of freezing point with salinity,
-                                             !! in deg C PSU-1.
-  real   , optional, intent(in) :: dTFr_dp   !< The derivative of freezing point with pressure,
-                                             !! in deg C Pa-1.
+  real   , optional, intent(in) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC].
+  real   , optional, intent(in) :: dTFr_dS   !< The derivative of freezing point with salinity
+                                             !! in [degC ppt-1].
+  real   , optional, intent(in) :: dTFr_dp   !< The derivative of freezing point with pressure
+                                             !! in [degC Pa-1].
 
   if (present(form_of_EOS    ))  EOS%form_of_EOS     = form_of_EOS
   if (present(form_of_TFreeze))  EOS%form_of_TFreeze = form_of_TFreeze
@@ -2385,11 +2385,11 @@ subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature,
                                               !! in [kg m-3 degC-1]
   real   , optional, intent(out) :: dRho_dS   !< Partial derivative of density with salinity
                                               !! in [kg m-3 ppt-1]
-  real   , optional, intent(out) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 in deg C.
-  real   , optional, intent(out) :: dTFr_dS   !< The derivative of freezing point with salinity,
-                                              !! in deg C PSU-1.
-  real   , optional, intent(out) :: dTFr_dp   !< The derivative of freezing point with pressure,
-                                              !! in deg C Pa-1.
+  real   , optional, intent(out) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC].
+  real   , optional, intent(out) :: dTFr_dS   !< The derivative of freezing point with salinity
+                                              !! [degC PSU-1].
+  real   , optional, intent(out) :: dTFr_dp   !< The derivative of freezing point with pressure
+                                              !! [degC Pa-1].
 
   if (present(form_of_EOS    ))  form_of_EOS     = EOS%form_of_EOS
   if (present(form_of_TFreeze))  form_of_TFreeze = EOS%form_of_TFreeze

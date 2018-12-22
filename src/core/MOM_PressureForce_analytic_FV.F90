@@ -38,7 +38,7 @@ type, public :: PressureForce_AFV_CS ; private
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [kg m-3].
   real    :: GFS_scale      !< A scaling of the surface pressure gradients to
-                            !! allow the use of a reduced gravity model.
+                            !! allow the use of a reduced gravity model [nondim].
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                             !! timing of diagnostic output.
@@ -103,7 +103,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness [H ~> kg/m2]
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [m s-2]
@@ -121,17 +121,19 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties, in C.
+                ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [PSU].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
-                       ! of salinity and temperature within each layer.
+    S_t, &      ! Top and bottom edge values for linear reconstructions
+    S_b, &      ! of salinity within each layer [ppt].
+    T_t, &      ! Top and bottom edge values for linear reconstructions
+    T_b         ! of temperature within each layer [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [m2 s-2].
     intp_dza    ! The vertical integral in depth of the pressure anomaly less
-                ! the pressure anomaly at the top of the layer, in Pa m2 s-2.
+                ! the pressure anomaly at the top of the layer [Pa m2 s-2].
   real, dimension(SZI_(G),SZJ_(G))  :: &
     dp, &       ! The (positive) change in pressure across a layer [Pa].
     SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
@@ -146,16 +148,16 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                 ! density near-surface layer [kg m-3].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_za     ! The zonal integral of the geopotential anomaly along the
-                ! interface below a layer, divided by the grid spacing, m2 s-2.
+                ! interface below a layer, divided by the grid spacing [m2 s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     intx_dza    ! The change in intx_za through a layer [m2 s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     inty_za     ! The meridional integral of the geopotential anomaly along the
-                ! interface below a layer, divided by the grid spacing, m2 s-2.
+                ! interface below a layer, divided by the grid spacing [m2 s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
     inty_dza    ! The change in inty_za through a layer [m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density, in Pa (usually 2e7 Pa = 2000 dbar).
+                             ! density, [Pa] (usually 2e7 Pa = 2000 dbar).
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [Pa].
@@ -444,14 +446,14 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
   type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness [H ~> m]
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [m s-2]
   type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                         !! or atmosphere-ocean interface in Pa.
+                                                         !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
                                                          !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -469,7 +471,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
     Rho_cv_BL   !   The coordinate potential density in the deepest variable
                 ! density near-surface layer [kg m-3].
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    dz, &       ! The change in geopotential thickness through a layer, m2 s-2.
+    dz, &       ! The change in geopotential thickness through a layer [m2 s-2].
     pa, &       ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
                 ! the interface atop a layer [Pa].
     dpa, &      ! The change in pressure anomaly between the top and bottom
@@ -487,7 +489,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties, in C.
+                ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [PSU].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -495,13 +497,13 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                        ! of salinity and temperature within each layer.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
-                             ! density, in Pa (usually 2e7 Pa = 2000 dbar).
-  real :: p0(SZI_(G))        ! An array of zeros to use for pressure in Pa.
+                             ! density, [Pa] (usually 2e7 Pa = 2000 dbar).
+  real :: p0(SZI_(G))        ! An array of zeros to use for pressure [Pa].
   real :: h_neglect          ! A thickness that is so small it is usually lost
-                             ! in roundoff and can be neglected, in m.
+                             ! in roundoff and can be neglected [H ~> m].
   real :: g_Earth_z          ! A scaled version of g_Earth [m2 Z-1 s-2 ~> m s-2].
   real :: I_Rho0             ! 1/Rho0 [m3 kg-1].
-  real :: G_Rho0             ! G_Earth / Rho0 in m5 Z-1 s-2 kg-1.
+  real :: G_Rho0             ! G_Earth / Rho0 in [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
   real :: Rho_ref            ! The reference density [kg m-3].
   real :: dz_neglect         ! A minimal thickness [Z ~> m], like e.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
