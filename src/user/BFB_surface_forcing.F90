@@ -67,7 +67,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                                                       !! returned by a previous call to
                                                       !! BFB_surface_forcing_init.
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward, in C.
+  real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward [PSU].
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].

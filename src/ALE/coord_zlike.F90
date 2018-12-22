@@ -13,11 +13,11 @@ type, public :: zlike_CS ; private
   !> Number of levels to be generated
   integer :: nk
 
-  !> Minimum thickness allowed for layers, in the same thickness units that will
-  !! be used in all subsequent calls to build_zstar_column with this structure.
+  !> Minimum thickness allowed for layers, in the same thickness units (perhaps [H ~> m or kg m-2])
+  !! that will be used in all subsequent calls to build_zstar_column with this structure.
   real :: min_thickness
 
-  !> Target coordinate resolution, usually in Z (often m)
+  !> Target coordinate resolution, usually in [Z ~> m]
   real, allocatable, dimension(:) :: coordinateResolution
 end type zlike_CS
 
@@ -29,7 +29,7 @@ contains
 subroutine init_coord_zlike(CS, nk, coordinateResolution)
   type(zlike_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,            intent(in) :: nk !< Number of levels in the grid
-  real, dimension(:), intent(in) :: coordinateResolution !< Target coordinate resolution, in Z (often m)
+  real, dimension(:), intent(in) :: coordinateResolution !< Target coordinate resolution [Z ~> m]
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_zlike: CS already associated!")
   allocate(CS)

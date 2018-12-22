@@ -566,7 +566,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     dyn_coef_eta, & ! The coefficient relating the changes in eta to the
                   ! dynamic surface pressure under rigid ice
                   ! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
-    p_surf_dyn    ! A dynamic surface pressure under rigid ice, in m2 s-2.
+    p_surf_dyn    ! A dynamic surface pressure under rigid ice [m2 s-2].
   type(local_BT_cont_u_type), dimension(SZIBW_(CS),SZJW_(CS)) :: &
     BTCL_u        ! A repackaged version of the u-point information in BT_cont.
   type(local_BT_cont_v_type), dimension(SZIW_(CS),SZJBW_(CS)) :: &

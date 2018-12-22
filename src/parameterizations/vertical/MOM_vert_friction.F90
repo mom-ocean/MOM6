@@ -40,11 +40,11 @@ type, public :: vertvisc_CS ; private
   real    :: Hmix            !< The mixed layer thickness in thickness units [H ~> m or kg m-2].
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
                              !! stress is applied with direct_stress [H ~> m or kg m-2].
-  real    :: Kvml            !< The mixed layer vertical viscosity in m2 s-1.
-  real    :: Kv              !< The interior vertical viscosity in m2 s-1.
+  real    :: Kvml            !< The mixed layer vertical viscosity [Z2 s-1 ~> m2 s-1].
+  real    :: Kv              !< The interior vertical viscosity [Z2 s-1 ~> m2 s-1].
   real    :: Hbbl            !< The static bottom boundary layer thickness [H ~> m or kg m-2].
   real    :: Kvbbl           !< The vertical viscosity in the bottom boundary
-                             !! layer, in m2 s-1.
+                             !! layer [Z2 s-1 ~> m2 s-1].
 
   real    :: maxvel          !< Velocity components greater than maxvel are truncated [m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
@@ -601,10 +601,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real, dimension(SZIB_(G)) :: &
     kv_bbl, &     ! The bottom boundary layer viscosity [Z2 s-1 ~> m2 s-1].
     bbl_thick, &  ! The bottom boundary layer thickness [H ~> m or kg m-2].
-    I_Hbbl, &     ! The inverse of the bottom boundary layer thickness, in units
-                  ! of H-1 (i.e., m-1 or m2 kg-1).
-    I_Htbl, &     ! The inverse of the top boundary layer thickness, in units
-                  ! of H-1 (i.e., m-1 or m2 kg-1).
+    I_Hbbl, &     ! The inverse of the bottom boundary layer thickness [H-1 ~> m-1 or m2 kg-1].
+    I_Htbl, &     ! The inverse of the top boundary layer thickness [H-1 ~> m-1 or m2 kg-1].
     zcol1, &      ! The height of the interfaces to the north and south of a
     zcol2, &      ! v-point [H ~> m or kg m-2].
     Ztop_min, &   ! The deeper of the two adjacent surface heights [H ~> m or kg m-2].
@@ -613,10 +611,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     zh, &         ! An estimate of the interface's distance from the bottom
                   ! based on harmonic mean thicknesses [H ~> m or kg m-2].
     h_ml          ! The mixed layer depth [H ~> m or kg m-2].
-  real, allocatable, dimension(:,:) :: hML_u ! Diagnostic of the mixed layer depth at u points, in m.
-  real, allocatable, dimension(:,:) :: hML_v ! Diagnostic of the mixed layer depth at v points, in m.
-  real, allocatable, dimension(:,:,:) :: Kv_u !< Total vertical viscosity at u-points, in m2 s-1.
-  real, allocatable, dimension(:,:,:) :: Kv_v !< Total vertical viscosity at v-points, in m2 s-1.
+  real, allocatable, dimension(:,:) :: hML_u ! Diagnostic of the mixed layer depth at u points [H ~> m or kg m-2].
+  real, allocatable, dimension(:,:) :: hML_v ! Diagnostic of the mixed layer depth at v points [H ~> m or kg m-2].
+  real, allocatable, dimension(:,:,:) :: Kv_u !< Total vertical viscosity at u-points [Z2 s-1 ~> m2 s-1].
+  real, allocatable, dimension(:,:,:) :: Kv_v !< Total vertical viscosity at v-points [Z2 s-1 ~> m2 s-1].
   real :: zcol(SZI_(G)) ! The height of an interface at h-points [H ~> m or kg m-2].
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
@@ -1072,7 +1070,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 !      h_ml, &  ! The mixed layer depth [H ~> m or kg m-2].
     nk_visc, &  ! The (real) interface index of the base of mixed layer.
     z_t, &      ! The distance from the top, sometimes normalized
-                ! by Hmix, in H or nondimensional.
+                ! by Hmix, [H ~> m or kg m-2] or [nondim].
     kv_tbl, &   ! The viscosity in a top boundary layer under ice [Z2 s-1 ~> m2 s-1].
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
@@ -1579,8 +1577,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ! Local variables
 
   real :: hmix_str_dflt
-  real :: Kv_dflt ! A default viscosity in m2 s-1.
-  real :: Hmix_m  ! A boundary layer thickness, in m.
+  real :: Kv_dflt ! A default viscosity [m2 s-1].
+  real :: Hmix_m  ! A boundary layer thickness [m].
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
 ! This include declares and sets the variable "version".
 #include "version_variable.h"

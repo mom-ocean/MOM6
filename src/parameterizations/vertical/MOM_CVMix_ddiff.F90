@@ -170,27 +170,27 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for temp (Z2/sec).
+                                                                  !! diffusivity for temp [Z2 s-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for salt (Z2/sec).
+                                                                  !! diffusivity for salt [Z2 s-1 ~> m2 s-1].
   type(CVMix_ddiff_cs),                       pointer     :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
   integer,                                    intent(in)  :: j    !< Meridional grid indice.
   ! Local variables
   real, dimension(SZK_(G)) :: &
-    cellHeight, &  !< Height of cell centers (m)
+    cellHeight, &  !< Height of cell centers [m]
     dRho_dT,    &  !< partial derivatives of density wrt temp [kg m-3 degC-1]
     dRho_dS,    &  !< partial derivatives of density wrt saln [kg m-3 ppt-1]
-    pres_int,   &  !< pressure at each interface (Pa)
-    temp_int,   &  !< temp and at interfaces (degC)
-    salt_int,   &  !< salt at at interfaces
+    pres_int,   &  !< pressure at each interface [Pa]
+    temp_int,   &  !< temp and at interfaces [degC]
+    salt_int,   &  !< salt at at interfaces [ppt]
     alpha_dT,   &  !< alpha*dT across interfaces
     beta_dS,    &  !< beta*dS across interfaces
-    dT,         &  !< temp. difference between adjacent layers (degC)
-    dS             !< salt difference between adjacent layers
+    dT,         &  !< temp. difference between adjacent layers [degC]
+    dS             !< salt difference between adjacent layers [ppt]
   real, dimension(SZK_(G)+1) :: &
-    Kd1_T,      &  !< Diapycanal diffusivity of temperature, in m2 s-1.
-    Kd1_S          !< Diapycanal diffusivity of salinity, in m2 s-1.
+    Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
+    Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   integer :: kOBL                        !< level of OBL extent
