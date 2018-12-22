@@ -48,7 +48,7 @@ type, public :: wave_structure_CS ; !private
                                    !< Vertical profile of the magnitude of horizontal velocity,
                                    !! (u^2+v^2)^0.5, averaged over a period [m s-1].
   real, allocatable, dimension(:,:,:) :: z_depths
-                                   !< Depths of layer interfaces, in m.
+                                   !< Depths of layer interfaces [m].
   real, allocatable, dimension(:,:,:) :: N2
                                    !< Squared buoyancy frequency at each interface [s-2].
   integer, allocatable, dimension(:,:):: num_intfaces
