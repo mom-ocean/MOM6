@@ -445,18 +445,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
        ! ice runoff flux
        if (associated(fluxes%frunoff)) &
             fluxes%frunoff(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)
-
-       ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
-       ! heat_content_frunoff. I am seeting these to zero for now.
-       if (associated(IOB%runoff_hflx)) &
-            fluxes%heat_content_lrunoff(i,j) = 0.0 * G%mask2dT(i,j)
-
-       if (associated(IOB%calving_hflx)) &
-            fluxes%heat_content_frunoff(i,j) = 0.0 * G%mask2dT(i,j)
     else
        if (associated(IOB%runoff)) &
             fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
+    end if
 
+    if (.not. cesm_coupled) then
        if (associated(IOB%calving)) &
             fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
 
@@ -469,12 +463,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
        if (associated(IOB%mass_berg)) &
             fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-       if (associated(IOB%runoff_hflx)) &
-            fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
-
-       if (associated(IOB%calving_hflx)) &
-            fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
     end if
+
+    if (associated(IOB%runoff_hflx)) &
+         fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (associated(IOB%calving_hflx)) &
+         fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%lw_flux)) &
       fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)

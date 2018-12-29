@@ -152,8 +152,7 @@
 !! - there are calls to two stubs: `ice_ocn_bnd_from_data()` and `external_coupler_sbc_before()` - these are currently
 !!   inactive, but may be modified to read in import data from file or from an external coupler
 !! - diagnostics are optionally written to files `field_ocn_import_*`, one for each import field
-!! - mom_import_cesm or mom_import_nems is called
-!!    - the sign is reversed on `mean_evap_rate` and `mean_sensi_heat_flux`
+!! - mom_import is called
 !!    - momentum flux vectors are rotated to internal grid
 !! - optionally, a call is made to `ocean_model_restart()` at the interval `restart_interval`
 !!
@@ -399,8 +398,7 @@ module mom_cap_mod
   use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
 #endif
-  use mom_cap_methods,          only: mom_import_cesm, mom_export_cesm
-  use mom_cap_methods,          only: mom_import_nems, mom_export_nems
+  use mom_cap_methods,          only: mom_import, mom_export_cesm, mom_export_nems
 
   use, intrinsic :: iso_fortran_env, only: output_unit
 
@@ -1904,7 +1902,7 @@ contains
     call get_ocean_grid(ocean_state, ocean_grid)
 
     if (cesm_coupled) then
-       call mom_export_cesm(ocean_public, ocean_grid, exportState, logunit, clock, rc=rc)
+       call mom_export_cesm(ocean_public, ocean_grid, exportState, clock, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -2099,14 +2097,13 @@ contains
 
     if (cesm_coupled) then
        call shr_file_setLogUnit (logunit)
-       call mom_import_cesm(ocean_public, ocean_grid, importState, ice_ocean_boundary, &
-            logunit, runtype, clock, rc=rc)
+       call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype=runtype, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
     else
-       call mom_import_nems(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc)
+       call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -2144,7 +2141,7 @@ contains
     !---------------
 
     if (cesm_coupled) then
-       call mom_export_cesm(ocean_public, ocean_grid, exportState, logunit, clock, rc=rc)
+       call mom_export_cesm(ocean_public, ocean_grid, exportState, clock, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
