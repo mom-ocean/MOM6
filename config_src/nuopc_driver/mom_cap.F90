@@ -157,7 +157,7 @@
 !! - optionally, a call is made to `ocean_model_restart()` at the interval `restart_interval`
 !!
 !! After the call to `update_ocean_model()`, the cap performs these steps:
-!! - mom_export_cesm or mom_export_nems is called
+!! - mom_export is called
 !!   - the `ocean_mask` export is set to match that of the internal MOM mask
 !!   - the `freezing_melting_potential` export is converted from J m-2 to W m-2 by dividing by the coupling interval
 !!   - vector rotations are applied to the `ocean_current_zonal` and `ocean_current_merid` exports, back to lat-lon grid
@@ -398,7 +398,7 @@ module mom_cap_mod
   use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
   use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
 #endif
-  use mom_cap_methods,          only: mom_import, mom_export_cesm, mom_export_nems
+  use mom_cap_methods,          only: mom_import, mom_export
 
   use, intrinsic :: iso_fortran_env, only: output_unit
 
@@ -1037,11 +1037,9 @@ contains
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"               , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"               , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"                 , "will provide") ! -> inst_pres_height_surface
-       ! when coupled to cam
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup" , "will provide") ! -> mean long wave up
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn" , "will provide") ! -> mean long wave down
-       ! when coupled to fv3
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx", "will_provide")
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup"               , "will provide") ! -> mean long wave up (coupled to cam)
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"               , "will provide") ! -> mean long wave down (coupled to cam)
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"         , "will_provide") ! -> coupled to fv3
 
        ! EMC fields not used
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
@@ -1051,70 +1049,14 @@ contains
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide") ! not in CESM
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide") ! not in CESM
 
-       ! CESM currently not used
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"     , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"      , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_prec"     , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphidry" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphodry" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcphiwet" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ocphidry" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ocphodry" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ocphiwet" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet1"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet2"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet3"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet4"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry1"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry2"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry3"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry4"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_bcphi"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_bcpho"    , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_flxdst"   , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "So_duu10n"     , "will provide")
-
-       ! Optional CESM fields currently not used
-       ! call NUOPC_CompAttributeGet(gcomp, name='flds_co2a', value=cvalue, rc=rc)
-       ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       ! read(cvalue,*) flds_co2a
-       ! call ESMF_LogWrite('flds_co2a = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=rc)
-       ! call NUOPC_CompAttributeGet(gcomp, name='flds_co2c', value=cvalue, rc=rc)
-       ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       ! read(cvalue,*) flds_co2c
-       ! call ESMF_LogWrite('flds_co2c = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=rc)
-       ! if (flds_co2a .or. flds_co2c) then
-       !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_co2prog"    , "will provide")
-       !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_co2diag"    , "will provide")
-       ! end if
-       ! call NUOPC_CompAttributeGet(gcomp, name='ice_ncat', value=cvalue, rc=rc)
-       ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       ! read(cvalue,*) ice_ncat
-       ! call ESMF_LogWrite('ice_ncat = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=rc)
-       ! call NUOPC_CompAttributeGet(gcomp, name='flds_i2o_per_cat', value=cvalue, rc=rc)
-       ! if (shr_nuopc_methods_ChkErr(rc,__LINE__,u_FILE_u)) return
-       ! read(cvalue,*) flds_i2o_per_cat
-       ! call ESMF_LogWrite('flds_i2o_per_cat = '// trim(cvalue), ESMF_LOGMSG_INFO, rc=rc)
-       ! if (flds_i2o_per_cat) then
-       !    do num = 1, ice_ncat
-       !       name = 'Si_ifrac_' // cnum
-       !       call fld_list_add(fldsToOcn_num, fldsToOcn, trim(name), "will provide")
-       !       name = 'PFioi_swpen_ifrac_' // cnum
-       !       call fld_list_add(fldsToOcn_num, fldsToOcn, trim(name), "will provide")
-       !    end do
-       !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sf_afrac"      , "will provide")
-       !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sf_afracr"     , "will provide")
-       !    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_afracr", "will provide")
-       ! end if
-       ! do n = 1,shr_string_listGetNum(ndep_fields)
-       !    call shr_string_listGetName(ndep_fields, n, name)
-       !    call fld_list_add(fldsToOcn_num, fldsToOcn, trim(name), "will provide")
-       ! end do
+       ! CESM currently not used 
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"  , "will provide")
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes" , "will provide")
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes" , "will provide")
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes" , "will provide")
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"   , "will provide")
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth" , "will provide")
+       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw" , "will provide")
 
        !--------- export fields -------------
        if (len_trim(scalar_field_name) > 0) then
@@ -1127,17 +1069,14 @@ contains
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"          , "will provide") ! -> ocn_current_merid
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! -> sea_surface_slope_zonal
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! -> sea_surface_slope_merid
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! not in EMC
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! -> not in EMC
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! -> freezing_melting_potential
 
-       ! EMC fields not used
-       ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev", "will provide") ! not in CESM
+       ! EMC fields not used in CESM
+       ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev", "will provide")
 
-       ! Optional CESM fields currently not used
-       ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen", "will provide") ! not in EMC
-       ! if (flds_co2c) then
-       !    call fld_list_add(fldsToOcn_num, fldsFrOcn, "Faoo_fco2_ocn" , "will provide")
-       ! end if
+       ! CESM fields currently not used in EMC
+       ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen", "will provide")
 
     else
 
@@ -1162,22 +1101,17 @@ contains
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide")
 
        !--------- export fields -------------
-       ! This sets pointers of the fldsFrOcn to the ocean_public data (unlike the cesm copy paradigm)
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"    , "will provide", data=ocean_public%t_surf)
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"                     , "will provide", data=ocean_public%s_surf )
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"          , "will provide", data=ocean_public%u_surf )
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"          , "will provide", data=ocean_public%v_surf )
-      !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir"           , "will provide")
-      !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir"           , "will provide")
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide", data=ocean_public%sea_lev)
-      !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide", data=ocean_public%frazil)
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "accum_heat_frazil"          , "will provide", data=Ocean_public%frazil)         !JW
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "inst_melt_potential"        , "will provide", data=Ocean_public%melt_potential) !JW
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide", data=dataPtr_frzmlt)              !JW
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_zonal"    , "will provide", data=ocean_public%frazil)         !JW
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_merid"    , "will provide", data=ocean_public%frazil)         !JW
-
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"    , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"                     , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"          , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"          , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "accum_heat_frazil"          , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "inst_melt_potential"        , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_zonal"    , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_merid"    , "will provide")
     end if
 
     do n = 1,fldsToOcn_num
@@ -1878,6 +1812,7 @@ contains
     type(ocean_grid_type), pointer         :: ocean_grid
     character(240)                         :: msgString
     integer                                :: fieldCount, n
+    integer                                :: dt_cpld = 86400
     type(ESMF_Field)                       :: field
     character(len=64),allocatable          :: fieldNameList(:)
     character(len=*),parameter  :: subname='(mom_cap:DataInitialize)'
@@ -1902,7 +1837,7 @@ contains
     call get_ocean_grid(ocean_state, ocean_grid)
 
     if (cesm_coupled) then
-       call mom_export_cesm(ocean_public, ocean_grid, exportState, clock, rc=rc)
+       call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, dt_cpld, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
@@ -2069,7 +2004,7 @@ contains
 
     Time = esmf2fms_time(currTime)
     Time_step_coupled = esmf2fms_time(timeStep)
-    dt_cpld = dth*3600+dtm*60+dts
+    dt_cpld = dth*3600 + dtm*60 + dts
 
     !---------------
     ! Write diagnostics for import
@@ -2095,20 +2030,19 @@ contains
     ! Import data
     !---------------
 
+#ifdef CESMCOUPLED
+    call shr_file_setLogUnit (logunit)
+#endif
+
     if (cesm_coupled) then
-       call shr_file_setLogUnit (logunit)
        call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype=runtype, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
     else
        call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
     end if
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
     !---------------
     ! Update MOM6
@@ -2140,24 +2074,17 @@ contains
     ! Export Data
     !---------------
 
-    if (cesm_coupled) then
-       call mom_export_cesm(ocean_public, ocean_grid, exportState, clock, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-    else
-       call mom_export_nems(ocean_state, ocean_public, ocean_grid, dt_cpld, exportState, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-    end if
+    call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, dt_cpld, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
-    if (cesm_coupled) then
+#ifdef CESM_COUPLED
        ! reset shr logging to my original values
        call shr_file_setLogUnit (output_unit)
     end if
+#endif
 
     !---------------
     ! If restart alarm is ringing - write restart file
