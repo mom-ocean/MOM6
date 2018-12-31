@@ -1040,7 +1040,7 @@ contains
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide") ! not in CESM
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide") ! not in CESM
 
-       ! CESM currently not used 
+       ! CESM currently not used
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"  , "will provide")
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes" , "will provide")
        ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes" , "will provide")

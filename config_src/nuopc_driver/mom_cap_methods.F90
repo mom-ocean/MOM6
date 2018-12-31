@@ -52,8 +52,8 @@ module mom_cap_methods
 contains
 !===============================================================================
 
-  !> This function has a few purposes: 
-  !! (1) it imports surface fluxes using data from the mediator; and 
+  !> This function has a few purposes:
+  !! (1) it imports surface fluxes using data from the mediator; and
   !! (2) it can apply restoring in SST and SSS.
   !! See \ref section_ocn_import for a summary of the surface fluxes that are
   !! passed from MCT to MOM6, including fluxes that need to be included in the future.
@@ -162,7 +162,7 @@ contains
        ! -------
        ! Net longwave radiation (W/m2)
        ! -------
-       ! Different treatment of long wave dependent on atmosphere 
+       ! Different treatment of long wave dependent on atmosphere
        ! When running with cam or datm - need Foxx_lwup and Faxa_lwdn
        ! When running with fv3 - need mean_net_lw_flx
 
@@ -431,7 +431,7 @@ contains
                file=__FILE__)) &
                return  ! bail out
        if (cesm_coupled) then
-          ! salt flux (minus sign needed here -GMM)  
+          ! salt flux (minus sign needed here -GMM)
           ! TODO (mvertens, 2018-12-28): NEMS does not have a minus sign - which one is right?
           do j = jsc,jec
              do i = isc,iec
@@ -439,7 +439,7 @@ contains
              enddo
           enddo
        end if
-          
+
        !----
        ! mass of overlying ice
        !----
@@ -517,7 +517,7 @@ contains
     end if
 
     !----------------
-    ! Copy from ocean_public to exportstate. 
+    ! Copy from ocean_public to exportstate.
     !----------------
 
     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
@@ -675,7 +675,7 @@ contains
                 melt_potential(i,j) =  ocean_public%frazil(i,j) * inv_dt_int
              else
                 melt_potential(i,j) = -ocean_public%melt_potential(i,j) * inv_dt_int
-                if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0 
+                if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
              end if
           end do
        end do
@@ -684,7 +684,7 @@ contains
           do i = isc,iec
              ! TODO (mvertens, 2018-12-29): use inv_dt_int from cesm - and not the original implementation?
              melt_potential(i,j) = -melt_potential(i,j) / dt_cpld
-             if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0 
+             if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
           end do
        end do
     end if
@@ -705,7 +705,7 @@ contains
        do j = jsc,jec
           do i = isc,iec
              !convert from J/m^2 to W/m^2 for CICE coupling
-             frazil(i,j) = ocean_public%frazil(i,j)/dt_cpld 
+             frazil(i,j) = ocean_public%frazil(i,j)/dt_cpld
              if (frazil(i,j) == 0.0) then
                 frzmlt(i,j) = melt_potential(i,j)
              else
@@ -876,7 +876,7 @@ contains
             file=__FILE__)) &
             return  ! bail out
     end if
-       
+
   end subroutine mom_export
 
 !===============================================================================
@@ -977,7 +977,7 @@ contains
        n = 0
        do j = jsc,jec
           do i = isc,iec
-             n = n + 1 
+             n = n + 1
              if (present(do_sum)) then
                 output(i,j)  = output(i,j) + dataPtr1d(n)
              else
@@ -1076,12 +1076,12 @@ contains
        lbnd2 = lbound(dataPtr2d,2)
 
        do j = jsc, jec
-          j1 = j + lbnd2 - jsc  
+          j1 = j + lbnd2 - jsc
           jg = j + ocean_grid%jsc - jsc
           do i = isc, iec
              i1 = i + lbnd1 - isc
              ig = i + ocean_grid%isc - isc
-             dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg) 
+             dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
           end do
        end do
 
