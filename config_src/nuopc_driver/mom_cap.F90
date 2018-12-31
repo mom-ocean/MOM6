@@ -394,11 +394,8 @@ module mom_cap_mod
   use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
   use MOM_ocean_model,          only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
   use mom_cap_time,             only: AlarmInit
-#ifdef CESMCOUPLED
-  use shr_file_mod,             only: shr_file_getUnit, shr_file_freeUnit
-  use shr_file_mod,             only: shr_file_setLogUnit, shr_file_setLogLevel
-#endif
   use mom_cap_methods,          only: mom_import, mom_export
+  use mom_cap_share
 
   use, intrinsic :: iso_fortran_env, only: output_unit
 
@@ -458,12 +455,6 @@ module mom_cap_mod
   integer              :: scalar_field_idx_grid_ny
   character(len=*),parameter :: u_file_u = &
        __FILE__
-
-#ifdef CESMCOUPLED
-  logical :: cesm_coupled = .true.
-#else
-  logical :: cesm_coupled = .false.
-#endif
 
 !=======================================================================
 contains
@@ -1195,9 +1186,9 @@ contains
 
     rc = ESMF_SUCCESS
 
-#ifdef CESMCOUPLED
-    call shr_file_setLogUnit (logunit)
-#endif
+    if (cesm_coupled) then
+       call shr_file_setLogUnit (logunit)
+    end if
 
     !----------------------------------------------------------------------------
     ! Get pointers to ocean internal state
@@ -1284,7 +1275,7 @@ contains
     ! Create either a grid or a mesh
     !---------------------------------
 
-    if (cesm_coupled) then
+    if (geomtype == ESMF_GEOMTYPE_MESH) then
 
        !---------------------------------
        ! Create a MOM6 mesh
@@ -1348,7 +1339,7 @@ contains
             file=__FILE__)) &
             return  ! bail out
 
-    else
+    else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
        !---------------------------------
        ! create a MOM6 grid
@@ -1936,9 +1927,9 @@ contains
     rc = ESMF_SUCCESS
     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
 
-#ifdef CESMCOUPLED
-    call shr_file_setLogUnit (logunit)
-#endif
+    if (cesm_coupled) then
+       call shr_file_setLogUnit (logunit)
+    end if
 
     ! query the Component for its clock, importState and exportState
     call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, &
@@ -2030,9 +2021,9 @@ contains
     ! Import data
     !---------------
 
-#ifdef CESMCOUPLED
-    call shr_file_setLogUnit (logunit)
-#endif
+    if (cesm_coupled) then
+       call shr_file_setLogUnit (logunit)
+    end if
 
     if (cesm_coupled) then
        call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype=runtype, rc=rc)
@@ -2080,11 +2071,9 @@ contains
          file=__FILE__)) &
          return  ! bail out
 
-#ifdef CESM_COUPLED
-       ! reset shr logging to my original values
-       call shr_file_setLogUnit (output_unit)
+    if (cesm_coupled) then
+       call shr_file_setLogUnit (logunit)
     end if
-#endif
 
     !---------------
     ! If restart alarm is ringing - write restart file

@@ -28,6 +28,7 @@ module mom_cap_methods
   use MOM_domains,         only: pass_var
   use MOM_error_handler,   only: is_root_pe
   use mpp_domains_mod,     only: mpp_get_compute_domain
+  use mom_cap_share
 
   ! By default make data private
   implicit none
@@ -45,16 +46,7 @@ module mom_cap_methods
      module procedure State_GetFldPtr_2d
   end interface
 
-#ifdef CESMCOUPLED
-  logical :: cesm_coupled = .true.
-  type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
-#else
-  logical :: cesm_coupled = .false.
-  type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
-#endif
-
-  integer            :: rc,dbrc
-  integer            :: import_cnt = 0
+  integer :: import_cnt = 0
 
 !===============================================================================
 contains

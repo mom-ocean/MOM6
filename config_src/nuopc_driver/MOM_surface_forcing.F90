@@ -40,6 +40,7 @@ use fms_mod,              only : stdout
 use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
+use mom_cap_share
 
 implicit none ; private
 
@@ -195,12 +196,6 @@ type, public :: ice_ocean_boundary_type
 end type ice_ocean_boundary_type
 
 integer :: id_clock_forcing
-
-#ifdef CESMCOUPLED
-  logical :: cesm_coupled = .true.
-#else
-  logical :: cesm_coupled = .false.
-#endif
 
 !=======================================================================
 contains
