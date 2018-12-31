@@ -1732,7 +1732,7 @@ contains
     endif
 
     !---------------------------------
-    ! set surface temperature to 0 if ocean mask is 0 
+    ! set surface temperature to 0 if ocean mask is 0
     !---------------------------------
 
     ! TODO (mvertens, 2018-12-30): is this really necessary? for now only do this for grid
@@ -1756,21 +1756,21 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       
+
        call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
-       
+
        if (geomtype == ESMF_GEOMTYPE_GRID) then
           call ESMF_FieldGet(field_t_surf, localDe=0, farrayPtr=t_surf2d, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
                file=__FILE__)) &
                return  ! bail out
-          
+
           lbnd1 = lbound(t_surf2d,1)
           ubnd1 = ubound(t_surf2d,1)
           lbnd2 = lbound(t_surf2d,2)
           ubnd2 = ubound(t_surf2d,2)
-          
+
           do j = lbnd2, ubnd2
              do i = lbnd1, ubnd1
                 j1 = j - lbnd2 + jsc
@@ -1791,7 +1791,7 @@ contains
     !     line=__LINE__, &
     !     file=__FILE__)) &
     !     return  ! bail out
-    
+
   end subroutine InitializeRealize
 
   !===============================================================================

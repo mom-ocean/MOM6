@@ -638,7 +638,7 @@ contains
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
-    
+
     call State_SetExport(exportState, trim(fldname_y), &
          isc, iec, jsc, jec, ocean_public%v_surf, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -700,7 +700,7 @@ contains
          return  ! bail out
 
     ! -------
-    ! frazil and freezing melting potential 
+    ! frazil and freezing melting potential
     ! -------
 
     call ESMF_StateGet(exportState, 'accum_heat_frazil'         , itemFlag1)
@@ -741,7 +741,7 @@ contains
     end if
 
     ! -------
-    ! Sea level 
+    ! Sea level
     ! -------
     fldname = 'sea_level'
     call ESMF_StateGet(exportState, trim(fldname), itemFlag, rc=rc)
