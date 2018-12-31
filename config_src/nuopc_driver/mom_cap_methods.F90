@@ -5,9 +5,6 @@ module mom_cap_methods
   ! Masks, areas, center (tlat, tlon), and corner (ulat, ulon) coordinates are then added to the `ESMF_Grid`
   ! by retrieving those fields from MOM with calls to `ocean_model_data_get()`.
 
-
-  use NUOPC,               only: NUOPC_Advertise, NUOPC_Realize, NUOPC_IsConnected
-  use NUOPC_Model,         only: NUOPC_ModelGet
   use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
   use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
   use ESMF,                only: ESMF_State, ESMF_StateGet
@@ -430,6 +427,7 @@ contains
                line=__LINE__, &
                file=__FILE__)) &
                return  ! bail out
+
        if (cesm_coupled) then
           ! salt flux (minus sign needed here -GMM)
           ! TODO (mvertens, 2018-12-28): NEMS does not have a minus sign - which one is right?
@@ -443,8 +441,9 @@ contains
        !----
        ! mass of overlying ice
        !----
-       if (.not. cesm_coupled) then
-          fldname = 'mass_of_overlying_ice'
+       fldname = 'mass_of_overlying_ice'
+       call ESMF_StateGet(importState, trim(fldname), itemFlag)
+       if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
           call state_getimport(importState, trim(fldname),  &
                isc, iec, jsc, jec, ice_ocean_boundary%mi, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -476,12 +475,16 @@ contains
     integer                         :: isc, iec, jsc, jec   ! local indices
     integer                         :: iloc, jloc           ! local indices
     integer                         :: n
+    integer                         :: icount
     real                            :: slp_L, slp_R, slp_C
     real                            :: slope, u_min, u_max
     integer                         :: day, secs
     type(ESMF_TimeInterval)         :: timeStep
     integer                         :: dt_int
     real                            :: inv_dt_int  !< The inverse of coupling time interval in s-1.
+    type(ESMF_StateItem_Flag)       :: itemFlag
+    type(ESMF_StateItem_Flag)       :: itemFlag1
+    type(ESMF_StateItem_Flag)       :: itemFlag2
     character(len=128)              :: fldname
     character(len=128)              :: fldname_x
     character(len=128)              :: fldname_y
@@ -590,30 +593,31 @@ contains
        fldname_y = 'ocn_current_merid'
     end if
 
+    ! rotate ocn current from tripolar grid back to lat/lon grid x,y => latlon (CCW)
+    ! "ocean_grid" has halos and uses global indexing.
+
+    ! TODO (mvertens, 2018-12-30): Only one of these is correct - the cesm_coupled one is the
+    ! latest and is the one that GM feels is the correct one
+
+    allocate(ocz(isc:iec, jsc:jec))
+    allocate(ocm(isc:iec, jsc:jec))
+    allocate(ocz_rot(isc:iec, jsc:jec))
+    allocate(ocm_rot(isc:iec, jsc:jec))
+
     if (cesm_coupled) then
-       call State_SetExport(exportState, trim(fldname_x), &
-            isc, iec, jsc, jec, ocean_public%u_surf, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-
-       call State_SetExport(exportState, trim(fldname_y), &
-            isc, iec, jsc, jec, ocean_public%v_surf, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+       ! do j = jsc, jec
+       !    jg = j + ocean_grid%jsc - jsc
+       !    do i = isc, iec
+       !       ig = i + ocean_grid%isc - isc
+       !       ocz(i,j) = ocean_public%u_surf(i,j)
+       !       ocm(i,j) = ocean_public%v_surf(i,j)
+       !       ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) &
+       !                    - ocean_grid%sin_rot(ig,jg)*ocm(i,j)
+       !       ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) &
+       !                    + ocean_grid%sin_rot(ig,jg)*ocz(i,j)
+       !    end do
+       ! end do
     else
-
-       ! rotate ocn current from tripolar grid back to lat/lon grid x,y => latlon (CCW)
-       ! "ocean_grid" has halos and uses global indexing.
-
-       allocate(ocz(isc:iec, jsc:jec))
-       allocate(ocm(isc:iec, jsc:jec))
-       allocate(ocz_rot(isc:iec, jsc:jec))
-       allocate(ocm_rot(isc:iec, jsc:jec))
-
        do j = jsc, jec
           jg = j + ocean_grid%jsc - jsc
           do i = isc, iec
@@ -626,28 +630,28 @@ contains
                           - ocean_grid%sin_rot(ig,jg)*ocz(i,j)
           end do
        end do
-
-       call State_SetExport(exportState, trim(fldname_x), &
-            isc, iec, jsc, jec, ocz_rot, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-
-       call State_SetExport(exportState, trim(fldname_y), &
-            isc, iec, jsc, jec, ocm_rot, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-
     end if
+
+    call State_SetExport(exportState, trim(fldname_x), &
+         isc, iec, jsc, jec, ocean_public%u_surf, ocean_grid, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
+    
+    call State_SetExport(exportState, trim(fldname_y), &
+         isc, iec, jsc, jec, ocean_public%v_surf, ocean_grid, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
     ! -------
     ! Boundary layer depth
     ! -------
-    if (cesm_coupled) then
-       fldname = 'So_bldepth'
+    fldname = 'So_bldepth'
+    call ESMF_StateGet(exportState, trim(fldname), itemFlag, rc=rc)
+    if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
        call State_SetExport(exportState, trim(fldname), &
             isc, iec, jsc, jec, ocean_public%obld, ocean_grid, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -696,9 +700,13 @@ contains
          return  ! bail out
 
     ! -------
-    ! frazil and freezing melting potential (nems only)
+    ! frazil and freezing melting potential 
     ! -------
-    if (.not. cesm_coupled) then
+
+    call ESMF_StateGet(exportState, 'accum_heat_frazil'         , itemFlag1)
+    call ESMF_StateGet(exportState, 'freezing_melting_potential', itemFlag2)
+    if (itemFlag1 /= ESMF_STATEITEM_NOTFOUND .and. itemFlag2 /= ESMF_STATEITEM_NOTFOUND) then
+
        allocate(frazil(isc:iec, jsc:jec))
        allocate(frzmlt(isc:iec, jsc:jec))
 
@@ -733,11 +741,11 @@ contains
     end if
 
     ! -------
-    ! Sea level (nems only)
+    ! Sea level 
     ! -------
-    if (.not. cesm_coupled) then
-       fldname = 'sea_level'
-
+    fldname = 'sea_level'
+    call ESMF_StateGet(exportState, trim(fldname), itemFlag, rc=rc)
+    if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
        call State_SetExport(exportState, trim(fldname), &
             isc, iec, jsc, jec, ocean_public%sea_lev, ocean_grid, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -837,23 +845,23 @@ contains
       end do
     end do
 
-    if (cesm_coupled) then
-       ! TODO (mvertens, 2018-12-29): do we want to do the rotation like for nems?
-       ! and is the nems rotation correct (since GM pointed out that the NEMS taux, tauy rotation was not)
-       call State_SetExport(exportState, trim(fldname_x), isc, iec, jsc, jec, dhdx, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       call State_SetExport(exportState, trim(fldname_y), isc, iec, jsc, jec, dhdy, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+    ! rotate slopes from tripolar grid back to lat/lon grid,  x,y => latlon (CCW)
+    ! "ocean_grid" uses has halos and uses global indexing.
 
+    ! TODO (mvertens, 2018-12-30): Only one of these is correct - the cesm_coupled one is the
+    ! latest and is the one that GM feels is the correct one
+    if (cesm_coupled) then
+       ! do j = jsc, jec
+       !    jg = j + ocean_grid%jsc - jsc
+       !    do i = isc, iec
+       !       ig = i + ocean_grid%isc - isc
+       !       dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
+       !                     - ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
+       !       dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
+       !                     + ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
+       !    end do
+       ! end do
     else
-       ! rotate slopes from tripolar grid back to lat/lon grid,  x,y => latlon (CCW)
-       ! "ocean_grid" uses has halos and uses global indexing.
        do j = jsc, jec
           jg = j + ocean_grid%jsc - jsc
           do i = isc, iec
@@ -864,18 +872,19 @@ contains
                            - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
           end do
        end do
-
-       call State_SetExport(exportState, trim(fldname_x), isc, iec, jsc, jec, dhdx_rot, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       call State_SetExport(exportState, trim(fldname_y), isc, iec, jsc, jec, dhdy_rot, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
     end if
+
+    call State_SetExport(exportState, trim(fldname_x), isc, iec, jsc, jec, dhdx, ocean_grid, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
+
+    call State_SetExport(exportState, trim(fldname_y), isc, iec, jsc, jec, dhdy, ocean_grid, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
   end subroutine mom_export
 
@@ -955,6 +964,7 @@ contains
     integer             , intent(out)   :: rc
 
     ! local variables
+    type(ESMF_StateItem_Flag)     :: itemFlag
     integer                       :: n, i, j, i1, j1
     integer                       :: lbnd1,lbnd2
     real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
@@ -964,50 +974,55 @@ contains
 
     rc = ESMF_SUCCESS
 
-    if (geomtype == ESMF_GEOMTYPE_MESH) then
+    call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
+    if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
 
-       ! get field pointer
-       call state_getfldptr(state, trim(fldname), dataptr1d, rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+       if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-       ! determine output array
-       n = 0
-       do j = jsc,jec
-          do i = isc,iec
-             n = n + 1
-             if (present(do_sum)) then
-                output(i,j)  = output(i,j) + dataPtr1d(n)
-             else
-                output(i,j)  = dataPtr1d(n)
-             end if
+          ! get field pointer
+          call state_getfldptr(state, trim(fldname), dataptr1d, rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
+
+          ! determine output array
+          n = 0
+          do j = jsc,jec
+             do i = isc,iec
+                n = n + 1
+                if (present(do_sum)) then
+                   output(i,j)  = output(i,j) + dataPtr1d(n)
+                else
+                   output(i,j)  = dataPtr1d(n)
+                end if
+             end do
           end do
-       end do
 
-    else if (geomtype == ESMF_GEOMTYPE_GRID) then
+       else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
-       call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+          call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
 
-       lbnd1 = lbound(dataPtr2d,1)
-       lbnd2 = lbound(dataPtr2d,2)
+          lbnd1 = lbound(dataPtr2d,1)
+          lbnd2 = lbound(dataPtr2d,2)
 
-       do j = jsc, jec
-          j1 = j + lbnd2 - jsc
-          do i = isc, iec
-             i1 = i + lbnd1 - isc
-             if (present(do_sum)) then
-                output(i,j) = output(i,j) + dataPtr2d(i1,j1)
-             else
-                output(i,j) = dataPtr2d(i1,j1)
-             end if
+          do j = jsc, jec
+             j1 = j + lbnd2 - jsc
+             do i = isc, iec
+                i1 = i + lbnd1 - isc
+                if (present(do_sum)) then
+                   output(i,j) = output(i,j) + dataPtr2d(i1,j1)
+                else
+                   output(i,j) = dataPtr2d(i1,j1)
+                end if
+             end do
           end do
-       end do
+
+       end if
 
     end if
 
@@ -1033,6 +1048,7 @@ contains
     integer               , intent(out)   :: rc
 
     ! local variables
+    type(ESMF_StateItem_Flag)     :: itemFlag
     integer                       :: n, i, j, i1, j1, ig,jg
     integer                       :: lbnd1,lbnd2
     real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
@@ -1046,44 +1062,49 @@ contains
     ! input array from "ocean_public" uses local indexing without halos
     ! mask from "ocean_grid" uses global indexing with halos
 
-    if (geomtype == ESMF_GEOMTYPE_MESH) then
+    call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
+    if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
 
-       call state_getfldptr(state, trim(fldname), dataptr1d, rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+       if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-       n = 0
-       do j = jsc, jec
-          jg = j + ocean_grid%jsc - jsc
-          do i = isc, iec
-             ig = i + ocean_grid%isc - isc
-             n = n+1
-             dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
+          call state_getfldptr(state, trim(fldname), dataptr1d, rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
+
+          n = 0
+          do j = jsc, jec
+             jg = j + ocean_grid%jsc - jsc
+             do i = isc, iec
+                ig = i + ocean_grid%isc - isc
+                n = n+1
+                dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
+             end do
           end do
-       end do
 
-    else if (geomtype == ESMF_GEOMTYPE_GRID) then
+       else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
-       call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
+          call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
 
-       lbnd1 = lbound(dataPtr2d,1)
-       lbnd2 = lbound(dataPtr2d,2)
+          lbnd1 = lbound(dataPtr2d,1)
+          lbnd2 = lbound(dataPtr2d,2)
 
-       do j = jsc, jec
-          j1 = j + lbnd2 - jsc
-          jg = j + ocean_grid%jsc - jsc
-          do i = isc, iec
-             i1 = i + lbnd1 - isc
-             ig = i + ocean_grid%isc - isc
-             dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
+          do j = jsc, jec
+             j1 = j + lbnd2 - jsc
+             jg = j + ocean_grid%jsc - jsc
+             do i = isc, iec
+                i1 = i + lbnd1 - isc
+                ig = i + ocean_grid%isc - isc
+                dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
+             end do
           end do
-       end do
+
+       end if
 
     end if
 

@@ -429,8 +429,6 @@ module mom_cap_mod
     character(len=64) :: stdname
     character(len=64) :: shortname
     character(len=64) :: transferOffer
-    logical           :: assoc    ! is the farrayPtr associated with internal data
-    real(ESMF_KIND_R8), dimension(:,:), pointer :: farrayPtr
   end type fld_list_type
 
   integer,parameter    :: fldsMax = 100
@@ -443,7 +441,6 @@ module mom_cap_mod
   integer              :: import_slice = 1
   integer              :: export_slice = 1
   character(len=256)   :: tmpstr
-  type(ESMF_Grid)      :: mom_grid_i
   logical              :: write_diagnostics = .false.
   character(len=32)    :: runtype  ! run type
   integer              :: logunit  ! stdout logging unit number
@@ -763,9 +760,6 @@ contains
     integer                                :: userRc
     character(len=512)                     :: restartfile          ! Path/Name of restart file
     character(len=*), parameter            :: subname='(mom_cap:InitializeAdvertise)'
-    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_frzmlt
-    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdx
-    real(ESMF_KIND_R8), dimension(:,:), pointer :: dataPtr_dhdy
 !--------------------------------
 
     rc = ESMF_SUCCESS
@@ -1167,7 +1161,8 @@ contains
     integer                                    :: nblocks_tot
     logical                                    :: found
     real(ESMF_KIND_R8), allocatable            :: ofld(:,:), gfld(:,:)
-    real(ESMF_KIND_R8), pointer                :: t_surf(:,:)
+    real(ESMF_KIND_R8), pointer                :: t_surf1d(:,:)
+    real(ESMF_KIND_R8), pointer                :: t_surf2d(:,:)
     integer(ESMF_KIND_I4), pointer             :: dataPtr_mask(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_area(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_xcen(:,:)
@@ -1180,6 +1175,7 @@ contains
     integer                                    :: lsize
     integer                                    :: ig,jg, ni,nj,k
     integer, allocatable                       :: gindex(:) ! global index space
+    character(len=128)                         :: fldname
     character(len=256)                         :: cvalue
     character(len=*), parameter                :: subname='(mom_cap:InitializeRealize)'
     !--------------------------------
@@ -1333,6 +1329,7 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
+
        call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -1449,8 +1446,6 @@ contains
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-
-       mom_grid_i = gridIn
 
        call ESMF_GridAddCoord(gridIn, staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1737,46 +1732,58 @@ contains
     endif
 
     !---------------------------------
-    ! realize fields on grid
+    ! set surface temperature to 0 if ocean mask is 0 
     !---------------------------------
 
-    call ESMF_StateGet(exportState, itemSearch="sea_surface_temperature", itemCount=icount, rc=rc)
+    ! TODO (mvertens, 2018-12-30): is this really necessary? for now only do this for grid
+
+    if (cesm_coupled) then
+       fldname = 'So_t'
+    else
+       fldname = 'sea_surface_temperature'
+    end if
+
+    call ESMF_StateGet(exportState, itemSearch=trim(fldname), itemCount=icount, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
 
     ! Do sst initialization if it's part of export state
-    if(icount /= 0) then
+    if (icount /= 0) then
+       call ESMF_StateGet(exportState, itemName=trim(fldname), field=field_t_surf, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+       
+       call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
+       
+       if (geomtype == ESMF_GEOMTYPE_GRID) then
+          call ESMF_FieldGet(field_t_surf, localDe=0, farrayPtr=t_surf2d, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+               line=__LINE__, &
+               file=__FILE__)) &
+               return  ! bail out
+          
+          lbnd1 = lbound(t_surf2d,1)
+          ubnd1 = ubound(t_surf2d,1)
+          lbnd2 = lbound(t_surf2d,2)
+          ubnd2 = ubound(t_surf2d,2)
+          
+          do j = lbnd2, ubnd2
+             do i = lbnd1, ubnd1
+                j1 = j - lbnd2 + jsc
+                i1 = i - lbnd1 + isc
+                if (ofld(i1,j1) == 0.) t_surf2d(i,j) = 0.0
+             enddo
+          enddo
+       end if
+    end if
 
-      call ESMF_StateGet(exportState, itemName='sea_surface_temperature', field=field_t_surf, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-      call ESMF_FieldGet(field_t_surf, localDe=0, farrayPtr=t_surf, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
-      call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
-
-      lbnd1 = lbound(t_surf,1)
-      ubnd1 = ubound(t_surf,1)
-      lbnd2 = lbound(t_surf,2)
-      ubnd2 = ubound(t_surf,2)
-
-      do j = lbnd2, ubnd2
-      do i = lbnd1, ubnd1
-        j1 = j - lbnd2 + jsc
-        i1 = i - lbnd1 + isc
-        if (ofld(i1,j1) == 0.) t_surf(i,j) = 0.0
-      enddo
-      enddo
-
-      deallocate(ofld)
-    endif
+    !---------------------------------
+    ! write out diagnostics
+    !---------------------------------
 
     !call NUOPC_Write(exportState, fileNamePrefix='post_realize_field_ocn_export_', &
     !     timeslice=1, relaxedFlag=.true., rc=rc)
@@ -1784,7 +1791,7 @@ contains
     !     line=__LINE__, &
     !     file=__FILE__)) &
     !     return  ! bail out
-
+    
   end subroutine InitializeRealize
 
   !===============================================================================
@@ -2409,6 +2416,7 @@ contains
     ! ----------------------------------------------
     ! Set scalar data from State for a particular name
     ! ----------------------------------------------
+
     real(ESMF_KIND_R8),intent(in)     :: value
     integer,           intent(in)     :: scalar_id
     type(ESMF_State),  intent(inout)  :: State
@@ -2418,10 +2426,10 @@ contains
     integer,           intent(inout)  :: rc
 
     ! local variables
-    integer                         :: ierr, len
     type(ESMF_Field)                :: field
     real(ESMF_KIND_R8), pointer     :: farrayptr(:,:)
     character(len=*), parameter     :: subname='(mom_cap:State_SetScalar)'
+    !--------------------------------------------------------
 
     rc = ESMF_SUCCESS
 
@@ -2448,6 +2456,7 @@ contains
 
   subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
 
+    ! input/output variables
     type(ESMF_State)    , intent(inout)        :: state
     integer             , intent(in)           :: nfields
     type(fld_list_type) , intent(inout)        :: field_defs(:)
@@ -2456,13 +2465,13 @@ contains
     type(ESMF_Mesh)     , intent(in), optional :: mesh
     integer             , intent(inout)        :: rc
 
-    integer          :: i
-    type(ESMF_Field) :: field
-    integer          :: npet, nx, ny, pet
-    integer          :: elb(2), eub(2), clb(2), cub(2), tlb(2), tub(2)
-    type(ESMF_VM)    :: vm
-    real(ESMF_KIND_R8), pointer :: fldptr(:,:)
+    ! local variables
+    integer                     :: i
+    type(ESMF_Field)            :: field
+    real(ESMF_KIND_R8), pointer :: fldptr1d(:)   ! for mesh
+    real(ESMF_KIND_R8), pointer :: fldptr2d(:,:) ! for grid
     character(len=*),parameter  :: subname='(mom_cap:MOM_RealizeFields)'
+    !--------------------------------------------------------
 
     rc = ESMF_SUCCESS
 
@@ -2471,45 +2480,18 @@ contains
       if (NUOPC_IsConnected(state, fieldName=field_defs(i)%shortname)) then
 
         if (field_defs(i)%shortname == scalar_field_name) then
+
           call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected on root pe.", &
             ESMF_LOGMSG_INFO, &
             line=__LINE__, &
             file=__FILE__, &
             rc=rc)
+
           call SetScalarField(field, rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-        elseif (field_defs(i)%assoc) then
-          call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname)&
-            // " is connected and associated.", &
-            ESMF_LOGMSG_INFO, &
-            line=__LINE__, &
-            file=__FILE__, &
-            rc=rc)
-          write(tmpstr,'(a,4i12)') subname//trim(tag)//' Field '//trim(field_defs(i)%shortname)//':', &
-            lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
-            lbound(field_defs(i)%farrayPtr,2), ubound(field_defs(i)%farrayPtr,2)
-          call ESMF_LogWrite(tmpstr, ESMF_LOGMSG_INFO, rc=rc)
-
-          if (present(grid)) then
-             field = ESMF_FieldCreate(grid=grid, &
-                  farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_DELOCAL, &
-                 !farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
-                  name=field_defs(i)%shortname, rc=rc)
-             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-                  line=__LINE__, &
-                  file=__FILE__)) &
-                  return  ! bail out
-          else if (present(mesh)) then
-             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
-                  name=field_defs(i)%shortname, rc=rc)
-             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-                  line=__LINE__, &
-                  file=__FILE__)) &
-                  return  ! bail out
-          end if
 
         else
 
@@ -2518,6 +2500,7 @@ contains
             line=__LINE__, &
             file=__FILE__, &
             rc=rc)
+
           if (present(grid)) then
 
              field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
@@ -2527,13 +2510,13 @@ contains
                   file=__FILE__)) &
                   return  ! bail out
 
-             ! initialize to zero
-             call ESMF_FieldGet(field, farrayPtr=fldptr, rc=rc)
+             ! initialize fldptr to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
              if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                   line=__LINE__, &
                   file=__FILE__)) &
                   return  ! bail out
-             fldptr = 0.0
+             fldptr2d(:,:) = 0.0
 
           else if (present(mesh)) then
 
@@ -2543,16 +2526,28 @@ contains
                   line=__LINE__, &
                   file=__FILE__)) &
                   return  ! bail out
+
+             ! initialize fldptr to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
+             if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                  line=__LINE__, &
+                  file=__FILE__)) &
+                  return  ! bail out
+             fldptr1d(:) = 0.0
+
           end if
 
         endif
 
+        ! Realize connected field
         call NUOPC_Realize(state, field=field, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
           file=__FILE__)) &
           return  ! bail out
-      else
+
+      else ! field is not connected
+
         call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is not connected.", &
           ESMF_LOGMSG_INFO, &
           line=__LINE__, &
@@ -2564,63 +2559,67 @@ contains
           line=__LINE__, &
           file=__FILE__)) &
           return  ! bail out
+
       endif
 
     enddo
+
+  contains  !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    subroutine SetScalarField(field, rc)
+
+      ! create a field with scalar data on the root pe
+      type(ESMF_Field), intent(inout)  :: field
+      integer,          intent(inout)  :: rc
+
+      ! local variables
+      type(ESMF_Distgrid) :: distgrid
+      type(ESMF_Grid)     :: grid
+      character(len=*), parameter :: subname='(mom_cap:SetScalarField)'
+
+      rc = ESMF_SUCCESS
+
+      ! create a DistGrid with a single index space element, which gets mapped onto DE 0.
+      distgrid = ESMF_DistGridCreate(minIndex=(/1/), maxIndex=(/1/), rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+           line=__LINE__, &
+           file=__FILE__)) &
+           return  ! bail out
+
+      grid = ESMF_GridCreate(distgrid, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+           line=__LINE__, &
+           file=__FILE__)) &
+           return  ! bail out
+
+      field = ESMF_FieldCreate(name=trim(scalar_field_name), grid=grid, typekind=ESMF_TYPEKIND_R8, &
+           ungriddedLBound=(/1/), ungriddedUBound=(/scalar_field_count/), rc=rc) ! num of scalar values
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+           line=__LINE__, &
+           file=__FILE__)) &
+           return  ! bail out
+
+    end subroutine SetScalarField
 
   end subroutine MOM_RealizeFields
 
 !===============================================================================
 
-  subroutine SetScalarField(field, rc)
-    ! ----------------------------------------------
-    ! create a field with scalar data on the root pe
-    ! ----------------------------------------------
-    type(ESMF_Field), intent(inout)  :: field
-    integer,          intent(inout)  :: rc
-
-    ! local variables
-    type(ESMF_Distgrid) :: distgrid
-    type(ESMF_Grid)     :: grid
-    character(len=*), parameter :: subname='(mom_cap:SetScalarField)'
-
-    rc = ESMF_SUCCESS
-
-    ! create a DistGrid with a single index space element, which gets mapped onto DE 0.
-    distgrid = ESMF_DistGridCreate(minIndex=(/1/), maxIndex=(/1/), rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-
-    grid = ESMF_GridCreate(distgrid, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-
-    field = ESMF_FieldCreate(name=trim(scalar_field_name), grid=grid, &
-      typekind=ESMF_TYPEKIND_R8, &
-      ungriddedLBound=(/1/), &
-      ungriddedUBound=(/scalar_field_count/), & ! num of scalar values
-      rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-
-  end subroutine SetScalarField
-
-!===============================================================================
-
-  subroutine fld_list_add(num, fldlist, stdname, transferOffer, data, shortname)
+  subroutine fld_list_add(num, fldlist, stdname, transferOffer, shortname)
     ! ----------------------------------------------
     ! Set up a list of field information
     ! ----------------------------------------------
-    integer,             intent(inout)  :: num
-    type(fld_list_type), intent(inout)  :: fldlist(:)
-    character(len=*),    intent(in)     :: stdname
-    character(len=*),    intent(in)     :: transferOffer
-    real(ESMF_KIND_R8), dimension(:,:), optional, target :: data
-    character(len=*),    intent(in),optional :: shortname
+    integer,                    intent(inout) :: num
+    type(fld_list_type),        intent(inout) :: fldlist(:)
+    character(len=*),           intent(in)    :: stdname
+    character(len=*),           intent(in)    :: transferOffer
+    character(len=*), optional, intent(in)    :: shortname
 
     ! local variables
     integer :: rc
     character(len=*), parameter :: subname='(mom_cap:fld_list_add)'
 
     ! fill in the new entry
-
     num = num + 1
     if (num > fldsMax) then
        call ESMF_LogSetError(ESMF_RC_VAL_OUTOFRANGE, &
@@ -2636,13 +2635,6 @@ contains
        fldlist(num)%shortname   = trim(stdname)
     endif
     fldlist(num)%transferOffer  = trim(transferOffer)
-    if (present(data)) then
-      fldlist(num)%assoc        = .true.
-      ! The following sets up the data pointer that will be used in the realize call
-      fldlist(num)%farrayPtr    => data
-    else
-      fldlist(num)%assoc        = .false.
-    endif
 
   end subroutine fld_list_add
 

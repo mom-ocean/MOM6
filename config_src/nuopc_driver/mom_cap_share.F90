@@ -21,7 +21,9 @@ module mom_cap_share
   type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
 #endif
 
+!=======================================================================
 contains
+!=======================================================================
 
 #ifndef CESMCOUPLED
   subroutine shr_file_setLogUnit(nunit)
@@ -29,6 +31,12 @@ contains
     ! do nothing for this stub - its just here to replace
     ! having cppdefs in the main program
   end subroutine shr_file_setLogUnit
+
+  subroutine shr_file_getLogUnit(nunit)
+    integer, intent(in) :: nunit
+    ! do nothing for this stub - its just here to replace
+    ! having cppdefs in the main program
+  end subroutine shr_file_getLogUnit
 #endif
 
 end module mom_cap_share
