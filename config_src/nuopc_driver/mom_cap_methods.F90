@@ -119,7 +119,12 @@ contains
        !----
        ! near-IR, direct shortwave  (W/m2)
        !----
-       call state_getimport(importState, 'mean_net_sw_ir_dir_flx', &
+       if (cesm_coupled) then
+          fldname = 'Foxx_swnet_idr'
+       else
+          fldname = 'mean_net_sw_ir_dir_flx'
+       end if
+       call state_getimport(importState, trim(fldname), &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dir, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -129,7 +134,12 @@ contains
        !----
        ! near-IR, diffuse shortwave  (W/m2)
        !----
-       call state_getimport(importState, 'mean_net_sw_ir_dif_flx', &
+       if (cesm_coupled) then
+          fldname = 'Foxx_swnet_idf'
+       else
+          fldname = 'mean_net_sw_ir_dif_flx'
+       end if
+       call state_getimport(importState, trim(fldname), &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -139,7 +149,12 @@ contains
        !----
        ! visible, direct shortwave  (W/m2)
        !----
-       call state_getimport(importState, 'mean_net_sw_vis_dir_flx', &
+       if (cesm_coupled) then
+          fldname = 'Foxx_swnet_vdr'
+       else
+          fldname = 'mean_net_sw_vis_dir_flx'
+       end if
+       call state_getimport(importState, trim(fldname), &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -149,7 +164,12 @@ contains
        !----
        ! visible, diffuse shortwave (W/m2)
        !----
-       call state_getimport(importState, 'mean_net_sw_vis_dif_flx', &
+       if (cesm_coupled) then
+          fldname = 'Foxx_swnet_vdf'
+       else
+          fldname = 'mean_net_sw_vis_dif_flx'
+       end if
+       call state_getimport(importState, trim(fldname), &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -173,6 +193,7 @@ contains
        else
           isPresent_lwup = .false.
        end if
+
        call ESMF_StateGet(importState, 'Faxa_lwdn', itemFlag, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -183,6 +204,7 @@ contains
        else
           isPresent_lwdn = .false.
        end if
+
        call ESMF_StateGet(importState, "mean_net_lw_flx", itemFlag, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
