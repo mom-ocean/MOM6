@@ -23,7 +23,6 @@ module mom_cap_methods
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
   use MOM_domains,         only: pass_var
-  use MOM_error_handler,   only: is_root_pe
   use mpp_domains_mod,     only: mpp_get_compute_domain
   use mom_cap_share
 
@@ -271,13 +270,10 @@ contains
              jg = j + ocean_grid%jsc - jsc
              do i = isc, iec
                 ig = i + ocean_grid%isc - isc
-                ! TODO (mvertens, 2018-12-28): create a new baseline with these changes
-                ! ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg) * taux(i,j) &
-                !                                + ocean_grid%sin_rot(ig,jg) * tauy(i,j)
-                ! ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg) * tauy(i,j) &
-                !                                - ocean_grid%sin_rot(ig,jg) * taux(i,j)
-                ice_ocean_boundary%u_flux(i,j) = taux(i,j)
-                ice_ocean_boundary%v_flux(i,j) = tauy(i,j)
+                ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg) * taux(i,j) &
+                                               + ocean_grid%sin_rot(ig,jg) * tauy(i,j)
+                ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg) * tauy(i,j) &
+                                               - ocean_grid%sin_rot(ig,jg) * taux(i,j)
              end do
           end do
        else
@@ -627,18 +623,18 @@ contains
     allocate(ocm_rot(isc:iec, jsc:jec))
 
     if (cesm_coupled) then
-       ! do j = jsc, jec
-       !    jg = j + ocean_grid%jsc - jsc
-       !    do i = isc, iec
-       !       ig = i + ocean_grid%isc - isc
-       !       ocz(i,j) = ocean_public%u_surf(i,j)
-       !       ocm(i,j) = ocean_public%v_surf(i,j)
-       !       ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) &
-       !                    - ocean_grid%sin_rot(ig,jg)*ocm(i,j)
-       !       ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) &
-       !                    + ocean_grid%sin_rot(ig,jg)*ocz(i,j)
-       !    end do
-       ! end do
+       do j = jsc, jec
+          jg = j + ocean_grid%jsc - jsc
+          do i = isc, iec
+             ig = i + ocean_grid%isc - isc
+             ocz(i,j) = ocean_public%u_surf(i,j)
+             ocm(i,j) = ocean_public%v_surf(i,j)
+             ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) &
+                          - ocean_grid%sin_rot(ig,jg)*ocm(i,j)
+             ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) &
+                          + ocean_grid%sin_rot(ig,jg)*ocz(i,j)
+          end do
+       end do
     else
        do j = jsc, jec
           jg = j + ocean_grid%jsc - jsc
@@ -873,16 +869,16 @@ contains
     ! TODO (mvertens, 2018-12-30): Only one of these is correct - the cesm_coupled one is the
     ! latest and is the one that GM feels is the correct one
     if (cesm_coupled) then
-       ! do j = jsc, jec
-       !    jg = j + ocean_grid%jsc - jsc
-       !    do i = isc, iec
-       !       ig = i + ocean_grid%isc - isc
-       !       dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
-       !                     - ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
-       !       dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
-       !                     + ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
-       !    end do
-       ! end do
+       do j = jsc, jec
+          jg = j + ocean_grid%jsc - jsc
+          do i = isc, iec
+             ig = i + ocean_grid%isc - isc
+             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
+                           - ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
+             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
+                           + ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
+          end do
+       end do
     else
        do j = jsc, jec
           jg = j + ocean_grid%jsc - jsc
