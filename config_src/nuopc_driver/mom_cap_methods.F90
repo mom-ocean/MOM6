@@ -785,8 +785,10 @@ contains
     end if
 
     allocate(ssh(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !global indices
-    allocate(dhdx(isc:iec, jsc:jec)) !local indices
-    allocate(dhdy(isc:iec, jsc:jec)) !local indices
+    allocate(dhdx(isc:iec, jsc:jec))     !local indices
+    allocate(dhdy(isc:iec, jsc:jec))     !local indices
+    allocate(dhdx_rot(isc:iec, jsc:jec)) !local indices
+    allocate(dhdy_rot(isc:iec, jsc:jec)) !local indices
     ssh  = 0.0_ESMF_KIND_R8
     dhdx = 0.0_ESMF_KIND_R8
     dhdy = 0.0_ESMF_KIND_R8
