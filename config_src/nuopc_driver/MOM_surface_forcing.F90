@@ -185,14 +185,14 @@ type, public :: ice_ocean_boundary_type
                                                             !! ice-shelves, expressed as a coefficient
                                                             !! for divergence damping, as determined
                                                             !! outside of the ocean model in (m3/s)
-  integer :: xtype                                   !< The type of the exchange - REGRID, REDIST or DIRECT
-  type(coupler_2d_bc_type)      :: fluxes            !< A structure that may contain an array of
-                                                     !! named fields used for passive tracer fluxes.
-  integer :: wind_stagger = -999                     !< A flag indicating the spatial discretization of
-                                                     !! wind stresses.  This flag may be set by the
-                                                     !! flux-exchange code, based on what the sea-ice
-                                                     !! model is providing.  Otherwise, the value from
-                                                     !! the surface_forcing_CS is used.
+  integer :: xtype                                          !< The type of the exchange - REGRID, REDIST or DIRECT
+  type(coupler_2d_bc_type)      :: fluxes                   !< A structure that may contain an array of
+                                                            !! named fields used for passive tracer fluxes.
+  integer :: wind_stagger = -999                            !< A flag indicating the spatial discretization of
+                                                            !! wind stresses.  This flag may be set by the
+                                                            !! flux-exchange code, based on what the sea-ice
+                                                            !! model is providing.  Otherwise, the value from
+                                                            !! the surface_forcing_CS is used.
 end type ice_ocean_boundary_type
 
 integer :: id_clock_forcing
@@ -417,7 +417,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     enddo ; enddo
   endif
 
-
   ! obtain fluxes from IOB; note the staggering of indices
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
   do j=js,je ; do i=is,ie
@@ -431,34 +430,28 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     if (associated(IOB%q_flux)) &
       fluxes%evap(i,j) = IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    ! Note: currently runoff is treated differently for nems and cesm coupling
-    if (cesm_coupled) then
-       ! liquid runoff flux
-       if (associated(fluxes%lrunoff)) &
-            fluxes%lrunoff(i,j) = G%mask2dT(i,j) * IOB%rofl_flux(i-i0,j-j0)
-
-       ! ice runoff flux
-       if (associated(fluxes%frunoff)) &
-            fluxes%frunoff(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)
-    else
-       if (associated(IOB%runoff)) &
-            fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
+    ! liquid runoff flux
+    if (associated(IOB%rofl_flux)) then
+       fluxes%lrunoff(i,j) = IOB%rofl_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    else if (associated(IOB%runoff)) then
+       fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
     end if
 
-    if (.not. cesm_coupled) then
-       if (associated(IOB%calving)) &
-            fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
-
-       if (associated(IOB%ustar_berg)) &
-            fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
-
-       if (associated(IOB%area_berg)) &
-            fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
-
-       if (associated(IOB%mass_berg)) &
-            fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
-
+    ! ice runoff flux
+    if (associated(IOB%rofi_flux)) then
+       fluxes%frunoff(i,j) = IOB%rofi_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    else if (associated(IOB%calving)) then
+       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
     end if
+
+    if (associated(IOB%ustar_berg)) &
+         fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (associated(IOB%area_berg)) &
+         fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (associated(IOB%mass_berg)) &
+         fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%runoff_hflx)) &
          fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
@@ -473,9 +466,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
       fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     ! Note: currently latent heat flux is treated differently for nems and cesm
-    if (cesm_coupled) then
-       if (associated(IOB%latent_flux)) &
-            fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
+    if (associated(IOB%latent_flux)) then
+         fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
     else
        fluxes%latent(i,j) = 0.0
        if (associated(IOB%fprec)) then
@@ -490,18 +482,21 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
           fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
           fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
        endif
-
        fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
     end if
 
     if (associated(IOB%sw_flux_vis_dir)) &
       fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
+
     if (associated(IOB%sw_flux_vis_dif)) &
       fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
+
     if (associated(IOB%sw_flux_nir_dir)) &
       fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
+
     if (associated(IOB%sw_flux_nir_dif)) &
       fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
+
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 

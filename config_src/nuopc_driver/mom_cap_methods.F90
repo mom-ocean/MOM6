@@ -69,9 +69,6 @@ contains
     integer                         :: i, j, ig, jg, n
     integer                         :: isc, iec, jsc, jec
     logical                         :: do_import
-    logical                         :: isPresent_lwup
-    logical                         :: isPresent_lwdn
-    logical                         :: isPresent_lwnet
     character(len=128)              :: fldname
     character(len=128)              :: fldname_x
     character(len=128)              :: fldname_y
@@ -178,66 +175,17 @@ contains
        ! -------
        ! Net longwave radiation (W/m2)
        ! -------
-       ! Different treatment of long wave dependent on atmosphere
-       ! When running with cam or datm - need Foxx_lwup and Faxa_lwdn
-       ! When running with fv3 - need mean_net_lw_flx
-
-       call ESMF_StateGet(importState, 'Foxx_lwup', itemFlag, rc=rc)
+       if (cesm_coupled) then
+          fldname = 'Foxx_lwnet'
+       else
+          fldname = 'mean_net_lw_flx'
+       end if
+       call state_getimport(importState, trim(fldname),  &
+            isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       if (itemflag /= ESMF_STATEITEM_NOTFOUND) then
-          isPresent_lwup = .true.
-       else
-          isPresent_lwup = .false.
-       end if
-
-       call ESMF_StateGet(importState, 'Faxa_lwdn', itemFlag, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       if (itemflag /= ESMF_STATEITEM_NOTFOUND) then
-          isPresent_lwdn = .true.
-       else
-          isPresent_lwdn = .false.
-       end if
-
-       call ESMF_StateGet(importState, "mean_net_lw_flx", itemFlag, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-       if (itemflag /= ESMF_STATEITEM_NOTFOUND) then
-          isPresent_lwnet = .true.
-       else
-          isPresent_lwnet = .false.
-       end if
-
-       if (isPresent_lwup .and. isPresent_lwdn) then
-          ! longwave radiation, sum up and down (W/m2)
-          call state_getimport(importState, 'Foxx_lwup',  &
-               isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-          call state_getimport(importState, 'Faxa_lwdn', &
-               isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, do_sum=.true., rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-       else if (isPresent_lwnet) then
-          ! net longwave radiation, sum up and down (W/m2)
-          call state_getimport(importState, 'mean_net_lw_flx',  &
-               isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, do_sum=.true., rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-       end if
 
        !----
        ! zonal and meridional surface stress

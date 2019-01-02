@@ -222,28 +222,28 @@
 !!
 !! @subsection ImportFields Import Fields
 !!
-!! Standard Name             | Units      | Model Variable  | Description                      | Notes
+!! Standard Name             | Units      | Model Variable  | Description                           | Notes
 !! --------------------------|------------|-----------------|---------------------------------------|-------------------
 !! inst_pres_height_surface  | Pa         | p               | pressure of overlying sea ice and atmosphere
-!! mass_of_overlying_sea_ice | kg         | mi              | mass of overlying sea ice        | |
+!! mass_of_overlying_sea_ice | kg         | mi              | mass of overlying sea ice          | |
 !! mean_calving_heat_flx     | W m-2      | calving_hflx    | heat flux, relative to 0C, of frozen land water into ocean
-!! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff       | |
-!! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux           | sign reversed (- evap)
-!! mean_fprec_rate           | kg m-2 s-1 | fprec           | mass flux of frozen precip       | |
+!! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff         | |
+!! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux             | sign reversed (- evap)
+!! mean_fprec_rate           | kg m-2 s-1 | fprec           | mass flux of frozen precip         | |
 !! mean_merid_moment_flx     | Pa         | v_flux          | j-directed wind stress into ocean
-!!                                              | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
-!! mean_net_lw_flx           | W m-2      | lw_flux         | long wave radiation              | |
+!!                                        | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
+!! mean_net_lw_flx           | W m-2      | lw_flux         | long wave radiation                | |
 !! mean_net_sw_ir_dif_flx    | W m-2      | sw_flux_nir_dif | diffuse near IR shortwave radiation| |
-!! mean_net_sw_ir_dir_flx    | W m-2      | sw_flux_nir_dir | direct near IR shortwave radiation| |
+!! mean_net_sw_ir_dir_flx    | W m-2      | sw_flux_nir_dir | direct near IR shortwave radiation | |
 !! mean_net_sw_vis_dif_flx   | W m-2      | sw_flux_vis_dif | diffuse visible shortware radiation| |
-!! mean_net_sw_vis_dir_flx   | W m-2      | sw_flux_vis_dir | direct visible shortware radiation| |
-!! mean_prec_rate            | kg m-2 s-1 | lprec           | mass flux of liquid precip       | |
+!! mean_net_sw_vis_dir_flx   | W m-2      | sw_flux_vis_dir | direct visible shortware radiation | |
+!! mean_prec_rate            | kg m-2 s-1 | lprec           | mass flux of liquid precip         | |
 !! mean_runoff_heat_flx      | W m-2      | runoff_hflx     | heat flux, relative to 0C, of liquid land water into ocean
-!! mean_runoff_rate          | kg m-2 s-1 | runoff          | mass flux of liquid runoff       | |
-!! mean_salt_rate            | kg m-2 s-1 | salt_flux       | salt flux                        | |
-!! mean_sensi_heat_flx       | W m-2      | t_flux          | sensible heat flux into ocean    | sign reversed (- sensi)
+!! mean_runoff_rate          | kg m-2 s-1 | runoff          | mass flux of liquid runoff         | |
+!! mean_salt_rate            | kg m-2 s-1 | salt_flux       | salt flux                          | |
+!! mean_sensi_heat_flx       | W m-2      | t_flux          | sensible heat flux into ocean      | sign reversed (- sensi)
 !! mean_zonal_moment_flx     | Pa         | u_flux          | j-directed wind stress into ocean
-!!                                              | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
+!!                                        | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
 !!
 !!
 !! @subsection ExportField Export Fields
@@ -254,15 +254,15 @@
 !! Standard Name              | Units | Model Variable | Description                               | Notes
 !! ---------------------------|-------|----------------|-------------------------------------------|--------------------
 !! freezing_melting_potential | W m-2 | frazil         | accumulated heating from frazil formation
-!!                                              | cap converts model units (J m-2) to (W m-2) for export
+!!                                                     | cap converts model units (J m-2) to (W m-2) for export
 !! ocean_mask                 |       |                | ocean mask                                | |
 !! ocn_current_merid          | m s-1 | v_surf         | j-directed surface velocity on u-cell
-!!                                              | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
+!!                                                     | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
 !! ocn_current_zonal          | m s-1 | u_surf         | i-directed surface velocity on u-cell
-!!                                              | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
+!!                                                     | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
 !! s_surf                     | psu   | s_surf         | sea surface salinity on t-cell            | |
 !! sea_lev                    | m     | sea_lev        | sea level
-!!                                              | model computation is eta_t + patm/(rho0*grav) - eta_geoid - eta_tide
+!!                                                     | model computation is eta_t + patm/(rho0*grav) - eta_geoid - eta_tide
 !! sea_surface_temperature    | K     | t_surf         | sea surface temperature on t-cell         | |
 !!
 !! @subsection MemoryManagement Memory Management
@@ -1001,66 +1001,51 @@ contains
       file=__FILE__)) &
       return  ! bail out
 
+    ! CESM fields currently not used in cesm_coupled
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"  , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth" , "will provide")
+    ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw" , "will provide")
+    ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen", "will provide")
+
     if (cesm_coupled) then
 
        !--------- import fields -------------
        if (len_trim(scalar_field_name) > 0) then
           call fld_list_add(fldsToOcn_num, fldsToOcn, trim(scalar_field_name), "will_provide") ! not in EMC
        endif
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"         , "will provide") ! -> inst_pres_height_surface
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain"       , "will provide") ! -> mean_prec_rat
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow"       , "will provide") ! -> mean_fprec_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_vdr"  , "will provide") ! -> mean_net_sw_ir_dif_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_vdf"  , "will provide") ! -> mean_net_sw_vis_dir_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_idr"  , "will provide") ! -> mean_net_sw_ir_dir_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_idf"  , "will provide") ! -> mean_net_sw_vis_dif_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"       , "will provide") ! -> mean_zonal_moment_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"       , "will provide") ! -> mean_merid_moment_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"        , "will provide") ! -> mean_sensi_heat_flx
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lat"        , "will provide") ! -> mean latent heat flux
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap"       , "will provide") ! -> mean_evap_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_salt"       , "will provide") ! -> mean_salt_rate
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"       , "will provide") ! -> liquid runoff
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"       , "will provide") ! -> ice runoff
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwup"       , "will provide") ! -> mean long wave up (coupled to cam)
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_lwdn"       , "will provide") ! -> mean long wave down (coupled to cam)
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx" , "will_provide") ! -> coupled to fv3
-
-       ! EMC fields not used
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_lw_flx"            , "will provide") ! for CESM lwup + lwdn
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! for CESM rofl + rofi
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide") ! not in CESM
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide") ! not in CESM
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide") ! not in CESM
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide") ! not in CESM
-
-       ! CESM fields currently not used
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"  , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth" , "will provide")
-       ! call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw" , "will provide")
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux"      , "will provide") ! -> mean_zonal_moment_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy"      , "will provide") ! -> mean_merid_moment_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"       , "will provide") ! -> mean_sensi_heat_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lat"       , "will provide") ! -> mean latent heat flux
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap"      , "will provide") ! -> mean_evap_rate
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_salt"      , "will provide") ! -> mean_salt_rate
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwnet"     , "will_provide") ! -> mean net lwnet
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_vdr" , "will provide") ! -> mean_net_sw_ir_dif_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_vdf" , "will provide") ! -> mean_net_sw_vis_dir_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_idr" , "will provide") ! -> mean_net_sw_ir_dir_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_idf" , "will provide") ! -> mean_net_sw_vis_dif_flx
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_rain"      , "will provide") ! -> mean_prec_rat
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_snow"      , "will provide") ! -> mean_fprec_rate
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"      , "will provide") ! -> liquid runoff
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"      , "will provide") ! -> ice runoff
+       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv"        , "will provide") ! -> inst_pres_height_surface
 
        !--------- export fields -------------
        if (len_trim(scalar_field_name) > 0) then
           call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide") ! not in EMC
        endif
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_omask"      , "will provide") ! -> ocean_mask
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_t"          , "will provide") ! -> sea_surface_temperature
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_s"          , "will provide") ! -> s_surf
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_u"          , "will provide") ! -> ocn_current_zonal
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"          , "will provide") ! -> ocn_current_merid
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"       , "will provide") ! -> sea_surface_slope_zonal
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"       , "will provide") ! -> sea_surface_slope_merid
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"    , "will provide") ! -> not in EMC
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"        , "will provide") ! -> freezing_melting_potential
-
-       ! EMC fields not used in CESM
-       ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev", "will provide")
-
-       ! CESM fields currently not used in EMC
-       ! call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen", "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_omask"   , "will provide") ! -> ocean_mask
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_t"       , "will provide") ! -> sea_surface_temperature
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_s"       , "will provide") ! -> s_surf
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_u"       , "will provide") ! -> ocn_current_zonal
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v"       , "will provide") ! -> ocn_current_merid
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdx"    , "will provide") ! -> sea_surface_slope_zonal
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"    , "will provide") ! -> sea_surface_slope_merid
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth" , "will provide") ! -> not in EMC
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"     , "will provide") ! -> freezing_melting_potential
 
     else
 
@@ -1077,12 +1062,12 @@ contains
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_net_sw_ir_dif_flx"     , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_prec_rate"             , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fprec_rate"            , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide")
        call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide")
-       call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide")
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") ! not used in NEMS
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide") ! not used in NEMS
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide") ! not used in NEMS
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide") ! not used in NEMS
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice"  , "will provide") ! not used in NEMS
 
        !--------- export fields -------------
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
@@ -1090,12 +1075,12 @@ contains
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"                     , "will provide")
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"          , "will provide")
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"          , "will provide")
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide")
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "accum_heat_frazil"          , "will provide")
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "inst_melt_potential"        , "will provide")
-       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide")
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_zonal"    , "will provide")
        call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_merid"    , "will provide")
+       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide")
+      !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "accum_heat_frazil"          , "will provide") ! not used in NEMS
+      !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "inst_melt_potential"        , "will provide") ! not used in NEMS
+      !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                    , "will provide") ! not used in NEMS
     end if
 
     do n = 1,fldsToOcn_num
