@@ -1062,12 +1062,8 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
   logical :: search_layer
-  integer :: k, kl_left_0, kl_right_0
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
-  integer :: lastK_left, lastK_right
-  real    :: lastP_left, lastP_right
   real    :: min_bound
-  real    :: T_other, S_other, P_other, dRdT_other, dRdS_other
   real    :: pos
 
   ! Initialize variables for the search
