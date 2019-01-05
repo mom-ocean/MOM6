@@ -1213,17 +1213,14 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
     endif
     ! Effective thickness
     if (k_surface>1) then
-      ! This is useful as a check to make sure that positions are monotonically increasing
-      hL = absolute_position(nk,ns,Pres_l,KoL,PoL,k_surface) - absolute_position(nk,ns,Pres_l,KoL,PoL,k_surface-1)
-      hR = absolute_position(nk,ns,Pres_r,KoR,PoR,k_surface) - absolute_position(nk,ns,Pres_r,KoR,PoR,k_surface-1)
-      ! Check to see if neutral surfaces have crossed if hL or hR is negative
-      if ( hL<0. .or. hR<0. ) then
-        hEff(k_surface-1) = 0.
-        call MOM_error(FATAL, "hL or hR is negative")
-      elseif ( hL > 0. .and. hR > 0.) then
+      if ( KoL(k_surface) == KoL(k_surface-1) .and. KoR(k_surface) == KoR(k_surface-1) ) then
         hL = (PoL(k_surface) - PoL(k_surface-1))*hcol_l(KoL(k_surface))
         hR = (PoR(k_surface) - PoR(k_surface-1))*hcol_r(KoR(k_surface))
-        hEff(k_surface-1) = 2. * ( (hL * hR) / ( hL + hR ) )! Harmonic mean
+        if ( hL + hR == 0. ) then
+           hEff(k_surface-1) = 0.
+        else
+           hEff(k_surface-1) = 2. * ( (hL * hR) / ( hL + hR ) )! Harmonic mean
+        endif
       else
         hEff(k_surface-1) = 0.
       endif
