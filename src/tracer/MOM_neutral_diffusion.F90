@@ -8,7 +8,7 @@ use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
 use MOM_EOS,                   only : EOS_type, EOS_manual_init, calculate_compress, calculate_density_derivs
-use MOM_EOS,                   only : calculate_density, calculate_density_second_derivs
+use MOM_EOS,                   only : calculate_density_second_derivs
 use MOM_EOS,                   only : extract_member_EOS, EOS_LINEAR, EOS_TEOS10, EOS_WRIGHT
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
@@ -162,10 +162,6 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
     call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
-    call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
-                   "Extrapolate at the top and bottommost cells, otherwise   \n"//  &
-                   "assume boundaries are piecewise constant",                      &
-                   default=.false.)
     call get_param(param_file, mdl, "NEUTRAL_POS_METHOD", CS%neutral_pos_method,   &
                    "Method used to find the neutral position                 \n"// &
                    "1. Delta_rho varies linearly, find 0 crossing            \n"// &
@@ -374,9 +370,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                          &
-            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                      &
+            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                     &
             CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%stable_cell(i,j,:),                   &
-            CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:),              &
+            CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:),             &
             CS%dRdT_i(i+1,j,:,:), CS%dRdS_i(i+1,j,:,:), CS%stable_cell(i+1,j,:),             &
             CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:), &
             CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                          &
@@ -395,9 +391,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
       else
         call find_neutral_surface_positions_discontinuous(CS, G%ke,                          &
-            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                      &
+            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                     &
             CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%stable_cell(i,j,:),                   &
-            CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:),              &
+            CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:),             &
             CS%dRdT_i(i,j+1,:,:), CS%dRdS_i(i,j+1,:,:), CS%stable_cell(i,j+1,:),             &
             CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:), &
             CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                          &
@@ -1180,7 +1176,6 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
           endif
         endif
 
-
         PoL(k_surface) = pos
         KoL(k_surface) = kl_left
 
@@ -1903,7 +1898,7 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
-                                   'Indentical columns with mixed layer')
+                                   'Identical columns with mixed layer')
 
   ! Right column with unstable mixed layer
   call find_neutral_surface_positions_continuous(3, &
@@ -2203,7 +2198,30 @@ logical function ndiff_unit_tests_discontinuous(verbose)
 !            "Temp/Salt stratified   (Brent)  "))
 !  deallocate(EOS)
 !
-!  if (.not. ndiff_unit_tests_discontinuous) write(*,*) 'Pass'
+  ! Tests for linearized version of searching the layer for neutral surface position
+  ! EOS linear in T, uniform alpha
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.2, 0., -0.2, 0., -0.2, 0., &
+             (/12.,-4./), (/34.,0./), 0.), "Temp Uniform Linearized Alpha/Beta"))
+  ! EOS linear in S, uniform beta
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., 0., 0.8, 0., 0.8, 0., 0.8, &
+             (/12.,0./), (/34.,2./), 0.), "Salt Uniform Linearized Alpha/Beta"))
+  ! EOS linear in T/S, uniform alpha/beta
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, &
+             (/12.,-4./), (/34.,2./), 0.), "Temp/salt Uniform Linearized Alpha/Beta"))
+  ! EOS linear in T, insensitive to S
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., -0.2, 0., -0.4, 0., -0.6, 0., &
+             (/12.,-4./), (/34.,0./), 0.), "Temp stratified Linearized Alpha/Beta"))
+  ! EOS linear in S, insensitive to T
+  ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
+             find_neutral_pos_linear_alpha_beta(CS%ndiff_aux_CS, 10., 35., 0., 0.8, 0., 1.0, 0., 0.5, &
+             (/12.,0./), (/34.,2./), 0.), "Salt stratified Linearized Alpha/Beta"))
+  if (.not. ndiff_unit_tests_discontinuous) write(*,*) 'Pass'
+  deallocate(EOS)
+  deallocate(CS%ndiff_aux_CS
 
 end function ndiff_unit_tests_discontinuous
 

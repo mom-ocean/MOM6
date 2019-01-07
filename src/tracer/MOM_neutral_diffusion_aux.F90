@@ -13,6 +13,7 @@ public set_ndiff_aux_params
 public calc_drho
 public drho_at_pos
 public interpolate_for_nondim_position
+public find_neutral_pos_linear_alpha_beta
 public refine_nondim_position
 public check_neutral_positions
 public kahan_sum
@@ -159,6 +160,99 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if ( interpolate_for_nondim_position > 1. ) &
     stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
+
+!> Search a layer to find where delta_rho = 0 based on a linear interpolation of alpha and beta of the top and bottom
+!! being searched and polynomial reconstructions of T and S. We need Newton's method because the T and S
+!! reconstructions make delta_rho a polynomial function of z if using PPM or higher. If Newton's method would search
+!! fall out of the interval [0,1], a bisection step would be taken instead. Also this linearization of alpha, beta
+!! means that second derivatives of the EOS are not needed. Note that delta in variable names below refers to
+!! horizontal differences and 'd' refers to vertical differences
+function find_neutral_pos_linear_alpha_beta( CS, T_ref, S_ref, alpha_ref, beta_ref, alpha_top, beta_top, &
+                                                  alpha_bot, beta_bot, ppoly_T, ppoly_S, z0 ) result( z )
+  type(ndiff_aux_CS_type),  intent(in) :: CS        !< Control structure with parameters for this module
+  real,                     intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
+  real,                     intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
+  real,                     intent(in) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
+  real,                     intent(in) :: beta_ref  !< dRho/dS of the neutral surface at the searched from interface
+  real,                     intent(in) :: alpha_top !< dRho/dT at top of layer being searched
+  real,                     intent(in) :: beta_top  !< dRho/dS at top of layer being searched
+  real,                     intent(in) :: alpha_bot !< dRho/dT at bottom of layer being searched
+  real,                     intent(in) :: beta_bot  !< dRho/dS at bottom of layer being searched
+  real, dimension(:),       intent(in) :: ppoly_T   !< Coefficients of the order N polynomial reconstruction of T within
+                                                    !! the layer to be searched.
+  real, dimension(:),       intent(in) :: ppoly_S   !< Coefficients of the order N polynomial reconstruction of T within
+                                                    !! the layer to be searched.
+  real,                     intent(in)  :: z0       !< Lower bound of position, also serves as the initial guess
+  real                                  :: z        !< Position where drho = 0
+  ! Local variables
+  real :: dalpha, dbeta, drho, drho_dz, alpha_z, beta_z, T_z, S_z, deltaT, deltaS, dT_dz, dS_dz, alpha_sum, beta_sum, dz
+  real :: drho_min, drho_max, ztest, zmin, zmax
+  real :: a1, a2
+  integer :: iter
+
+  ! Position independent quantities
+  dalpha = alpha_bot - alpha_top
+  dbeta  = beta_bot  - beta_top
+  ! Initial starting drho (used for bisection)
+  zmin = z0        ! Lower bounding interval
+  zmax = 1.        ! Maximum bounding interval (bottom of layer)
+  T_z = evaluation_polynomial( ppoly_T, CS%nterm, zmin )
+  S_z = evaluation_polynomial( ppoly_S, CS%nterm, zmin )
+  drho_min = 0.5 * ( (alpha_top + alpha_ref )*(T_z - T_ref) + (beta_top + beta_ref)*(S_z - S_ref) )
+  T_z = evaluation_polynomial( ppoly_T, CS%nterm, zmax )
+  S_z = evaluation_polynomial( ppoly_S, CS%nterm, zmax )
+  drho_max = 0.5 * ( (alpha_bot + alpha_ref )*(T_z - T_ref) + (beta_bot + beta_ref)*(S_z - S_ref) )
+
+  z = z0
+  do iter = 1, CS%max_iter
+    ! Calculate quantities at the current nondimensional position
+    a1 = 1.-z
+    a2 = z
+    alpha_z   = a1*alpha_top + a2*alpha_bot
+    beta_z    = a1*beta_top  + a2*beta_bot
+    T_z       = evaluation_polynomial( ppoly_T, CS%nterm, z )
+    S_z       = evaluation_polynomial( ppoly_S, CS%nterm, z )
+    deltaT    = T_z - T_ref
+    deltaS    = S_z - S_ref
+    alpha_sum = alpha_ref + alpha_z
+    beta_sum  = beta_ref  + beta_z
+    drho      = 0.5 * ( alpha_sum*deltaT + beta_sum*deltaS )
+    ! Check for convergence
+    if (ABS(drho) <= CS%drho_tol) exit
+    ! Update bisection bracketing intervals
+    if (drho < 0. .and. drho > drho_min) then
+      drho_min = drho
+      zmin = z
+    elseif (drho > 0. .and. drho < drho_max) then
+      drho_max = drho
+      zmax = z
+    endif
+
+    ! Calculate a Newton step
+    dT_dz = first_derivative_polynomial( ppoly_T, CS%nterm, z )
+    dS_dz = first_derivative_polynomial( ppoly_S, CS%nterm, z )
+    drho_dz = 0.5*( (dalpha*deltaT + alpha_sum*dT_dz) + (dbeta*deltaS + beta_sum*dS_dz) )
+
+    ztest = z - drho/drho_dz
+    print *, ztest, z, drho, drho_dz
+
+    ! Take a bisection if z falls out of [zmin,zmax]
+    if (ztest < zmin .or. ztest > zmax) then
+      if ( drho < 0. ) then
+        ztest = 0.5*(z + zmax)
+      else
+        ztest = 0.5*(zmin + z)
+      endif
+    endif
+
+    ! Test to ensure we haven't stalled out
+    if ( abs(z-ztest) <= CS%xtol ) exit
+
+    ! Reset for next iteration
+    z = ztest
+  enddo
+
+end function find_neutral_pos_linear_alpha_beta
 
 !> Use root-finding methods to find where dRho = 0, based on the equation of state and the polynomial
 !! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear
