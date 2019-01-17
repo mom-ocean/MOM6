@@ -54,6 +54,8 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
+  logical :: use_GME_VarMix       !< If true, calculates slopes and Brunt-Vaisala frequency for use with
+                                  !! the GME closure.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   !< S*N at u-points (s^-1)
     SN_v => NULL(), &  !< S*N at v-points (s^-1)
@@ -89,6 +91,8 @@ type, public :: VarMix_CS
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope (non-dimensional)
     slope_y => NULL(), &  !< Meridional isopycnal slope (non-dimensional)
+    N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points (s-2)
+    N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points (s-2)
     ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with (non-dim)
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
@@ -403,19 +407,20 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     e             ! The interface heights relative to mean sea level, in m.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at u-points
+!  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points
+!  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at u-points
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  if (CS%calculate_Eady_growth_rate .or. CS%use_stored_slopes) then
+  if (CS%calculate_Eady_growth_rate .or. CS%use_stored_slopes &
+      .or. CS%use_GME_VarMix) then
     call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
-                                  CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
+                                  CS%slope_x, CS%slope_y, CS%N2_u, CS%N2_v, 1)
       if (CS%calculate_Eady_growth_rate) then
-        call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+        call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, CS%N2_u, CS%N2_v, G, GV, CS)
       endif
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
@@ -429,8 +434,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
     if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
     if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
     if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, N2_u, CS%diag)
-    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, N2_v, CS%diag)
+    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
+    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
   endif
 
 end subroutine calc_slope_functions
@@ -998,6 +1003,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
+    allocate(CS%N2_u(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%N2_u(:,:,:) = 0.0
+    allocate(CS%N2_v(isd:ied,JsdB:JedB,G%ke+1)) ; CS%N2_v(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
@@ -1114,6 +1121,14 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     else
       oneOrTwo = 1.0
     endif
+
+    call get_param(param_file, mdl, "USE_GME", CS%use_GME_VarMix, &
+                 "If true, use the GM+E backscatter scheme in association \n"//&
+                 "with the Gent and McWilliams parameterization.", default=.false.)
+
+    if (CS%use_GME_VarMix .and. .not. CS%use_stored_slopes) &
+              call MOM_error(FATAL,"ERROR: use_stored_slopes must be TRUE when "// &
+                                   "using GME.")
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
