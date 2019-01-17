@@ -20,7 +20,7 @@ use MOM_verticalGrid,          only : verticalGrid_type
 implicit none ; private
 
 public thickness_diffuse, thickness_diffuse_init, thickness_diffuse_end
-public vert_fill_TS
+public vert_fill_TS, thickness_diffuse_get_KH
 
 #include <MOM_memory.h>
 
@@ -52,11 +52,17 @@ type, public :: thickness_diffuse_CS ; private
                                  !! longer than DT, or 0 (the default) to use DT.
   integer :: nkml                !< number of layers within mixed layer
   logical :: debug               !< write verbose checksums for debugging purposes
-!  logical :: QG_Leith_GM         !< If true, uses the QG Leith viscosity as the GM coefficient
+  logical :: use_GME_thickness_diffuse !< If true, passes GM coefficients to MOM_hor_visc for use
+                                 !! with GME closure.
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
   real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
+
+  real, dimension(:,:,:), pointer :: &
+    KH_u_GME => NULL(), &        !< interface height diffusivities in u-columns (m2 s-1)
+    KH_v_GME => NULL(), &        !< interface height diffusivities in v-columns (m2 s-1)
+    KH_t_GME => NULL()           !< interface height diffusivities in t-columns (m2 s-1)
 
   !>@{
   !! Diagnostic identifier
@@ -239,6 +245,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
 !$OMP do
+  if (CS%use_GME_thickness_diffuse) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+        CS%KH_u_GME(I,j,k) = KH_u(I,j,k)
+    enddo ; enddo ; enddo
+  endif
+
+!$OMP do
   do J=js-1,je ; do i=is,ie
     Khth_Loc(i,j) = CS%Khth
   enddo ; enddo
@@ -303,6 +316,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
         KH_v(i,J,k) = VarMix%KH_v_QG(i,J,k)
       enddo ; enddo ; enddo
     endif
+  endif
+
+!$OMP do
+  if (CS%use_GME_thickness_diffuse) then
+    do k=1,nz ; do j=js-1,je ; do I=is,ie
+      CS%KH_v_GME(I,j,k) = KH_v(I,j,k)
+    enddo ; enddo ; enddo
   endif
 
 !$OMP do
@@ -385,6 +405,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
                        / (hu(I-1,j)+hu(I,j)+hv(i,J-1)+hv(i,J)+h_neglect)
         enddo ; enddo
       enddo
+
+      if (CS%use_GME_thickness_diffuse) then
+        do k=1,nz; do j=js,je ; do i=is,ie
+          CS%KH_t_GME(i,j,k) = KH_t(i,j,k)
+        enddo ; enddo ; enddo
+      endif
+
       if (CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
       if (CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
     endif
@@ -1805,6 +1832,15 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
 
+  call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
+                 "If true, use the GM+E backscatter scheme in association \n"//&
+                 "with the Gent and McWilliams parameterization.", default=.false.)
+
+  if (CS%use_GME_thickness_diffuse) then
+    allocate(CS%KH_u_GME(G%IsdB:G%IedB,G%jsd:G%jed,G%ke+1)) ; CS%KH_u_GME(:,:,:) = 0.0
+    allocate(CS%KH_v_GME(G%isd:G%ied,G%JsdB:G%JedB,G%ke+1)) ; CS%KH_v_GME(:,:,:) = 0.0
+    allocate(CS%KH_t_GME(G%isd:G%ied,G%jsd:G%jed,G%ke+1)) ;   CS%KH_t_GME(:,:,:) = 0.0
+  endif
 
   if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
   else ; flux_to_kg_per_s = 1. ; endif
@@ -1859,6 +1895,34 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
            'Parameterized Meridional Overturning Streamfunction before limiting/smoothing', 'm3 s-1')
 
 end subroutine thickness_diffuse_init
+
+!> Copies ubtav and vbtav from private type into arrays
+subroutine thickness_diffuse_get_KH(CS, KH_t_GME, KH_u_GME, KH_v_GME, G)
+  type(thickness_diffuse_CS),          pointer     :: CS   !< Control structure for
+                                                   !! this module
+  type(ocean_grid_type),               intent(in)  :: G    !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: KH_t_GME!< interface height
+                                                   !! diffusivities in t-columns (m2 s-1)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: KH_u_GME!< interface height
+                                                   !! diffusivities in u-columns (m2 s-1)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: KH_v_GME!< interface height
+                                                   !! diffusivities in v-columns (m2 s-1)
+  ! Local variables
+  integer :: i,j,k
+
+  do k=1,G%ke ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
+    KH_t_GME(i,j,k) = CS%KH_t_GME(i,j,k)
+  enddo ; enddo ; enddo
+
+  do k=1,G%ke ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
+    KH_u_GME(I,j,k) = CS%KH_u_GME(I,j,k)
+  enddo ; enddo ; enddo
+
+  do k=1,G%ke ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
+    KH_v_GME(i,J,k) = CS%KH_v_GME(i,J,k)
+  enddo ; enddo ; enddo
+
+end subroutine thickness_diffuse_get_KH
 
 !> Deallocate the thickness diffusion control structure
 subroutine thickness_diffuse_end(CS)

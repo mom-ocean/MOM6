@@ -55,7 +55,7 @@ implicit none ; private
 #endif
 
 public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
-public register_barotropic_restarts, set_dtbt
+public register_barotropic_restarts, set_dtbt, barotropic_get_tav
 
 !> The barotropic stepping open boundary condition type
 type, private :: BT_OBC_type
@@ -4348,6 +4348,29 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 
 end subroutine barotropic_init
 
+!> Copies ubtav and vbtav from private type into arrays
+subroutine barotropic_get_tav(CS, ubtav, vbtav, G)
+  type(barotropic_CS),                 pointer     :: CS   !< Control structure for
+                                                   !! this module
+  type(ocean_grid_type),               intent(in)  :: G    !< Grid structure
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: ubtav!< zonal barotropic vel.
+                                                   !! ave. over baroclinic time-step (m s-1)
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: vbtav!< meridional barotropic vel.
+                                                   !! ave. over baroclinic time-step (m s-1)
+  ! Local variables
+  integer :: i,j
+
+  do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
+    ubtav(I,j) = CS%ubtav(I,j)
+  enddo ; enddo
+
+  do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
+    vbtav(i,J) = CS%vbtav(i,J)
+  enddo ; enddo
+
+end subroutine barotropic_get_tav
+
+
 !> Clean up the barotropic control structure.
 subroutine barotropic_end(CS)
   type(barotropic_CS), pointer :: CS  !< Control structure to clear out.
@@ -4366,7 +4389,7 @@ subroutine barotropic_end(CS)
 end subroutine barotropic_end
 
 !> This subroutine is used to register any fields from MOM_barotropic.F90
-!! that should be written to or read from the restart file.
+!!! that should be written to or read from the restart file.
 subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
