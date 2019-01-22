@@ -362,7 +362,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP                                  sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
 !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
-!$OMP                                  div_xx, div_xx_dx, div_xx_dy,                  &
+!$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
 
 

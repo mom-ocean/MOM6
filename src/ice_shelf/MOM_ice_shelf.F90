@@ -25,7 +25,7 @@ use MOM_io, only : slasher, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real
+use MOM_time_manager, only : time_type, time_type_to_real, time_type_to_real, real_to_time
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_variables, only : surface
 use MOM_forcing_type, only : forcing, allocate_forcing_type, MOM_forcing_chksum
@@ -47,7 +47,7 @@ use MOM_coms, only : reproducing_sum, sum_across_PEs
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
-use time_manager_mod, only : print_time, time_type_to_real, real_to_time_type
+use time_manager_mod, only : print_time
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -754,6 +754,10 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
+  if ((CS%grid%isc /= G%isc) .or. (CS%grid%iec /= G%iec) .or. &
+      (CS%grid%jsc /= G%jsc) .or. (CS%grid%jec /= G%jec)) &
+    call MOM_error(FATAL,"add_shelf_forces: Incompatible ocean and ice shelf grids.")
+
   ISS => CS%ISS
 
   find_area = .true. ; if (present(do_shelf_area)) find_area = do_shelf_area
@@ -823,6 +827,10 @@ subroutine add_shelf_pressure(G, CS, fluxes)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
+  if ((CS%grid%isc /= G%isc) .or. (CS%grid%iec /= G%iec) .or. &
+      (CS%grid%jsc /= G%jsc) .or. (CS%grid%jec /= G%jec)) &
+    call MOM_error(FATAL,"add_shelf_pressure: Incompatible ocean and ice shelf grids.")
+
   do j=js,je ; do i=is,ie
     press_ice = (CS%ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
     if (associated(fluxes%p_surf)) then
@@ -876,6 +884,10 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
+
+  if ((CS%grid%isc /= G%isc) .or. (CS%grid%iec /= G%iec) .or. &
+      (CS%grid%jsc /= G%jsc) .or. (CS%grid%jec /= G%jec)) &
+    call MOM_error(FATAL,"add_shelf_flux: Incompatible ocean and ice shelf grids.")
 
   ISS => CS%ISS
 
@@ -979,7 +991,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
       ! just compute changes in mass after first time step
       if (t0>0.0) then
-        Time0 = real_to_time_type(t0)
+        Time0 = real_to_time(t0)
         last_hmask(:,:) = ISS%hmask(:,:) ; last_area_shelf_h(:,:) = ISS%area_shelf_h(:,:)
         call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
         last_h_shelf = last_mass_shelf/CS%density_ice
@@ -1098,16 +1110,17 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call set_grid_metrics(dG, param_file)
   ! call set_diag_mediator_grid(CS%grid, CS%diag)
 
-  ! The ocean grid is possibly different
-  if (associated(ocn_grid)) CS%ocn_grid => ocn_grid
+  ! The ocean grid possibly uses different symmetry.
+  if (associated(ocn_grid)) then ; CS%ocn_grid => ocn_grid
+  else ; CS%ocn_grid => CS%grid ; endif
 
   ! Convenience pointers
   G => CS%grid
   OG => CS%ocn_grid
 
   if (is_root_pe()) then
-   write(0,*) 'OG: ', OG%isd, OG%isc, OG%iec, OG%ied, OG%jsd, OG%jsc, OG%jsd, OG%jed
-   write(0,*) 'IG: ', G%isd, G%isc, G%iec, G%ied, G%jsd, G%jsc, G%jsd, G%jed
+    write(0,*) 'OG: ', OG%isd, OG%isc, OG%iec, OG%ied, OG%jsd, OG%jsc, OG%jsd, OG%jed
+    write(0,*) 'IG: ', G%isd, G%isc, G%iec, G%ied, G%jsd, G%jsc, G%jsd, G%jed
   endif
 
   CS%Time = Time ! ### This might not be in the right place?
@@ -1344,10 +1357,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
      ! when SHELF_THERMO = True. These fluxes are necessary if one wants to
      ! use either ENERGETICS_SFC_PBL (ALE mode) or BULKMIXEDLAYER (layer mode).
     if (present(fluxes)) &
-      call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., &
+      call allocate_forcing_type(CS%ocn_grid, fluxes, ustar=.true., shelf=.true., &
                                  press=.true., water=CS%isthermo, heat=CS%isthermo)
     if (present(forces)) &
-      call allocate_mech_forcing(G, forces, ustar=.true., shelf=.true., press=.true.)
+      call allocate_mech_forcing(CS%ocn_grid, forces, ustar=.true., shelf=.true., press=.true.)
   else
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes in solo mode.")
     if (present(fluxes)) &
@@ -1363,6 +1376,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call copy_dyngrid_to_MOM_grid(dG, CS%grid)
 
   call destroy_dyn_horgrid(dG)
+
+  !### Rescale the topography in the grid, and record the units.
 
   ! Set up the restarts.
   call restart_init(param_file, CS%restart_CSp, "Shelf.res")

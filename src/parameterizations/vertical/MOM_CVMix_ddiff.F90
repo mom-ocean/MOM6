@@ -46,8 +46,8 @@ type, public :: CVMix_ddiff_cs
   !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (m2/s)
-  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (m2/s)
+!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (Z2/s)
+!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (Z2/s)
   real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio (nondim)
 
 end type CVMix_ddiff_cs
@@ -136,10 +136,10 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1')
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=GV%Z_to_m**2)
 
   CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1')
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=GV%Z_to_m**2)
 
   CS%id_R_rho = register_diag_field('ocean_model','R_rho',diag%axesTi,Time, &
          'Double-diffusion density ratio', 'nondim')
@@ -167,9 +167,9 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for temp (m2/sec).
+                                                                  !! diffusivity for temp (Z2/sec).
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for salt (m2/sec).
+                                                                  !! diffusivity for salt (Z2/sec).
   type(CVMix_ddiff_cs),                           pointer :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
   integer,                                   intent(in)   :: j    !< Meridional grid indice.
@@ -185,6 +185,9 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
     beta_dS,    &  !< beta*dS across interfaces
     dT,         &  !< temp. difference between adjacent layers (degC)
     dS             !< salt difference between adjacent layers
+  real, dimension(SZK_(G)+1) :: &
+    Kd1_T,      &  !< Diapycanal diffusivity of temperature, in m2 s-1.
+    Kd1_S          !< Diapycanal diffusivity of salinity, in m2 s-1.
 
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   integer :: kOBL                        !< level of OBL extent
@@ -196,8 +199,6 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
   alpha_dT(:) = 0.0; beta_dS(:) = 0.0; dRho_dT(:) = 0.0
   dRho_dS(:) = 0.0; dT(:) = 0.0; dS(:) = 0.0
 
-  ! set Kd_T and Kd_S to zero to avoid passing values from previous call
-  Kd_T(:,j,:) = 0.0; Kd_S(:,j,:) = 0.0
 
   ! GMM, I am leaving some code commented below. We need to pass BLD to
   ! this soubroutine to avoid adding diffusivity above that. This needs
@@ -263,12 +264,17 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
     ! gets index of the level and interface above hbl
     !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
-    call CVMix_coeffs_ddiff(Tdiff_out=Kd_T(i,j,:), &
-                            Sdiff_out=Kd_S(i,j,:), &
+    Kd1_T(:) = 0.0 ; Kd1_S(:) = 0.0
+    call CVMix_coeffs_ddiff(Tdiff_out=Kd1_T(:), &
+                            Sdiff_out=Kd1_S(:), &
                             strat_param_num=alpha_dT(:), &
                             strat_param_denom=beta_dS(:), &
                             nlev=G%ke,    &
                             max_nlev=G%ke)
+    do K=1,G%ke+1
+      Kd_T(i,j,K) = GV%m_to_Z**2 * Kd1_T(K)
+      Kd_S(i,j,K) = GV%m_to_Z**2 * Kd1_S(K)
+    enddo
 
     ! Do not apply mixing due to convection within the boundary layer
     !do k=1,kOBL
