@@ -76,6 +76,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_CVMix_tests, only: SCM_CVMix_tests_TS_init
+use Idealized_Hurricane, only : idealized_hurricane_TS_init ! add by Xiaohui 
 use dyed_channel_initialization, only : dyed_channel_set_OBC_tracer_data
 use dyed_obcs_initialization, only : dyed_obcs_set_OBC_data
 use supercritical_initialization, only : supercritical_set_OBC_data
@@ -85,7 +86,6 @@ use BFB_initialization, only : BFB_initialize_sponges_southonly
 use dense_water_initialization, only : dense_water_initialize_TS
 use dense_water_initialization, only : dense_water_initialize_sponges
 use dumbbell_initialization, only : dumbbell_initialize_sponges
-
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
@@ -369,6 +369,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
         case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init (tv%T, &
+                                           tv%S, h, G, GV, PF, just_read_params=just_read)
+! add by Xiaohui to initialize Temp profile
+        case ("Idealized_Hurricane"); call idealized_hurricane_TS_init (tv%T, &
                                            tv%S, h, G, GV, PF, just_read_params=just_read)
         case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, &
                                  h, just_read_params=just_read)
