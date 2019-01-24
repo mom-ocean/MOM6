@@ -19,19 +19,22 @@ module Idealized_hurricane
 ! 2. Make the hurricane-to-background wind transition a runtime parameter
 !
 
+use MOM_domains,       only : pass_var, pass_vector, TO_ALL
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_verticalgrid,  only : verticalGrid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
-
+!use Idealized_Hurricane, only: IdealHurrT_init
 implicit none ; private
 
 #include <MOM_memory.h>
+public idealized_hurricane_TS_init  ! public interface to initialize the temperature and salinity profile
 
 public idealized_hurricane_wind_init !Public interface to intialize the idealized
                                      ! hurricane wind profile.
@@ -39,7 +42,6 @@ public idealized_hurricane_wind_forcing !Public interface to update the idealize
                                         ! hurricane wind profile.
 public SCM_idealized_hurricane_wind_forcing !Public interface to the legacy idealized
                                         ! hurricane wind profile for SCM.
-
 !> Container for parameters describing idealized wind structure
 type, public :: idealized_hurricane_CS ; private
 
@@ -87,6 +89,111 @@ end type
 character(len=40)  :: mdl = "idealized_hurricane" !< This module's name.
 
 contains
+!> Initializes temperature and salinity for the SCM CVMix test example
+subroutine idealized_hurricane_TS_init(T, S, h, G, GV, param_file, just_read_params)
+  use NETCDF
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness in H (often m o      
+  type(ocean_grid_type),                  intent(in)  :: G !< Grid structure 
+  type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
+  type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+  ! Local variables
+  real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness (Z)
+  real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness (Z)
+  real :: UpperLayerTemp !< Upper layer temperature (SST if thickness 0) (deg C)
+  real :: UpperLayerSalt !< Upper layer salinity (SSS if thickness 0) (PPT)
+  real :: LowerLayerTemp !< Temp at top of lower layer (deg C)
+  real :: LowerLayerSalt !< Salt at top of lower layer (PPT)
+  real :: LowerLayerdTdz !< Temp gradient in lower layer (deg C / Z)
+  real :: LowerLayerdSdz !< Salt gradient in lower layer (PPT / Z)
+  real :: LowerLayerMinTemp !< Minimum temperature in lower layer
+  real :: zC, DZ, top, bottom ! Depths and thicknesses in Z.
+  logical :: just_read    ! If true, just read parameters but set nothing.
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  character (len = 11) :: FILE_NAME = "TProfMWR.nc"
+  character(20) :: varname, varn1, varn2
+  integer :: ncid,varid,rcode_temp
+  integer,parameter ::zz =80
+  real :: temp(zz)
+  real :: Z(zz)
+  
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "SCM_TEMP_MLD", UpperLayerTempMLD, &
+                 'Initial temp mixed layer depth', &
+                 units='m', default=0.0, scale=GV%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_SALT_MLD", UpperLayerSaltMLD, &
+                 'Initial salt mixed layer depth', &
+                 units='m', default=0.0, scale=GV%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L1_SALT", UpperLayerSalt, &
+                 'Layer 2 surface salinity', units='1e-3', default=35.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L1_TEMP", UpperLayerTemp, &
+                 'Layer 1 surface temperature', units='C', default=20.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_SALT", LowerLayerSalt, &
+                 'Layer 2 surface salinity', units='1e-3', default=35.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_TEMP", LowerLayerTemp, &
+                 'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_DTDZ", LowerLayerdTdZ,     &
+                 'Initial temperature stratification in layer 2', &
+                 units='C/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_DSDZ", LowerLayerdSdZ,  &
+                 'Initial salinity stratification in layer 2', &
+                 units='PPT/m', default=0.0, scale=GV%Z_to_m, do_not_log=just_read)
+  call get_param(param_file, mdl, "SCM_L2_MINTEMP",LowerLayerMinTemp, &
+                 'Layer 2 minimum temperature', units='C', default=4.0, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+! varibale names read from the input file
+  varn1 = 'Z'
+  varn2 = 'temp'
+! open and read temperature profile form a netcdf file
+  rcode_temp =  nf90_open(trim(FILE_NAME), NF90_NOWRITE, ncid)
+ if (rcode_temp /= 0) then
+   call MOM_error(FATAL,"error opening file "//trim(FILE_NAME)//&
+            " in Idealized_Hurricane.")
+ endif
+!     write(*,*) "inquiring variable:"
+  call check(nf90_inq_varid(ncid,varn1,varid))
+  call check(nf90_get_var(ncid, varid, Z))
+
+  call check(nf90_inq_varid(ncid,varn2,varid))
+  call check(nf90_get_var(ncid, varid, temp))
+  call check(nf90_close(ncid))
+
+  do j=js,je ; do i=is,ie
+    top = 0. ! Reference to surface
+    bottom = 0.
+    do k=1,nz
+      bottom = bottom - h(i,j,k)*GV%H_to_Z ! Interface below layer (in m)
+      zC = 0.5*( top + bottom )        ! Z of middle of layer (in m)
+     ! DZ = min(0., zC + UpperLayerTempMLD)
+     ! T(i,j,k) = max(LowerLayerMinTemp,LowerLayerTemp + LowerLayerdTdZ * DZ)
+      T(i,j,k) = temp(k)
+      DZ = min(0., zC + UpperLayerSaltMLD)
+      S(i,j,k) = LowerLayerSalt + LowerLayerdSdZ * DZ
+      top = bottom
+    enddo ! k
+  enddo ; enddo
+contains
+      subroutine check (status) 
+        implicit none
+        integer, intent(in) :: status
+
+        if(status .ne. nf90_noerr) then
+          write(*,*) "error!"
+          write(*,*) trim(nf90_strerror(status))
+          stop
+        endif
+      end subroutine check
+end subroutine idealized_hurricane_TS_init
 
 !> Initializes wind profile for the SCM idealized hurricane example
 subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
