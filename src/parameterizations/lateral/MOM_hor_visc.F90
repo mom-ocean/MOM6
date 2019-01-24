@@ -262,18 +262,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     vort_xy_q, & ! vertical vorticity at corner points (s-1)
     GME_coeff_q  !< GME coeff. at q-points (m2 s-1)
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1) :: &
     KH_u_GME  !< interface height diffusivities in u-columns (m2 s-1)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1) :: &
     KH_v_GME  !< interface height diffusivities in v-columns (m2 s-1)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     FrictWork, &     ! energy dissipated by lateral friction (W/m2)
-    div_xx_h, &      ! horizontal divergence (s-1)
+    div_xx_h         ! horizontal divergence (s-1)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     KH_t_GME, &      !< interface height diffusivities in t-columns (m2 s-1)
     GME_coeff_h      !< GME coeff. at h-points (m2 s-1)
-
   real :: Ah         ! biharmonic viscosity (m4/s)
   real :: Kh         ! Laplacian  viscosity (m2/s)
   real :: AhSm       ! Smagorinsky biharmonic viscosity (m4/s)
@@ -367,6 +367,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
 
   if (CS%use_GME) then
+
     call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -752,7 +753,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
       if (CS%use_GME) then
         call thickness_diffuse_get_KH(thickness_diffuse, KH_t_GME, KH_u_GME, KH_v_GME, G)
-        GME_coeff = KH_t_GME(i,j,k) * &
+        GME_coeff = 0.001 * KH_t_GME(i,j,k) * &
                     0.5*(VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I-1,j,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i,J-1,k)) )**2 ) / &
@@ -939,7 +940,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif ! Laplacian
 
       if (CS%use_GME) then
-        GME_coeff = ( 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
+        GME_coeff = 0.001 * ( 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
                             KH_v_GME(i,J,k) + KH_v_GME(i+1,J,k)) * &
                       0.25*(VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
                             VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)) * &
@@ -1644,7 +1645,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     CS%Ah_bg_xy(:,:) = 0.0
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
-    Ah_Limit = 0.3 / (dt*64.0)
+    if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
     if (CS%Smagorinsky_Ah .and. CS%bound_Coriolis) &
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1815,7 +1816,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%use_GME) then
-      CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTL, Time, &
+      CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTi, Time, &
         'GME coefficient at h Points', 'm^2 s-1')
 
       CS%id_GME_coeff_q = register_diag_field('ocean_model', 'GME_coeff_q', diag%axesBL, Time, &
