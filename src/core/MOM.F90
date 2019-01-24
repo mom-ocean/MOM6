@@ -964,7 +964,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                 p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                 CS%eta_av_bc, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
-                CS%MEKE, CS%Barotropic_CSp, CS%thickness_diffuse_CSp)
+                CS%MEKE, CS%thickness_diffuse_CSp)
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
   elseif (CS%do_dynamics) then ! ------------------------------------ not SPLIT
@@ -2304,12 +2304,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call VarMix_init(Time, G, GV, param_file, diag, CS%VarMix)
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
+  call thickness_diffuse_init(Time, G, GV, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
               G, GV, param_file, diag, CS%dyn_split_RK2_CSp, restart_CSp,    &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-              CS%Barotropic_CSp, CS%thickness_diffuse_CSp,                   &
+              CS%thickness_diffuse_CSp,                                      &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
               CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt)
     if (CS%dtbt_reset_period > 0.0) then
@@ -2337,7 +2338,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
-  call thickness_diffuse_init(Time, G, GV, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp, restart_CSp)
   if (CS%mixedlayer_restrat) then
