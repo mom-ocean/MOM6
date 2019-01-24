@@ -777,9 +777,10 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  inv_PI3 = 1.0/((4.0*atan(1.0))**3)
+
   if (k > 1) then
 
-    inv_PI3 = 1.0/((4.0*atan(1.0))**3)
   ! Add in stretching term for the QG Leith vsicosity
 !  if (CS%use_QG_Leith) then
 !    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
