@@ -319,7 +319,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
-  real :: TX,TY       !< wind stress
+  real :: TX,TY,Du,Dv       !< wind stress
   real :: Uocn, Vocn  !< Surface ocean velocity components
   real :: LAT, LON    !< Grid location
   real :: YY, XX      !< storm relative position
@@ -381,7 +381,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
         XX = LON - XC
       endif
       call idealized_hurricane_wind_profile(&
-         CS,f,YY,XX,Uocn,Vocn,TX,TY)
+         CS,f,YY,XX,Uocn,Vocn,TX,TY,Du,Dv)
       forces%taux(I,j) = G%mask2dCu(I,j) * TX
     enddo
   enddo
@@ -404,11 +404,13 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
         XX = LON - XC
       endif
       call idealized_hurricane_wind_profile(&
-           CS,f,YY,XX,Uocn,Vocn,TX,TY)
+           CS,f,YY,XX,Uocn,Vocn,TX,TY,Du,Dv)
       forces%tauy(i,J) = G%mask2dCv(i,J) * TY
     enddo
   enddo
 
+  ! modify by Xiaohui to add U10 as a variable 
+     
   !> Get Ustar
   do j=js,je
     do i=is,ie
@@ -416,6 +418,9 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
       forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
          sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+      call idealized_hurricane_wind_profile(&
+           CS,f,YY,XX,Uocn,Vocn,TX,TY,Du,Dv)
+      forces%Wnd(i,j) = G%mask2dT(i.j) * sqrt(Du**2+Dv**2) 
     enddo
   enddo
 
@@ -423,7 +428,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, CS)
 end subroutine idealized_hurricane_wind_forcing
 
 !> Calculate the wind speed at a location as a function of time.
-subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
+subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty,Du,Dv)
   ! Author: Brandon Reichl
   ! Date: Nov-20-2014
   !       Aug-14-2018 Generalized for non-SCM configuration
@@ -438,6 +443,8 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   real, intent(in)  :: VOCN !< Y surface current
   real, intent(out) :: Tx   !< X stress
   real, intent(out) :: Ty   !< Y stress
+  real, intent(out) :: Du   !< X stress
+  real, intent(out) :: Dv   !< Y stress
 
   ! Local variables
 
@@ -449,8 +456,8 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   real :: radiusB
   real :: fcor
   real :: du10
-  real :: du
-  real :: dv
+ ! real :: du
+ ! real :: dv
   real :: CD
 
   !Wind angle variables
@@ -486,7 +493,7 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
   ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
   if ( (radius/CS%rad_max_wind .gt. 0.001) .and. &
        (radius/CS%rad_max_wind .lt. 10.) ) then
-    U10 = sqrt(CS%Holland_AxBxDP*exp(-CS%Holland_A/radiusB)/(CS%rho_A*radiusB)&
+   U10 = sqrt(CS%Holland_AxBxDP*exp(-CS%Holland_A/radiusB)/(CS%rho_A*radiusB)&
                 +0.25*(radius_km*absf)**2) - 0.5*radius_km*absf
   elseif ( (radius/CS%rad_max_wind .gt. 10.) .and. &
            (radius/CS%rad_max_wind .lt. 15.) ) then
@@ -500,7 +507,7 @@ subroutine idealized_hurricane_wind_profile(CS,absf,YY,XX,UOCN,VOCN,Tx,Ty)
     endif
     radiusB=radius10**CS%Holland_B
 
-    U10 = (sqrt(CS%Holland_AxBxDp*exp(-CS%Holland_A/radiusB)/(CS%rho_A*radiusB)&
+   U10 = (sqrt(CS%Holland_AxBxDp*exp(-CS%Holland_A/radiusB)/(CS%rho_A*radiusB)&
                   +0.25*(radius_km*absf)**2)-0.5*radius_km*absf) &
            * (15.-radius/CS%rad_max_wind)/5.
   else
@@ -717,6 +724,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
        sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+    forces%Wnd(i,j) = G%mask2dT(i,j) *du10
   enddo ; enddo
   return
 end subroutine SCM_idealized_hurricane_wind_forcing
