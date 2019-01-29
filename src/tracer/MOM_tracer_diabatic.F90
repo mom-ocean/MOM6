@@ -231,7 +231,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   real,                                       intent(in   ) :: evap_CFL_limit !< Limit on the fraction of the
                                                                   !! water that can be fluxed out of the top
-                                                                  !! layer in a timestep (nondim)
+                                                                  !! layer in a timestep [nondim]
   real,                                       intent(in   ) :: minimum_forcing_depth !< The smallest depth over
                                                                   !! which fluxes can be applied [m]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated

@@ -126,8 +126,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
                   ! grid cell [H-1 m-2 ~> m-3 or kg-1].
     Kh_h, &       ! The tracer diffusivity averaged to tracer points [m2 s-1].
     CFL, &        ! A diffusive CFL number for each cell [nondim].
-    dTr           ! The change in a tracer's concentration, in units of
-                  ! concentration [Conc].
+    dTr           ! The change in a tracer's concentration, in units of concentration [Conc].
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     khdt_x, &     ! The value of Khtr*dt times the open face width divided by
