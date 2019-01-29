@@ -350,12 +350,11 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                                                                      !! for PPM interface values
 
   real, dimension(SZI_(G),ntr) :: &
-    slope_x             ! The concentration slope per grid point in units of
-                        ! concentration [nondim].
+    slope_x             ! The concentration slope per grid point [conc].
   real, dimension(SZIB_(G),ntr) :: &
-    flux_x              ! The tracer flux across a boundary in m3*conc or kg*conc.
+    flux_x              ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
   real :: maxslope      ! The maximum concentration slope per grid point
-                        ! consistent with monotonicity, in conc. (nondim.).
+                        ! consistent with monotonicity [conc].
   real :: hup, hlos     ! hup is the upwind volume, hlos is the
                         ! part of that volume that might be lost
                         ! due to advection out the other side of
@@ -363,8 +362,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: uhh(SZIB_(G)) ! The zonal flux that occurs during the
                         ! current iteration [H m2 ~> m3 or kg].
   real, dimension(SZIB_(G)) :: &
-    hlst, Ihnew, &      ! Work variables with units of [H m2 ~> m3 or kg] and [H-1 m-2 ~> m-3 or kg-1].
-    CFL                 ! A nondimensional work variable.
+    hlst, &             ! Work variable [H m2 ~> m3 or kg].
+    Ihnew, &            ! Work variable [H-1 m-2 ~> m-3 or kg-1].
+    CFL                 ! A nondimensional work variable [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
@@ -678,12 +678,11 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                                                                      !! for PPM interface values
 
   real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
-    slope_y                     ! The concentration slope per grid point in units of
-                                ! concentration (nondim.).
+    slope_y                     ! The concentration slope per grid point [conc].
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    flux_y                      ! The tracer flux across a boundary in m3 * conc or kg*conc.
+    flux_y                      ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
   real :: maxslope              ! The maximum concentration slope per grid point
-                                ! consistent with monotonicity, in conc. (nondim.).
+                                ! consistent with monotonicity [conc].
   real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
                                 ! current iteration [H m2 ~> m3 or kg].
   real :: hup, hlos             ! hup is the upwind volume, hlos is the
@@ -691,7 +690,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                                 ! due to advection out the other side of
                                 ! the grid box, both in  [H m2 ~> m3 or kg].
   real, dimension(SZIB_(G)) :: &
-    hlst, Ihnew, &      ! Work variables with units of [H m2 ~> m3 or kg] and [H-1 m-2 ~> m-3 or kg-1].
+    hlst, &             ! Work variable [H m2 ~> m3 or kg].
+    Ihnew, &            ! Work variable [H-1 m-2 ~> m-3 or kg-1].
     CFL                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].

@@ -46,7 +46,7 @@ type, public :: oil_tracer_CS ; private
   real :: oil_source_latitude  !< Longitude of source location (geographic)
   integer :: oil_source_i=-999 !< Local i of source location (computational)
   integer :: oil_source_j=-999 !< Local j of source location (computational)
-  real :: oil_source_rate     !< Rate of oil injection (kg/s)
+  real :: oil_source_rate     !< Rate of oil injection [kg s-1]
   real :: oil_start_year      !< The year in which tracers start aging, or at which the
                               !! surface value equals young_val, in years.
   real :: oil_end_year        !< The year in which tracers start aging, or at which the
@@ -59,7 +59,7 @@ type, public :: oil_tracer_CS ; private
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
   real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
   real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
-  real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil (in s^-1) calculated from oil_decay_days
+  real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [s-1] calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
   logical :: oil_may_reinit  !< If true, oil tracers may be reset by the initialization code
                              !! if they are not found in the restart files.
@@ -321,7 +321,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
                                               !! call to register_oil_tracer.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column

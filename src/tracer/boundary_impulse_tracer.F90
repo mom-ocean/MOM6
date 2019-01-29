@@ -231,7 +231,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
                                               !! thermodynamic variables
   logical,                 intent(in) :: debug !< If true calculate checksums
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [m]
 
@@ -285,17 +285,17 @@ end subroutine boundary_impulse_tracer_column_physics
 
 !> Calculate total inventory of tracer
 function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),                      intent(in   ) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in   ) :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(:),                         intent(  out) :: stocks !< the mass-weighted integrated amount of each
-                                                                    !! tracer, in kg times concentration units [kg conc].
-  type(boundary_impulse_tracer_CS),           pointer       :: CS   !< The control structure returned by a previous
-                                                                    !! call to register_boundary_impulse_tracer.
-  character(len=*), dimension(:),             intent(  out) :: names  !< The names of the stocks calculated.
-  character(len=*), dimension(:),             intent(  out) :: units  !< The units of the stocks calculated.
-  integer, optional,                          intent(in   ) :: stock_index !< The coded index of a specific stock
-                                                                   !! being sought.
+  type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in   ) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in   ) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(:),                       intent(  out) :: stocks !< the mass-weighted integrated amount of each
+                                                                  !! tracer, in kg times concentration units [kg conc].
+  type(boundary_impulse_tracer_CS),         pointer       :: CS   !< The control structure returned by a previous
+                                                                  !! call to register_boundary_impulse_tracer.
+  character(len=*), dimension(:),           intent(  out) :: names  !< The names of the stocks calculated.
+  character(len=*), dimension(:),           intent(  out) :: units  !< The units of the stocks calculated.
+  integer, optional,                        intent(in   ) :: stock_index !< The coded index of a specific stock
+                                                                  !! being sought.
   integer :: boundary_impulse_stock  !< Return value: the number of stocks calculated here.
 
 ! This function calculates the mass-weighted integral of all tracer stocks,

@@ -158,10 +158,10 @@ type, public :: offline_transport_CS ; private
   ! Fields at T-point
   real, allocatable, dimension(:,:,:) :: eatr
                    !< Amount of fluid entrained from the layer above within
-                   !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                   !! one time step [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: ebtr
                    !< Amount of fluid entrained from the layer below within
-                   !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                   !! one time step [H ~> m or kg m-2]
   ! Fields at T-points on interfaces
   real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity
   real, allocatable, dimension(:,:,:) :: h_end  !< Thicknesses at the end of offline timestep
