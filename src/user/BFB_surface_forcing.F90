@@ -24,27 +24,20 @@ public BFB_buoyancy_forcing, BFB_surface_forcing_init
 !> Control structure for BFB_surface_forcing
 type, public :: BFB_surface_forcing_CS ; private
 
-  logical :: use_temperature !< If true, temperature and salinity are used as
-                             !! state variables.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !<   The density used in the Boussinesq
-                             !! approximation [kg m-3].
-  real :: G_Earth            !<   The gravitational acceleration [m s-2]
-  real :: Flux_const         !<   The restoring rate at the surface [m s-1].
-  real :: gust_const         !<   A constant unresolved background gustiness
+  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
+  real :: G_Earth            !< The gravitational acceleration [m s-2]
+  real :: Flux_const         !< The restoring rate at the surface [m s-1].
+  real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
-  real :: SST_s              !< SST at the southern edge of the linear
-                             !! forcing ramp
-  real :: SST_n              !< SST at the northern edge of the linear
-                             !! forcing ramp
-  real :: lfrslat            !< Southern latitude where the linear forcing ramp
-                             !! begins
-  real :: lfrnlat            !< Northern latitude where the linear forcing ramp
-                             !! ends
-  real :: drho_dt            !< Rate of change of density with temperature.
-                             !! Note that temperature is being used as a dummy
-                             !! variable here. All temperatures are converted
-                             !! into density.
+  real :: SST_s              !< SST at the southern edge of the linear forcing ramp [degC]
+  real :: SST_n              !< SST at the northern edge of the linear forcing ramp [degC]
+  real :: lfrslat            !< Southern latitude where the linear forcing ramp begins [degLat]
+  real :: lfrnlat            !< Northern latitude where the linear forcing ramp ends [degLat]
+  real :: drho_dt            !< Rate of change of density with temperature [kg m-3 degC-1].
+                             !!   Note that temperature is being used as a dummy variable here.
+                             !! All temperatures are converted into density.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
@@ -102,7 +95,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -110,7 +103,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      !   Heat fluxes are in units of W m-2 and are positive into the ocean.
+      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)

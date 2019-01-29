@@ -33,15 +33,15 @@ subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, 
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US    !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< Parameter file handle
-  real,                    intent(out) :: S_ref      !< Reference salinity (ppt)
-  real,                    intent(out) :: dSdz       !< Salinity stratification (ppt/Z)
-  real,                    intent(out) :: delta_S    !< Salinity difference across baroclinic zone (ppt)
-  real,                    intent(out) :: dSdx       !< Linear salinity gradient (ppt/m)
-  real,                    intent(out) :: T_ref      !< Reference temperature (ppt)
-  real,                    intent(out) :: dTdz       !< Temperature stratification (ppt/Z)
-  real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone (ppt)
-  real,                    intent(out) :: dTdx       !< Linear temperature gradient (ppt/m)
-  real,                    intent(out) :: L_zone     !< Width of baroclinic zone (m)
+  real,                    intent(out) :: S_ref      !< Reference salinity [ppt]
+  real,                    intent(out) :: dSdz       !< Salinity stratification [ppt Z-1 ~> ppt m-1]
+  real,                    intent(out) :: delta_S    !< Salinity difference across baroclinic zone [ppt]
+  real,                    intent(out) :: dSdx       !< Linear salinity gradient [ppt m-1]
+  real,                    intent(out) :: T_ref      !< Reference temperature [degC]
+  real,                    intent(out) :: dTdz       !< Temperature stratification [degC Z-1 ~> degC m-1]
+  real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone [degC]
+  real,                    intent(out) :: dTdx       !< Linear temperature gradient [degC m-1]
+  real,                    intent(out) :: L_zone     !< Width of baroclinic zone [m]
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 

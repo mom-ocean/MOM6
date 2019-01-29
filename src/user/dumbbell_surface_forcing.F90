@@ -26,11 +26,10 @@ type, public :: dumbbell_surface_forcing_CS ; private
   logical :: use_temperature !< If true, temperature and salinity are used as
                              !! state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !<   The density used in the Boussinesq
-                             !! approximation [kg m-3].
-  real :: G_Earth            !<   The gravitational acceleration [m s-2]
-  real :: Flux_const         !<   The restoring rate at the surface [m s-1].
-  real :: gust_const         !<   A constant unresolved background gustiness
+  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
+  real :: G_Earth            !< The gravitational acceleration [m s-2]
+  real :: Flux_const         !< The restoring rate at the surface [m s-1].
+  real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
   real :: slp_amplitude      !< The amplitude of pressure loading [Pa] applied
                              !! to the reservoirs
@@ -98,7 +97,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -106,7 +105,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      !   Heat fluxes are in units of W m-2 and are positive into the ocean.
+      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)

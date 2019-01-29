@@ -172,7 +172,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                     ! to reduce the impact of truncation errors.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [kg m-3].
   real :: Pa_to_H   ! A factor to convert from Pa to the thicknesss units (H).
-!  real :: oneatm = 101325.0  ! 1 atm in Pa (kg/ms2)
+!  real :: oneatm = 101325.0  ! 1 atm in [Pa] = [kg m-1 s-2]
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk

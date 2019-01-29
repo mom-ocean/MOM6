@@ -56,60 +56,60 @@ type, public :: forcing
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
-    buoy          => NULL()  !< buoyancy flux (m^2/s^3)
+    buoy          => NULL()  !< buoyancy flux [m2 s-3]
 
-  ! radiative heat fluxes into the ocean (W/m^2)
+  ! radiative heat fluxes into the ocean [W m-2]
   real, pointer, dimension(:,:) :: &
-    sw         => NULL(), & !< shortwave (W/m^2)
-    sw_vis_dir => NULL(), & !< visible, direct shortwave (W/m^2)
-    sw_vis_dif => NULL(), & !< visible, diffuse shortwave (W/m^2)
-    sw_nir_dir => NULL(), & !< near-IR, direct shortwave (W/m^2)
-    sw_nir_dif => NULL(), & !< near-IR, diffuse shortwave (W/m^2)
-    lw         => NULL()    !< longwave (W/m^2) (typically negative)
+    sw         => NULL(), & !< shortwave [W m-2]
+    sw_vis_dir => NULL(), & !< visible, direct shortwave [W m-2]
+    sw_vis_dif => NULL(), & !< visible, diffuse shortwave [W m-2]
+    sw_nir_dir => NULL(), & !< near-IR, direct shortwave [W m-2]
+    sw_nir_dif => NULL(), & !< near-IR, diffuse shortwave [W m-2]
+    lw         => NULL()    !< longwave [W m-2] (typically negative)
 
-  ! turbulent heat fluxes into the ocean (W/m^2)
+  ! turbulent heat fluxes into the ocean [W m-2]
   real, pointer, dimension(:,:) :: &
-    latent     => NULL(), & !< latent (W/m^2)   (typically < 0)
-    sens       => NULL(), & !< sensible (W/m^2) (typically negative)
-    heat_added => NULL()    !< additional heat flux from SST restoring or flux adjustments (W/m^2)
+    latent     => NULL(), & !< latent [W m-2]   (typically < 0)
+    sens       => NULL(), & !< sensible [W m-2] (typically negative)
+    heat_added => NULL()    !< additional heat flux from SST restoring or flux adjustments [W m-2]
 
   ! components of latent heat fluxes used for diagnostic purposes
   real, pointer, dimension(:,:) :: &
-    latent_evap_diag    => NULL(), & !< latent (W/m^2) from evaporating liquid water (typically < 0)
-    latent_fprec_diag   => NULL(), & !< latent (W/m^2) from melting fprec  (typically < 0)
-    latent_frunoff_diag => NULL()    !< latent (W/m^2) from melting frunoff (calving) (typically < 0)
+    latent_evap_diag    => NULL(), & !< latent [W m-2] from evaporating liquid water (typically < 0)
+    latent_fprec_diag   => NULL(), & !< latent [W m-2] from melting fprec  (typically < 0)
+    latent_frunoff_diag => NULL()    !< latent [W m-2] from melting frunoff (calving) (typically < 0)
 
-  ! water mass fluxes into the ocean ( kg/(m^2 s) ); these fluxes impact the ocean mass
+  ! water mass fluxes into the ocean [kg m-2 s-1]; these fluxes impact the ocean mass
   real, pointer, dimension(:,:) :: &
-    evap        => NULL(), & !< (-1)*fresh water flux evaporated out of the ocean ( kg/(m^2 s) )
-    lprec       => NULL(), & !< precipitating liquid water into the ocean ( kg/(m^2 s) )
-    fprec       => NULL(), & !< precipitating frozen water into the ocean ( kg/(m^2 s) )
-    vprec       => NULL(), & !< virtual liquid precip associated w/ SSS restoring ( kg/(m^2 s) )
-    lrunoff     => NULL(), & !< liquid river runoff entering ocean ( kg/(m^2 s) )
-    frunoff     => NULL(), & !< frozen river runoff (calving) entering ocean ( kg/(m^2 s) )
-    seaice_melt => NULL(), & !< seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
-    netMassIn   => NULL(), & !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
-    netMassOut  => NULL(), & !< Net water mass flux into of the ocean ( kg/(m^2 s) )
-    netSalt     => NULL()    !< Net salt entering the ocean
+    evap        => NULL(), & !< (-1)*fresh water flux evaporated out of the ocean [kg m-2 s-1]
+    lprec       => NULL(), & !< precipitating liquid water into the ocean [kg m-2 s-1]
+    fprec       => NULL(), & !< precipitating frozen water into the ocean [kg m-2 s-1]
+    vprec       => NULL(), & !< virtual liquid precip associated w/ SSS restoring [kg m-2 s-1]
+    lrunoff     => NULL(), & !< liquid river runoff entering ocean [kg m-2 s-1]
+    frunoff     => NULL(), & !< frozen river runoff (calving) entering ocean [kg m-2 s-1]
+    seaice_melt => NULL(), & !< seaice melt (positive) or formation (negative) [kg m-2 s-1]
+    netMassIn   => NULL(), & !< Sum of water mass flux out of the ocean [kg m-2 s-1]
+    netMassOut  => NULL(), & !< Net water mass flux into of the ocean [kg m-2 s-1]
+    netSalt     => NULL()    !< Net salt entering the ocean [kgSalt m-2 s-1]
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
-    heat_content_cond    => NULL(), & !< heat content associated with condensating water (W/m^2)
-    heat_content_lprec   => NULL(), & !< heat content associated with liquid >0 precip   (W/m^2) (diagnostic)
-    heat_content_fprec   => NULL(), & !< heat content associated with frozen precip      (W/m^2)
-    heat_content_vprec   => NULL(), & !< heat content associated with virtual >0 precip  (W/m^2)
-    heat_content_lrunoff => NULL(), & !< heat content associated with liquid runoff      (W/m^2)
-    heat_content_frunoff => NULL(), & !< heat content associated with frozen runoff      (W/m^2)
-    heat_content_icemelt => NULL(), & !< heat content associated with liquid sea ice     (W/m^2)
-    heat_content_massout => NULL(), & !< heat content associated with mass leaving ocean (W/m^2)
-    heat_content_massin  => NULL()    !< heat content associated with mass entering ocean (W/m^2)
+    heat_content_cond    => NULL(), & !< heat content associated with condensating water [W m-2]
+    heat_content_lprec   => NULL(), & !< heat content associated with liquid >0 precip   [W m-2] (diagnostic)
+    heat_content_fprec   => NULL(), & !< heat content associated with frozen precip      [W m-2]
+    heat_content_vprec   => NULL(), & !< heat content associated with virtual >0 precip  [W m-2]
+    heat_content_lrunoff => NULL(), & !< heat content associated with liquid runoff      [W m-2]
+    heat_content_frunoff => NULL(), & !< heat content associated with frozen runoff      [W m-2]
+    heat_content_icemelt => NULL(), & !< heat content associated with liquid sea ice     [W m-2]
+    heat_content_massout => NULL(), & !< heat content associated with mass leaving ocean [W m-2]
+    heat_content_massin  => NULL()    !< heat content associated with mass entering ocean [W m-2]
 
   ! salt mass flux (contributes to ocean mass only if non-Bouss )
   real, pointer, dimension(:,:) :: &
-    salt_flux       => NULL(), & !< net salt flux into the ocean ( kg salt/(m^2 s) )
-    salt_flux_in    => NULL(), & !< salt flux provided to the ocean from coupler ( kg salt/(m^2 s) )
+    salt_flux       => NULL(), & !< net salt flux into the ocean [kgSalt m-2 s-1]
+    salt_flux_in    => NULL(), & !< salt flux provided to the ocean from coupler [kgSalt m-2 s-1]
     salt_flux_added => NULL()    !< additional salt flux from restoring or flux adjustment before adjustment
-                                 !! to net zero ( kg salt/(m^2 s) )
+                                 !! to net zero [kgSalt m-2 s-1]
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
@@ -119,7 +119,7 @@ type, public :: forcing
                 !< Pressure at the top ocean interface [Pa] as used to drive the ocean model.
                 !! If p_surf is limited, p_surf may be smaller than p_surf_full, otherwise they are the same.
   real, pointer, dimension(:,:) :: p_surf_SSH => NULL()
-                !< Pressure at the top ocean interface that is used in corrections to the sea surface
+                !< Pressure at the top ocean interface [Pa] that is used in corrections to the sea surface
                 !! height field that is passed back to the calling routines.
                 !! p_surf_SSH may point to p_surf or to p_surf_full.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
@@ -129,14 +129,14 @@ type, public :: forcing
 
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
-    TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer (W/m^2)
+    TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer [W m-2]
     ustar_tidal   => NULL()    !< tidal contribution to bottom ustar [m s-1]
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
     ustar_berg => NULL(), &   !< iceberg contribution to top ustar [Z s-1 ~> m s-1].
-    area_berg  => NULL(), &   !< area of ocean surface covered by icebergs (m2/m2)
-    mass_berg  => NULL()      !< mass of icebergs (kg/m2)
+    area_berg  => NULL(), &   !< area of ocean surface covered by icebergs [m2 m-2]
+    mass_berg  => NULL()      !< mass of icebergs [kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves [Z s-1 ~> m s-1].
@@ -146,15 +146,15 @@ type, public :: forcing
                                  !! associated if ice shelves are enabled, and are
                                  !! exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: iceshelf_melt => NULL() !< Ice shelf melt rate (positive)
-                                 !! or freezing (negative) (in m/year)
+                                 !! or freezing (negative) [m year-1]
 
   ! Scalars set by surface forcing modules
-  real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
-  real :: saltFluxGlobalAdj  !< adjustment to restoring salt flux to zero out global net ( kg salt/(m^2 s) )
-  real :: netFWGlobalAdj     !< adjustment to net fresh water to zero out global net ( kg/(m^2 s) )
-  real :: vPrecGlobalScl     !< scaling of restoring vprec to zero out global net ( -1..1 )
-  real :: saltFluxGlobalScl  !< scaling of restoring salt flux to zero out global net ( -1..1 )
-  real :: netFWGlobalScl     !< scaling of net fresh water to zero out global net ( -1..1 )
+  real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net [kg m-2 s-1]
+  real :: saltFluxGlobalAdj  !< adjustment to restoring salt flux to zero out global net [kgSalt m-2 s-1]
+  real :: netFWGlobalAdj     !< adjustment to net fresh water to zero out global net [kg m-2 s-1]
+  real :: vPrecGlobalScl     !< scaling of restoring vprec to zero out global net ( -1..1 ) [nondim]
+  real :: saltFluxGlobalScl  !< scaling of restoring salt flux to zero out global net ( -1..1 ) [nondim]
+  real :: netFWGlobalScl     !< scaling of net fresh water to zero out global net ( -1..1 ) [nondim]
 
   logical :: fluxes_used = .true. !< If true, all of the heat, salt, and mass
                                   !! fluxes have been applied to the ocean.
@@ -162,7 +162,7 @@ type, public :: forcing
                                   !! should be applied [s].  If negative, this forcing
                                   !! type variable has not yet been inialized.
 
-  real :: C_p                !< heat capacity of seawater ( J/(K kg) ).
+  real :: C_p                !< heat capacity of seawater [J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
   ! passive tracer surface fluxes
@@ -884,9 +884,9 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
-  ! netH       = water (H units/s) added/removed via surface fluxes
-  ! netHeat    = heat (degC * H/s) via surface fluxes
-  ! netSalt    = salt ( g(salt)/m2 for non-Bouss and ppt*m for Bouss /s) via surface fluxes
+  ! netH       = water added/removed via surface fluxes [H s-1 ~> m s-1 or kg m-2 s-1]
+  ! netHeat    = heat via surface fluxes [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+  ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
   ! this call returns the rate because dt=1
   call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                                 &

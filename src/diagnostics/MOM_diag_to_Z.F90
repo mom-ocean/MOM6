@@ -177,11 +177,11 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   real :: htot           ! summed layer thicknesses [H ~> m or kg m-2]
   real :: dilate         ! proportion by which to dilate every layer
   real :: wt(SZK_(G)+1)  ! fractional weight for each layer in the
-                         ! range between k_top and k_bot (nondim)
+                         ! range between k_top and k_bot [nondim]
   real :: z1(SZK_(G)+1)  ! z1 and z2 are the depths of the top and bottom
   real :: z2(SZK_(G)+1)  ! limits of the part of a layer that contributes
                          ! to a depth level, relative to the cell center
-                         ! and normalized by the cell thickness (nondim)
+                         ! and normalized by the cell thickness [nondim]
                          ! Note that -1/2 <= z1 < z2 <= 1/2.
   real :: sl_tr(max(CS%num_tr_used,1)) ! normalized slope of the tracer
                                        ! within the cell, in tracer units
@@ -674,10 +674,10 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real, dimension(:), intent(out)   :: wt     !< Relative weights of each layer from k_top to k_bot.
   real, dimension(:), intent(out)   :: z1     !< Depth of the top limits of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
-       !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+       !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
   real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
-       !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+       !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
   ! Local variables
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k

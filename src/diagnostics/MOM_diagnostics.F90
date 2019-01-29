@@ -233,13 +233,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
   real :: wt, wt_p
 
-  ! squared Coriolis parameter at to h-points (1/s2)
+  ! squared Coriolis parameter at to h-points [s-2]
   real :: f2_h
 
-  ! magnitude of the gradient of f (1/(m*s))
+  ! magnitude of the gradient of f [s-1 m-1]
   real :: mag_beta
 
-  ! frequency squared used to avoid division by 0 (1/s2)
+  ! frequency squared used to avoid division by 0 [s-2]
   ! value is roughly (pi / (the age of the universe) )^2.
   real, parameter :: absurdly_small_freq2 = 1e-34
 
@@ -327,7 +327,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
-  ! diagnose thickness/volumes of grid cells (meter)
+  ! diagnose thickness/volumes of grid cells [m]
   if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
     if (GV%Boussinesq) then ! thkcello = h for Boussinesq
       if (CS%id_thkcello > 0) then ; if (GV%H_to_m == 1.0) then
@@ -359,7 +359,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           do i=is,ie ! Pressure for EOS at the layer center [Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
-          ! Store in-situ density (kg/m3) in work_3d
+          ! Store in-situ density [kg m-3] in work_3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
                                  work_3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
           do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
@@ -1140,7 +1140,7 @@ subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
   type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement (m)
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
@@ -1181,13 +1181,13 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement (m)
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh_ibc !< Time mean surface height with corrections
-                                                  !! for ice displacement and the inverse barometer (m)
+                                                  !! for ice displacement and the inverse barometer [m]
 
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
+    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh [m]
   real :: I_time_int    ! The inverse of the time interval [s-1].
   real :: zos_area_mean, volo, ssh_ga
   integer :: i, j, is, ie, js, je
