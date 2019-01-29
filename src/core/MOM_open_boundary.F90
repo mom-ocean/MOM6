@@ -73,7 +73,7 @@ type, public :: OBC_segment_data_type
   real, pointer, dimension(:,:,:) :: buffer_src=>NULL() !< buffer for segment data located at cell faces
                                                 !! and on the original vertical grid
   integer                         :: nk_src     !< Number of vertical levels in the source data
-  real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data (m)
+  real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data [m]
   real, dimension(:,:,:), pointer :: buffer_dst=>NULL() !< buffer src data remapped to the target vertical grid
   real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity [m s-1]
   real                            :: value              !< constant value if fid is equal to -1
@@ -135,15 +135,15 @@ type, public :: OBC_segment_type
   integer :: Ie_obc         !< i-indices of boundary segment.
   integer :: Js_obc         !< j-indices of boundary segment.
   integer :: Je_obc         !< j-indices of boundary segment.
-  real :: Velocity_nudging_timescale_in  !< Nudging timescale on inflow (s).
-  real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow (s).
+  real :: Velocity_nudging_timescale_in  !< Nudging timescale on inflow [s].
+  real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow [s].
   logical :: on_pe          !< true if segment is located in the computational domain
   logical :: temp_segment_data_exists !< true if temperature data arrays are present
   logical :: salt_segment_data_exists !< true if salinity data arrays are present
-  real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity
-                                                    !! wave speed (m -s) at OBC-points.
-  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness (m) at OBC-points.
-  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness (m) at OBC-points.
+  real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity wave speed [m s-1]
+                                                    !! at OBC-points.
+  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness [m] at OBC-points.
+  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness [m] at OBC-points.
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
                                                             !! segment [m s-1].
   real, pointer, dimension(:,:,:) :: tangential_vel=>NULL() !< The layer velocity tangential to the
@@ -154,13 +154,13 @@ type, public :: OBC_segment_type
                                                             !! segment (m3 s-1).
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
                                                             !! the OB segment [m s-1].
-  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment (m).
+  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment [m].
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
                                                             !! segment [s-1]
   real, pointer, dimension(:,:,:) :: grad_tan=>NULL()       !< The gradient of the tangential flow along the
                                                             !! segment [s-1]
   real, pointer, dimension(:,:,:) :: grad_gradient=>NULL()  !< The gradient of the gradient of tangential flow along the
-                                                            !! segment (m-1 s-1)
+                                                            !! segment [m-1 s-1]
   real, pointer, dimension(:,:,:) :: rx_normal=>NULL()      !< The rx_old_u value for radiation coeff
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: ry_normal=>NULL()      !< The tangential value for radiation coeff
@@ -175,7 +175,7 @@ type, public :: OBC_segment_type
                                                             !! can occur [s-1].
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
-  real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed (m-3)
+  real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed [m-3]
   real :: Tr_InvLscale3_in                                      !< for restoring the tracer concentration in a
                                                                 !! ficticious reservior towards interior values
                                                                 !! when flow is exiting the domain, or towards

@@ -227,7 +227,7 @@ end subroutine SCM_CVMix_tests_wind_forcing
 subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
   type(surface),            intent(in)    :: state  !< Surface state structure
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
-  type(time_type),          intent(in)    :: day    !< Time in days (seconds?)
+  type(time_type),          intent(in)    :: day    !< Current model time
   type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
   type(SCM_CVMix_tests_CS), pointer       :: CS     !< Container for SCM parameters
 

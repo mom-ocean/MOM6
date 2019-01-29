@@ -145,7 +145,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
   real :: density_restore  ! De
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -179,7 +179,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       "Temperature/salinity restoring not coded!" )
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo

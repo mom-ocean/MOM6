@@ -74,7 +74,7 @@ type, public :: int_tide_CS ; private
                         !< energy lost due to wave breaking [W m-2]
   real, allocatable, dimension(:,:) :: TKE_itidal_loss_fixed
                         !< fixed part of the energy lost due to small-scale drag
-                        !! [kg Z-2] here; will be multiplied by N and En to get into [W m-2]
+                        !! [kg Z-2 ~> kg m-2] here; will be multiplied by N and En to get into [W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
                         !< energy lost due to small-scale wave drag [W m-2]
   real, allocatable, dimension(:,:) :: tot_leak_loss !< Energy loss rates due to misc bakground processes,
@@ -623,17 +623,17 @@ end subroutine sum_En
 !! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
 subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
   type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
-  type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
                                                  !! previous call to int_tide_init.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                              intent(in)    :: Nb !< Near-bottom stratification [s-1].
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), &
-                             intent(inout) :: Ub !< Rms (over one period) near-bottom horizontal
+                             intent(inout) :: Ub !< RMS (over one period) near-bottom horizontal
                                                  !! mode velocity [m s-1].
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                             intent(in) :: TKE_loss_fixed !< Fixed part of energy loss,
-                                                 !! in kg Z-2 (rho*kappa*h^2).
+                             intent(in) :: TKE_loss_fixed !< Fixed part of energy loss [kg Z-2 ~> kg m-2] 
+                                                 !! (rho*kappa*h^2).
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
                              intent(inout) :: En !< Energy density of the internal waves [J m-2].
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
@@ -760,8 +760,8 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   real :: favg            ! The average Coriolis parameter at a point [s-1].
   real :: df2_dy, df2_dx  ! The x- and y- gradients of the squared Coriolis parameter [s-2 m-1].
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [s-1 m-1].
-  real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself in m-1.
-  real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself in m-1.
+  real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself [m-1].
+  real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself [m-1].
   real :: Angle_size, dt_Angle_size, angle
   real :: Ifreq, Kmag2, I_Kmag
   real, parameter :: cn_subRO = 1e-100

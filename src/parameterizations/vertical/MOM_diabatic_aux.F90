@@ -399,7 +399,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
   real :: S(SZI_(G),SZK_(G))
   real :: h_2d(SZI_(G),SZK_(G))
   real :: Rcv(SZI_(G),SZK_(G))
-  real :: mc  ! A layer's mass in kg m-2 .
+  real :: mc  ! A layer's mass [kg m-2].
   real :: s_new,R_new,t0,scale, cdz
   integer :: i, j, k, is, ie, js, je, nz, ks
 

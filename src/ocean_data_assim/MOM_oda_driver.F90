@@ -545,7 +545,7 @@ end subroutine save_obs_diff
 
 !> Apply increments to tracers
 subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
-  real,                     intent(in)    :: dt !< The tracer timestep (seconds)
+  real,                     intent(in)    :: dt !< The tracer timestep [s]
   type(ocean_grid_type),    intent(in)    :: G  !< ocean grid structure
   type(thermo_var_ptrs),    intent(inout) :: tv !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &

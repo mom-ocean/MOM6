@@ -31,15 +31,15 @@ type, public :: opacity_CS ; private
                              !! water properties into the opacity (i.e., the e-folding depth) and
                              !! (perhaps) the number of bands of penetrating shortwave radiation to use.
   real :: pen_sw_scale       !<   The vertical absorption e-folding depth of the
-                             !! penetrating shortwave radiation, in m.
+                             !! penetrating shortwave radiation [m].
   real :: pen_sw_scale_2nd   !<   The vertical absorption e-folding depth of the
-                             !! (2nd) penetrating shortwave radiation, in m.
+                             !! (2nd) penetrating shortwave radiation [m].
   real :: SW_1ST_EXP_RATIO   !< Ratio for 1st exp decay in Two Exp decay opacity
   real :: pen_sw_frac        !<   The fraction of shortwave radiation that is
                              !! penetrating with a constant e-folding approach.
   real :: blue_frac          !<   The fraction of the penetrating shortwave
                              !! radiation that is in the blue band, ND.
-  real :: opacity_land_value !< The value to use for opacity over land, in m-1.
+  real :: opacity_land_value !< The value to use for opacity over land [m-1].
                              !! The default is 10 m-1 - a value for muddy water.
   integer :: sbc_chl         !< An integer handle used in time interpolation of
                              !! chlorophyll read from a file.
@@ -79,25 +79,16 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
   type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by
                                                    !! opacity_init.
 
-! Arguments: (inout) opacity - The inverse of the vertical absorption decay
-!                     scale for penetrating shortwave radiation, in m-1.
-!            (inout) fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!            (in)    G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!            (in)    CS - The control structure earlier set up by opacity_init.
-
 ! local variables
   integer :: i, j, k, n, is, ie, js, je, nz
-  real :: inv_sw_pen_scale  ! The inverse of the e-folding scale, in m-1.
+  real :: inv_sw_pen_scale  ! The inverse of the e-folding scale [m-1].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation.
   logical :: call_for_surface  ! if horizontal slice is the surface layer
   real :: tmp(SZI_(G),SZJ_(G),SZK_(G))  ! A 3-d temporary array.
-  real :: chl(SZI_(G),SZJ_(G),SZK_(G))  ! The concentration of chlorophyll-A
-                                        ! in mg m-3.
+  real :: chl(SZI_(G),SZJ_(G),SZK_(G))  ! The concentration of chlorophyll-A [mg m-3].
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
-                                        ! summed across all bands, in W m-2.
+                                        ! summed across all bands [W m-2].
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_opacity: "// &
@@ -210,18 +201,17 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                optional, intent(in)     :: chl_in !< A 3-d field of chlorophyll A,
                                                   !! in mg m-3.
 
-  real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in
-                                    ! a layer, in mg/m^3.
+  real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in a layer [mg m-3].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation.
   real :: Inv_nbands_nir    ! The inverse of the number of bands of penetrating
                             ! near-infrafed radiation.
   real :: SW_pen_tot        ! The sum across the bands of the penetrating
-                            ! shortwave radiation, in W m-2.
+                            ! shortwave radiation [W m-2].
   real :: SW_vis_tot        ! The sum across the visible bands of shortwave
-                            ! radiation, in W m-2.
+                            ! radiation [W m-2].
   real :: SW_nir_tot        ! The sum across the near infrared bands of shortwave
-                            ! radiation, in W m-2.
+                            ! radiation [W m-2].
   type(time_type) :: day
   character(len=128) :: mesg
   integer :: i, j, k, n, is, ie, js, je, nz, nbands

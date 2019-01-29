@@ -85,10 +85,10 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
           !! give vhbt as the depth-integrated transport [m s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt_aux !< A second summed zonal
-          !! volume flux in m3/s.
+          !! volume flux [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt_aux !< A second summed meridional
-          !! volume flux in m3/s.
+          !! volume flux [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(inout) :: u_cor_aux !< The zonal velocities
           !! that give uhbt_aux as the depth-integrated transport [m s-1].

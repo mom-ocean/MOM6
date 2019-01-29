@@ -118,7 +118,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo

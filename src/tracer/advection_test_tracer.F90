@@ -198,9 +198,9 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
+  real :: dist2  ! The distance squared from a line [m2].
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
+                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   real :: tmpx, tmpy, locx, locy
@@ -284,7 +284,7 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep (nondim)
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
@@ -356,7 +356,7 @@ function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G      !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                              !! tracer, in kg times concentration units.
+                                                              !! tracer, in kg times concentration units [kg conc].
   type(verticalGrid_type),            intent(in)    :: GV     !< The ocean's vertical grid structure
   type(advection_test_tracer_CS),     pointer       :: CS     !< The control structure returned by a previous
                                                               !! call to register_advection_test_tracer.

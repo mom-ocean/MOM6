@@ -771,9 +771,9 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type),  intent(in)    :: US !< Pointer to a structure containing unit conversion factors
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(inout) :: u  !< The zonal ice shelf velocity at vertices, in m/year
+                          intent(inout) :: u  !< The zonal ice shelf velocity at vertices [m year-1]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(inout) :: v  !< The meridional ice shelf velocity at vertices, in m/year
+                          intent(inout) :: v  !< The meridional ice shelf velocity at vertices [m year-1]
   integer,                intent(out)   :: iters !< The number of iterations used in the solver.
   type(time_type),        intent(in)    :: Time !< The current model time
 
@@ -1033,9 +1033,9 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
                                            !! the ice-shelf state
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(inout) :: u  !< The zonal ice shelf velocity at vertices, in m/year
+                          intent(inout) :: u  !< The zonal ice shelf velocity at vertices [m year-1]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(inout) :: v  !< The meridional ice shelf velocity at vertices, in m/year
+                          intent(inout) :: v  !< The meridional ice shelf velocity at vertices [m year-1]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: taudx !< The x-direction driving stress, in ???
   real, dimension(SZDIB_(G),SZDJB_(G)), &
@@ -2035,7 +2035,7 @@ subroutine ice_shelf_min_thickness_calve(G, h_shelf, area_shelf_h, hmask, thickn
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -2062,7 +2062,7 @@ subroutine calve_to_mask(G, h_shelf, area_shelf_h, hmask, calve_mask)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
+                         intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -2360,9 +2360,9 @@ subroutine CG_action(uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node,
                          intent(in)    :: Phisub !< Quadrature structure weights at subgridscale
                                             !! locations for finite element calculations
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                         intent(in)    :: u  !< The zonal ice shelf velocity at vertices, in m/year
+                         intent(in)    :: u  !< The zonal ice shelf velocity at vertices [m year-1]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                         intent(in)    :: v  !< The meridional ice shelf velocity at vertices, in m/year
+                         intent(in)    :: v  !< The meridional ice shelf velocity at vertices [m year-1]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(in)    :: umask !< A coded mask indicating the nature of the
                                              !! zonal flow at the corner point
@@ -2390,7 +2390,7 @@ subroutine CG_action(uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node,
                                                 !! units depend on the basal law exponent.
                 ! and/or whether flow is "hybridized"
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: dxdyh  !< The tracer cell area, in m2
+                         intent(in)    :: dxdyh  !< The tracer cell area [m2]
   real,                  intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                      !! of seawater, nondimensional
   integer,               intent(in)    :: is  !< The starting i-index to work on
@@ -2561,9 +2561,9 @@ subroutine CG_action_subgrid_basal(Phisub, H, U, V, DXDYH, bathyT, dens_ratio, U
                         intent(in)    :: Phisub !< Quadrature structure weights at subgridscale
                                             !! locations for finite element calculations
   real, dimension(2,2), intent(in)    :: H  !< The ice shelf thickness at nodal (corner) points [Z ~> m].
-  real, dimension(2,2), intent(in)    :: U  !< The zonal ice shelf velocity at vertices, in m/year
-  real, dimension(2,2), intent(in)    :: V  !< The meridional ice shelf velocity at vertices, in m/year
-  real,                 intent(in)    :: DXDYH  !< The tracer cell area, in m2
+  real, dimension(2,2), intent(in)    :: U  !< The zonal ice shelf velocity at vertices [m year-1]
+  real, dimension(2,2), intent(in)    :: V  !< The meridional ice shelf velocity at vertices [m year-1]
+  real,                 intent(in)    :: DXDYH  !< The tracer cell area [m2]
   real,                 intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points [Z ~> m].
   real,                 intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                     !! of seawater, nondimensional
@@ -2767,7 +2767,7 @@ subroutine CG_diagonal_subgrid_basal (Phisub, H_node, DXDYH, bathyT, dens_ratio,
                                              !! locations for finite element calculations
   real, dimension(2,2), intent(in) :: H_node !< The ice shelf thickness at nodal (corner)
                                              !! points [Z ~> m].
-  real,              intent(in)    :: DXDYH  !< The tracer cell area, in m2
+  real,              intent(in)    :: DXDYH  !< The tracer cell area [m2]
   real,              intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points [Z ~> m].
   real,              intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                  !! of seawater, nondimensional
@@ -2991,9 +2991,9 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u, v)
   type(ocean_grid_type), intent(in)    :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type), intent(in)    :: US !< Pointer to a structure containing unit conversion factors
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                         intent(inout) :: u !< The zonal ice shelf velocity, in m/year.
+                         intent(inout) :: u !< The zonal ice shelf velocity [m year-1].
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                         intent(inout) :: v !< The meridional ice shelf velocity, in m/year.
+                         intent(inout) :: v !< The meridional ice shelf velocity [m year-1].
 
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for bilinear FEM solve
 ! so there is an "upper" and "lower" bilinear viscosity
@@ -3049,7 +3049,7 @@ subroutine update_OD_ffrac(CS, G, US, ocean_mass, find_avg)
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type),  intent(in)    :: US !< Pointer to a structure containing unit conversion factors
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: ocean_mass !< The mass per unit area of the ocean in kg m-2.
+                          intent(in)    :: ocean_mass !< The mass per unit area of the ocean [kg m-2].
   logical,                intent(in)    :: find_avg !< If true, find the average of OD and ffrac, and
                                               !! reset the underlying running sums to 0.
 
@@ -3120,7 +3120,7 @@ subroutine bilinear_shape_functions (X, Y, Phi, area)
   real, dimension(4),   intent(in) :: Y !< The y-positions of the vertices of the quadrilateral.
   real, dimension(8,4), intent(inout) :: Phi !< The gradients of bilinear basis elements at Gaussian
                                              !! quadrature points surrounding the cell verticies.
-  real,                 intent(out) :: area !< The quadrilateral cell area, in m2.
+  real,                 intent(out) :: area !< The quadrilateral cell area [m2].
 
 ! X and Y must be passed in the form
     !  3 - 4
@@ -3618,7 +3618,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
                           intent(in)    :: h0 !< The initial ice shelf thicknesses [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_after_uflux !< The ice shelf thicknesses after
-                                              !! the zonal mass fluxes, in m.
+                                              !! the zonal mass fluxes [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G),4), &
                           intent(inout) :: flux_enter !< The integrated temperature flux into
                                               !! the cell through the 4 cell boundaries [degC Z m2 ~> degC m3]

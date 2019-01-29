@@ -83,8 +83,8 @@ type, public :: surface_forcing_CS ; private
   real :: Flux_const            !< piston velocity for surface restoring [m s-1]
   real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
   real :: Flux_const_S          !< piston velocity for surface salinity restoring [m s-1]
-  real :: latent_heat_fusion    !< latent heat of fusion [J kg]
-  real :: latent_heat_vapor     !< latent heat of vaporization [J kg]
+  real :: latent_heat_fusion    !< latent heat of fusion [J kg-1]
+  real :: latent_heat_vapor     !< latent heat of vaporization [J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
   real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const" forcing
 
