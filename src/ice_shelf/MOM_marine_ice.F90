@@ -25,7 +25,7 @@ public iceberg_forces, iceberg_fluxes, marine_ice_init
 
 !> Control structure for MOM_marine_ice
 type, public :: marine_ice_CS ; private
-  real :: kv_iceberg          !< The viscosity of the icebergs in m2/s (for ice rigidity)
+  real :: kv_iceberg          !< The viscosity of the icebergs [m2 s-1] (for ice rigidity)
   real :: berg_area_threshold !< Fraction of grid cell which iceberg must occupy
                               !! so that fluxes below are set to zero. (0.5 is a
                               !! good value to use.) Not applied for negative values.
@@ -152,8 +152,8 @@ subroutine iceberg_fluxes(G, fluxes, use_ice_shelf, sfc_state, &
         if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
         if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
 
-        ! Add frazil formation diagnosed by the ocean model (J m-2) in the
-        ! form of surface layer evaporation (kg m-2 s-1). Update lprec in the
+        ! Add frazil formation diagnosed by the ocean model [J m-2] in the
+        ! form of surface layer evaporation [kg m-2 s-1]. Update lprec in the
         ! control structure for diagnostic purposes.
 
         if (associated(sfc_state%frazil)) then

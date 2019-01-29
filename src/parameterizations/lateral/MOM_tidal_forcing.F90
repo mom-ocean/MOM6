@@ -22,7 +22,7 @@ public tidal_forcing_sensitivity
 integer, parameter :: MAX_CONSTITUENTS = 10 !< The maximum number of tidal
                                             !! constituents that could be used.
 
-!> The control structure for the MOM_tidal_forcing mldule
+!> The control structure for the MOM_tidal_forcing module
 type, public :: tidal_forcing_CS ; private
   logical :: use_sal_scalar !< If true, use the scalar approximation when
                       !! calculating self-attraction and loading.
@@ -38,7 +38,7 @@ type, public :: tidal_forcing_CS ; private
   real, dimension(MAX_CONSTITUENTS) :: &
     freq, &           !< The frequency of a tidal constituent [s-1].
     phase0, &         !< The phase of a tidal constituent at time 0, in radians.
-    amp, &            !< The amplitude of a tidal constituent at time 0, in m.
+    amp, &            !< The amplitude of a tidal constituent at time 0 [m].
     love_no           !< The Love number of a tidal constituent at time 0 [nondim].
   integer :: struct(MAX_CONSTITUENTS) !< An encoded spatial structure for each constituent
   character (len=16) :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
@@ -48,10 +48,10 @@ type, public :: tidal_forcing_CS ; private
     cos_struct => NULL(), &    !< be associated with the astronomical forcing.
     cosphasesal => NULL(), &   !< The cosine and sine of the phase of the
     sinphasesal => NULL(), &   !< self-attraction and loading amphidromes.
-    ampsal => NULL(), &        !< The amplitude of the SAL, in m.
+    ampsal => NULL(), &        !< The amplitude of the SAL [m].
     cosphase_prev => NULL(), & !< The cosine and sine of the phase of the
     sinphase_prev => NULL(), & !< amphidromes in the previous tidal solutions.
-    amp_prev => NULL()         !< The amplitude of the previous tidal solution, in m.
+    amp_prev => NULL()         !< The amplitude of the previous tidal solution [m].
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides

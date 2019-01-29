@@ -84,7 +84,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   real :: Rcv_tgt       ! coordinate density of target layer [kg m-3]
   real :: dRcv          ! difference between Rcv and Rcv_tgt [kg m-3]
   real :: dRcv_dT       ! partial derivative of coordinate density wrt temp
-                        ! in the present layer (kg m-3 K-1); usually negative
+                        ! in the present layer [kg m-3 degC-1]; usually negative
   real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
   real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
   real :: heat_in_place ! heating to warm present layer w/o movement between layers

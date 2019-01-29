@@ -2035,7 +2035,7 @@ subroutine get_net_mass_forcing(fluxes, G, net_mass_src)
   type(forcing),                    intent(in)  :: fluxes !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),            intent(in)  :: G      !< The ocean grid type
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: net_mass_src !< The net mass flux of water into the ocean
-                                                          !! in kg m-2 s-1.
+                                                          !! [kg m-2 s-1].
 
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

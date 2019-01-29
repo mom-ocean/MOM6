@@ -51,7 +51,7 @@ end type int_tide_input_CS
 !> This type is used to exchange fields related to the internal tides.
 type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
-    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean, in W m-2.
+    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [W m-2].
     h2, &               !< The squared topographic roughness height [Z2 ~> m2].
     tideamp, &          !< The amplitude of the tidal velocities [m s-1].
     Nb                  !< The bottom stratification [s-1].

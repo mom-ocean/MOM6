@@ -1032,7 +1032,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     vhtot, &    ! the surface mixed layer [H m s-1 ~> m2 s-1 or kg m-1 s-1].
     Idecay_len_TKE, & ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     dR_dT, &    !   Partial derivative of the density at the base of layer nkml
-                ! (roughly the base of the mixed layer) with temperature [kg m-3 K-1].
+                ! (roughly the base of the mixed layer) with temperature [kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with salinity [kg m-3 psu-1].
     ustar, &    !   The surface friction velocity under ice shelves [Z s-1 ~> m s-1].

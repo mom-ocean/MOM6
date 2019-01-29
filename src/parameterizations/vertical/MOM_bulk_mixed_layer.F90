@@ -205,8 +205,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                                                       !! previous call to mixedlayer_init.
   type(optics_type),          pointer       :: optics !< The structure containing the inverse of the
                                                       !! vertical absorption decay scale for
-                                                      !! penetrating shortwave radiation, in m-1.
-  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth, in m.
+                                                      !! penetrating shortwave radiation [m-1].
+  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [m].
   logical,                    intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
                                                      !! outgoing surface freshwater fluxes are
                                                      !! combined before being applied, instead of
@@ -219,12 +219,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                                                       !! diagnostics will be written. The default is
                                                       !! .true.
 
-  ! Local variiables
+  ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
     eaml, &     !   The amount of fluid moved downward into a layer due to mixed
-                ! mixed layer detrainment, in m. (I.e. entrainment from above.)
+                ! layer detrainment [H ~> m or kg m-2]. (I.e. entrainment from above.)
     ebml        !   The amount of fluid moved upward into a layer due to mixed
-                ! mixed layer detrainment, in m. (I.e. entrainment from below.)
+                ! layer detrainment [H ~> m or kg m-2]. (I.e. entrainment from below.)
 
   ! If there is resorting, the vertical coordinate for these variables is the
   ! new, sorted index space.  Here layer 0 is an initially massless layer that
@@ -273,8 +273,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                      ! ocean over a time step [H ~> m or kg m-2].
     NetMassOut,   &  ! The mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
                      ! over a time step from evaporating fresh water [H ~> m or kg m-2]
-    Net_heat, & !   The net heating at the surface over a time step in K H.  Any
-                ! penetrating shortwave radiation is not included in Net_heat.
+    Net_heat, & !   The net heating at the surface over a time step [degC H ~> degC m or degC kg m-2].
+                ! Any penetrating shortwave radiation is not included in Net_heat.
     Net_salt, & ! The surface salt flux into the ocean over a time step, psu H.
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     p_ref, &    !   Reference pressure for the potential density governing mixed
@@ -294,13 +294,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
   real, dimension(max(CS%nsw,1),SZI_(G)) :: &
     Pen_SW_bnd  !   The penetrating fraction of the shortwave heating integrated
-                ! over a time step in each band, in K H.
+                ! over a time step in each band [degC H ~> degC m or degC kg m-2].
   real, dimension(max(CS%nsw,1),SZI_(G),SZK_(GV)) :: &
     opacity_band ! The opacity in each band [H-1 ~> m-1 or m2 kg-1]. The indicies are band, i, k.
 
   real :: cMKE(2,SZI_(G)) ! Coefficients of HpE and HpE^2 used in calculating the
-                          ! denominator of MKE_rate, in m-1 and m-2.
-  real :: Irho0         ! 1.0 / rho_0
+                          ! denominator of MKE_rate; the two elements have differing
+                          ! units of [H-1 ~> m-1 or m2 kg-1] and [H-2 ~> m-2 or m4 kg-2].
+  real :: Irho0         ! 1.0 / rho_0 [m3 kg-1]
   real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1)
   real :: Ih            !   The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
   real :: Idt           !   The inverse of the timestep [s-1].
@@ -982,7 +983,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   real, dimension(SZI_(G)), intent(in)    :: netMassOut !< The mass or volume flux out of the ocean
                                                    !! within a time step [H ~> m or kg m-2].
   real, dimension(SZI_(G)), intent(in)    :: Net_heat !< The net heating at the surface over a
-                                                   !! time step in K H.  Any penetrating shortwave
+                                                   !! time step [degC H ~> degC m or degC kg m-2].  Any penetrating shortwave
                                                    !! radiation is not included in Net_heat.
   real, dimension(SZI_(G)), intent(in)    :: Net_salt !< The net surface salt flux into the ocean
                                                    !! over a time step [PSU H ~> PSU m or PSU kg m-2].
@@ -990,7 +991,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                                    !! shortwave radiation.
   real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
                                                    !! heating at the sea surface in each
-                                                   !! penetrating band, in K H,
+                                                   !! penetrating band [degC H ~> degC m or degC kg m-2],
                                                    !! size nsw x SZI_(G).
   real, dimension(:,:,:),   intent(in)    :: opacity_band !< The opacity in each band of penetrating
                                                    !! shortwave radiation [H-1 ~> m-1 or m2 kg-1].
@@ -1527,8 +1528,9 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                                    !! temperature [kg m-3 degC-1].
   real, dimension(SZI_(G)), intent(in)    :: dRcv_dT !< The partial derivative of Rcv with respect to
                                                    !! temperature [kg m-3 degC-1].
-  real, dimension(2,SZI_(G)), intent(in)  :: cMKE  !< Coefficients of HpE and HpE^2 used in calculating
-                                                   !! the denominator of MKE_rate, in m-1 and m-2.
+  real, dimension(2,SZI_(G)), intent(in)  :: cMKE  !< Coefficients of HpE and HpE^2 used in calculating the
+                                                   !! denominator of MKE_rate; the two elements have differing
+                                                   !! units of [H-1 ~> m-1 or m2 kg-1] and [H-2 ~> m-2 or m4 kg-2].
   real,                     intent(in)    :: Idt_diag !< The inverse of the accumulated diagnostic
                                                    !! time interval [s-1].
   integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
@@ -2279,8 +2281,8 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                   ! layer that remains [H ~> m or kg m-2].
   real :: stays_min_merge         ! The minimum allowed value of stays_merge [H ~> m or kg m-2].
 
-  real :: dR0_2dz, dRcv_2dz       ! Half the vertical gradients of R0, Rcv, T, and
-!  real :: dT_2dz, dS_2dz          ! S, in kg m-4, kg m-4, K m-1, and psu m-1.
+  real :: dR0_2dz, dRcv_2dz       ! Half the vertical gradients of R0 and Rcv [kg m-3 H-1 ~> kg m-4 or m-1]
+!  real :: dT_2dz, dS_2dz         ! Half the vertical gradients of T and S, in degC H-1, and ppt H-1.
   real :: scale_slope             ! A nondimensional number < 1 used to scale down
                                   ! the slope within the upper buffer layer when
                                   ! water MUST be detrained to the lower layer.
@@ -2305,7 +2307,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                   ! interior layers that are just lighter and
                                   ! just denser than the lower buffer layer.
 
-  real :: R0_det, T_det, S_det    ! Detrained values of R0, T, and S.
+  real :: R0_det, T_det, S_det    ! Detrained values of R0 [kg m-3], T [degC], and S [ppt].
   real :: Rcv_stays, R0_stays     ! Values of Rcv and R0 that stay in a layer.
   real :: T_stays, S_stays        ! Values of T and S that stay in a layer.
   real :: dSpice_det, dSpice_stays! The spiciness difference between an original
@@ -2316,7 +2318,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                   ! the lower buffer layer and the water that
                                   ! moves into an interior layer [kg m-3].
   real :: dSpice_2dz              ! The vertical gradient of spiciness used for
-                                  ! advection, in kg m-4.
+                                  ! advection [kg m-3 H-1 ~> kg m-4 or m-1].
 
   real :: dPE_ratio               ! Multiplier of dPE_det at which merging is
                                   ! permitted - here (detrainment_per_day/dt)*30
@@ -2330,7 +2332,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: dT_dS_gauge, dS_dT_gauge ! The relative scales of temperature and
                                   ! salinity changes in defining spiciness, in
                                   ! [degC psu-1] and [psu degC-1].
-  real :: I_denom                 ! A work variable with units of psu2 m6 kg-2.
+  real :: I_denom                 ! A work variable with units of [ppt2 m6 kg-2].
 
   real :: G_2                     ! 1/2 G_Earth [m2 Z-1 s-2 ~> m s-2].
   real :: Rho0xG                  ! Rho0 times G_Earth [kg m-1 Z-1 s-2 ~> kg m-2 s-2].

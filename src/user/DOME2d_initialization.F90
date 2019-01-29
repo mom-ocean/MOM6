@@ -362,11 +362,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp
-  real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness, in m.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness
+  real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp [degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt [ppt]
+  real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO [kg m-3]
+  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness [H ~> m or kg m-2].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness [Z ~> m]
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [s-1].
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical

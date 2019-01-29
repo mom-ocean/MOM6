@@ -176,7 +176,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK
   real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
-  real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer densities, in Pa.
+  real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer densities [Pa].
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
   real :: hAtVel, zpa, zpb, dh, res_scaling_fac, I_l_f
@@ -577,7 +577,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: absf            ! absolute value of f, interpolated to velocity points [s-1]
   real :: u_star          ! surface friction velocity, interpolated to velocity points [Z s-1 ~> m s-1].
   real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer [s-1]
-  real :: timescale       ! mixing growth timescale (sec)
+  real :: timescale       ! mixing growth timescale [s]
   real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! tiny thickness that usually lost in roundoff and can be neglected [Z ~> m]
   real :: I4dt            ! 1/(4 dt)
@@ -592,7 +592,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: vDml(SZI_(G))   ! half of the mixed layer [H m2 s-1 ~> m3 s-1 or kg s-1].
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
-                                            ! directions (sec), stored in 2-D
+                                            ! directions [s], stored in 2-D
                                             ! arrays for diagnostic purposes.
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.

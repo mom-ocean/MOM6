@@ -123,7 +123,7 @@ type, public :: tidal_mixing_cs
   real :: Polzin_min_decay_scale !< minimum decay scale of the tidal dissipation
                               !! profile in Polzin formulation [Z ~> m].
 
-  real :: TKE_itide_max       !< maximum internal tide conversion (W m-2)
+  real :: TKE_itide_max       !< maximum internal tide conversion [W m-2]
                               !! available to mix above the BBL
 
   real :: utide               !< constant tidal amplitude [m s-1] used if
@@ -146,20 +146,19 @@ type, public :: tidal_mixing_cs
   type(remapping_CS)              :: remap_CS           !< The control structure for remapping
 
   ! Data containers
-  real, pointer, dimension(:,:) :: TKE_Niku    => NULL() !< Lee wave driven Turbulent Kinetic Energy input,
-                                                         !! in W m-2
+  real, pointer, dimension(:,:) :: TKE_Niku    => NULL() !< Lee wave driven Turbulent Kinetic Energy input [W m-2]
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL() !< The internal Turbulent Kinetic Energy input divided
-                                                         !! by the bottom stratfication, in J m-2.
+                                                         !! by the bottom stratfication [J m-2].
   real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency [s-1].
   real, pointer, dimension(:,:) :: mask_itidal => NULL() !< A mask of where internal tide energy is input
-  real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance, in m2.
+  real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance [m2].
   real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [m s-1]
   real, allocatable, dimension(:)     :: h_src           !< tidal constituent input layer thickness [m]
   real, allocatable, dimension(:,:)   :: tidal_qe_2d     !< Tidal energy input times the local dissipation
                                                          !! fraction, q*E(x,y), with the CVMix implementation
-                                                         !! of Jayne et al tidal mixing, in W m-2.
+                                                         !! of Jayne et al tidal mixing [W m-2].
                                                          !! TODO: make this E(x,y) only
-  real, allocatable, dimension(:,:,:) :: tidal_qe_3d_in  !< q*E(x,y,z) with the Schmittner parameterization, in W m-3?
+  real, allocatable, dimension(:,:,:) :: tidal_qe_3d_in  !< q*E(x,y,z) with the Schmittner parameterization [W m-3?]
 
   ! Diagnostics
   type(diag_ctrl),          pointer :: diag => NULL() !< structure to regulate diagnostic output timing

@@ -113,13 +113,13 @@ type, public ::  ocean_public_type
   real, pointer, dimension(:,:)  :: &
     t_surf => NULL(), & !< SST on t-cell (degrees Kelvin)
     s_surf => NULL(), & !< SSS on t-cell (psu)
-    u_surf => NULL(), & !< i-velocity at the locations indicated by stagger, m/s.
-    v_surf => NULL(), & !< j-velocity at the locations indicated by stagger, m/s.
+    u_surf => NULL(), & !< i-velocity at the locations indicated by stagger [m s-1].
+    v_surf => NULL(), & !< j-velocity at the locations indicated by stagger [m s-1].
     sea_lev => NULL(), & !< Sea level in m after correction for surface pressure,
-                        !! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
-    frazil =>NULL(), &  !< Accumulated heating (in Joules/m^2) from frazil
+                        !! i.e. dzt(1) + eta_t + patm/rho0/grav [m]
+    frazil =>NULL(), &  !< Accumulated heating [J m-2] from frazil
                         !! formation in the ocean.
-    area => NULL()      !< cell area of the ocean surface, in m2.
+    area => NULL()      !< cell area of the ocean surface [m2].
   type(coupler_2d_bc_type) :: fields    !< A structure that may contain named
                                         !! arrays of tracer-related surface fields.
   integer                  :: avg_kount !< A count of contributions to running
@@ -154,8 +154,8 @@ type, public :: ocean_state_type ; private
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
   real :: press_to_z          !< A conversion factor between pressure and ocean
-                              !! depth in m, usually 1/(rho_0*g), in m Pa-1.
-  real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
+                              !! depth in m, usually 1/(rho_0*g) [m Pa-1].
+  real :: C_p                 !< The heat capacity of seawater [J degC-1 kg-1].
   logical :: offline_tracer_mode = .false. !< If false, use the model in prognostic mode
                               !! with the barotropic and baroclinic dynamics, thermodynamics,
                               !! etc. stepped forward integrated in time.
@@ -169,8 +169,8 @@ type, public :: ocean_state_type ; private
                               !! If false, the two phases are advanced with
                               !! separate calls. The default is true.
   ! The following 3 variables are only used here if single_step_call is false.
-  real    :: dt               !< (baroclinic) dynamics time step (seconds)
-  real    :: dt_therm         !< thermodynamics time step (seconds)
+  real    :: dt               !< (baroclinic) dynamics time step [s]
+  real    :: dt_therm         !< thermodynamics time step [s]
   logical :: thermo_spans_coupling !< If true, thermodynamic and tracer time
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
@@ -820,9 +820,9 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
                                                !! visible ocean surface fields, whose elements
                                                !! have their data set here.
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface, in Pa.
+  real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface [Pa].
   real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
-                                               !! ocean depth in m, usually 1/(rho_0*g), in m Pa-1.
+                                               !! ocean depth in m, usually 1/(rho_0*g) [m Pa-1].
   ! Local variables
   real :: IgR0
   character(len=48)  :: val_str
