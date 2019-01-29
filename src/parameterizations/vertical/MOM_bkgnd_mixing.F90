@@ -39,13 +39,13 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
 
   ! Parameters
   real    :: Bryan_Lewis_c1         !< The vertical diffusivity values for  Bryan-Lewis profile
-                                    !! at |z|=D (m2/s)
+                                    !! at |z|=D [m2 s-1]
   real    :: Bryan_Lewis_c2         !< The amplitude of variation in diffusivity for the
-                                    !! Bryan-Lewis diffusivity profile (m2/s)
+                                    !! Bryan-Lewis diffusivity profile [m2 s-1]
   real    :: Bryan_Lewis_c3         !< The inverse length scale for transition region in the
-                                    !! Bryan-Lewis diffusivity profile (1/m)
+                                    !! Bryan-Lewis diffusivity profile [m-1]
   real    :: Bryan_Lewis_c4         !< The depth where diffusivity is Bryan_Lewis_bl1 in the
-                                    !! Bryan-Lewis profile (m)
+                                    !! Bryan-Lewis profile [m]
   real    :: bckgrnd_vdc1           !< Background diffusivity (Ledwell) when
                                     !! horiz_varying_background=.true.
   real    :: bckgrnd_vdc_eq         !! Equatorial diffusivity (Gregg) when
@@ -54,8 +54,8 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
                                     !! horiz_varying_background=.true.
   real    :: bckgrnd_vdc_ban        !< Banda Sea diffusivity (Gordon) when
                                     !! horiz_varying_background=.true.
-  real    :: Kd_min                 !< minimum diapycnal diffusivity (Z2/s)
-  real    :: Kd                     !< interior diapycnal diffusivity (Z2/s)
+  real    :: Kd_min                 !< minimum diapycnal diffusivity [Z2 s-1 ~> m2 s-1]
+  real    :: Kd                     !< interior diapycnal diffusivity [Z2 s-1 ~> m2 s-1]
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
                                     !! Henyey scaling from the mixing
@@ -64,7 +64,7 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
                                     !! diffusivities with Kd_tanh_lat_fn. Valid values
                                     !! are in the range of -2 to 2; 0.4 reproduces CM2M.
-  real    :: Kdml                   !< mixed layer diapycnal diffusivity (Z2/s)
+  real    :: Kdml                   !< mixed layer diapycnal diffusivity [Z2 s-1 ~> m2 s-1]
                                     !! when bulkmixedlayer==.false.
   real    :: Hmix                   !< mixed layer thickness [Z ~> m] when bulkmixedlayer==.false.
   logical :: Kd_tanh_lat_fn         !< If true, use the tanh dependence of Kd_sfc on
@@ -100,10 +100,10 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
   integer :: id_kd_bkgnd = -1 !< Diagnotic IDs
   integer :: id_kv_bkgnd = -1 !< Diagnostic IDs
 
-  real, allocatable, dimension(:,:)   ::  Kd_sfc !< surface value of the diffusivity (Z2/s)
+  real, allocatable, dimension(:,:)   ::  Kd_sfc !< surface value of the diffusivity [Z2 s-1 ~> m2 s-1]
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: kd_bkgnd !< Background diffusivity (Z2/s)
-  real, allocatable, dimension(:,:,:) :: kv_bkgnd !< Background viscosity  (Z2/s)
+  real, allocatable, dimension(:,:,:) :: kd_bkgnd !< Background diffusivity [Z2 s-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:,:) :: kv_bkgnd !< Background viscosity  [Z2 s-1 ~> m2 s-1]
 
   character(len=40)  :: bkgnd_scheme_str = "none" !< Background scheme identifier
 
@@ -125,7 +125,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   type(bkgnd_mixing_cs),    pointer      :: CS         !< This module's control structure.
 
   ! Local variables
-  real :: Kv                    ! The interior vertical viscosity (m2/s) - read to set prandtl
+  real :: Kv                    ! The interior vertical viscosity [m2 s-1] - read to set prandtl
                                 ! number unless it is provided as a parameter
   real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
 
@@ -335,7 +335,7 @@ subroutine sfc_bkgnd_mixing(G, US, CS)
   ! local variables
   real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
-  real :: abs_sin    !< absolute value of sine of latitude (nondim)
+  real :: abs_sin    !< absolute value of sine of latitude [nondim]
   real :: epsilon
   integer :: i, j, k, is, ie, js, je
 
@@ -398,9 +398,9 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
                                                                  !! a previous call to bkgnd_mixing_init.
 
   ! local variables
-  real, dimension(SZK_(G)+1) :: depth_int  !< distance from surface of the interfaces (m)
-  real, dimension(SZK_(G)+1) :: Kd_col     !< Diffusivities at the interfaces (m2 s-1)
-  real, dimension(SZK_(G)+1) :: Kv_col     !< Viscosities at the interfaces (m2 s-1)
+  real, dimension(SZK_(G)+1) :: depth_int  !< distance from surface of the interfaces [m]
+  real, dimension(SZK_(G)+1) :: Kd_col     !< Diffusivities at the interfaces [m2 s-1]
+  real, dimension(SZK_(G)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
   real, dimension(SZI_(G)) :: depth        !< distance from surface of an interface [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [Z ~> m]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [Z-1 ~> m-1]
@@ -409,7 +409,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
   real :: N02_N2
   real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
-  real :: abs_sin    !< absolute value of sine of latitude (nondim)
+  real :: abs_sin    !< absolute value of sine of latitude [nondim]
   real :: epsilon
   real :: bckgrnd_vdc_psin !< PSI diffusivity in northern hemisphere
   real :: bckgrnd_vdc_psis !< PSI diffusivity in southern hemisphere

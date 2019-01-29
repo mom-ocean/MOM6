@@ -45,26 +45,26 @@ public tidal_mixing_end
 type, public :: tidal_mixing_diags ; private
   real, pointer, dimension(:,:,:) :: &
     Kd_itidal             => NULL(),& !< internal tide diffusivity at interfaces [Z2 s-1 ~> m2 s-1].
-    Fl_itidal             => NULL(),& !< vertical flux of tidal turbulent dissipation (m3 s-3)
+    Fl_itidal             => NULL(),& !< vertical flux of tidal turbulent dissipation [m3 s-3]
     Kd_Niku               => NULL(),& !< lee-wave diffusivity at interfaces [Z2 s-1 ~> m2 s-1].
-    Kd_Niku_work          => NULL(),& !< layer integrated work by lee-wave driven mixing (W m-2)
-    Kd_Itidal_Work        => NULL(),& !< layer integrated work by int tide driven mixing (W m-2)
-    Kd_Lowmode_Work       => NULL(),& !< layer integrated work by low mode driven mixing (W m-2)
-    N2_int                => NULL(),& !< Bouyancy frequency squared at interfaces (s-2)
-    vert_dep_3d           => NULL(),& !< The 3-d mixing energy deposition (W m-3)
+    Kd_Niku_work          => NULL(),& !< layer integrated work by lee-wave driven mixing [W m-2]
+    Kd_Itidal_Work        => NULL(),& !< layer integrated work by int tide driven mixing [W m-2]
+    Kd_Lowmode_Work       => NULL(),& !< layer integrated work by low mode driven mixing [W m-2]
+    N2_int                => NULL(),& !< Bouyancy frequency squared at interfaces [s-2]
+    vert_dep_3d           => NULL(),& !< The 3-d mixing energy deposition [W m-3]
     Schmittner_coeff_3d   => NULL()   !< The coefficient in the Schmittner et al mixing scheme, in UNITS?
   real, pointer, dimension(:,:,:) :: tidal_qe_md => NULL() !< Input tidal energy dissipated locally,
-                                           !! interpolated to model vertical coordinate (W m-3?)
+                                           !! interpolated to model vertical coordinate [W m-3?]
   real, pointer, dimension(:,:,:) :: Kd_lowmode => NULL() !< internal tide diffusivity at interfaces
                                            !! due to propagating low modes [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Fl_lowmode => NULL() !< vertical flux of tidal turbulent
-                                           !! dissipation due to propagating low modes (m3/s3)
+                                           !! dissipation due to propagating low modes [m3 s-3]
   real, pointer, dimension(:,:) :: &
-    TKE_itidal_used           => NULL(),& !< internal tide TKE input at ocean bottom (W/m2)
-    N2_bot                    => NULL(),& !< bottom squared buoyancy frequency (1/s2)
-    N2_meanz                  => NULL(),& !< vertically averaged buoyancy frequency (1/s2)
+    TKE_itidal_used           => NULL(),& !< internal tide TKE input at ocean bottom [W m-2]
+    N2_bot                    => NULL(),& !< bottom squared buoyancy frequency [s-2]
+    N2_meanz                  => NULL(),& !< vertically averaged buoyancy frequency [s-2]
     Polzin_decay_scale_scaled => NULL(),& !< vertical scale of decay for tidal dissipation
-    Polzin_decay_scale        => NULL(),& !< vertical decay scale for tidal diss with Polzin (meter)
+    Polzin_decay_scale        => NULL(),& !< vertical decay scale for tidal diss with Polzin [m]
     Simmons_coeff_2d          => NULL()   !< The Simmons et al mixing coefficient
 
 end type
@@ -93,14 +93,14 @@ type, public :: tidal_mixing_cs
   real :: Int_tide_decay_scale !< decay scale for internal wave TKE [Z ~> m].
 
   real :: Mu_itides           !< efficiency for conversion of dissipation
-                              !! to potential energy (nondimensional)
+                              !! to potential energy [nondim]
 
-  real :: Gamma_itides        !< fraction of local dissipation (nondimensional)
+  real :: Gamma_itides        !< fraction of local dissipation [nondim]
 
   real :: Gamma_lee           !< fraction of local dissipation for lee waves
-                              !! (Nikurashin's energy input) (nondimensional)
+                              !! (Nikurashin's energy input) [nondim]
   real :: Decay_scale_factor_lee !< Scaling factor for the decay scale of lee
-                              !! wave energy dissipation (nondimensional)
+                              !! wave energy dissipation [nondim]
 
   real :: min_zbot_itides     !< minimum depth for internal tide conversion [Z ~> m].
   logical :: Lowmode_itidal_dissipation = .false.  !< If true, consider mixing due to breaking low
@@ -116,10 +116,10 @@ type, public :: tidal_mixing_cs
                               !! ocean bottom used in Polzin formulation of the
                               !! vertical scale of decay of tidal dissipation [s-1]
   real :: Polzin_decay_scale_factor !< Scaling factor for the decay length scale
-                              !! of the tidal dissipation profile in Polzin (nondimensional)
+                              !! of the tidal dissipation profile in Polzin [nondim]
   real :: Polzin_decay_scale_max_factor !< The decay length scale of tidal dissipation
                               !! profile in Polzin formulation should not exceed
-                              !! Polzin_decay_scale_max_factor * depth of the ocean (nondimensional).
+                              !! Polzin_decay_scale_max_factor * depth of the ocean [nondim].
   real :: Polzin_min_decay_scale !< minimum decay scale of the tidal dissipation
                               !! profile in Polzin formulation [Z ~> m].
 
@@ -716,9 +716,9 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
   real, dimension(SZK_(G)+1) :: Kd_tidal    ! tidal diffusivity [m2/s]
   real, dimension(SZK_(G)+1) :: Kv_tidal    ! tidal viscosity [m2/s]
   real, dimension(SZK_(G)+1) :: vert_dep    ! vertical deposition
-  real, dimension(SZK_(G)+1) :: iFaceHeight ! Height of interfaces (m)
+  real, dimension(SZK_(G)+1) :: iFaceHeight ! Height of interfaces [m]
   real, dimension(SZK_(G)+1) :: SchmittnerSocn
-  real, dimension(SZK_(G))   :: cellHeight  ! Height of cell centers (m)
+  real, dimension(SZK_(G))   :: cellHeight  ! Height of cell centers [m]
   real, dimension(SZK_(G))   :: tidal_qe_md ! Tidal dissipation energy interpolated from 3d input
                                             ! to model coordinates
   real, dimension(SZK_(G))   :: Schmittner_coeff
@@ -959,12 +959,12 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     htot,             & ! total thickness above or below a layer, or the
                         ! integrated thickness in the BBL [Z ~> m].
     htot_WKB,         & ! WKB scaled distance from top to bottom [Z ~> m].
-    TKE_itidal_bot,   & ! internal tide TKE at ocean bottom (m3/s3)
-    TKE_Niku_bot,     & ! lee-wave TKE at ocean bottom (m3/s3)
-    TKE_lowmode_bot,  & ! internal tide TKE at ocean bottom lost from all remote low modes (m3/s3) (BDM)
-    Inv_int,          & ! inverse of TKE decay for int tide over the depth of the ocean (nondim)
-    Inv_int_lee,      & ! inverse of TKE decay for lee waves over the depth of the ocean (nondim)
-    Inv_int_low,      & ! inverse of TKE decay for low modes over the depth of the ocean (nondim) (BDM)
+    TKE_itidal_bot,   & ! internal tide TKE at ocean bottom [m3 s-3]
+    TKE_Niku_bot,     & ! lee-wave TKE at ocean bottom [m3 s-3]
+    TKE_lowmode_bot,  & ! internal tide TKE at ocean bottom lost from all remote low modes [m3 s-3] (BDM)
+    Inv_int,          & ! inverse of TKE decay for int tide over the depth of the ocean [nondim]
+    Inv_int_lee,      & ! inverse of TKE decay for lee waves over the depth of the ocean [nondim]
+    Inv_int_low,      & ! inverse of TKE decay for low modes over the depth of the ocean [nondim] (BDM)
     z0_Polzin,        & ! TKE decay scale in Polzin formulation [Z ~> m].
     z0_Polzin_scaled, & ! TKE decay scale in Polzin formulation [Z ~> m].
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
@@ -974,19 +974,19 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     TKE_itidal_rem,   & ! remaining internal tide TKE (from barotropic source)
     TKE_Niku_rem,     & ! remaining lee-wave TKE
     TKE_lowmode_rem,  & ! remaining internal tide TKE (from propagating low mode source) (BDM)
-    TKE_frac_top,     & ! fraction of bottom TKE that should appear at top of a layer (nondim)
-    TKE_frac_top_lee, & ! fraction of bottom TKE that should appear at top of a layer (nondim)
+    TKE_frac_top,     & ! fraction of bottom TKE that should appear at top of a layer [nondim]
+    TKE_frac_top_lee, & ! fraction of bottom TKE that should appear at top of a layer [nondim]
     TKE_frac_top_lowmode, &
-                        ! fraction of bottom TKE that should appear at top of a layer (nondim) (BDM)
+                        ! fraction of bottom TKE that should appear at top of a layer [nondim] (BDM)
     z_from_bot,       & ! distance from bottom [Z ~> m].
     z_from_bot_WKB      ! WKB scaled distance from bottom [Z ~> m].
 
-  real :: I_rho0        ! 1 / RHO0, (m3/kg)
+  real :: I_rho0        ! 1 / RHO0 [m3 kg-1]
   real :: Kd_add        ! diffusivity to add in a layer [Z2 s-1 ~> m2 s-1].
-  real :: TKE_itide_lay ! internal tide TKE imparted to a layer (from barotropic) (m3/s3)
+  real :: TKE_itide_lay ! internal tide TKE imparted to a layer (from barotropic) [m3 s-3]
   real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer [m3 s-3]
-  real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) (m3/s3) (BDM)
-  real :: frac_used     ! fraction of TKE that can be used in a layer (nondim)
+  real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) [m3 s-3] (BDM)
+  real :: frac_used     ! fraction of TKE that can be used in a layer [nondim]
   real :: Izeta         ! inverse of TKE decay scale [Z-1 ~> m-1].
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves [Z-1 ~> m-1].
   real :: z0_psl        ! temporary variable [Z ~> m].
@@ -1516,7 +1516,7 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
   type(tidal_mixing_cs),   pointer    :: CS   !< The control structure for this module
   ! local
   integer :: i, j, isd, ied, jsd, jed, nz
-  real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
+  real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points [W m-2]
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 

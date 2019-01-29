@@ -47,8 +47,7 @@ contains
 !! be applied to the ocean is returned (WHERE)?
 subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid
-                                                                !! structure.
+  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
                                                                 !! to any available thermodynamic
@@ -69,7 +68,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   integer,                        optional, intent(in)    :: halo !< Halo width over which to work
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    heat_rem,  & ! remaining heat (H * degC)
+    heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
     h_geo_rem, & ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
     Rcv_BL,    & ! coordinate density in the deepest variable density layer [kg m-3]
     p_ref        ! coordiante densities reference pressure [Pa]

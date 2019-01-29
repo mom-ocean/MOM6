@@ -141,7 +141,7 @@ type, public :: energetic_PBL_CS ; private
   type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 
-  ! These are terms in the mixed layer TKE budget, all in J m-2 = kg s-2.
+  ! These are terms in the mixed layer TKE budget, all in [J m-2] = [kg s-2].
   real, allocatable, dimension(:,:) :: &
     diag_TKE_wind, &   !< The wind source of TKE [J m-2].
     diag_TKE_MKE, &    !< The resolved KE source of TKE [J m-2].
@@ -154,17 +154,17 @@ type, public :: energetic_PBL_CS ; private
     ML_depth, &        !< The mixed layer depth [Z ~> m]. (result after iteration step)
     ML_depth2, &       !< The mixed layer depth [Z ~> m]. (guess for iteration step)
     Enhance_M, &       !< The enhancement to the turbulent velocity scale [nondim]
-    MSTAR_MIX, &       !< Mstar used in EPBL
-    MSTAR_LT, &        !< Mstar for Langmuir turbulence
-    MLD_EKMAN, &       !< MLD over Ekman length
-    MLD_OBUKHOV, &     !< MLD over Obukhov length
-    EKMAN_OBUKHOV, &   !< Ekman over Obukhov length
-    LA, &              !< Langmuir number
-    LA_MOD             !< Modified Langmuir number
+    MSTAR_MIX, &       !< Mstar used in EPBL [nondim]
+    MSTAR_LT, &        !< Mstar for Langmuir turbulence [nondim]
+    MLD_EKMAN, &       !< MLD over Ekman length [nondim]
+    MLD_OBUKHOV, &     !< MLD over Obukhov length [nondim]
+    EKMAN_OBUKHOV, &   !< Ekman over Obukhov length [nondim]
+    LA, &              !< Langmuir number [nondim]
+    LA_MOD             !< Modified Langmuir number [nondim]
 
   real, allocatable, dimension(:,:,:) :: &
-    Velocity_Scale, & !< The velocity scale used in getting Kd
-    Mixing_Length     !< The length scale used in getting Kd
+    Velocity_Scale, & !< The velocity scale used in getting Kd [Z s-1 ~> m s-1]
+    Mixing_Length     !< The length scale used in getting Kd [Z ~> m]
   !>@{ Diagnostic IDs
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_MKE = -1, id_TKE_conv = -1, id_TKE_forcing = -1
@@ -1639,7 +1639,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real :: ColHt_core ! The diffusivity-independent core term in the expressions
                      ! for the column height changes [J m-3].
   real :: ColHt_chg  ! The change in the column height [H ~> m or kg m-2].
-  real :: y1   ! A local temporary term, in units of H-3 or H-4 in various contexts.
+  real :: y1   ! A local temporary term, [H-3 ~> m-3 or m6 kg-3] or [H-4 ~> m-4 or m8 kg-4] in various contexts.
 
   !   The expression for the change in potential energy used here is derived
   ! from the expression for the final estimates of the changes in temperature
@@ -1920,13 +1920,13 @@ end subroutine ust_2_u10_coare3p5
 !! layer thickness, inclusion conversion to the 10m wind.
 subroutine get_LA_windsea(ustar, hbl, GV, US, LA)
   real,                    intent(in)  :: ustar !< The water-side surface friction velocity [m s-1]
-  real,                    intent(in)  :: hbl   !< The ocean boundary layer depth (m)
+  real,                    intent(in)  :: hbl   !< The ocean boundary layer depth [m]
   type(verticalGrid_type), intent(in)  :: GV    !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US    !< A dimensional unit scaling type
   real,                    intent(out) :: LA    !< The Langmuir number returned from this module
 ! Original description:
 ! This function returns the enhancement factor, given the 10-meter
-! wind [m s-1], friction velocity [m s-1] and the boundary layer depth (m).
+! wind [m s-1], friction velocity [m s-1] and the boundary layer depth [m].
 ! Update (Jan/25):
 ! Converted from function to subroutine, now returns Langmuir number.
 ! Computes 10m wind internally, so only ustar and hbl need passed to
@@ -2242,8 +2242,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_TKE_conv = register_diag_field('ocean_model', 'ePBL_TKE_conv', diag%axesT1, &
       Time, 'Convective source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_forcing = register_diag_field('ocean_model', 'ePBL_TKE_forcing', diag%axesT1, &
-      Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation'//&
-            ' through model layers', 'm3 s-3')
+      Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation '//&
+            'through model layers', 'm3 s-3')
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'ePBL_TKE_mixing', diag%axesT1, &
       Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3')
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'ePBL_TKE_mech_decay', diag%axesT1, &
