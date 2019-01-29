@@ -28,7 +28,7 @@ contains
 subroutine init_coord_sigma(CS, nk, coordinateResolution)
   type(sigma_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,            intent(in) :: nk !< Number of layers in the grid
-  real, dimension(:), intent(in) :: coordinateResolution !< Nominal coordinate resolution (nondim)
+  real, dimension(:), intent(in) :: coordinateResolution !< Nominal coordinate resolution [nondim]
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_sigma: CS already associated!")
   allocate(CS)

@@ -45,8 +45,8 @@ type, public :: surface
     v, &        !< The mixed layer meridional velocity [m s-1].
     sea_lev, &  !< The sea level [m].  If a reduced surface gravity is
                 !! used, that is compensated for in sea_lev.
-    melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
-                      !! in J m-2. This is computed w.r.t. surface freezing temperature.
+    melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [J m-2].
+                      !! This is computed w.r.t. surface freezing temperature.
     ocean_mass, &  !< The total mass of the ocean [kg m-2].
     ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
     ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
@@ -219,7 +219,7 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
                 !< Viscosity in the viscous top boundary layer under ice shelves at v-points [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
-                !< The number of layers in the viscous surface mixed layer at u-points (nondimensional).
+                !< The number of layers in the viscous surface mixed layer at u-points [nondim].
                 !! This is not an integer because there may be fractional layers, and it is stored in
                 !! terms of layers, not depth, to facilitate the movement of the viscous boundary layer
                 !! with the flow.

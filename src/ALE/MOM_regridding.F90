@@ -87,7 +87,7 @@ type, public :: regridding_CS ; private
   !> Reference pressure for potential density calculations (Pa)
   real :: ref_pressure = 2.e7
 
-  !> Weight given to old coordinate when blending between new and old grids (nondim)
+  !> Weight given to old coordinate when blending between new and old grids [nondim]
   !! Used only below depth_of_time_filter_shallow, with a cubic variation
   !! from zero to full effect between depth_of_time_filter_shallow and
   !! depth_of_time_filter_deep.
@@ -100,7 +100,7 @@ type, public :: regridding_CS ; private
   real :: depth_of_time_filter_deep = 0.
 
   !> Fraction (between 0 and 1) of compressibility to add to potential density
-  !! profiles when interpolating for target grid positions. (nondim)
+  !! profiles when interpolating for target grid positions. [nondim]
   real :: compressibility_fraction = 0.
 
   !> If true, each interface is given a maximum depth based on a rescaling of
@@ -184,6 +184,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=*),           intent(in)    :: param_prefix !< String to prefix to parameter names.
                                                             !! If empty, causes main model parameters to be used.
   character(len=*),           intent(in)    :: param_suffix !< String to append to parameter names.
+
   ! Local variables
   integer :: ke ! Number of levels
   character(len=80)  :: string, string2, varName ! Temporary strings
@@ -194,18 +195,19 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
   real :: filt_len, strat_tol, index_scale, tmpReal
-  real :: maximum_depth !< The maximum depth of the ocean [m] (not in Z).
+  real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
   integer :: nz_fixed_sfc, k, nzf(4)
-  real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
+  real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate, which may be
+                                            ! [m] or [Z ~> m] or [H ~> m or kg m-2] or [kg m-3] or other units.
   real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses [H ~> m or kg m-2]
   real, dimension(:), allocatable :: z_max  ! Maximum interface depths [H ~> m or kg m-2] or other
                                             ! units depending on the coordinate
   real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths
                                             ! [H ~> m or kg m-2] or other units
-  real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode
-  ! Thicknesses that give level centers corresponding to table 2 of WOA09
+  real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode [kg m-3]
+  ! Thicknesses [m] that give level centers corresponding to table 2 of WOA09
   real, dimension(40) :: woa09_dz = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
                                       37.5, 50.,  50.,  75., 100., 100., 100., 100., &
                                      100., 100., 100., 100., 100., 100., 100., 175., &
@@ -918,10 +920,11 @@ end subroutine calc_h_new_by_dz
 
 !> Check that the total thickness of two grids match
 subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
-  type(ocean_grid_type),                       intent(in) :: G !< Grid structure
-  type(verticalGrid_type),                     intent(in) :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in) :: h !< Layer thicknesses (m)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzInterface !< Change in interface positions (m)
+  type(ocean_grid_type),                       intent(in) :: G   !< Grid structure
+  type(verticalGrid_type),                     intent(in) :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzInterface !< Change in interface positions
+                                                                 !! [H ~> m or kg m-2]
   character(len=*),                            intent(in) :: msg !< Message to append to errors
   ! Local variables
   integer :: i, j
@@ -936,8 +939,8 @@ end subroutine check_remapping_grid
 !> Check that the total thickness of new and old grids are consistent
 subroutine check_grid_column( nk, depth, h, dzInterface, msg )
   integer,               intent(in) :: nk !< Number of cells
-  real,                  intent(in) :: depth !< Depth of bottom (m or arbitrary units)
-  real, dimension(nk),   intent(in) :: h  !< Cell thicknesses (m or arbitrary units)
+  real,                  intent(in) :: depth !< Depth of bottom [Z ~> m] or arbitrary units
+  real, dimension(nk),   intent(in) :: h  !< Cell thicknesses [Z ~> m] or arbitrary units
   real, dimension(nk+1), intent(in) :: dzInterface !< Change in interface positions (same units as h)
   character(len=*),      intent(in) :: msg !< Message to append to errors
   ! Local variables
@@ -998,9 +1001,9 @@ end subroutine check_grid_column
 subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   type(regridding_CS),      intent(in)    :: CS !< Regridding control structure
   integer,                  intent(in)    :: nk !< Number of cells in source grid
-  real, dimension(nk+1),    intent(in)    :: z_old !< Old grid position (m)
-  real, dimension(CS%nk+1), intent(in)    :: z_new !< New grid position (m)
-  real, dimension(CS%nk+1), intent(inout) :: dz_g !< Change in interface positions (m)
+  real, dimension(nk+1),    intent(in)    :: z_old !< Old grid position [m]
+  real, dimension(CS%nk+1), intent(in)    :: z_new !< New grid position [m]
+  real, dimension(CS%nk+1), intent(inout) :: dz_g !< Change in interface positions [m]
   ! Local variables
   real :: sgn  ! The sign convention for downward.
   real :: dz_tgt, zr1, z_old_k
@@ -1475,7 +1478,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
       z_col(1) = 0. ! Work downward rather than bottom up
       do K = 1, GV%ke
-        z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of [H ~> m or kg m-2]
+        z_col(K+1) = z_col(K) + h(i,j,k)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
@@ -1607,7 +1610,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
       depth = G%bathyT(i,j) * GV%Z_to_H
       z_col(1) = 0. ! Work downward rather than bottom up
       do K=1,nz
-        z_col(K+1) = z_col(K) + h(i, j, k) ! Work in units of [H ~> m or kg m-2]
+        z_col(K+1) = z_col(K) + h(i,j,k)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
                     ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
@@ -2221,19 +2224,19 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: Rho_ml_avg_depth !< Averaging depth over which to determine mixed layer potential
                                                     !! density [H ~> m or kg m-2]
   real,    optional, intent(in) :: nlay_ML_to_interior !< Number of layers to offset the mixed layer density to find
-                                                    !! resolved stratification (nondim)
+                                                    !! resolved stratification [nondim]
   logical, optional, intent(in) :: fix_haloclines   !< Detect regions with much weaker stratification in the coordinate
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for
-                                                    !! spuriously unstable water mass profiles (m)
+                                                    !! spuriously unstable water mass profiles [m]
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic
                                                     !! halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward
                                                     !! from the top.
-  real,    optional, intent(in) :: adaptTimeRatio   !< Ratio of the ALE timestep to the grid timescale, ND.
+  real,    optional, intent(in) :: adaptTimeRatio   !< Ratio of the ALE timestep to the grid timescale [nondim].
   real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region [H ~> m or kg m-2].
-  real,    optional, intent(in) :: adaptZoomCoeff   !< Coefficient of near-surface zooming diffusivity, ND.
-  real,    optional, intent(in) :: adaptBuoyCoeff   !< Coefficient of buoyancy diffusivity, ND.
-  real,    optional, intent(in) :: adaptAlpha       !< Scaling factor on optimization tendency, ND.
+  real,    optional, intent(in) :: adaptZoomCoeff   !< Coefficient of near-surface zooming diffusivity [nondim].
+  real,    optional, intent(in) :: adaptBuoyCoeff   !< Coefficient of buoyancy diffusivity [nondim].
+  real,    optional, intent(in) :: adaptAlpha       !< Scaling factor on optimization tendency [nondim].
   logical, optional, intent(in) :: adaptDoMin       !< If true, make a HyCOM-like mixed layer by
                                                     !! preventing interfaces from being shallower than
                                                     !! the depths specified by the regridding coordinate.

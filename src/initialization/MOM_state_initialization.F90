@@ -707,7 +707,7 @@ subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
-  real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
+  real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
   real :: hTmp, eTmp, dilate
   character(len=100) :: mesg
 
@@ -1164,7 +1164,7 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer [ppt]
   real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer [ppt]
   real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface [Pa]
-  real, dimension(nk),   intent(inout) :: h   !< Layer thickness (H units, m or Pa)
+  real, dimension(nk),   intent(inout) :: h   !< Layer thickness [H ~> m or kg m-2]
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
   real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth

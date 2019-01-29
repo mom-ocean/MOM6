@@ -99,15 +99,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! gravity wave speed [m s-1].
   integer,                                  intent(in)  :: ModeNum !< Mode number
   real,                                     intent(in)  :: freq !< Intrinsic wave frequency [s-1].
-  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned
-                                                              !! by a previous call to
-                                                              !! wave_structure_init.
+  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned by a
+                                                              !! previous call to wave_structure_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                                  optional, intent(in)  :: En !< Internal wave energy density,
-                                                              !! in Jm-2.
+                                  optional, intent(in)  :: En !< Internal wave energy density [J m-2].
   logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
-                                                              !! over the entire computational
-                                                              !! domain.
+                                                              !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
@@ -115,8 +112,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it,
-                  ! [s2 m-2].
+                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &

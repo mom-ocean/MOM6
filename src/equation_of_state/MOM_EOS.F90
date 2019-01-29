@@ -200,7 +200,7 @@ subroutine calculate_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref)
   real,           intent(in)  :: T !< Potential temperature referenced to the surface [degC]
   real,           intent(in)  :: S !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa]
-  real,           intent(out) :: specvol  !< specific volume (in-situ if pressure is local) (m3 kg-1)
+  real,           intent(out) :: specvol  !< specific volume (in-situ if pressure is local) [m3 kg-1]
   type(EOS_type), pointer     :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
 
@@ -1379,7 +1379,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t [Pa]
   real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out [Pa]
   real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to
-  real,           intent(in)  :: G_e !< Gravitational acceleration (m2 Z-1 s-2)
+  real,           intent(in)  :: G_e !< Gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
   type(EOS_type), pointer     :: EOS !< Equation of state structure
   real,           intent(out) :: P_b !< Pressure at the bottom of the cell [Pa]
   real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m].
