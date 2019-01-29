@@ -38,7 +38,7 @@ type, public :: opacity_CS ; private
   real :: pen_sw_frac        !<   The fraction of shortwave radiation that is
                              !! penetrating with a constant e-folding approach.
   real :: blue_frac          !<   The fraction of the penetrating shortwave
-                             !! radiation that is in the blue band, ND.
+                             !! radiation that is in the blue band [nondim].
   real :: opacity_land_value !< The value to use for opacity over land [m-1].
                              !! The default is 10 m-1 - a value for muddy water.
   integer :: sbc_chl         !< An integer handle used in time interpolation of

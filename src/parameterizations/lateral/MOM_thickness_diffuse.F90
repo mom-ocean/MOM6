@@ -32,36 +32,36 @@ public vert_fill_TS
 
 !> Control structure for thickness diffusion
 type, public :: thickness_diffuse_CS ; private
-  real    :: Khth                !< Background interface depth diffusivity (m2 s-1)
-  real    :: Khth_Slope_Cff      !< Slope dependence coefficient of Khth (m2 s-1)
+  real    :: Khth                !< Background interface depth diffusivity [m2 s-1]
+  real    :: Khth_Slope_Cff      !< Slope dependence coefficient of Khth [m2 s-1]
   real    :: max_Khth_CFL        !< Maximum value of the diffusive CFL for thickness diffusion
-  real    :: Khth_Min            !< Minimum value of Khth (m2 s-1)
-  real    :: Khth_Max            !< Maximum value of Khth (m2 s-1), or 0 for no max
-  real    :: slope_max           !< Slopes steeper than slope_max are limited in some way.
+  real    :: Khth_Min            !< Minimum value of Khth [m2 s-1]
+  real    :: Khth_Max            !< Maximum value of Khth [m2 s-1], or 0 for no max
+  real    :: slope_max           !< Slopes steeper than slope_max are limited in some way [nondim].
   real    :: kappa_smooth        !< Vertical diffusivity used to interpolate more
-                                 !! sensible values of T & S into thin layers.
+                                 !! sensible values of T & S into thin layers [Z2 s-1 ~> m2 s-1].
   logical :: thickness_diffuse   !< If true, interfaces heights are diffused.
   logical :: use_FGNV_streamfn   !< If true, use the streamfunction formulation of
                                  !! Ferrari et al., 2010, which effectively emphasizes
                                  !! graver vertical modes by smoothing in the vertical.
   real    :: FGNV_scale          !< A coefficient scaling the vertical smoothing term in the
-                                 !! Ferrari et al., 2010, streamfunction formulation.
+                                 !! Ferrari et al., 2010, streamfunction formulation [nondim].
   real    :: FGNV_c_min          !< A minimum wave speed used in the Ferrari et al., 2010,
                                  !! streamfunction formulation [m s-1].
   real    :: N2_floor            !< A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010,
-                                 !! streamfunction formulation (s-2).
+                                 !! streamfunction formulation [s-2].
   logical :: detangle_interfaces !< If true, add 3-d structured interface height
                                  !! diffusivities to horizontally smooth jagged layers.
   real    :: detangle_time       !< If detangle_interfaces is true, this is the
                                  !! timescale over which maximally jagged grid-scale
-                                 !! thickness variations are suppressed.  This must be
+                                 !! thickness variations are suppressed [s].  This must be
                                  !! longer than DT, or 0 (the default) to use DT.
   integer :: nkml                !< number of layers within mixed layer
   logical :: debug               !< write verbose checksums for debugging purposes
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
-  real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
-  real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
-  real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
+  real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [W m-2]
+  real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
+  real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
 
   !>@{
   !! Diagnostic identifier
@@ -83,10 +83,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   type(verticalGrid_type),                   intent(in)    :: GV     !< Vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux (m2 H)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m2 H)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
+                                                                     !! [m2 H ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
+                                                                     !! [m2 H ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamics structure
-  real,                                      intent(in)    :: dt     !< Time increment (s)
+  real,                                      intent(in)    :: dt     !< Time increment [s]
   type(MEKE_type),                           pointer       :: MEKE   !< MEKE control structure
   type(VarMix_CS),                           pointer       :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                      intent(inout) :: CDp    !< Diagnostics for the continuity equation
@@ -94,30 +96,30 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   ! Local variables
   real :: e(SZI_(G), SZJ_(G), SZK_(G)+1) ! heights of interfaces, relative to mean
                                          ! sea level [Z ~> m], positive up.
-  real :: uhD(SZIB_(G), SZJ_(G), SZK_(G)) ! uhD & vhD are the diffusive u*h &
-  real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! v*h fluxes (m2 H s-1)
+  real :: uhD(SZIB_(G), SZJ_(G), SZK_(G)) ! Diffusive u*h fluxes [m2 H s-1 ~> m3 s-1 or kg s-1]
+  real :: vhD(SZI_(G), SZJB_(G), SZK_(G)) ! Diffusive v*h fluxes [m2 H s-1 ~> m3 s-1 or kg s-1]
 
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: &
-    KH_u, &       ! interface height diffusivities in u-columns (m2 s-1)
+    KH_u, &       ! interface height diffusivities in u-columns [m2 s-1]
     int_slope_u   ! A nondimensional ratio from 0 to 1 that gives the relative
                   ! weighting of the interface slopes to that calculated also
                   ! using density gradients at u points.  The physically correct
                   ! slopes occur at 0, while 1 is used for numerical closures.
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: &
-    KH_v, &       ! interface height diffusivities in v-columns (m2 s-1)
+    KH_v, &       ! interface height diffusivities in v-columns [m2 s-1]
     int_slope_v   ! A nondimensional ratio from 0 to 1 that gives the relative
                   ! weighting of the interface slopes to that calculated also
                   ! using density gradients at v points.  The physically correct
                   ! slopes occur at 0, while 1 is used for numerical closures.
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
-    KH_t          ! diagnosed diffusivity at tracer points (m^2/s)
+    KH_t          ! diagnosed diffusivity at tracer points [m2 s-1]
 
   real, dimension(SZIB_(G), SZJ_(G)) :: &
-    KH_u_CFL      ! The maximum stable interface height diffusivity at u grid points (m2 s-1)
+    KH_u_CFL      ! The maximum stable interface height diffusivity at u grid points [m2 s-1]
   real, dimension(SZI_(G), SZJB_(G)) :: &
-    KH_v_CFL      ! The maximum stable interface height diffusivity at v grid points (m2 s-1)
+    KH_v_CFL      ! The maximum stable interface height diffusivity at v grid points [m2 s-1]
   real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
-  real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity (m2/s)
+  real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity [m2 s-1]
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [m s-1]
@@ -125,8 +127,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   integer :: i, j, k, is, ie, js, je, nz
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness [H ~> m or kg m-2]
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
-  real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
-  real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
+  real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
+  real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -708,7 +710,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
-            ! Estimate the streamfunction at each interface (m3 s-1).
+            ! Estimate the streamfunction at each interface [m3 s-1].
             Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
@@ -954,7 +956,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
-            ! Estimate the streamfunction at each interface (m3 s-1).
+            ! Estimate the streamfunction at each interface [m3 s-1].
             Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
@@ -1164,7 +1166,7 @@ subroutine streamfn_solver(nk, c2_h, hN2, sfn)
   integer,               intent(in)    :: nk   !< Number of layers
   real, dimension(nk),   intent(in)    :: c2_h !< Wave speed squared over thickness in layers [m s-2]
   real, dimension(nk+1), intent(in)    :: hN2  !< Thickness times N2 at interfaces [m s-2]
-  real, dimension(nk+1), intent(inout) :: sfn  !< Streamfunction (Z m2 s-1 or arbitrary units)
+  real, dimension(nk+1), intent(inout) :: sfn  !< Streamfunction [Z m2 s-1 ~> m3 s-1] or arbitrary units
                                                !! On entry, equals diffusivity times slope.
                                                !! On exit, equals the streamfunction.
   ! Local variables
@@ -1201,15 +1203,15 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface positions [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kh_u !< Thickness diffusivity on interfaces
-                                                                     !! at u points (m2/s)
+                                                                     !! at u points [m2 s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: Kh_v !< Thickness diffusivity on interfaces
-                                                                     !! at v points (m2/s)
+                                                                     !! at v points [m2 s-1]
   real, dimension(SZIB_(G),SZJ_(G)),           intent(in)    :: Kh_u_CFL !< Maximum stable thickness diffusivity
-                                                                     !! at u points (m2/s)
+                                                                     !! at u points [m2 s-1]
   real, dimension(SZI_(G),SZJB_(G)),           intent(in)    :: Kh_v_CFL !< Maximum stable thickness diffusivity
-                                                                     !! at v points (m2/s)
+                                                                     !! at v points [m2 s-1]
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< Thermodynamics structure
-  real,                                        intent(in)    :: dt   !< Time increment (s)
+  real,                                        intent(in)    :: dt   !< Time increment [s]
   type(thickness_diffuse_CS),                  pointer       :: CS   !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: int_slope_u !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from the
@@ -1617,12 +1619,12 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   type(ocean_grid_type),                    intent(in)  :: G     !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV    !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature (C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity (ppt)
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use (Z2/s)
-  real,                                     intent(in)  :: dt    !< Time increment (s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature (C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity [ppt]
+  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 s-1 ~> m2 s-1]
+  real,                                     intent(in)  :: dt    !< Time increment [s]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity [ppt]
   integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
                                                                  !! 0 by default
   ! Local variables

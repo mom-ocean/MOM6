@@ -20,16 +20,16 @@ type, public :: optics_type
 
   integer :: nbands    !< number of penetrating bands of SW radiation
 
-  real, pointer, dimension(:,:,:,:) :: opacity_band => NULL() !< SW optical depth per unit thickness (1/m)
+  real, pointer, dimension(:,:,:,:) :: opacity_band => NULL() !< SW optical depth per unit thickness [m-1]
                             !! The number of radiation bands is most rapidly varying (first) index.
 
-  real, pointer, dimension(:,:,:) :: SW_pen_band  => NULL()  !< shortwave radiation (W/m^2) at the surface
+  real, pointer, dimension(:,:,:) :: SW_pen_band  => NULL()  !< shortwave radiation [W m-2] at the surface
                             !! in each of the nbands bands that penetrates beyond the surface.
                             !! The most rapidly varying dimension is the band.
 
   real, pointer, dimension(:) :: &
-    min_wavelength_band => NULL(), & !< The minimum wavelength in each band of penetrating shortwave radiation (nm)
-    max_wavelength_band => NULL()    !< The maximum wavelength in each band of penetrating shortwave radiation (nm)
+    min_wavelength_band => NULL(), & !< The minimum wavelength in each band of penetrating shortwave radiation [nm]
+    max_wavelength_band => NULL()    !< The maximum wavelength in each band of penetrating shortwave radiation [nm]
 
 end type optics_type
 
@@ -49,8 +49,8 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   type(ocean_grid_type),            intent(in)    :: G     !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV    !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(:,:,:),           intent(in)    :: opacity_band !< Opacity in each band of
-                                                           !! penetrating shortwave radiation (1/H).
+  real, dimension(:,:,:),           intent(in)    :: opacity_band !< Opacity in each band of penetrating
+                                                           !! shortwave radiation [H-1 ~> m-1 or m2 kg-1].
                                                            !! The indicies are band, i, k.
   integer,                          intent(in)    :: nsw   !< Number of bands of penetrating
                                                            !! shortwave radiation.
@@ -110,7 +110,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
                    ! heating that hits the bottom and will be redistributed through
                    ! the water column [degC H ~> degC m or degC kg m-2]
   real :: SW_trans          ! fraction of shortwave radiation that is not
-                            ! absorbed in a layer (nondimensional)
+                            ! absorbed in a layer [nondim]
   real :: unabsorbed        ! fraction of the shortwave radiation that
                             ! is not absorbed because the layers are too thin
   real :: Ih_limit          ! inverse of the total depth at which the
@@ -334,7 +334,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 
   real, dimension(size(iPen_SW_bnd,1),size(iPen_SW_bnd,2)) :: Pen_SW_bnd
   real :: SW_trans        ! fraction of shortwave radiation not
-                          ! absorbed in a layer (nondimensional)
+                          ! absorbed in a layer [nondim]
   real :: unabsorbed      ! fraction of the shortwave radiation
                           ! not absorbed because the layers are too thin.
   real :: Ih_limit        ! inverse of the total depth at which the

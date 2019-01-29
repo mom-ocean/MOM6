@@ -26,16 +26,16 @@ public CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_is_used, compute_ddiff_coe
 type, public :: CVMix_ddiff_cs
 
   ! Parameters
-  real    :: strat_param_max !< maximum value for the stratification parameter (nondim)
+  real    :: strat_param_max !< maximum value for the stratification parameter [nondim]
   real    :: kappa_ddiff_s   !< leading coefficient in formula for salt-fingering regime
-                             !! for salinity diffusion (m^2/s)
-  real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula (nondim)
-  real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula (nondim)
-  real    :: mol_diff        !< molecular diffusivity (m^2/s)
-  real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime (nondim)
-  real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime (nondim)
-  real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime (nondim)
-  real    :: min_thickness      !< Minimum thickness allowed (m)
+                             !! for salinity diffusion [m2 s-1]
+  real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula [nondim]
+  real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula [nondim]
+  real    :: mol_diff        !< molecular diffusivity [m2 s-1]
+  real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime [nondim]
+  real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime [nondim]
+  real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime [nondim]
+  real    :: min_thickness      !< Minimum thickness allowed [m]
   character(len=4) :: diff_conv_type !< type of diffusive convection to use. Options are Marmorino &
                                 !! Caldwell 1976 ("MC76"; default) and Kelley 1988, 1990 ("K90")
   logical :: debug              !< If true, turn on debugging
@@ -47,9 +47,9 @@ type, public :: CVMix_ddiff_cs
   !!@}
 
   ! Diagnostics arrays
-!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (Z2/s)
-!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (Z2/s)
-  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio (nondim)
+!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp [Z2 s-1 ~> m2 s-1]
+!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt [Z2 s-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio [nondim]
 
 end type CVMix_ddiff_cs
 
@@ -192,7 +192,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
     Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
     Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
+  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
   integer :: kOBL                        !< level of OBL extent
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, k

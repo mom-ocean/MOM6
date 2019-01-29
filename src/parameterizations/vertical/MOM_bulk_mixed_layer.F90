@@ -499,7 +499,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       ! as follows:
       !   TKE_river[m3 s-3] = 0.5*rivermix_depth*g*Irho0*drho_ds*
       !                       River*(Samb - Sriver) = CS%mstar*U_star^3
-      ! where River is in units of m s-1.
+      ! where River is in units of [m s-1].
       ! Samb = Ambient salinity at the mouth of the estuary
       ! rivermix_depth =  The prescribed depth over which to mix river inflow
       ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
@@ -520,8 +520,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     ! We aggregate the thermodynamic forcing for a time step into the following:
     ! netMassInOut = water [H ~> m or kg m-2] added/removed via surface fluxes
     ! netMassOut   = water [H ~> m or kg m-2] removed via evaporating surface fluxes
-    ! net_heat     = heat (degC * H) via surface fluxes
-    ! net_salt     = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
+    ! net_heat     = heat via surface fluxes [degC H ~> degC m or degC kg m-2]
+    ! net_salt     = salt via surface fluxes [ppt H ~> dppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
     call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
@@ -982,9 +982,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                                    !! within a time step [H ~> m or kg m-2]. (I.e. P+R-E.)
   real, dimension(SZI_(G)), intent(in)    :: netMassOut !< The mass or volume flux out of the ocean
                                                    !! within a time step [H ~> m or kg m-2].
-  real, dimension(SZI_(G)), intent(in)    :: Net_heat !< The net heating at the surface over a
-                                                   !! time step [degC H ~> degC m or degC kg m-2].  Any penetrating shortwave
-                                                   !! radiation is not included in Net_heat.
+  real, dimension(SZI_(G)), intent(in)    :: Net_heat !< The net heating at the surface over a time
+                                                   !! step [degC H ~> degC m or degC kg m-2].  Any penetrating
+                                                   !! shortwave radiation is not included in Net_heat.
   real, dimension(SZI_(G)), intent(in)    :: Net_salt !< The net surface salt flux into the ocean
                                                    !! over a time step [PSU H ~> PSU m or PSU kg m-2].
   integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
@@ -1350,8 +1350,8 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
                     ! convective adjustment is converted to TKE, often ~0.2 [nondim].
   real :: TKE_CA    ! The potential energy released by convective adjustment if
                     ! that release is positive [Z m2 s-2 ~> m3 s-2].
-  real :: MKE_rate_CA ! MKE_rate for convective adjustment, ND, 0 to 1.
-  real :: MKE_rate_FC ! MKE_rate for free convection, ND, 0 to 1.
+  real :: MKE_rate_CA ! MKE_rate for convective adjustment [nondim], 0 to 1.
+  real :: MKE_rate_FC ! MKE_rate for free convection [nondim], 0 to 1.
   real :: totEn_Z   ! The total potential energy released by convection, [Z3 s-2 ~> m3 s-2].
   real :: Ih        ! The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
   real :: exp_kh    ! The nondimensional decay of TKE across a layer [nondim].
@@ -2292,7 +2292,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                   ! rho_0*g [H2 ~> m2 or kg2 m-4].
   real :: dPE_det, dPE_merge      ! The energy required to mix the detrained water
                                   ! into the buffer layer or the merge the two
-                                  ! buffer layers, both in units of J H2 Z m-5.
+                                  ! buffer layers [J H2 Z m-5 ~> J m-2 or J kg2 m-8].
 
   real :: h_from_ml               ! The amount of additional water that must be
                                   ! drawn from the mixed layer [H ~> m or kg m-2].
