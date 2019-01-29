@@ -714,7 +714,7 @@ end subroutine meshgrid
 !! in each region is an approximation to del2(zi)=0 subject to
 !! boundary conditions along the valid points curve bounding this region.
 subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
-  real, dimension(:,:), intent(inout) :: zi !< interface positions (m)
+  real, dimension(:,:), intent(inout) :: zi !< interface positions [m] or arbitrary
   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill !< points to be smoothed
   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad !< ignore these points
   real, intent(in)  :: sor !< successive over-relaxation coefficient (typically 0.6)

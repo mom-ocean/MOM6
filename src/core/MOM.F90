@@ -466,7 +466,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   logical :: therm_reset ! If true, reset running sums of thermodynamic quantities.
   real :: cycle_time    ! The length of the coupled time-stepping cycle [s].
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
-    ssh         ! sea surface height, which may be based on eta_av (meter)
+    ssh         ! sea surface height, which may be based on eta_av [m]
 
   real, dimension(:,:,:), pointer :: &
     u => NULL(), & ! u : zonal velocity component [m s-1]
@@ -2488,7 +2488,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(unit_scale_type),   pointer :: US => NULL() ! Pointer to a structure containing
                                                    ! various unit conversion factors
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
-  real, allocatable :: z_interface(:,:,:) ! Interface heights (meter)
+  real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
   type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)

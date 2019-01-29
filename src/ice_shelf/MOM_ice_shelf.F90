@@ -629,7 +629,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
   enddo ; enddo ! i- and j-loops
 
-  ! mass flux (kg/s), part of ISOMIP diags.
+  ! mass flux [kg s-1], part of ISOMIP diags.
   mass_flux(:,:) = 0.0
   mass_flux(:,:) = ISS%water_flux(:,:) * ISS%area_shelf_h(:,:)
 
@@ -1056,7 +1056,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     enddo ; enddo
 
     if (CS%DEBUG) then
-      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
+      write(mesg,*) 'Mean melt flux [kg m-2 s-1], dt = ', mean_melt_flux, CS%time_step
       call MOM_mesg(mesg)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, CS%US, haloshift=0)
     endif

@@ -69,7 +69,7 @@ type, public :: wave_parameters_CS ; private
 
   ! Surface Wave Dependent 1d/2d/3d vars
   real, allocatable, dimension(:), public :: &
-       WaveNum_Cen        !< Wavenumber bands for read/coupled (1/m)
+       WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
   real, allocatable, dimension(:), public :: &
        Freq_Cen           !< Frequency bands for read/coupled [s-1]
   real, allocatable, dimension(:), public :: &
@@ -77,11 +77,11 @@ type, public :: wave_parameters_CS ; private
   real, allocatable, dimension(:), public :: &
        PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:,:,:), public :: &
-       Us_x               !< 3d Stokes drift profile (zonal, m/s)
+       Us_x               !< 3d zonal Stokes drift profile [m s-1]
                           !! Horizontal -> U points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-       Us_y               !< 3d Stokes drift profile (meridional, m/s)
+       Us_y               !< 3d meridional Stokes drift profile [m s-1]
                           !! Horizontal -> V points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:), public :: &
@@ -189,7 +189,7 @@ contains
 
 !> Initializes parameters related to MOM_wave_interface
 subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
-  type(time_type), target, intent(in)    :: Time       !< Time (s)
+  type(time_type), target, intent(in)    :: Time       !< Model time
   type(ocean_grid_type),   intent(inout) :: G          !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
@@ -426,8 +426,8 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS)
   type(ocean_grid_type), intent(inout) :: G   !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
-  type(time_type),         intent(in)  :: Day !< Time (s)
-  type(time_type),         intent(in)  :: dt  !< Timestep (s)
+  type(time_type),         intent(in)  :: Day !< Current model time
+  type(time_type),         intent(in)  :: dt  !< Timestep as a time-type
   ! Local variables
   integer :: ii, jj, kk, b
   type(time_type) :: Day_Center
@@ -966,7 +966,7 @@ end subroutine get_Langmuir_Number
 !!
 !! Original description:
 !! - This function returns the enhancement factor, given the 10-meter
-!!   wind [m s-1], friction velocity [m s-1] and the boundary layer depth (m).
+!!   wind [m s-1], friction velocity [m s-1] and the boundary layer depth [m].
 !!
 !! Update (Jan/25):
 !! - Converted from function to subroutine, now returns Langmuir number.
@@ -1102,7 +1102,7 @@ subroutine Get_SL_Average_Band( GV, AvgDepth, NB, WaveNumbers, SurfStokes, Avera
   real, intent(in)    :: AvgDepth    !< Depth to average over [Z ~> m].
   integer, intent(in) :: NB          !< Number of bands used
   real, dimension(NB), &
-       intent(in)     :: WaveNumbers !< Wavenumber corresponding to each band (1/Z)
+       intent(in)     :: WaveNumbers !< Wavenumber corresponding to each band [Z-1 ~> m-1]
   real, dimension(NB), &
        intent(in)     :: SurfStokes  !< Surface Stokes drift for each band [m s-1]
   real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth [m s-1]

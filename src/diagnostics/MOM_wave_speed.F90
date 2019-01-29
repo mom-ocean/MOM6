@@ -67,7 +67,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                                           !! monotonic for the purposes of calculating vertical
                                           !! modal structure [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-        optional,                   intent(out) :: modal_structure !< Normalized model structure (non-dim)
+        optional,                   intent(out) :: modal_structure !< Normalized model structure [nondim]
 
   ! Local variables
   real, dimension(SZK_(G)+1) :: &

@@ -66,8 +66,8 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
   ! Local variables
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [kg m-3].
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
-  real :: rho_fn      ! The density dependence of the input function, 0-1, ND.
-  real :: lat_fn      ! The latitude dependence of the input function, 0-1, ND.
+  real :: rho_fn      ! The density dependence of the input function, 0-1 [nondim].
+  real :: lat_fn      ! The latitude dependence of the input function, 0-1 [nondim].
   logical :: use_EOS  ! If true, density is calculated from T & S using an
                       ! equation of state.
   logical :: store_Kd_add  ! Save the added diffusivity as a diagnostic if true.

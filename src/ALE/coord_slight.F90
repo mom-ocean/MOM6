@@ -24,14 +24,14 @@ type, public :: slight_CS ; private
   real :: ref_pressure
 
   !> Fraction (between 0 and 1) of compressibility to add to potential density
-  !! profiles when interpolating for target grid positions. (nondim)
+  !! profiles when interpolating for target grid positions. [nondim]
   real :: compressibility_fraction
 
   ! The following 4 parameters were introduced for use with the SLight coordinate:
   !> Depth over which to average to determine the mixed layer potential density [H ~> m or kg m-2]
   real :: Rho_ML_avg_depth
 
-  !> Number of layers to offset the mixed layer density to find resolved stratification (nondim)
+  !> Number of layers to offset the mixed layer density to find resolved stratification [nondim]
   real :: nlay_ml_offset
 
   !> The number of fixed-thickness layers at the top of the model
@@ -48,7 +48,7 @@ type, public :: slight_CS ; private
   !! unstable water mass profiles [H ~> m or kg m-2].
   real :: halocline_filter_length
 
-  !> A value of the stratification ratio that defines a problematic halocline region (nondim).
+  !> A value of the stratification ratio that defines a problematic halocline region [nondim].
   real :: halocline_strat_tol
 
   !> Nominal density of interfaces [kg m-3].
@@ -124,7 +124,7 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
                                       !! new grid through regridding [H ~> m or kg m-2]
   real,    optional, intent(in) :: compressibility_fraction !< Fraction (between 0 and 1) of
                                       !! compressibility to add to potential density profiles when
-                                      !! interpolating for target grid positions. (nondim)
+                                      !! interpolating for target grid positions. [nondim]
   real,    optional, intent(in) :: dz_ml_min        !< The fixed resolution in the topmost
                                       !! SLight_nkml_min layers [H ~> m or kg m-2]
   integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickness layers at the
@@ -132,13 +132,13 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
   real,    optional, intent(in) :: Rho_ML_avg_depth !< Depth over which to average to determine
                                       !! the mixed layer potential density [H ~> m or kg m-2]
   real,    optional, intent(in) :: nlay_ML_offset   !< Number of layers to offset the mixed layer
-                                      !! density to find resolved stratification (nondim)
+                                      !! density to find resolved stratification [nondim]
   logical, optional, intent(in) :: fix_haloclines   !< If true, detect regions with much weaker than
                                       !! based on in-situ density, and use a stretched coordinate there.
   real,    optional, intent(in) :: halocline_filter_length !< A length scale over which to filter T & S
                                       !! when looking for spuriously unstable water mass profiles [H ~> m or kg m-2].
   real,    optional, intent(in) :: halocline_strat_tol !< A value of the stratification ratio that
-                                      !! defines a problematic halocline region (nondim).
+                                      !! defines a problematic halocline region [nondim].
   type(interp_CS_type), &
            optional, intent(in) :: interp_CS !< Controls for interpolation
 
