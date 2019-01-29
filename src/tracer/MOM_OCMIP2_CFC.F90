@@ -45,24 +45,28 @@ type, public :: OCMIP2_CFC_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM6 tracer registry
   real, pointer, dimension(:,:,:) :: &
-    CFC11 => NULL(), &     !< The CFC11 concentration in mol m-3.
-    CFC12 => NULL()        !< The CFC12 concentration in mol m-3.
+    CFC11 => NULL(), &     !< The CFC11 concentration [mol m-3].
+    CFC12 => NULL()        !< The CFC12 concentration [mol m-3].
   ! In the following variables a suffix of _11 refers to CFC11 and _12 to CFC12.
   !>@{ Coefficients used in the CFC11 and CFC12 solubility calculation
-  real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
-  real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
-                                       ! units of ND, degC-1, degC-2, degC-3.
-  real :: d1_11, d2_11, d3_11, d4_11   ! Coefficients in the calculation of the
-  real :: d1_12, d2_12, d3_12, d4_12   ! CFC11 and CFC12 solubilities, in units
-                                       ! of ND, K-1, log(K)^-1, K-2.
-  real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
-  real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
-                                       ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+  real :: a1_11, a1_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [nondim]
+  real :: a2_11, a2_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [degC-1]
+  real :: a3_11, a3_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [degC-2]
+  real :: a4_11, a4_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [degC-3]
+
+  real :: d1_11, d1_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [nondim]
+  real :: d2_11, d2_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-1]
+  real :: d3_11, d3_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [log(hectoKelvin)-1]
+  real :: d4_11, d4_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-2]
+
+  real :: e1_11, e1_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1]
+  real :: e2_11, e2_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1 hectoKelvin-1]
+  real :: e3_11, e3_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-2 hectoKelvin-2]
   !!@}
-  real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11.
-  real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12.
-  real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out.
-  real :: CFC12_land_val = -1.0 !< The value of CFC12 used where land is masked out.
+  real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11 [mol m-3].
+  real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12 [mol m-3].
+  real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out [mol m-3].
+  real :: CFC12_land_val = -1.0 !< The value of CFC12 used where land is masked out [mol m-3].
   logical :: tracers_may_reinit !< If true, tracers may be reset via the initialization code
                                 !! if they are not found in the restart files.
   character(len=16) :: CFC11_name !< CFC11 variable name
@@ -427,7 +431,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   type(OCMIP2_CFC_CS),     pointer    :: CS   !< The control structure returned by a
                                               !! previous call to register_OCMIP2_CFC.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column
@@ -551,15 +555,15 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    CFC11_Csurf, &  ! The CFC-11 and CFC-12 surface concentrations times the
-    CFC12_Csurf, &  ! Schmidt number term, both in mol m-3.
-    CFC11_alpha, &  ! The CFC-11 solubility in mol m-3 pptv-1.
-    CFC12_alpha     ! The CFC-12 solubility in mol m-3 pptv-1.
-  real :: ta        ! Absolute sea surface temperature in units of dekaKelvin!?!
-  real :: sal       ! Surface salinity in PSU.
-  real :: SST       ! Sea surface temperature in degrees Celsius.
-  real :: alpha_11  ! The solubility of CFC 11 in mol m-3 pptv-1.
-  real :: alpha_12  ! The solubility of CFC 12 in mol m-3 pptv-1.
+    CFC11_Csurf, &  ! The CFC-11 surface concentrations times the Schmidt number term [mol m-3].
+    CFC12_Csurf, &  ! The CFC-12 surface concentrations times the Schmidt number term [mol m-3].
+    CFC11_alpha, &  ! The CFC-11 solubility [mol m-3 pptv-1].
+    CFC12_alpha     ! The CFC-12 solubility [mol m-3 pptv-1].
+  real :: ta        ! Absolute sea surface temperature [hectoKelvin] (Why use such bizzare units?)
+  real :: sal       ! Surface salinity [PSU].
+  real :: SST       ! Sea surface temperature [degC].
+  real :: alpha_11  ! The solubility of CFC 11 [mol m-3 pptv-1].
+  real :: alpha_12  ! The solubility of CFC 12 [mol m-3 pptv-1].
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
   integer :: i, j, m, is, ie, js, je, idim(4), jdim(4)

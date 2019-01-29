@@ -282,7 +282,7 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
  type(advection_test_tracer_CS), pointer :: CS !< The control structure returned by a previous
                                               !! call to register_advection_test_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column
