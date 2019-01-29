@@ -7,7 +7,7 @@ use MOM_debugging,             only : hchksum, uvchksum
 use MOM_diag_mediator,         only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator,         only : diag_update_remap_grids
-use MOM_error_handler,         only : MOM_error, FATAL, WARNING
+use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_EOS,                   only : calculate_density, calculate_density_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
@@ -61,8 +61,7 @@ type, public :: thickness_diffuse_CS ; private
 
   real, dimension(:,:,:), pointer :: &
     KH_u_GME => NULL(), &        !< interface height diffusivities in u-columns (m2 s-1)
-    KH_v_GME => NULL(), &        !< interface height diffusivities in v-columns (m2 s-1)
-    KH_t_GME => NULL()           !< interface height diffusivities in t-columns (m2 s-1)
+    KH_v_GME => NULL()           !< interface height diffusivities in v-columns (m2 s-1)
 
   !>@{
   !! Diagnostic identifier
@@ -403,12 +402,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
                        / (hu(I-1,j)+hu(I,j)+hv(i,J-1)+hv(i,J)+h_neglect)
         enddo ; enddo
       enddo
-
-      if (CS%use_GME_thickness_diffuse) then
-        do k=1,nz; do j=js,je ; do i=is,ie
-          CS%KH_t_GME(i,j,k) = KH_t(i,j,k)
-        enddo ; enddo ; enddo
-      endif
 
       if (CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
       if (CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
@@ -1834,9 +1827,8 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "with the Gent and McWilliams parameterization.", default=.false.)
 
   if (CS%use_GME_thickness_diffuse) then
-    allocate(CS%KH_u_GME(G%IsdB:G%IedB,G%jsd:G%jed,G%ke+1)) ; CS%KH_u_GME(:,:,:) = 0.0
-    allocate(CS%KH_v_GME(G%isd:G%ied,G%JsdB:G%JedB,G%ke+1)) ; CS%KH_v_GME(:,:,:) = 0.0
-    allocate(CS%KH_t_GME(G%isd:G%ied,G%jsd:G%jed,G%ke+1)) ;   CS%KH_t_GME(:,:,:) = 0.0
+    call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)
+    call safe_alloc_ptr(CS%KH_v_GME,G%isd,G%ied,G%JsdB,G%JedB,G%ke+1)
   endif
 
   if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
@@ -1896,22 +1888,16 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
 end subroutine thickness_diffuse_init
 
 !> Copies ubtav and vbtav from private type into arrays
-subroutine thickness_diffuse_get_KH(CS, KH_t_GME, KH_u_GME, KH_v_GME, G)
+subroutine thickness_diffuse_get_KH(CS, KH_u_GME, KH_v_GME, G)
   type(thickness_diffuse_CS),          pointer     :: CS   !< Control structure for
                                                    !! this module
   type(ocean_grid_type),               intent(in)  :: G    !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: KH_t_GME!< interface height
-                                                   !! diffusivities in t-columns (m2 s-1)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: KH_u_GME!< interface height
                                                    !! diffusivities in u-columns (m2 s-1)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: KH_v_GME!< interface height
                                                    !! diffusivities in v-columns (m2 s-1)
   ! Local variables
   integer :: i,j,k
-
-  do k=1,G%ke ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
-    KH_t_GME(i,j,k) = CS%KH_t_GME(i,j,k)
-  enddo ; enddo ; enddo
 
   do k=1,G%ke ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
     KH_u_GME(I,j,k) = CS%KH_u_GME(I,j,k)
