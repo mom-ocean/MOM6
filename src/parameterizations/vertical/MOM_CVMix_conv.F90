@@ -27,11 +27,11 @@ public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_end, CVMix_conv_is_used
 type, public :: CVMix_conv_cs
 
   ! Parameters
-  real    :: kd_conv_const !< diffusivity constant used in convective regime (m2/s)
-  real    :: kv_conv_const !< viscosity constant used in convective regime (m2/s)
+  real    :: kd_conv_const !< diffusivity constant used in convective regime [m2 s-1]
+  real    :: kv_conv_const !< viscosity constant used in convective regime [m2 s-1]
   real    :: bv_sqr_conv   !< Threshold for squared buoyancy frequency
-                           !! needed to trigger Brunt-Vaisala parameterization (1/s^2)
-  real    :: min_thickness !< Minimum thickness allowed (m)
+                           !! needed to trigger Brunt-Vaisala parameterization [s-2]
+  real    :: min_thickness !< Minimum thickness allowed [m]
   logical :: debug         !< If true, turn on debugging
 
   ! Daignostic handles and pointers
@@ -41,9 +41,9 @@ type, public :: CVMix_conv_cs
   !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection (m2/s)
-  real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection (m2/s)
+  real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency [s-2]
+  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection [m2 s-1]
+  real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection [m2 s-1]
 
 end type CVMix_conv_cs
 
@@ -156,17 +156,17 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
   type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
-  real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer (m)
+  real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer [m]
   ! local variables
   real, dimension(SZK_(G)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
                                       !! variable since here convection is always
                                       !! computed based on Brunt Vaisala.
   real, dimension(SZK_(G)) :: rho_1d  !< water density in a column, this is also
                                       !! a dummy variable, same reason as above.
-  real, dimension(SZK_(G)+1) :: kv_col !< Viscosities at interfaces in the column (m2 s-1)
-  real, dimension(SZK_(G)+1) :: kd_col !< Diffusivities at interfaces in the column (m2 s-1)
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
-  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
+  real, dimension(SZK_(G)+1) :: kv_col !< Viscosities at interfaces in the column [m2 s-1]
+  real, dimension(SZK_(G)+1) :: kd_col !< Diffusivities at interfaces in the column [m2 s-1]
+  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
+  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers [m]
   integer :: kOBL                        !< level of OBL extent
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k

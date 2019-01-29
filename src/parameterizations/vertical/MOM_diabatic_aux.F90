@@ -652,7 +652,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
-  real,                    intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
+  real,                    intent(in) :: densityDiff !< Density difference to determine MLD [kg m-3]
   type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
   integer,       optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
@@ -777,7 +777,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                                                !! available thermodynamic fields.
   logical,                 intent(in)    :: aggregate_FW_forcing !< If False, treat in/out fluxes separately.
   real,                    intent(in)    :: evap_CFL_limit !< The largest fraction of a layer that
-                                               !! can be evaporated in one time-step (non-dim).
+                                               !! can be evaporated in one time-step [nondim].
   real,                    intent(in)    :: minimum_forcing_depth !< The smallest depth over which
                                                !! heat and freshwater fluxes is applied [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -927,9 +927,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     !                note that lprec generally has sea ice melt/form included.
     ! netMassOut   = net mass leaving ocean surface [H ~> m or kg m-2] over a time step.
     !                netMassOut < 0 means mass leaves ocean.
-    ! netHeat      = heat (degC * H) via surface fluxes, excluding the part
+    ! netHeat      = heat via surface fluxes [degC H ~> degC m or degC kg m-2], excluding the part
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0.
-    ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
+    ! netSalt      = surface salt fluxes [ppt H ~> dppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation split according to bands.
     !                This field provides that portion of SW from atmosphere that in fact
     !                enters to the ocean and participates in pentrative SW heating.
@@ -1035,7 +1035,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
             ! as follows:
             !   TKE_river[m3 s-3] = 0.5*rivermix_depth*g*(1/rho)*drho_ds*
             !                       River*(Samb - Sriver) = CS%mstar*U_star^3
-            ! where River is in units of m s-1.
+            ! where River is in units of [m s-1].
             ! Samb = Ambient salinity at the mouth of the estuary
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.

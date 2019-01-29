@@ -852,8 +852,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
                                                  !! that is set by a previous call to initialize_sponge (in).
   type(time_type), optional, intent(in)    :: Time !< The current model date
 
-  real :: damp                                  ! The timestep times the local damping coefficient.  ND.
-  real :: I1pdamp                               ! I1pdamp is 1/(1 + damp).  Nondimensional.
+  real :: damp                                  ! The timestep times the local damping coefficient [nondim].
+  real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
   real :: Idt                                   ! 1.0/dt [s-1].
   real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid

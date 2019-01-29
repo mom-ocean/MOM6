@@ -31,40 +31,40 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
   ! Parameters
-  real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE (non-dim)
-  real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE (non-dim)
+  real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
+  real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
   real :: MEKE_damping  !< Local depth-independent MEKE dissipation rate [s-1].
   real :: MEKE_Cd_scale !< The ratio of the bottom eddy velocity to the column mean
                         !! eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1
                         !! to account for the surface intensification of MEKE.
-  real :: MEKE_Cb       !< Coefficient in the \f$\gamma_{bot}\f$ expression (non-dim)
-  real :: MEKE_min_gamma!< Minimum value of gamma_b^2 allowed (non-dim)
-  real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression (non-dim)
+  real :: MEKE_Cb       !< Coefficient in the \f$\gamma_{bot}\f$ expression [nondim]
+  real :: MEKE_min_gamma!< Minimum value of gamma_b^2 allowed [nondim]
+  real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression [nondim]
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
                         !! first baroclinic deformation radius.
   logical :: use_old_lscale !< Use the old formula for mixing length scale.
-  real :: cdrag         !< The bottom drag coefficient for MEKE (non-dim).
+  real :: cdrag         !< The bottom drag coefficient for MEKE [nondim].
   real :: MEKE_BGsrc    !< Background energy source for MEKE [W kg-1] (= m2 s-3).
-  real :: MEKE_dtScale  !< Scale factor to accelerate time-stepping (non-dim.)
-  real :: MEKE_KhCoeff  !< Scaling factor to convert MEKE into Kh (non-dim.)
+  real :: MEKE_dtScale  !< Scale factor to accelerate time-stepping [nondim]
+  real :: MEKE_KhCoeff  !< Scaling factor to convert MEKE into Kh [nondim]
   real :: MEKE_Uscale   !< MEKE velocity scale for bottom drag [m s-1]
   real :: MEKE_KH       !< Background lateral diffusion of MEKE [m2 s-1]
   real :: MEKE_K4       !< Background bi-harmonic diffusivity (of MEKE) [m4 s-1]
   real :: KhMEKE_Fac    !< A factor relating MEKE%Kh to the diffusivity used for
-                        !! MEKE itself (nondimensional).
+                        !! MEKE itself [nondim].
   real :: viscosity_coeff !< The scaling coefficient in the expression for
                         !! viscosity used to parameterize lateral momentum mixing
                         !! by unresolved eddies represented by MEKE.
   real :: Lfixed        !< Fixed mixing length scale [m].
-  real :: aDeform       !< Weighting towards deformation scale of mixing length (non-dim.)
-  real :: aRhines       !< Weighting towards Rhines scale of mixing length (non-dim.)
-  real :: aFrict        !< Weighting towards frictional arrest scale of mixing length (non-dim.)
-  real :: aEady         !< Weighting towards Eady scale of mixing length (non-dim.)
-  real :: aGrid         !< Weighting towards grid scale of mixing length (non-dim.)
-  real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE (non-dim.)
+  real :: aDeform       !< Weighting towards deformation scale of mixing length [nondim]
+  real :: aRhines       !< Weighting towards Rhines scale of mixing length [nondim]
+  real :: aFrict        !< Weighting towards frictional arrest scale of mixing length [nondim]
+  real :: aEady         !< Weighting towards Eady scale of mixing length [nondim]
+  real :: aGrid         !< Weighting towards grid scale of mixing length [nondim]
+  real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
-                                !! when computing beta in Rhines scale (non-dim.)
+                                !! when computing beta in Rhines scale [nondim]
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
 

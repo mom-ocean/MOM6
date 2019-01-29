@@ -1638,7 +1638,9 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real :: eL                ! 1 or 0, depending on whether increases in E lead
                             ! to decreases in the entrainment from below by the
                             ! deepest buffer layer.
-  real :: fa, fk, fm, fr    ! Temporary variables used to calculate err, in ND, H2, H, H.
+  real :: fa                ! Temporary variable used to calculate err [nondim].
+  real :: fk                ! Temporary variable used to calculate err [H2 ~> m2 or kg2 m-4].
+  real :: fm, fr            ! Temporary variables used to calculate err [H ~> m or kg m-2].
   real :: tolerance         ! The tolerance within which E must be converged [H ~> m or kg m-2].
   real :: E_prev            ! The previous value of E [H ~> m or kg m-2].
   logical, dimension(SZI_(G)) :: false_position ! If true, the false position
@@ -2117,7 +2119,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "calculate the interior diapycnal entrainment.", default=5)
-! In this module, KD is only used to set the default for TOLERANCE_ENT. (m2 s-1)
+! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
   call get_param(param_file, mdl, "KD", Kd, fail_if_missing=.true.)
   call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &

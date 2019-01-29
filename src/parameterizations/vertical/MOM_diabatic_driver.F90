@@ -161,7 +161,7 @@ type, public:: diabatic_CS; private
   real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
                                            !! fluxes are applied [m].
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
-                                     !! evaporated in one time-step (non-dim).
+                                     !! evaporated in one time-step [nondim].
   integer :: halo_TS_diff = 0        !< The temperature, salinity and thickness halo size that
                                      !! must be valid for the diffusivity calculations.
   logical :: useKPP = .false.        !< use CVMix/KPP diffusivities and non-local transport
@@ -313,7 +313,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     cn       ! baroclinic gravity wave speeds
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux (Z2/s3), used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux [Z2 s-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -347,7 +347,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
              ! the arrays are not needed at the same time.
 
   integer :: kb(SZI_(G),SZJ_(G)) ! index of the lightest layer denser
-                                 ! than the buffer laye (nondimensional)
+                                 ! than the buffer layer [nondim]
 
   real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential
                                  ! density which defines the coordinate
@@ -1195,7 +1195,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux (m2/s3), used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux [m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -1229,7 +1229,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
              ! the arrays are not needed at the same time.
 
   integer :: kb(SZI_(G),SZJ_(G)) ! index of the lightest layer denser
-                                 ! than the buffer laye (nondimensional)
+                                 ! than the buffer layer [nondim]
 
   real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential
                                  ! density which defines the coordinate
@@ -1253,7 +1253,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
                        ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
-                       ! coupled to the bottom within a timestep (m)
+                       ! coupled to the bottom within a timestep [H ~> m or kg m-2]
 
   real :: htot(SZIB_(G))             ! The summed thickness from the bottom [H ~> m or kg m-2].
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
@@ -2073,7 +2073,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
-    Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
+    Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)  !### I think this needs GV%Z_to_H
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
@@ -2450,7 +2450,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
   type(optics_type), optional, pointer       :: optics_CSp  !< A pointer to be set to the optics control structure
   real,              optional, intent(  out) :: evap_CFL_limit !<The largest fraction of a layer that can be
-                                                            !! evaporated in one time-step (non-dim).
+                                                            !! evaporated in one time-step [nondim].
   real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
                                                             !! and freshwater fluxes are applied [m].
 

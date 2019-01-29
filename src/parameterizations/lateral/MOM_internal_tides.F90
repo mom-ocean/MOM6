@@ -87,13 +87,13 @@ type, public :: int_tide_CS ; private
                         !! summed over angle, frequency and mode [W m-2]
   real, allocatable, dimension(:,:) :: tot_allprocesses_loss !< Energy loss rates due to all processes,
                         !! summed over angle, frequency and mode [W m-2]
-  real :: q_itides      !< fraction of local dissipation (nondimensional)
+  real :: q_itides      !< fraction of local dissipation [nondim]
   real :: En_sum        !< global sum of energy for use in debugging
   type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
   character(len=200) :: inputdir !< directory to look for coastline angle file
   real :: decay_rate    !< A constant rate at which internal tide energy is
                         !! lost to the interior ocean internal wave field.
-  real :: cdrag         !< The bottom drag coefficient (non-dim).
+  real :: cdrag         !< The bottom drag coefficient [nondim].
   logical :: apply_background_drag
                         !< If true, apply a drag due to background processes as a sink.
   logical :: apply_bottom_drag
@@ -632,7 +632,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
                              intent(inout) :: Ub !< RMS (over one period) near-bottom horizontal
                                                  !! mode velocity [m s-1].
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                             intent(in) :: TKE_loss_fixed !< Fixed part of energy loss [kg Z-2 ~> kg m-2] 
+                             intent(in) :: TKE_loss_fixed !< Fixed part of energy loss [kg Z-2 ~> kg m-2]
                                                  !! (rho*kappa*h^2).
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
                              intent(inout) :: En !< Energy density of the internal waves [J m-2].
@@ -1358,12 +1358,12 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! Left and right face energy densities [J m-2].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    flux_x      ! The internal wave energy flux, in J s-1.
+    flux_x      ! The internal wave energy flux [J s-1].
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
-    Fdt_m, Fdt_p! Left and right energy fluxes, in J
+    Fdt_m, Fdt_p! Left and right energy fluxes [J]
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
@@ -1441,12 +1441,12 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! South and north face energy densities [J m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    flux_y      ! The internal wave energy flux, in J s-1.
+    flux_y      ! The internal wave energy flux [J s-1].
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
-    Fdt_m, Fdt_p! South and north energy fluxes, in J
+    Fdt_m, Fdt_p! South and north energy fluxes [J]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
@@ -1562,8 +1562,7 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
                                                         !! reconstruction [J m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: hR !< Right- Energy densities in the
                                                         !! reconstruction [J m-2].
-  real, dimension(SZI_(G)),         intent(inout) :: vh !< The meridional energy transport,
-                                                        !! in J s-1.
+  real, dimension(SZI_(G)),         intent(inout) :: vh !< The meridional energy transport [J s-1].
   real,                             intent(in)    :: dt !< Time increment [s].
   integer,                          intent(in)    :: J  !< The j-index to work on.
   integer,                          intent(in)    :: ish !< The start i-index range to work on.

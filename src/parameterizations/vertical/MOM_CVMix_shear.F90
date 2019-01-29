@@ -36,8 +36,8 @@ type, public :: CVMix_shear_cs ! TODO: private
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
   real    :: KPP_exp                        !< Exponent of unitless factor of diff.
                                             !! for KPP internal shear mixing scheme.
-  real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency [s-2]
+  real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency [s-2]
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
   real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
                                                         !! after smoothing
@@ -76,8 +76,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) :: Ri_Grad !< Gradient Richardson number
-  real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces (m2/s)
-  real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces (m2/s)
+  real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
+  real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
