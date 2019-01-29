@@ -39,8 +39,8 @@ contains
 subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
   type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in generated grid
-  real, dimension(nk),  intent(in) :: coordinateResolution !< Nominal near-surface resolution (m)
-  real, dimension(nk+1),intent(in) :: target_density !< Interface target densities (kg/m3)
+  real, dimension(nk),  intent(in) :: coordinateResolution !< Nominal near-surface resolution [m]
+  real, dimension(nk+1),intent(in) :: target_density !< Interface target densities [kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_hycom: CS already associated!")
@@ -100,13 +100,13 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive [H ~> m or kg m-2])
-  real, dimension(nz),   intent(in)    :: T !< Temperature of column (degC)
-  real, dimension(nz),   intent(in)    :: S !< Salinity of column (psu)
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, (in m or H)
-  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
+  real, dimension(nz),   intent(in)    :: T !< Temperature of column [degC]
+  real, dimension(nz),   intent(in)    :: S !< Salinity of column [ppt]
+  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in [m] or [H ~> m or kg m-2]
+  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure [Pa]
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
-  real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in m
+  real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in [m]
                                                  !! to desired units for zInterface, perhaps m_to_H.
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions
@@ -121,7 +121,7 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   real, dimension(CS%nk) :: h_col_new ! New layer thicknesses
   real :: z_scale
   real :: stretching ! z* stretching, converts z* to z.
-  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
+  real :: nominal_z ! Nominal depth of interface when using z* [Z ~> m]
   real :: hNew
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
   logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.

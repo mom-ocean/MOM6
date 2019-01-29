@@ -151,7 +151,7 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: tangential_grad=>NULL() !< The gradient of the velocity tangential
                                                             !! to the OB segment [m s-1].
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
-                                                            !! segment (m3 s-1).
+                                                            !! segment [m3 s-1].
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
                                                             !! the OB segment [m s-1].
   real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment [m].
@@ -1412,8 +1412,8 @@ end subroutine open_boundary_impose_normal_slope
 subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),            intent(inout) :: G !< Ocean grid structure
-  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell (m2)
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell (m2)
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell [m2]
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell [m2]
   ! Local variables
   integer :: i, j, n
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -2921,7 +2921,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   type(verticalGrid_type),                   intent(in)    :: GV   !<  Ocean vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [m]
   type(time_type),                           intent(in)    :: Time !< Model time
   ! Local variables
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed
@@ -2930,7 +2930,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
   type(OBC_segment_type), pointer :: segment => NULL()
   integer, dimension(4) :: siz,siz2
-  real :: sumh ! column sum of thicknesses (m)
+  real :: sumh ! column sum of thicknesses [m]
   integer :: ni_seg, nj_seg  ! number of src gridpoints along the segments
   integer :: i2, j2          ! indices for referencing local domain array
   integer :: is_obc, ie_obc, js_obc, je_obc  ! segment indices within local domain
