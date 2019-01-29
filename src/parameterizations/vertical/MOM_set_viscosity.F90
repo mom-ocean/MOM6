@@ -1683,7 +1683,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
-  real :: hfreeze !< If hfreeze > 0 (m), melt potential will be computed.
+  real :: hfreeze !< If hfreeze > 0 [m], melt potential will be computed.
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 

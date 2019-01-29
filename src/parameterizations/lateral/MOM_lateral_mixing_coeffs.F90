@@ -108,7 +108,7 @@ type, public :: VarMix_CS
   integer :: Res_fn_power_visc !< The power of dx/Ld in the Kh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
-  real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate (nondim).
+  real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate [nondim].
 
   ! Diagnostics
   !>@{
@@ -174,7 +174,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   endif
 
   ! Calculate and store the ratio between deformation radius and grid-spacing
-  ! at h-points (non-dimensional).
+  ! at h-points [nondim].
   if (CS%calculate_rd_dx) then
     if (.not. associated(CS%Rd_dx_h)) call MOM_error(FATAL, &
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
@@ -578,12 +578,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                            pointer       :: CS !< Variable mixing coefficients
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                    intent(in)    :: calculate_slopes !< If true, calculate slopes internally
                                                                   !! otherwise use slopes stored in CS
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points (for diagnostics)
+  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
+  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
