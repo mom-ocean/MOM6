@@ -72,11 +72,11 @@ type, public :: surface_forcing_CS ; private
   real :: latent_heat_vapor     !< Latent heat of vaporization [J kg-1]
 
   real :: max_p_surf            !< The maximum surface pressure that can be
-                                !! exerted by the atmosphere and floating sea-ice,
-                                !! in Pa.  This is needed because the FMS coupling
-                                !! structure does not limit the water that can be
-                                !! frozen out of the ocean and the ice-ocean heat
-                                !! fluxes are treated explicitly.
+                                !! exerted by the atmosphere and floating sea-ice [Pa].
+                                !! This is needed because the FMS coupling structure
+                                !! does not limit the water that can be frozen out
+                                !! of the ocean and the ice-ocean heat fluxes are
+                                !! treated explicitly.
   logical :: use_limited_P_SSH  !< If true, return the sea surface height with
                                 !! the correction for the atmospheric (and sea-ice)
                                 !! pressure limited by max_p_surf instead of the
@@ -1009,9 +1009,9 @@ end subroutine extract_IOB_stresses
 !> Adds thermodynamic flux adjustments obtained via data_override
 !! Component name is 'OCN'
 !! Available adjustments are:
-!! - hflx_adj (Heat flux into the ocean, in W m-2)
-!! - sflx_adj (Salt flux into the ocean, in kg salt m-2 s-1)
-!! - prcme_adj (Fresh water flux into the ocean, in kg m-2 s-1)
+!! - hflx_adj (Heat flux into the ocean [W m-2])
+!! - sflx_adj (Salt flux into the ocean [kg salt m-2 s-1])
+!! - prcme_adj (Fresh water flux into the ocean [kg m-2 s-1])
 subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   type(ocean_grid_type),    intent(inout) :: G  !< Ocean grid structure
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
@@ -1054,8 +1054,8 @@ end subroutine apply_flux_adjustments
 !> Adds mechanical forcing adjustments obtained via data_override
 !! Component name is 'OCN'
 !! Available adjustments are:
-!! - taux_adj (Zonal wind stress delta, positive to the east, in Pa)
-!! - tauy_adj (Meridional wind stress delta, positive to the north, in Pa)
+!! - taux_adj (Zonal wind stress delta, positive to the east [Pa])
+!! - tauy_adj (Meridional wind stress delta, positive to the north [Pa])
 subroutine apply_force_adjustments(G, CS, Time, forces)
   type(ocean_grid_type),    intent(inout) :: G  !< Ocean grid structure
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure

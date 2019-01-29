@@ -540,7 +540,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
                    ! current depth level [H m2 ~> m3 or kg]
   real :: vh_here  ! meridional transport of a layer that is attributed to
                    ! the current depth level [H m2 ~> m3 or kg]
-  real :: Idt      ! inverse of the time step (sec)
+  real :: Idt      ! inverse of the time step [s]
 
   real :: z_int_above(SZIB_(G)) ! height of the interface atop a layer [H ~> m or kg m-2]
 

@@ -243,7 +243,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
   type(vertvisc_type),               intent(inout) :: visc         !< vertical visc, bottom drag, and related
   type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
-  real,                              intent(in)    :: dt           !< time step (sec)
+  real,                              intent(in)    :: dt           !< time step [s]
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at start of this dynamic
                                                                    !! time step [Pa]
@@ -316,8 +316,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     u_init => NULL(), v_init => NULL(), & ! Pointers to u and v or u_adj and v_adj.
     u_av, & ! The zonal velocity time-averaged over a time step [m s-1].
     v_av, & ! The meridional velocity time-averaged over a time step [m s-1].
-    h_av    ! The layer thickness time-averaged over a time step, in m or
-            ! kg m-2.
+    h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
   real :: Idt
   logical :: dyn_p_surf
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
@@ -974,7 +973,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
   type(MOM_restart_CS),             pointer       :: restart_CS !< restart control structure
-  real,                             intent(in)    :: dt         !< time step (sec)
+  real,                             intent(in)    :: dt         !< time step [s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis
   type(cont_diag_ptrs),     target, intent(inout) :: Cont_diag  !< points to terms in continuity equation

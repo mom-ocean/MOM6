@@ -672,7 +672,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
                                                           !! layers [s-2].
   integer,                          intent(in)    :: j    !< j-index of row to work on
-  real,                             intent(in)    :: dt   !< Time increment (sec).
+  real,                             intent(in)    :: dt   !< Time increment [s].
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
   real, dimension(SZI_(G),SZK_(G)), intent(out)   :: TKE_to_Kd !< The conversion rate between the TKE
                                                           !! TKE dissipated within  a layer and the
@@ -1400,7 +1400,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real :: cdrag_sqrt       ! square root of the drag coefficient [nondim]
   real :: ustar            ! value of ustar at a thickness point [Z s-1 ~> m s-1].
   real :: ustar2           ! square of ustar, for convenience [Z2 s-2 ~> m2 s-2]
-  real :: absf             ! average absolute value of Coriolis parameter around a thickness point (1/sec)
+  real :: absf             ! average absolute value of Coriolis parameter around a thickness point [s-1]
   real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely [Z ~> m].
   real :: z_bot            ! distance to interface k from bottom [Z ~> m].
   real :: D_minus_z        ! distance to interface k from surface [Z ~> m].
@@ -1453,12 +1453,12 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     ! I am still unsure about sqrt(cdrag) in this expressions - AJA
     TKE_column = cdrag_sqrt * visc%TKE_BBL(i,j)
     ! Add in tidal dissipation energy at the bottom [m3 s-3].
-    ! Note that TKE_tidal is in W m-2.
+    ! Note that TKE_tidal is in [W m-2].
     if (associated(fluxes%TKE_tidal)) TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
-    total_thickness = ( sum(h(i,j,:)) + GV%H_subroundoff )* GV%H_to_Z ! Total column thickness, in m.
+    total_thickness = ( sum(h(i,j,:)) + GV%H_subroundoff )* GV%H_to_Z ! Total column thickness [Z ~> m].
     ustar_D = ustar * total_thickness
     z_bot = 0.
     Kd_lower = 0. ! Diffusivity on bottom boundary.
@@ -1485,7 +1485,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       z_bot = z_bot + h(i,j,k)*GV%H_to_Z ! Distance between upper interface of layer and the bottom [Z ~> m].
       D_minus_z = max(total_thickness - z_bot, 0.) ! Thickness above layer, Z.
 
-      ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
+      ! Diffusivity using law of the wall, limited by rotation, at height z [m2 s-1].
       ! This calculation is at the upper interface of the layer
       if ( ustar_D + absf * ( z_bot * D_minus_z ) == 0.) then
         Kd_wall = 0.

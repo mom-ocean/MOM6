@@ -93,7 +93,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 m-2 ~> 1].
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
+  real :: g_Rho0  ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
@@ -566,14 +566,14 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real, dimension(SZI_(G)) :: &
     htot, hmin, &    ! Thicknesses [Z ~> m].
     H_here, HxT_here, HxS_here, HxR_here
-  real :: speed2_tot ! overestimate of the mode-1 speed squared, m2 s-2
+  real :: speed2_tot ! overestimate of the mode-1 speed squared [m2 s-2]
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching
   real, parameter :: reduct_factor = 0.5
                      ! factor used in setting speed2_min
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
+  real :: g_Rho0  ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.

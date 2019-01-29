@@ -246,7 +246,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real :: H_limit_fluxes, IforcingDepthScale, Idt
   real :: dThickness, dTracer
   real :: fractionOfForcing, hOld, Ithickness
-  real :: RivermixConst  ! A constant used in implementing river mixing, in Pa s.
+  real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
   real, dimension(SZI_(G)) :: &
     netMassInOut, &  ! surface water fluxes [H ~> m or kg m-2] over time step
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step

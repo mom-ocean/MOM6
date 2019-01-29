@@ -88,9 +88,9 @@ type, public :: thermo_var_ptrs
   real :: P_Ref          !<   The coordinate-density reference pressure [Pa].
                          !! This is the pressure used to calculate Rml from
                          !! T and S when eqn_of_state is associated.
-  real :: C_p            !<   The heat capacity of seawater [J K-1 kg-1].
+  real :: C_p            !<   The heat capacity of seawater [J degC-1 kg-1].
                          !! When conservative temperature is used, this is
-                         !! constant and exactly 3991.86795711963 J K kg-1.
+                         !! constant and exactly 3991.86795711963 J degC-1 kg-1.
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is

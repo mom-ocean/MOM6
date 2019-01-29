@@ -43,16 +43,16 @@ type, public :: ctrl_forcing_CS ; private
   real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomaliess
                             !! accumulate [s-1].
   real    :: Len2           !< The square of the length scale over which the anomalies
-                            !! are smoothed via a Laplacian filter, in m2.
+                            !! are smoothed via a Laplacian filter [m2].
   real    :: lam_heat       !< A constant of proportionality between SST anomalies
-                            !! and heat fluxes, in W m-2 K-1.
+                            !! and heat fluxes [W m-2 degC-1].
   real    :: lam_prec       !< A constant of proportionality between SSS anomalies
-                            !! (normalised by mean SSS) and precipitation, in kg m-2.
+                            !! (normalised by mean SSS) and precipitation [kg m-2].
   real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
-                            !! anomalies and corrective heat fluxes, in W m-2 K-1.
+                            !! anomalies and corrective heat fluxes [W m-2 degC-1].
   real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
                             !! anomalies (normalised by mean SSS) and corrective
-                            !! precipitation, in kg m-2.
+                            !! precipitation [kg m-2].
 
   !>@{ Pointers for data.
   !! \todo Needs more complete documentation.
@@ -83,16 +83,16 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
                                                                !! anomalies [degC].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity
-                                                               !! anomlies, in g kg-1.
+                                                               !! anomlies [ppt].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface
-                                                               !! salinity, in g kg-1.
+                                                               !! salinity [ppt].
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat !< Virtual (corrective) heat
                                                                !! fluxes that are augmented
-                                                               !! in this subroutine, in W m-2.
+                                                               !! in this subroutine [W m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_precip !< Virtual (corrective)
                                                                !! precipitation fluxes that
                                                                !! are augmented in this
-                                                               !! subroutine, in kg m-2 s-1.
+                                                               !! subroutine [kg m-2 s-1].
   type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
   real,                  intent(in)    :: dt             !< Length of time over which these
                                                          !! fluxes will be applied [s].

@@ -55,7 +55,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   integer,                          intent(in)    :: nsw   !< Number of bands of penetrating
                                                            !! shortwave radiation.
   integer,                          intent(in)    :: j     !< j-index to work on.
-  real,                             intent(in)    :: dt    !< Time step (seconds).
+  real,                             intent(in)    :: dt    !< Time step [s].
   real,                             intent(in)    :: H_limit_fluxes !< If the total ocean depth is
                                                            !! less than this, they are scaled away
                                                            !! to avoid numerical instabilities
@@ -305,8 +305,8 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(:,:,:),   intent(in)    :: opacity_band !< opacity in each band of
-                                                 !! penetrating shortwave radiation,
-                                                 !! in m-1. The indicies are band, i, k.
+                                                 !! penetrating shortwave radiation [m-1].
+                                                 !! The indicies are band, i, k.
   integer,                  intent(in)    :: nsw !< number of bands of penetrating
                                                  !! shortwave radiation.
   integer,                  intent(in)    :: j   !< j-index to work on.

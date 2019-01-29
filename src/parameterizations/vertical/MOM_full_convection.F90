@@ -29,7 +29,7 @@ subroutine full_convection(G, GV, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, &
                            intent(out)   :: T_adj !< Adjusted potential temperature [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: S_adj !< Adjusted salinity [ppt].
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa (or NULL).
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
   real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
                                                   !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
   real,          optional, intent(in)    :: Kddt_convect !< A large convecting vertical

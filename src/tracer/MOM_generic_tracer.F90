@@ -602,7 +602,7 @@ contains
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
-                                                                !! tracer, in kg times concentration units.
+                                                                !! tracer, in kg times concentration units [kg conc].
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
     character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.

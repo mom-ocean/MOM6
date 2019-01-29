@@ -964,16 +964,16 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
                 ! u0v is the Laplacian sensitivities to the v velocities
-                ! at u points, in m-2, with u0u, v0u, and v0v defined similarly.
-  real :: grid_sp_h2       ! Harmonic mean of the squares of the grid
-  real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2)
-  real :: grid_sp_q2       ! spacings at h and q points (m2)
-  real :: grid_sp_q3       ! spacings at h and q points^(3/2) (m3)
+                ! at u points [m-2], with u0u, v0u, and v0v defined similarly.
+  real :: grid_sp_h2       ! Harmonic mean of the squares of the grid [m2]
+  real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2) [m3]
+  real :: grid_sp_q2       ! spacings at h and q points [m2]
+  real :: grid_sp_q3       ! spacings at h and q points^(3/2) [m3]
   real :: Kh_Limit         ! A coefficient [s-1] used, along with the
                            ! grid spacing, to limit Laplacian viscosity.
   real :: fmax             ! maximum absolute value of f at the four
                            ! vorticity points around a thickness point [s-1]
-  real :: BoundCorConst    ! constant (s2/m2)
+  real :: BoundCorConst    ! A constant used when using viscosity to bound the Coriolis accelerations [s2 m-2]
   real :: Ah_Limit         ! coefficient [s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
   real :: Kh               ! Lapacian horizontal viscosity [m2 s-1]
@@ -984,7 +984,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
   real :: Leith_bi_const   ! nondimensional biharmonic Leith constant
-  real :: dt               ! dynamics time step (sec)
+  real :: dt               ! dynamics time step [s]
   real :: Idt              ! inverse of dt [s-1]
   real :: denom            ! work variable; the denominator of a fraction
   real :: maxvel           ! largest permitted velocity components [m s-1]
