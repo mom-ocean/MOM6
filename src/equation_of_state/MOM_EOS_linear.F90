@@ -51,7 +51,7 @@ end interface calculate_density_second_derivs_linear
 contains
 
 !> This subroutine computes the density of sea water with a trivial
-!! linear equation of state (in kg m-3) from salinity (sal in PSU),
+!! linear equation of state (in [kg m-3]) from salinity (sal [PSU]),
 !! potential temperature (T [degC]), and pressure [Pa].
 subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
                                            Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)

@@ -925,8 +925,8 @@ subroutine convert_thickness(h, G, GV, US, tv)
                                        ! across a layer [m2 s-2].
   real :: rho(SZI_(G))
   real :: I_gEarth
-  real :: Hm_rho_to_Pa  ! A conversion factor from the input geometric thicknesses
-                        ! times the layer densities into Pa, in Pa m3 / H kg.
+  real :: Hm_rho_to_Pa  ! A conversion factor from the input geometric thicknesses times the
+                        ! layer densities into Pa [Pa m3 H-1 kg-1 ~> s-2 m2 or s-2 m5 kg-1].
   logical :: Boussinesq
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: itt, max_itt
@@ -999,9 +999,9 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
                                                       !! only read parameters without changing h.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    eta_sfc  ! The free surface height that the model should use, in m.
+    eta_sfc  ! The free surface height that the model should use [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    eta  ! The free surface height that the model should use, in m.
+    eta  ! The free surface height that the model should use [m].
   real :: dilate  ! A ratio by which layers are dilated [nondim].
   real :: scale_factor ! A scaling factor for the eta_sfc values that are read
                        ! in, which can be used to change units, for example.
@@ -1686,8 +1686,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   type(time_type),         intent(in) :: Time !< Time at the start of the run segment. Time_in
                                               !! overrides any value set for Time.
   ! Local variables
-  real, allocatable, dimension(:,:,:) :: eta ! The target interface heights, in m.
-  real, allocatable, dimension(:,:,:) :: h   ! The target interface thicknesses, in m.
+  real, allocatable, dimension(:,:,:) :: eta ! The target interface heights [Z ~> m].
+  real, allocatable, dimension(:,:,:) :: h   ! The target interface thicknesses [H ~> m or kg m-2].
 
   real, dimension (SZI_(G),SZJ_(G),SZK_(G)) :: &
     tmp, tmp2 ! A temporary array for tracers.
@@ -1972,7 +1972,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real, dimension(:,:,:), allocatable :: rho_z
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
-  real, dimension(SZI_(G))   :: press  ! Pressures in Pa.
+  real, dimension(SZI_(G))   :: press  ! Pressures [Pa].
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget ! Target thicknesses [Z ~> m].

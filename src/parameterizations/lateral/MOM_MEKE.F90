@@ -45,18 +45,18 @@ type, public :: MEKE_CS ; private
                         !! first baroclinic deformation radius.
   logical :: use_old_lscale !< Use the old formula for mixing length scale.
   real :: cdrag         !< The bottom drag coefficient for MEKE (non-dim).
-  real :: MEKE_BGsrc    !< Background energy source for MEKE in W/kg (= m2 s-3).
+  real :: MEKE_BGsrc    !< Background energy source for MEKE [W kg-1] (= m2 s-3).
   real :: MEKE_dtScale  !< Scale factor to accelerate time-stepping (non-dim.)
   real :: MEKE_KhCoeff  !< Scaling factor to convert MEKE into Kh (non-dim.)
   real :: MEKE_Uscale   !< MEKE velocity scale for bottom drag [m s-1]
-  real :: MEKE_KH       !< Background lateral diffusion of MEKE (m^2/s)
-  real :: MEKE_K4       !< Background bi-harmonic diffusivity (of MEKE) (m^4/s)
+  real :: MEKE_KH       !< Background lateral diffusion of MEKE [m2 s-1]
+  real :: MEKE_K4       !< Background bi-harmonic diffusivity (of MEKE) [m4 s-1]
   real :: KhMEKE_Fac    !< A factor relating MEKE%Kh to the diffusivity used for
                         !! MEKE itself (nondimensional).
   real :: viscosity_coeff !< The scaling coefficient in the expression for
                         !! viscosity used to parameterize lateral momentum mixing
                         !! by unresolved eddies represented by MEKE.
-  real :: Lfixed        !< Fixed mixing length scale, in m.
+  real :: Lfixed        !< Fixed mixing length scale [m].
   real :: aDeform       !< Weighting towards deformation scale of mixing length (non-dim.)
   real :: aRhines       !< Weighting towards Rhines scale of mixing length (non-dim.)
   real :: aFrict        !< Weighting towards frictional arrest scale of mixing length (non-dim.)
@@ -117,7 +117,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     MEKE_mom_src, & ! The MEKE source from momentum [m2 s-3].
     drag_rate_visc, &
     drag_rate, &    ! The MEKE spindown timescale due to bottom drag [s-1].
-    LmixScale, &    ! Square of eddy mixing length, in m2.
+    LmixScale, &    ! Square of eddy mixing length [m2].
     barotrFac2, &   ! Ratio of EKE_barotropic / EKE [nondim]
     bottomFac2      ! Ratio of EKE_bottom / EKE [nondim]
   real, dimension(SZIB_(G),SZJ_(G)) :: &

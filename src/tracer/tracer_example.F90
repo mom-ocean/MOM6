@@ -167,7 +167,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
+  real :: dist2  ! The distance squared from a line [m2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB, lntr
 
@@ -290,7 +290,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   real :: d1(SZI_(G))          ! d1=1-c1 is used by the tridiagonal solver.
   real :: h_neglect            ! A thickness that is so small it is usually lost
-                               ! in roundoff and can be neglected, in m.
+                               ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: b_denom_1 ! The first term in the denominator of b1 [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, m
 
@@ -366,7 +366,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                       intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                              !! tracer, in kg times concentration units.
+                                                              !! tracer, in kg times concentration units [kg conc].
   type(USER_tracer_example_CS),       pointer       :: CS     !< The control structure returned by a
                                                               !! previous call to register_USER_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.

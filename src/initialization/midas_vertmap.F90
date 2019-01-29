@@ -30,7 +30,7 @@ end interface
 contains
 
 #ifdef PY_SOLO
-!> Calculate seawater equation of state, given T[degC],S[PSU],p[Pa]
+!> Calculate seawater equation of state, given T[degC], S[PSU], and p[Pa]
 !! Returns density [kg m-3]
 !!
 !! These EOS routines are needed only for the stand-alone version of the code
@@ -38,9 +38,9 @@ contains
 !! sea water using the formulae given by  Wright, 1997, J. Atmos.
 !! Ocean. Tech., 14, 735-740.
 function wright_eos_2d(T,S,p) result(rho)
-  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and Salinity (psu)
+  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature [degC] and Salinity [psu]
   real, intent(in) :: p  !< pressure [Pa]
-  real(kind=8), dimension(size(T,1),size(T,2)) :: rho !< potential density (kg m-3)
+  real(kind=8), dimension(size(T,1),size(T,2)) :: rho !< potential density [kg m-3]
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom
@@ -68,16 +68,16 @@ function wright_eos_2d(T,S,p) result(rho)
 end function wright_eos_2d
 
 !> Calculate seawater thermal expansion coefficient given T[degC],S[PSU],p[Pa]
-!! Returns density [kg m-3 C-1]
+!! Returns density [kg m-3 degC-1]
 !!
 !! The subroutines in this file implement the equation of state for
 !! sea water using the formulae given by  Wright, 1997, J. Atmos.
 !! Ocean. Tech., 14, 735-740.
 function alpha_wright_eos_2d(T,S,p) result(drho_dT)
-  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and Salinity (psu)
+  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature [degC] and Salinity [psu]
   real, intent(in) :: p !< pressure [Pa]
   real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dT !< partial derivative of density with
-                                                          !! respect to temperature (kg m-3 C-1)
+                                                          !! respect to temperature [kg m-3 degC-1]
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -114,7 +114,7 @@ end function alpha_wright_eos_2d
 !! sea water using the formulae given by  Wright, 1997, J. Atmos.
 !! Ocean. Tech., 14, 735-740.
 function beta_wright_eos_2d(T,S,p) result(drho_dS)
-  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and salinity (psu)
+  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature [degC] and salinity [psu]
   real, intent(in) :: p !< pressure [Pa]
   real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with
                                                           !! respect to salinity [kg m-3 PSU-1]
@@ -346,8 +346,8 @@ end function bisect_fast
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start)
-  real(kind=8), dimension(:,:,:), intent(inout) :: temp !< potential temperature (degC)
-  real(kind=8), dimension(:,:,:), intent(inout) :: salt !< salinity (PSU)
+  real(kind=8), dimension(:,:,:), intent(inout) :: temp !< potential temperature [degC]
+  real(kind=8), dimension(:,:,:), intent(inout) :: salt !< salinity [PSU]
   real(kind=8), dimension(size(temp,3)), intent(in) :: R !< desired potential density [kg m-3].
   real, intent(in) :: p_ref !< reference pressure [Pa].
   integer, intent(in) :: niter !< maximum number of iterations
@@ -361,8 +361,8 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start, eos)
-  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature (degC)
-  real, dimension(:,:,:),        intent(inout) :: salt !< salinity (PSU)
+  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature [degC]
+  real, dimension(:,:,:),        intent(inout) :: salt !< salinity [PSU]
   real, dimension(size(temp,3)), intent(in)    :: R !< desired potential density [kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
@@ -465,9 +465,9 @@ end subroutine determine_temperature
 !! of each layer that overlaps that depth range.
 !! Note that by convention, e decreases with increasing k and Z_top > Z_bot.
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-  real, dimension(:), intent(in)  :: e  !< The interface positions, in m or Z.
-  real,               intent(in)  :: Z_top !< The top of the range being mapped to, in m or Z.
-  real,               intent(in)  :: Z_bot !< The bottom of the range being mapped to, in m or Z.
+  real, dimension(:), intent(in)  :: e  !< The interface positions, [Z ~> m] or other units.
+  real,               intent(in)  :: Z_top !< The top of the range being mapped to, [Z ~> m] or other units.
+  real,               intent(in)  :: Z_bot !< The bottom of the range being mapped to, [Z ~> m] or other units.
   integer,            intent(in)  :: k_max !< The number of valid layers.
   integer,            intent(in)  :: k_start !< The layer at which to start searching.
   integer,            intent(out) :: k_top !< The index of the top layer that overlap with the depth range.
@@ -528,7 +528,7 @@ end subroutine find_overlap
 !! a piecewise limited scheme.
 function find_limited_slope(val, e, k) result(slope)
   real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
-  real, dimension(:), intent(in) :: e   !< A column's interface heights, in Z or m.
+  real, dimension(:), intent(in) :: e   !< A column's interface heights [Z ~> m] or other units.
   integer,            intent(in) :: k   !< The layer whose slope is being determined.
   real :: slope !< The normalized slope in the intracell distribution of val.
   ! Local variables

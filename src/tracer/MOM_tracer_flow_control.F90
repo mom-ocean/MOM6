@@ -557,7 +557,7 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    &
                                   intent(in)  :: h           !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),             intent(out) :: stock_values !< The integrated amounts of a tracer
-                             !! on the current PE, usually in kg x concentration.
+                             !! on the current PE, usually in kg x concentration [kg conc].
   type(ocean_grid_type),          intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(tracer_flow_control_CS),   pointer     :: CS          !< The control structure returned by a

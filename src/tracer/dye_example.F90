@@ -271,7 +271,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep (nondim)
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 
 ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -331,7 +331,7 @@ end subroutine dye_tracer_column_physics
 function dye_stock(h, stocks, G, GV, CS, names, units, stock_index)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of
-                                                            !! each tracer, in kg times concentration units.
+                                                            !! each tracer, in kg times concentration units [kg conc].
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   type(dye_tracer_CS),                pointer       :: CS   !< The control structure returned by a

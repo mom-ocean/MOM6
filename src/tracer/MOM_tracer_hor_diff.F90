@@ -35,20 +35,20 @@ public tracer_hordiff, tracer_hor_diff_init, tracer_hor_diff_end
 !> The ocntrol structure for along-layer and epineutral tracer diffusion
 type, public :: tracer_hor_diff_CS ; private
   real    :: dt             !< The baroclinic dynamics time step [s].
-  real    :: KhTr           !< The along-isopycnal tracer diffusivity in m2/s.
+  real    :: KhTr           !< The along-isopycnal tracer diffusivity [m2 s-1].
   real    :: KhTr_Slope_Cff !< The non-dimensional coefficient in KhTr formula
-  real    :: KhTr_min       !< Minimum along-isopycnal tracer diffusivity in m2/s.
-  real    :: KhTr_max       !< Maximum along-isopycnal tracer diffusivity in m2/s.
+  real    :: KhTr_min       !< Minimum along-isopycnal tracer diffusivity [m2 s-1].
+  real    :: KhTr_max       !< Maximum along-isopycnal tracer diffusivity [m2 s-1].
   real    :: KhTr_passivity_coeff !< Passivity coefficient that scales Rd/dx (default = 0)
                                   !! where passivity is the ratio between along-isopycnal
-                                  !! tracer mixing and thickness mixing
-  real    :: KhTr_passivity_min   !< Passivity minimum (default = 1/2)
+                                  !! tracer mixing and thickness mixing [nondim]
+  real    :: KhTr_passivity_min   !< Passivity minimum (default = 1/2) [nondim]
   real    :: ML_KhTR_scale        !< With Diffuse_ML_interior, the ratio of the
                                   !! truly horizontal diffusivity in the mixed
-                                  !! layer to the epipycnal diffusivity.  Nondim.
+                                  !! layer to the epipycnal diffusivity [nondim].
   real    :: max_diff_CFL         !< If positive, locally limit the along-isopycnal
                                   !! tracer diffusivity to keep the diffusive CFL
-                                  !! locally at or below this value. Nondim.
+                                  !! locally at or below this value [nondim].
   logical :: Diffuse_ML_interior  !< If true, diffuse along isopycnals between
                                   !! the mixed layer and the interior.
   logical :: check_diffusive_CFL  !< If true, automatically iterate the diffusion
@@ -98,7 +98,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
-  real,                       intent(in)    :: dt      !< time step (seconds)
+  real,                       intent(in)    :: dt      !< time step [s]
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
   type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure

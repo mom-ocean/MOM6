@@ -27,13 +27,13 @@ public USER_init_ice_thickness
 
 !> The control structure for the user_ice_shelf module
 type, public :: user_ice_shelf_CS ; private
-  real :: Rho_ocean  !< The ocean's typical density, in kg m-2 Z-1.
+  real :: Rho_ocean  !< The ocean's typical density [kg m-2 Z-1].
   real :: max_draft  !< The maximum ocean draft of the ice shelf [Z ~> m].
   real :: min_draft  !< The minimum ocean draft of the ice shelf [Z ~> m].
-  real :: flat_shelf_width !< The range over which the shelf is min_draft thick.
-  real :: shelf_slope_scale !< The range over which the shelf slopes.
-  real :: pos_shelf_edge_0 !< The x-position of the shelf edge at time 0, in km.
-  real :: shelf_speed  !< The ice shelf speed of translation, in km day-1
+  real :: flat_shelf_width !< The range over which the shelf is min_draft thick [km].
+  real :: shelf_slope_scale !< The range over which the shelf slopes [km].
+  real :: pos_shelf_edge_0 !< The x-position of the shelf edge at time 0 [km].
+  real :: shelf_speed  !< The ice shelf speed of translation [km day-1]
   logical :: first_call = .true. !< If true, this module has not been called before.
 end type user_ice_shelf_CS
 
@@ -45,11 +45,11 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: mass_shelf !< The ice shelf mass per unit area averaged
-                                                  !! over the full ocean cell, in kg m-2.
+                                                  !! over the full ocean cell [kg m-2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: h_shelf !< The ice shelf thickness, in m.
+                           intent(out) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
+                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: hmask !< A mask indicating which tracer points are
                                                 !! partly or fully covered by an ice-shelf
@@ -59,19 +59,10 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   logical,                 intent(in)  :: new_sim  !< If true, this is a new run; otherwise it is
                                                    !! being started from a restart file.
 
-! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
-!                         cell, in kg m-2. (Intent out)
-!  (out)     area_shelf_h - The area of the ocean cell that is covered by the
-!                           rigid ice shelf, in m2.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-
 ! This subroutine sets up the initial mass and area covered by the ice shelf.
   real :: Rho_ocean  ! The ocean's typical density [kg m-3].
-  real :: max_draft  ! The maximum ocean draft of the ice shelf, in m.
-  real :: min_draft  ! The minimum ocean draft of the ice shelf, in m.
+  real :: max_draft  ! The maximum ocean draft of the ice shelf [Z ~> m].
+  real :: min_draft  ! The minimum ocean draft of the ice shelf [Z ~> m].
   real :: flat_shelf_width ! The range over which the shelf is min_draft thick.
   real :: c1 ! The maximum depths in m.
   character(len=40) :: mdl = "USER_initialize_shelf_mass" ! This subroutine's name.
@@ -112,9 +103,9 @@ end subroutine USER_initialize_shelf_mass
 subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, param_file)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: h_shelf !< The ice shelf thickness, in m.
+                           intent(out) :: h_shelf !< The ice shelf thickness [m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
+                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: hmask !< A mask indicating which tracer points are
                                                 !! partly or fully covered by an ice-shelf
@@ -135,9 +126,9 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: mass_shelf !< The ice shelf mass per unit area averaged
-                                                  !! over the full ocean cell, in kg m-2.
+                                                  !! over the full ocean cell [kg m-2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf, in m2.
+                           intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -147,13 +138,6 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   type(time_type),         intent(in)    :: Time !< The current model time
   logical,                 intent(in)    :: new_sim !< If true, this the start of a new run.
 
-! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
-!                         cell, in kg m-2. (Intent out)
-!  (out)     area_shelf_h - The area of the ocean cell that is covered by the
-!                           rigid ice shelf, in m2.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
 
   real :: c1, edge_pos, slope_pos
   integer :: i, j

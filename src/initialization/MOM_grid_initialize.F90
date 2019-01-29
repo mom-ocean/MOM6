@@ -37,7 +37,7 @@ type, public :: GPS ; private
                    !! starting value for the x-axis.
   real :: south_lat  !< The southern latitude of the domain or the equivalent
                    !! starting value for the y-axis.
-  real :: Rad_Earth !< The radius of the Earth, in m.
+  real :: Rad_Earth !< The radius of the Earth [m].
   real :: Lat_enhance_factor  !< The amount by which the meridional resolution
                    !! is enhanced within LAT_EQ_ENHANCE of the equator.
   real :: Lat_eq_enhance !< The latitude range to the north and south of the equator

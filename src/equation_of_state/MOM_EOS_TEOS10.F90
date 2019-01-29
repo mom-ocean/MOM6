@@ -172,7 +172,7 @@ subroutine calculate_density_derivs_array_teos10(T, S, pressure, drho_dT, drho_d
   real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with conservative
                                                  !! temperature [kg m-3 degC-1].
   real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with absolute salinity,
-                                                 !! in kg m-3 (g/kg)-1.
+                                                 !! [kg m-3 (g/kg)-1].
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
@@ -203,7 +203,7 @@ subroutine calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_
   real,    intent(out) :: drho_dT  !< The partial derivative of density with conservative
                                    !! temperature [kg m-3 degC-1].
   real,    intent(out) :: drho_dS  !< The partial derivative of density with absolute salinity,
-                                   !! in kg m-3 (g/kg)-1.
+                                   !! [kg m-3 (g/kg)-1].
 
   ! Local variables
   real :: zs, zt, zp

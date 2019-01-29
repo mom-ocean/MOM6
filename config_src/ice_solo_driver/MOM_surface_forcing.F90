@@ -505,7 +505,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
                                   ! be reset, depending on the time.
   character(len=200) :: filename  ! The name of the input file.
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
-  real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points, in Pa.
+  real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points [Pa].
   integer :: days, seconds
 
   call callTree_enter("wind_forcing_from_file, MOM_surface_forcing.F90")

@@ -106,8 +106,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
-                                                   !! (or NULL).
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
                                                    !! (not layer!) [Z2 s-1 ~> m2 s-1].  Initially this is the
@@ -115,7 +114,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                                    !! accelerate the iteration toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
-                                                   !! each interface (not layer!) in m2 s-2.
+                                                   !! each interface (not layer!) [m2 s-2].
                                                    !! Initially this is the value from the previous
                                                    !! timestep, which may accelerate the iteration
                                                    !! toward convergence.
@@ -391,20 +390,20 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: T_in   !< Layer potential temperatures in degC
+                           intent(in)    :: T_in   !< Layer potential temperatures [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: S_in   !< Layer salinities in ppt.
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa]
                                                    !! (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: kappa_io !< The diapycnal diffusivity at each interface
                                                    !! (not layer!) [Z2 s-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
-                                                   !! each interface (not layer!) in m2 s-2.
+                                                   !! each interface (not layer!) [m2 s-2].
                                                    !! Initially this is the value from the previous
                                                    !! timestep, which may accelerate the iteration
                                                    !! toward convergence.
@@ -773,7 +772,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     T_int, &    ! The temperature interpolated to an interface [degC].
     Sal_int, &  ! The salinity interpolated to an interface [PSU].
     dbuoy_dT, & ! The partial derivatives of buoyancy with changes in temperature
-    dbuoy_dS, & ! and salinity, [Z s-2 K-1 ~> m s-2 K-1] and [Z s-2 psu-1 ~> m s-2 psu-1].
+    dbuoy_dS, & ! and salinity, [Z s-2 degC-1 ~> m s-2 degC-1] and [Z s-2 psu-1 ~> m s-2 psu-1].
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
                    ! distance to the top and bottom boundaries [Z-2 ~> m-2].
     K_Q, &         ! Diffusivity divided by TKE [Z2 m-2 s ~> s].
@@ -790,7 +789,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: b1            ! The inverse of the pivot in the tridiagonal equations.
   real :: bd1           ! A term in the denominator of b1.
   real :: d1            ! 1 - c1 in the tridiagonal equations.
-  real :: gR0           ! Rho_0 times g in kg m-2 s-2.
+  real :: gR0           ! Rho_0 times g [kg m-2 s-2].
   real :: g_R0          ! g_R0 is g/Rho [Z m3 kg-1 s-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.

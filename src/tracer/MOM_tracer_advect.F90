@@ -58,7 +58,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face [H m2 ~> m3 or kg]
   type(ocean_OBC_type),    pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                    intent(in)    :: dt    !< time increment (seconds)
+  real,                    intent(in)    :: dt    !< time increment [s]
   type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
   type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
@@ -368,7 +368,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, m, n, i_up, stencil

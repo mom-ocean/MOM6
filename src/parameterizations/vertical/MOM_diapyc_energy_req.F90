@@ -195,7 +195,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     h_tr        ! h_tr is h at tracer points with a h_neglect added to
                 ! ensure positive definiteness [H ~> m or kg m-2].
   real, dimension(GV%ke+1) :: &
-    pres, &     ! Interface pressures in Pa.
+    pres, &     ! Interface pressures [Pa].
     pres_Z, &   ! Interface pressures with a rescaling factor to convert interface height
                 ! movements into changes in column potential energy [J m-2 Z-1 ~> J m-3].
     z_Int, &    ! Interface heights relative to the surface [H ~> m or kg m-2].

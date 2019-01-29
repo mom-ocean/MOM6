@@ -404,7 +404,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
   real, dimension(SZI_(G)) :: depth        !< distance from surface of an interface [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [Z ~> m]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [Z-1 ~> m-1]
-  real :: I_2Omega   !< 1/(2 Omega) (sec)
+  real :: I_2Omega   !< 1/(2 Omega) [s]
   real :: N_2Omega
   real :: N02_N2
   real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
