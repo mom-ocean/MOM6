@@ -157,11 +157,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   real, dimension(SZI_(G),SZK_(G)) :: &
     h_2d, &     !   A 2-d version of h [H ~> m or kg m-2].
     T_2d, &     !   A 2-d version of tv%T [degC].
-    S_2d, &     !   A 2-d version of tv%S [PSU].
+    S_2d, &     !   A 2-d version of tv%S [ppt].
     Rcv, &      !   A 2-d version of the coordinate density [kg m-3].
     h_2d_init, &  ! The initial value of h_2d [H ~> m or kg m-2].
     T_2d_init, &  ! THe initial value of T_2d [degC].
-    S_2d_init, &  ! The initial value of S_2d [PSU].
+    S_2d_init, &  ! The initial value of S_2d [ppt].
     d_eb, &     !   The downward increase across a layer in the entrainment from
                 ! below [H ~> m or kg m-2].  The sign convention is that positive values of
                 ! d_eb correspond to a gain in mass by a layer by upward motion.

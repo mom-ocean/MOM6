@@ -38,7 +38,7 @@ type, public :: dumbbell_surface_forcing_CS ; private
     forcing_mask             !< A mask regulating where forcing occurs
   real, dimension(:,:), allocatable :: &
     S_restore                !< The surface salinity field toward which to
-                             !! restore [PSU].
+                             !! restore [ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
@@ -60,7 +60,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                                                          !! call to dumbbell_surface_forcing_init
   ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [PSU].
+  real :: Salin_restore  ! The salinity that is being restored toward [ppt].
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].

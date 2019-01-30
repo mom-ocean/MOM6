@@ -74,7 +74,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbc
   type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer       :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                           !! or atmosphere-ocean interface in Pa.
+                                                           !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
                                                            !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -110,7 +110,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
   type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                           !! or atmosphere-ocean interface in Pa.
+                                                           !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
                                                            !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -118,12 +118,12 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                                                            !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
                                                            !! contributions or compressibility compensation.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [PSU].
+                ! than the mixed layer have the mixed layer's properties [ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     S_t, &      ! Top and bottom edge values for linear reconstructions
     S_b, &      ! of salinity within each layer [ppt].
@@ -491,7 +491,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [PSU].
+                ! than the mixed layer have the mixed layer's properties [ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
                        ! of salinity and temperature within each layer.

@@ -872,11 +872,11 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   type(thermo_var_ptrs),    intent(in)  :: tv   !< Structure containing pointers to any available
                                                 !! thermodynamic fields.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)  :: T_f  !< layer temp in C with the values in massless layers
-                                                !! filled vertically by diffusion.
+                            intent(in)  :: T_f  !< layer temperature with the values in massless layers
+                                                !! filled vertically by diffusion [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)  :: S_f  !< Layer salinities in PPT with values in massless
-                                                !! layers filled vertically by diffusion.
+                            intent(in)  :: S_f  !< Layer salinities with values in massless
+                                                !! layers filled vertically by diffusion [ppt].
   type(forcing),            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   integer,                  intent(in)  :: j    !< j-index of row to work on
   type(set_diffusivity_CS), pointer     :: CS   !< Diffusivity control structure
@@ -1047,11 +1047,11 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)  :: T_f !< layer temp in C with the values in massless layers
-                                               !! filled vertically by diffusion.
+                            intent(in)  :: T_f !< layer temperatures with the values in massless layers
+                                               !! filled vertically by diffusion [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)  :: S_f !< Layer salinities in PPT with values in massless
-                                               !! layers filled vertically by diffusion.
+                            intent(in)  :: S_f !< Layer salinities with values in massless
+                                               !! layers filled vertically by diffusion [ppt].
   integer,                  intent(in)  :: j   !< Meridional index upon which to work.
   type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
   real, dimension(SZI_(G),SZK_(G)+1),       &

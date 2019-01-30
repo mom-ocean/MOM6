@@ -51,7 +51,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature [degC], with the values in
                   ! in massless layers filled vertically by diffusion.
-    S, &          ! The filled salinity [PSU], with the values in
+    S, &          ! The filled salinity [ppt], with the values in
                   ! in massless layers filled vertically by diffusion.
     Rho           ! Density itself, when a nonlinear equation of state is not in use [kg m-3].
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &

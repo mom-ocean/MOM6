@@ -97,8 +97,8 @@ type, public :: EOS_type ; private
 ! The following parameters are use with the linear expression for the freezing
 ! point only.
   real :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC].
-  real :: dTFr_dS   !< The derivative of freezing point with salinity [deg C ppt-1].
-  real :: dTFr_dp   !< The derivative of freezing point with pressure [deg C Pa-1].
+  real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1].
+  real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1].
 
 !  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
@@ -596,7 +596,7 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                             !! the y grid spacing [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP  !< The pressure at the bathymetry in Pa
+              optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [Pa]
   real,       optional, intent(in)  :: dP_tiny !< A miniscule pressure change with
                                                !! the same units as p_t (Pa?)
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
@@ -1956,7 +1956,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                             !! the layer divided by the y grid spacing [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP !< The pressure at the bathymetry in Pa
+              optional, intent(in)  :: bathyP !< The pressure at the bathymetry [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
                                              !! the same units as p_t (Pa?)
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
@@ -2135,7 +2135,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real,                 intent(in)  :: dP_neglect !< A miniscule pressure change with
                                              !! the same units as p_t (Pa?)
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: bathyP !< The pressure at the bathymetry in Pa
+                        intent(in)  :: bathyP !< The pressure at the bathymetry [Pa]
   type(EOS_type),       pointer     :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza !< The change in the geopotential anomaly

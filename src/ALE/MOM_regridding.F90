@@ -1453,7 +1453,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
-  real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
+  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [Pa]
   integer   :: i, j, k, nki
   real :: depth
   real :: h_neglect, h_neglect_edge
@@ -1586,7 +1586,7 @@ subroutine build_grid_SLight(G, GV, h, tv, dzInterface, CS)
   real, dimension(SZK_(GV)+1) :: z_col   ! Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: z_col_new ! Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col [H ~> m or kg m-2]
-  real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
+  real, dimension(SZK_(GV))   :: p_col   ! Layer center pressure [Pa]
   real :: depth
   integer :: i, j, k, nz
   real :: h_neglect, h_neglect_edge
