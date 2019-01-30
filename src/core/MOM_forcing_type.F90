@@ -1314,7 +1314,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Integrated')
 
   ! seaice_melt field requires updates to the sea ice model
-  handles%id_total_icemelt = register_scalar_field('ocean_model', 'total_icemelt', Time, diag, &
+  handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_icemelt', Time, diag, &
       long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg s-1',                      &
       standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
       cmor_field_name='total_fsitherm',                                                                &
@@ -1456,9 +1456,9 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
         diag%axesT1,Time,'Surface ocean heat flux from SW+LW+latent+sensible+seaice_melt_heat (via the coupler)',&
         'W m-2')
 
-  handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface',diag%axesT1,  &
-        Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore+seaice_melt_heat', &
-        'or flux adjustments', 'W m-2',&
+  handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface',diag%axesT1, Time,  &
+        'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore+seaice_melt_heat or flux adjustments',&
+        'W m-2',&
         standard_name='surface_downward_heat_flux_in_sea_water', cmor_field_name='hfds',            &
         cmor_standard_name='surface_downward_heat_flux_in_sea_water',           &
         cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+masstransfer+frazil+seaice_melt_heat')
@@ -1692,7 +1692,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
       'net_heat_surface_ga', Time, diag,                                                      &
-      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+seaice_melt_heat', &
+      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+seaice_melt_heat'&
       ' or flux adjustments',                                                                 &
       units='W m-2',                                                                          &
       cmor_field_name='ave_hfds',                                                             &
