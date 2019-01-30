@@ -209,8 +209,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer selecting the equation of state.
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! in Pa.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa].
   ! Local variables
   real :: T_ref   ! Reference temperature
   real :: S_ref   ! Reference salinity
@@ -261,8 +260,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects equation of state.
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! in Pa.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa].
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
   real :: g_fs    ! Reduced gravity across the free surface [m s-2].
@@ -310,11 +308,12 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects equation of state
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! in Pa.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa]
+
+  ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
-  real :: S_Ref, S_Light, S_Dense ! Salinity range parameters in PSU.
-  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters in dec C.
+  real :: S_Ref, S_Light, S_Dense ! Salinity range parameters [ppt].
+  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters [decC].
   real :: res_rat ! The ratio of density space resolution in the denser part
                   ! of the range to that in the lighter part of the range.
                   ! Setting this greater than 1 increases the resolution for

@@ -2103,7 +2103,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   !          lon (degrees_E), lat (degrees_N), depth(meters)
   ! variables:
   !          ptemp(lon,lat,depth) : degC, potential temperature
-  !          salt (lon,lat,depth) : PSU, salinity
+  !          salt (lon,lat,depth) : ppt, salinity
   !
   ! The first record will be read if there are multiple time levels.
   ! The observation grid MUST tile the model grid. If the model grid extends

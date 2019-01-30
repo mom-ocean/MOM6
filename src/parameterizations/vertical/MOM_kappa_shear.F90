@@ -140,12 +140,12 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing [degC].
-    Sal, &      ! The salinity after a timestep of mixing [PSU].
+    Sal, &      ! The salinity after a timestep of mixing [ppt].
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [Z m s-1 ~> m2 s-1].
     v0xdz, &    ! The initial meridional velocity times dz [Z m s-1 ~> m2 s-1].
     T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
-    S0xdz       ! The initial salinity times dz [PSU Z ~> PSU m].
+    S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 s-1 ~> m2 s-1].
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
@@ -431,12 +431,12 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing [degC].
-    Sal, &      ! The salinity after a timestep of mixing [PSU].
+    Sal, &      ! The salinity after a timestep of mixing [ppt].
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [m Z s-1 ~> m2 s-1].
     v0xdz, &    ! The initial meridional velocity times dz [m Z s-1 ~> m2 s-1].
     T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
-    S0xdz       ! The initial salinity times dz [PSU Z ~> PSU m].
+    S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 s-1 ~> m2 s-1].
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
@@ -730,7 +730,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real, dimension(SZK_(GV)), &
                      intent(in)    :: T0xdz !< The initial temperature times dz [degC Z ~> degC m].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: S0xdz !< The initial salinity times dz [PSU Z ~> PSU m].
+                     intent(in)    :: S0xdz !< The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1), &
                      intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
@@ -747,7 +747,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing [degC].
-    Sal, &      ! The salinity after a timestep of mixing [PSU].
+    Sal, &      ! The salinity after a timestep of mixing [ppt].
     u_test, v_test, T_test, S_test
 
   real, dimension(nzc+1) :: &
@@ -770,9 +770,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     kappa_pred, & ! The value of kappa from a predictor step [Z2 s-1 ~> m2 s-1].
     pressure, & ! The pressure at an interface [Pa].
     T_int, &    ! The temperature interpolated to an interface [degC].
-    Sal_int, &  ! The salinity interpolated to an interface [PSU].
+    Sal_int, &  ! The salinity interpolated to an interface [ppt].
     dbuoy_dT, & ! The partial derivatives of buoyancy with changes in temperature
-    dbuoy_dS, & ! and salinity, [Z s-2 degC-1 ~> m s-2 degC-1] and [Z s-2 psu-1 ~> m s-2 psu-1].
+    dbuoy_dS, & ! and salinity, [Z s-2 degC-1 ~> m s-2 degC-1] and [Z s-2 ppt-1 ~> m s-2 ppt-1].
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
                    ! distance to the top and bottom boundaries [Z-2 ~> m-2].
     K_Q, &         ! Diffusivity divided by TKE [Z2 m-2 s ~> s].
@@ -1237,19 +1237,19 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [m s-1].
   real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [m s-1].
   real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
-  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [PSU].
+  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [ppt].
   real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers [Z ~> m].
   real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
                                               !! temperature [Z s-2 degC-1 ~> m s-2 degC-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
-                                              !! salinity [Z s-2 PSU-1 ~> m s-2 PSU-1].
+                                              !! salinity [Z s-2 ppt-1 ~> m s-2 ppt-1].
   real,                  intent(in)    :: dt  !< The time step [s].
   real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
   real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
   real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
-  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [PSU].
+  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [ppt].
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), optional, &

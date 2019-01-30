@@ -59,7 +59,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:), &
                  optional, pointer     :: p_atm !< The pressure at the ice-ocean or
-                                               !! atmosphere-ocean interface in Pa.
+                                               !! atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out) :: pbce !< The baroclinic pressure anomaly in each layer
                                                !! due to eta anomalies [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].

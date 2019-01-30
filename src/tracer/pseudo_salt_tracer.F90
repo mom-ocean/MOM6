@@ -40,9 +40,9 @@ type, public :: pseudo_salt_tracer_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
   real, pointer :: ps(:,:,:) => NULL()   !< The array of pseudo-salt tracer used in this
-                                         !! subroutine, in psu
+                                         !! subroutine [ppt}
   real, pointer :: diff(:,:,:) => NULL() !< The difference between the pseudo-salt
-                                         !! tracer and the real salt [PSU].
+                                         !! tracer and the real salt [ppt].
   logical :: pseudo_salt_may_reinit = .true. !< Hard coding since this should not matter
 
   integer :: id_psd = -1   !< A diagnostic ID

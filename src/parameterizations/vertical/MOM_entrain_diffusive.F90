@@ -179,7 +179,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
-                     ! evaluate dRho_dT and dRho_dS [degC] and [PSU].
+                     ! evaluate dRho_dT and dRho_dS [degC] and [ppt].
     dRho_dT, dRho_dS ! The partial derivatives of potential density with
                      ! temperature and salinity, [kg m-3 degC-1] and [kg m-3 ppt-1].
 

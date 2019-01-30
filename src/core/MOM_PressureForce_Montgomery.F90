@@ -388,7 +388,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [PSU].
+                ! than the mixed layer have the mixed layer's properties [ppt].
 
   real :: Rho_cv_BL(SZI_(G)) !   The coordinate potential density in
                 ! the deepest variable density near-surface layer [kg m-3].

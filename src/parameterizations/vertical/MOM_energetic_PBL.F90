@@ -236,7 +236,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: dS_expected !< The values of salinity change that
                                                    !! should be expected when the returned
-                                                   !! diffusivities are applied [PSU].
+                                                   !! diffusivities are applied [ppt].
   type(wave_parameters_CS), &
                  optional, pointer       :: Waves  !< Wave CS
 
@@ -266,7 +266,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h, &            !   The layer thickness [H ~> m or kg m-2].
     T, &            !   The layer temperatures [degC].
-    S, &            !   The layer salinities [PSU].
+    S, &            !   The layer salinities [ppt].
     u, &            !   The zonal velocity [m s-1].
     v               !   The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
