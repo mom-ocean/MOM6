@@ -1561,9 +1561,9 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       units='W')
 
   handles%id_total_heat_content_icemelt = register_scalar_field('ocean_model',     &
-      'total_heat_content_icemelt', Time, diag,                                    &
-      long_name='Area integrated heat content (relative to 0C) of water flux due sea ice '&
-      'melting/freezing', units='W')
+      'total_heat_content_icemelt', Time, diag,long_name=                          &
+      'Area integrated heat content (relative to 0C) of water flux due sea ice melting/freezing', &
+      units='W')
 
   handles%id_total_heat_content_vprec = register_scalar_field('ocean_model',      &
       'total_heat_content_vprec', Time, diag,                                     &
@@ -1691,9 +1691,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       units='W m-2')
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
-      'net_heat_surface_ga', Time, diag,                                                      &
-      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+seaice_melt_heat'&
-      ' or flux adjustments',                                                                 &
+      'net_heat_surface_ga', Time, diag, long_name=                                                     &
+      'Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+seaice_melt_heat or flux adjustments' &
       units='W m-2',                                                                          &
       cmor_field_name='ave_hfds',                                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_averaged',             &
