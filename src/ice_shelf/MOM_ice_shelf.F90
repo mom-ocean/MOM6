@@ -213,7 +213,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     dR0_dT, &  !< Partial derivative of the mixed layer density
                !< with temperature [kg m-3 degC-1].
     dR0_dS, &  !< Partial derivative of the mixed layer density
-               !< with salinity [kg m-3 PSU-1].
+               !< with salinity [kg m-3 ppt-1].
     p_int      !< The pressure at the ice-ocean interface [Pa].
 
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
@@ -237,17 +237,17 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   ! 3 equations formulation variables
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
-    Sbdry     !< Salinities in the ocean at the interface with the ice shelf [PSU].
+    Sbdry     !< Salinities in the ocean at the interface with the ice shelf [ppt].
   real :: Sbdry_it
   real :: Sbdry1, Sbdry2, S_a, S_b, S_c  ! use to find salt roots
-  real :: dS_it    !< The interface salinity change during an iteration [PSU].
+  real :: dS_it    !< The interface salinity change during an iteration [ppt].
   real :: hBL_neut !< The neutral boundary layer thickness [m].
   real :: hBL_neut_h_molec !< The ratio of the neutral boundary layer thickness
                    !! to the molecular boundary layer thickness [nondim].
   !### THESE ARE CURRENTLY POSITIVE UPWARD.
   real :: wT_flux !< The vertical flux of heat just inside the ocean [degC m s-1].
   real :: wB_flux !< The vertical flux of heat just inside the ocean [m2 s-3].
-  real :: dB_dS   !< The derivative of buoyancy with salinity [m s-2 PSU-1].
+  real :: dB_dS   !< The derivative of buoyancy with salinity [m s-2 ppt-1].
   real :: dB_dT   !< The derivative of buoyancy with temperature [m s-2 degC-1].
   real :: I_n_star, n_star_term, absf
   real :: dIns_dwB !< The partial derivative of I_n_star with wB_flux, in ???.

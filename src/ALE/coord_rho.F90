@@ -46,7 +46,7 @@ contains
 subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in the grid
-  real,                 intent(in) :: ref_pressure !< Nominal density of interfaces in Pa
+  real,                 intent(in) :: ref_pressure !< Coordinate reference pressure [Pa]
   real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 

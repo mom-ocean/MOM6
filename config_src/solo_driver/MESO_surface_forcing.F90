@@ -137,7 +137,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = CS%PmE(i,j) * CS%Rho0 * G%mask2dT(i,j)
@@ -145,7 +145,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      !   Heat fluxes are in units of W m-2 and are positive into the ocean.
+      !   Heat fluxes are in units of [W m-2] and are positive into the ocean.
       fluxes%lw(i,j)                 = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j)             = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j)               = CS%Heat(i,j) * G%mask2dT(i,j)
@@ -169,8 +169,8 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in C) and
-        ! salinity (in PSU) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
+        ! salinity (in ppt or PSU) that are being restored toward.
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)

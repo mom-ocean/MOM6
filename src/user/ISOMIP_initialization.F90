@@ -473,10 +473,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
                  do_not_log=.true.)
 
   call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, &
-                 'Surface salinity in sponge layer.', default=s_ref) ! units="PSU")
+                 'Surface salinity in sponge layer.', default=s_ref) ! units="ppt")
 
   call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, &
-                 'Bottom salinity in sponge layer.', default=s_ref) ! units="PSU")
+                 'Bottom salinity in sponge layer.', default=s_ref) ! units="ppt")
 
   call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, &
                  'Surface temperature in sponge layer.', default=t_ref) ! units="degC")
