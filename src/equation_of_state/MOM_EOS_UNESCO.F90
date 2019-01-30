@@ -17,15 +17,15 @@ public calculate_density_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
-!! a reference density, from salinity (in psu), potential temperature (in deg C), and pressure in Pa,
+!! a reference density, from salinity [PSU], potential temperature [degC], and pressure [Pa],
 !! using the UNESCO (1981) equation of state.
 interface calculate_density_UNESCO
   module procedure calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 end interface calculate_density_UNESCO
 
 !> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
-!! to a reference specific volume, from salinity (in psu), potential temperature (in deg C), and
-!! pressure in Pa, using the UNESCO (1981) equation of state.
+!! to a reference specific volume, from salinity [PSU], potential temperature [degC], and
+!! pressure [Pa], using the UNESCO (1981) equation of state.
 interface calculate_spec_vol_UNESCO
   module procedure calculate_spec_vol_scalar_UNESCO, calculate_spec_vol_array_UNESCO
 end interface calculate_spec_vol_UNESCO
@@ -55,7 +55,7 @@ contains
 
 !> This subroutine computes the in situ density of sea water (rho in
 !! [kg m-3]) from salinity (S [PSU]), potential temperature
-!! (T [degC]), and pressure in Pa, using the UNESCO (1981) equation of state.
+!! (T [degC]), and pressure [Pa], using the UNESCO (1981) equation of state.
 subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC].
   real,           intent(in)  :: S        !< Salinity [PSU].
@@ -78,7 +78,7 @@ end subroutine calculate_density_scalar_UNESCO
 
 !> This subroutine computes the in situ density of sea water (rho in
 !! [kg m-3]) from salinity (S [PSU]), potential temperature
-!! (T [degC]), and pressure in Pa, using the UNESCO (1981) equation of state.
+!! (T [degC]), and pressure [Pa], using the UNESCO (1981) equation of state.
 subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface [degC].
   real, dimension(:), intent(in)  :: S        !< salinity [PSU].
@@ -132,7 +132,7 @@ end subroutine calculate_density_array_UNESCO
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
 !! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
-!! and pressure in Pa, using the UNESCO (1981) equation of state.
+!! and pressure [Pa], using the UNESCO (1981) equation of state.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
   real,           intent(in)  :: T        !< potential temperature relative to the surface
@@ -153,7 +153,7 @@ end subroutine calculate_spec_vol_scalar_UNESCO
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
 !! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
-!! and pressure in Pa, using the UNESCO (1981) equation of state.
+!! and pressure [Pa], using the UNESCO (1981) equation of state.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts, spv_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface

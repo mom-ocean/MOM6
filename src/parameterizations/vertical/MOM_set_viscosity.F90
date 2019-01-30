@@ -157,7 +157,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     T_vel, &    ! Arithmetic mean of the layer temperatures adjacent to a
                 ! velocity point [degC].
     S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
-                ! velocity point [PSU].
+                ! velocity point [ppt].
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
                 ! to a velocity point [kg m-3].
 
@@ -189,7 +189,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: hutot            ! Running sum of thicknesses times the
                            ! velocity magnitudes [H m s-1 ~> m2 s-1 or kg m-1 s-1].
   real :: Thtot            ! Running sum of thickness times temperature [degC H ~> degC m or degC kg m-2].
-  real :: Shtot            ! Running sum of thickness times salinity [PSU H ~> PSU m or PSU kg m-2].
+  real :: Shtot            ! Running sum of thickness times salinity [ppt H ~> ppt m or ppt kg m-2].
   real :: hweight          ! The thickness of a layer that is within Hbbl
                            ! of the bottom [H ~> m or kg m-2].
   real :: v_at_u, u_at_v   ! v at a u point or vice versa [m s-1].
@@ -1024,7 +1024,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     Thtot, &    !   The integrated temperature of layers that are within the
                 ! surface mixed layer [H degC ~> m degC or kg degC m-2].
     Shtot, &    !   The integrated salt of layers that are within the
-                ! surface mixed layer [H PSU ~> m PSU or kg PSU m-2].
+                ! surface mixed layer [H ppt ~> m ppt or kg ppt m-2].
     Rhtot, &    !   The integrated density of layers that are within the surface mixed layer
                 ! [H kg m-3 ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
                 ! equation of state is used.
@@ -1034,11 +1034,11 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     dR_dT, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with temperature [kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
-                ! (roughly the base of the mixed layer) with salinity [kg m-3 psu-1].
+                ! (roughly the base of the mixed layer) with salinity [kg m-3 ppt-1].
     ustar, &    !   The surface friction velocity under ice shelves [Z s-1 ~> m s-1].
     press, &    ! The pressure at which dR_dT and dR_dS are evaluated [Pa].
     T_EOS, &    ! The potential temperature at which dR_dT and dR_dS are evaluated [degC]
-    S_EOS       ! The salinity at which dR_dT and dR_dS are evaluated [PSU].
+    S_EOS       ! The salinity at which dR_dT and dR_dS are evaluated [ppt].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     mask_u      ! A mask that disables any contributions from u points that
                 ! are land or past open boundary conditions [nondim], 0 or 1.
@@ -1067,7 +1067,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: hlay      ! The layer thickness at velocity points [H ~> m or kg m-2].
   real :: I_2hlay   ! 1 / 2*hlay [H-1 ~> m-1 or m2 kg-1].
   real :: T_lay     ! The layer temperature at velocity points [degC].
-  real :: S_lay     ! The layer salinity at velocity points [PSU].
+  real :: S_lay     ! The layer salinity at velocity points [ppt].
   real :: Rlay      ! The layer potential density at velocity points [kg m-3].
   real :: Rlb       ! The potential density of the layer below [kg m-3].
   real :: v_at_u    ! The meridonal velocity at a zonal velocity point [m s-1].

@@ -159,7 +159,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
              !! the units of eta to m; by default this is US%Z_to_m.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
-    p     ! The pressure in Pa.
+    p     ! The pressure at interfaces [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     dz_geo     ! The change in geopotential height across a layer [m2 s-2].
   real :: htot(SZI_(G))  ! The sum of all layers' thicknesses [H ~> m or kg m-2].

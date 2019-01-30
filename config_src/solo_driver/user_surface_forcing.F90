@@ -45,9 +45,9 @@ end type user_surface_forcing_CS
 
 contains
 
-!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
+!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy, in [Pa].
 !! These are the stresses in the direction of the model grid (i.e. the same
-!! direction as the u- and v- velocities.)  They are both in Pa.
+!! direction as the u- and v- velocities).
 subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
@@ -168,7 +168,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -200,8 +200,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in C) and
-        ! salinity (in PSU) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
+        ! salinity (in PSU or ppt) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 

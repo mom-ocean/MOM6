@@ -61,7 +61,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                                                       !! BFB_surface_forcing_init.
   ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [PSU].
+  real :: Salin_restore  ! The salinity that is being restored toward [ppt].
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
@@ -127,8 +127,8 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in C) and
-        ! salinity (in PSU) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
+        ! salinity (in ppt) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 

@@ -91,9 +91,9 @@ end type user_surface_forcing_CS
 
 contains
 
-!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
+!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy, in [Pa].
 !! These are the stresses in the direction of the model grid (i.e. the same
-!! direction as the u- and v- velocities.)  They are both in Pa.
+!! direction as the u- and v- velocities).
 subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
@@ -104,11 +104,9 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
                                                        !! by a previous call to user_surface_forcing_init
 
-!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
-! These are the stresses in the direction of the model grid (i.e. the same
-! direction as the u- and v- velocities.)  They are both in Pa.
-!   In addition, this subroutine can be used to set the surface friction
-! velocity, forces%ustar [Z s-1 ~> m s-1]. This is needed with a bulk mixed layer.
+!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy [Pa].
+! In addition, this subroutine can be used to set the surface friction velocity,
+! forces%ustar [Z s-1 ~> m s-1], which is needed with a bulk mixed layer.
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -220,7 +218,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -228,7 +226,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      !   Heat fluxes are in units of W m-2 and are positive into the ocean.
+      !   Heat fluxes are in units of [W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
@@ -252,8 +250,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in C) and
-        ! salinity (in PSU) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
+        ! salinity (in ppt or PSU) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 

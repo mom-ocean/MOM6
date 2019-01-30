@@ -737,7 +737,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   if (GV%Boussinesq) then
     mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
   else
-    ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
+    ! net_salt_input needs to be converted from ppt m s-1 to kg m-2 s-1.
     mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
     if (CS%use_temperature) &
       salin_mass_in = 0.001*EFP_to_real(CS%net_salt_in_EFP)

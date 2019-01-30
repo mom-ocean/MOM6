@@ -109,7 +109,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [m s-2]
   type(PressureForce_blk_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                           !! or atmosphere-ocean interface in Pa.
+                                                           !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
                                                            !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -122,7 +122,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [PSU].
+                ! than the mixed layer have the mixed layer's properties [ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [m2 s-2].
@@ -434,7 +434,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   type(PressureForce_blk_AFV_CS),            pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
-                                                         !! or atmosphere-ocean interface in Pa.
+                                                         !! or atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
                                                          !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
@@ -472,7 +472,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [PSU].
+                ! than the mixed layer have the mixed layer's properties [ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     S_t, S_b, & ! Top and bottom edge salinities for linear reconstructions within each layer [ppt].
     T_t, T_b    ! Top and bottom edge temperatures for linear reconstructions within each layer [degC].
