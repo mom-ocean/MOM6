@@ -58,14 +58,14 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
   real    :: displ(SZK_(G)+1)   ! The interface displacement in depth units.
-  real    :: z_unif(SZK_(G)+1)  ! Fractional uniform interface heights, nondim.
+  real    :: z_unif(SZK_(G)+1)  ! Fractional uniform interface heights [nondim].
   real    :: z_inter(SZK_(G)+1) ! Interface heights, in depth units.
   real    :: a0                 ! The displacement amplitude in depth units.
   real    :: weight_z           ! A (misused?) depth-space weighting, in inconsistent units.
@@ -180,9 +180,9 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                                                       eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC).
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt).
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H (m or Pa).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC].
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt].
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2].
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
