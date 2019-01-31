@@ -24,6 +24,11 @@ public Phillips_initialize_velocity
 public Phillips_initialize_sponges
 public Phillips_initialize_topography
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -35,18 +40,20 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h          !< The thickness that is being initialized, in H.
+                           intent(out) :: h          !< The thickness that is being initialized [H ~> m or kg m-2]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
                                                      !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces, in depth units (Z).
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in depth units (Z).
-  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface
-                            ! positive upward, in in depth units (Z).
-  real :: damp_rate, jet_width, jet_height, y_2
-  real :: half_strat, half_depth
+  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces [Z ~> m]
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m]
+  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface, positive upward [Z ~> m]
+  real :: jet_width         ! The width of the zonal-mean jet [km]
+  real :: jet_height        ! The interface height scale associated with the zonal-mean jet [Z ~> m]
+  real :: y_2
+  real :: half_strat      ! The fractional depth where the stratification is centered [nondim]
+  real :: half_depth      ! The depth where the stratification is centered [Z ~> m]
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -60,8 +67,9 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
-                 "The maximum depth of the ocean.", units="nondim", &
-                 default = 0.5, do_not_log=just_read)
+!### UNCOMMENT TO FIX THIS "The fractional depth where the stratification is centered.", &
+                 "The maximum depth of the ocean.", &
+                 units="nondim", default = 0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -91,11 +99,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   enddo ; enddo
 
   do j=js,je ; do i=is,ie
-!    This sets the initial thickness (in H) of the layers.  The      !
-!  thicknesses are set to insure that: 1.  each layer is at least an !
-!  Angstrom thick, and 2.  the interfaces are where they should be   !
-!  based on the resting depths and interface height perturbations,   !
-!  as long at this doesn't interfere with 1.                         !
+    !   This sets the initial thickness in [H ~> m or kg m-2] of the layers.  The
+    ! thicknesses are set to insure that: 1. each layer is at least an Angstrom thick, and
+    ! 2. the interfaces are where they should be based on the resting depths and interface
+    !    height perturbations, as long at this doesn't interfere with 1.
     eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
@@ -116,15 +123,15 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< i-component of velocity [m/s]
+                           intent(out) :: u  !< i-component of velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< j-component of velocity [m/s]
+                           intent(out) :: v  !< j-component of velocity [m s-1]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file to
                                                      !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: damp_rate, jet_width, jet_height, x_2, y_2
+  real :: jet_width, jet_height, x_2, y_2
   real :: velocity_amplitude, pi
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -203,21 +210,21 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
                                             !! the control structure for the
                                             !! sponge module.
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field, in units of H.
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field [H ~> m or kg m-2].
 
   ! Local variables
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units (Z).
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, in Z.
-  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
-  real :: damp_rate    ! The inverse zonal-mean damping rate, in s-1.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m].
+  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [s-1].
+  real :: damp_rate    ! The inverse zonal-mean damping rate [s-1].
   real :: jet_width    ! The width of the zonal mean jet, in km.
-  real :: jet_height   ! The interface height scale associated with the zonal-mean jet, in Z.
+  real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
   real :: y_2          ! The y-position relative to the channel center, in km.
-  real :: half_strat   ! The fractional depth where the straficiation is centered, ND.
-  real :: half_depth   ! The depth where the stratification is centered, in Z.
+  real :: half_strat   ! The fractional depth where the straficiation is centered [nondim].
+  real :: half_depth   ! The depth where the stratification is centered [Z ~> m].
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -341,16 +348,16 @@ end subroutine Phillips_initialize_topography
 !!  The one argument passed to initialize, Time, is set to the
 !!  current time of the simulation.  The fields which are initialized
 !!  here are:
-!!    u - Zonal velocity in m s-1.
-!!    v - Meridional velocity in m s-1.
+!!    u - Zonal velocity [m s-1].
+!!    v - Meridional velocity [m s-1].
 !!    h - Layer thickness in m.  (Must be positive.)
 !!    D - Basin depth in m.  (Must be positive.)
-!!    f - The Coriolis parameter, in s-1.
-!!    g - The reduced gravity at each interface, in m s-2.
-!!    Rlay - Layer potential density (coordinate variable) in kg m-3.
+!!    f - The Coriolis parameter [s-1].
+!!    g - The reduced gravity at each interface [m s-2]
+!!    Rlay - Layer potential density (coordinate variable) [kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!    T - Temperature in C.
-!!    S - Salinity in psu.
+!!    T - Temperature [degC].
+!!    S - Salinity [ppt].
 !!  If SPONGE is defined:
 !!    A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped
