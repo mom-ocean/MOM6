@@ -144,24 +144,24 @@ type, public :: diag_grid_storage
 end type diag_grid_storage
 
 !> integers to encode the total cell methods
-!integer :: PPP=111   !< x:point,y:point,z:point, this kind of diagnostic is not currently present in diag_table.MOM6
-!integer :: PPS=112   !< x:point,y:point,z:sum  , this kind of diagnostic is not currently present in diag_table.MOM6
-!integer :: PPM=113   !< x:point,y:point,z:mean , this kind of diagnostic is not currently present in diag_table.MOM6
-integer :: PSP=121  !< x:point,y:sum,z:point
-integer :: PSS=122  !< x:point,y:sum,z:point
-integer :: PSM=123  !< x:point,y:sum,z:mean
-integer :: PMP=131  !< x:point,y:mean,z:point
-integer :: PMM=133  !< x:point,y:mean,z:mean
-integer :: SPP=211  !< x:sum,y:point,z:point
-integer :: SPS=212  !< x:sum,y:point,z:sum
-integer :: SSP=221  !< x:sum;y:sum,z:point
-integer :: MPP=311  !< x:mean,y:point,z:point
-integer :: MPM=313  !< x:mean,y:point,z:mean
-integer :: MMP=331  !< x:mean,y:mean,z:point
-integer :: MMS=332  !< x:mean,y:mean,z:sum
-integer :: SSS=222  !< x:sum,y:sum,z:sum
-integer :: MMM=333  !< x:mean,y:mean,z:mean
-integer :: MSK=-1   !< Use the downsample method of a mask
+!integer :: PPP=111  ! x:point,y:point,z:point, this kind of diagnostic is not currently present in diag_table.MOM6
+!integer :: PPS=112  ! x:point,y:point,z:sum  , this kind of diagnostic is not currently present in diag_table.MOM6
+!integer :: PPM=113  ! x:point,y:point,z:mean , this kind of diagnostic is not currently present in diag_table.MOM6
+integer :: PSP=121  ! x:point,y:sum,z:point
+integer :: PSS=122  ! x:point,y:sum,z:point
+integer :: PSM=123  ! x:point,y:sum,z:mean
+integer :: PMP=131  ! x:point,y:mean,z:point
+integer :: PMM=133  ! x:point,y:mean,z:mean
+integer :: SPP=211  ! x:sum,y:point,z:point
+integer :: SPS=212  ! x:sum,y:point,z:sum
+integer :: SSP=221  ! x:sum;y:sum,z:point
+integer :: MPP=311  ! x:mean,y:point,z:point
+integer :: MPM=313  ! x:mean,y:point,z:mean
+integer :: MMP=331  ! x:mean,y:mean,z:point
+integer :: MMS=332  ! x:mean,y:mean,z:sum
+integer :: SSS=222  ! x:sum,y:sum,z:sum
+integer :: MMM=333  ! x:mean,y:mean,z:mean
+integer :: MSK=-1   ! Use the downsample method of a mask
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
 !!
@@ -794,7 +794,7 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
   !The downsampled mask is needed for sending out the diagnostics output via diag_manager
   !The non-downsampled mask is needed for downsampling the diagnostics field
   do dl=2,MAX_DSAMP_LEV
-     if(dl .ne. 2) call MOM_error(FATAL, "set_masks_for_axes_dsamp: Downsample level other than 2 is not supported yet!")
+     if(dl .ne. 2) call MOM_error(FATAL, "set_masks_for_axes_dsamp: Downsample level other than 2 is not supported!")
      do c=1, diag_cs%num_diag_coords
         ! Level/layer h-points in diagnostic coordinate
         axes => diag_cs%remap_axesTL(c)
@@ -834,7 +834,7 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
         ! Interface q-points in diagnostic coordinate
         axes => diag_cs%remap_axesBi(c)
         call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)!set downsampled mask
+          G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
         diag_cs%dsamp(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-downsampled mask
      enddo
   enddo
@@ -3543,16 +3543,17 @@ subroutine downsample_diag_indices_get(fo1,fo2, dl, diag_cs,isv,iev,jsv,jev)
   character(len=500) :: mesg
   logical, save :: first_check = .true.
 
-  !Check ONCE that the downsampled diag-compute domain is commensurate with the original non-downsampled diag-compute domain
+  !Check ONCE that the downsampled diag-compute domain is commensurate with the original
+  !non-downsampled diag-compute domain.
   !This is a major limitation of the current implementation of the downsampled diagnostics.
   !We assume that the compute domain can be subdivided to dl*dl cells, hence avoiding the need of halo updates.
   !We want this check to error out only if there was a downsampled diagnostics requested and about to post that is
-  !why the check is here and not in the init routines. This check need to be done only once, hence the outer if statement
+  !why the check is here and not in the init routines. This check need to be done only once, hence the outer if.
   if(first_check) then
      if(mod(diag_cs%ie-diag_cs%is+1, dl) .ne. 0 .OR. mod(diag_cs%je-diag_cs%js+1, dl) .ne. 0) then
         write (mesg,*) "Non-commensurate downsampled domain is not supported. "//&
-             "Please choose a layout such that NIGLOBAL/Layout_X and NJGLOBAL/Layout_Y are both divisible by dl=",dl, " Current domain extents: ",&
-             diag_cs%is,diag_cs%ie, diag_cs%js,diag_cs%je
+             "Please choose a layout such that NIGLOBAL/Layout_X and NJGLOBAL/Layout_Y are both divisible by dl=",dl,&
+             " Current domain extents: ", diag_cs%is,diag_cs%ie, diag_cs%js,diag_cs%je
         call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
      endif
      first_check = .false.
