@@ -33,6 +33,10 @@ public register_dye_tracer, initialize_dye_tracer
 public dye_tracer_column_physics, dye_tracer_surface_state
 public dye_stock, regional_dyes_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> The control structure for the regional dyes tracer package
 type, public :: dye_tracer_CS ; private
@@ -42,8 +46,8 @@ type, public :: dye_tracer_CS ; private
   real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
   real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
   real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
-  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected, in Z.
-  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected, in Z.
+  real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected [Z ~> m].
+  real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected [Z ~> m].
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
 
@@ -187,7 +191,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
   type(time_type), target,            intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl), target,            intent(in) :: diag !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
                                                          !! whether, where, and what open boundary
@@ -242,32 +246,32 @@ end subroutine initialize_dye_tracer
 !! tracer physics or chemistry to the tracers from this file.
 !! This is a simple example of a set of advected passive tracers.
 !! The arguments to this subroutine are redundant in that
-!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(dye_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
                                               !! call to register_dye_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 
 ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -325,9 +329,9 @@ end subroutine dye_tracer_column_physics
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
 function dye_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of
-                                                            !! each tracer, in kg times concentration units.
+                                                            !! each tracer, in kg times concentration units [kg conc].
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   type(dye_tracer_CS),                pointer       :: CS   !< The control structure returned by a
@@ -376,7 +380,7 @@ subroutine dye_tracer_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(dye_tracer_CS),    pointer       :: CS !< The control structure returned by a previous
                                               !! call to register_dye_tracer.
 

@@ -27,6 +27,11 @@ implicit none ; private
 public Kelvin_set_OBC_data, Kelvin_initialize_topography
 public register_Kelvin_OBC, Kelvin_OBC_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Control structure for Kelvin wave open boundaries.
 type, public :: Kelvin_OBC_CS ; private
   integer :: mode = 0          !< Vertical mode
@@ -121,7 +126,7 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   ! Local variables
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
   real :: m_to_Z  ! A dimensional rescaling factor.
-  real :: min_depth ! The minimum and maximum depths in Z.
+  real :: min_depth ! The minimum and maximum depths [Z ~> m].
   real :: PI ! 3.1415...
   real :: coast_offset1, coast_offset2, coast_angle, right_angle
   integer :: i, j
@@ -170,16 +175,16 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness [H ~> m or kg m-2].
   type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the Kelvin example.
   real :: time_sec, cff
-  real :: N0           ! Brunt-Vaisala frequency in s-1
+  real :: N0           ! Brunt-Vaisala frequency [s-1]
   real :: plx          !< Longshore wave parameter
   real :: pmz          !< Vertical wave parameter
   real :: lambda       !< Offshore decay scale
-  real :: omega        !< Wave frequency in s-1
+  real :: omega        !< Wave frequency [s-1]
   real :: PI
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB

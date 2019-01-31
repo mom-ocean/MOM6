@@ -31,40 +31,40 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
   ! Parameters
-  real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE (non-dim)
-  real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE (non-dim)
-  real :: MEKE_damping  !< Local depth-independent MEKE dissipation rate in s-1.
+  real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
+  real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
+  real :: MEKE_damping  !< Local depth-independent MEKE dissipation rate [s-1].
   real :: MEKE_Cd_scale !< The ratio of the bottom eddy velocity to the column mean
                         !! eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1
                         !! to account for the surface intensification of MEKE.
-  real :: MEKE_Cb       !< Coefficient in the \f$\gamma_{bot}\f$ expression (non-dim)
-  real :: MEKE_min_gamma!< Minimum value of gamma_b^2 allowed (non-dim)
-  real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression (non-dim)
+  real :: MEKE_Cb       !< Coefficient in the \f$\gamma_{bot}\f$ expression [nondim]
+  real :: MEKE_min_gamma!< Minimum value of gamma_b^2 allowed [nondim]
+  real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression [nondim]
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
                         !! first baroclinic deformation radius.
   logical :: use_old_lscale !< Use the old formula for mixing length scale.
-  real :: cdrag         !< The bottom drag coefficient for MEKE (non-dim).
-  real :: MEKE_BGsrc    !< Background energy source for MEKE in W/kg (= m2 s-3).
-  real :: MEKE_dtScale  !< Scale factor to accelerate time-stepping (non-dim.)
-  real :: MEKE_KhCoeff  !< Scaling factor to convert MEKE into Kh (non-dim.)
-  real :: MEKE_Uscale   !< MEKE velocity scale for bottom drag (m/s)
-  real :: MEKE_KH       !< Background lateral diffusion of MEKE (m^2/s)
-  real :: MEKE_K4       !< Background bi-harmonic diffusivity (of MEKE) (m^4/s)
+  real :: cdrag         !< The bottom drag coefficient for MEKE [nondim].
+  real :: MEKE_BGsrc    !< Background energy source for MEKE [W kg-1] (= m2 s-3).
+  real :: MEKE_dtScale  !< Scale factor to accelerate time-stepping [nondim]
+  real :: MEKE_KhCoeff  !< Scaling factor to convert MEKE into Kh [nondim]
+  real :: MEKE_Uscale   !< MEKE velocity scale for bottom drag [m s-1]
+  real :: MEKE_KH       !< Background lateral diffusion of MEKE [m2 s-1]
+  real :: MEKE_K4       !< Background bi-harmonic diffusivity (of MEKE) [m4 s-1]
   real :: KhMEKE_Fac    !< A factor relating MEKE%Kh to the diffusivity used for
-                        !! MEKE itself (nondimensional).
+                        !! MEKE itself [nondim].
   real :: viscosity_coeff !< The scaling coefficient in the expression for
                         !! viscosity used to parameterize lateral momentum mixing
                         !! by unresolved eddies represented by MEKE.
-  real :: Lfixed        !< Fixed mixing length scale, in m.
-  real :: aDeform       !< Weighting towards deformation scale of mixing length (non-dim.)
-  real :: aRhines       !< Weighting towards Rhines scale of mixing length (non-dim.)
-  real :: aFrict        !< Weighting towards frictional arrest scale of mixing length (non-dim.)
-  real :: aEady         !< Weighting towards Eady scale of mixing length (non-dim.)
-  real :: aGrid         !< Weighting towards grid scale of mixing length (non-dim.)
-  real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE (non-dim.)
+  real :: Lfixed        !< Fixed mixing length scale [m].
+  real :: aDeform       !< Weighting towards deformation scale of mixing length [nondim]
+  real :: aRhines       !< Weighting towards Rhines scale of mixing length [nondim]
+  real :: aFrict        !< Weighting towards frictional arrest scale of mixing length [nondim]
+  real :: aEady         !< Weighting towards Eady scale of mixing length [nondim]
+  real :: aGrid         !< Weighting towards grid scale of mixing length [nondim]
+  real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
-                                !! when computing beta in Rhines scale (non-dim.)
+                                !! when computing beta in Rhines scale [nondim]
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
 
@@ -98,48 +98,48 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness in H (m or kg m-2).
-  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points (s-1).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points [s-1].
+  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
-  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step (s).
+  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [s].
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Zonal mass flux (H m2 s-1).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Meridional mass flux (H m2 s-1).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Zonal mass flux [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Meridional mass flux [H m2 s-1 ~> m3 s-1 or kg s-1]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    mass, &         ! The total mass of the water column, in kg m-2.
-    I_mass, &       ! The inverse of mass, in m2 kg-1.
-    src, &          ! The sum of all MEKE sources, in m2 s-3.
-    MEKE_decay, &   ! The MEKE decay timescale, in s-1.
-    MEKE_GM_src, &  ! The MEKE source from thickness mixing, in m2 s-3.
-    MEKE_mom_src, & ! The MEKE source from momentum, in m2 s-3.
+    mass, &         ! The total mass of the water column [kg m-2].
+    I_mass, &       ! The inverse of mass [m2 kg-1].
+    src, &          ! The sum of all MEKE sources [m2 s-3].
+    MEKE_decay, &   ! The MEKE decay timescale [s-1].
+    MEKE_GM_src, &  ! The MEKE source from thickness mixing [m2 s-3].
+    MEKE_mom_src, & ! The MEKE source from momentum [m2 s-3].
     drag_rate_visc, &
-    drag_rate, &    ! The MEKE spindown timescale due to bottom drag, in s-1.
-    LmixScale, &    ! Square of eddy mixing length, in m2.
-    barotrFac2, &   ! Ratio of EKE_barotropic / EKE (nondim)/
-    bottomFac2      ! Ratio of EKE_bottom / EKE (nondim)/
+    drag_rate, &    ! The MEKE spindown timescale due to bottom drag [s-1].
+    LmixScale, &    ! Square of eddy mixing length [m2].
+    barotrFac2, &   ! Ratio of EKE_barotropic / EKE [nondim]
+    bottomFac2      ! Ratio of EKE_bottom / EKE [nondim]
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    MEKE_uflux, &   ! The zonal diffusive flux of MEKE, in kg m2 s-3.
-    Kh_u, &         ! The zonal diffusivity that is actually used, in m2 s-1.
-    baroHu, &       ! Depth integrated zonal mass flux (H m2 s-1).
+    MEKE_uflux, &   ! The zonal diffusive flux of MEKE [kg m2 s-3].
+    Kh_u, &         ! The zonal diffusivity that is actually used [m2 s-1].
+    baroHu, &       ! Depth integrated zonal mass flux [H m2 s-1 ~> m3 s-1 or kg s-1].
     drag_vel_u      ! A (vertical) viscosity associated with bottom drag at
-                    ! u-points, in m s-1.
+                    ! u-points [m s-1].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    MEKE_vflux, &   ! The meridional diffusive flux of MEKE, in kg m2 s-3.
-    Kh_v, &         ! The meridional diffusivity that is actually used, in m2 s-1.
-    baroHv, &       ! Depth integrated meridional mass flux (H m2 s-1).
+    MEKE_vflux, &   ! The meridional diffusive flux of MEKE [kg m2 s-3].
+    Kh_v, &         ! The meridional diffusivity that is actually used [m2 s-1].
+    baroHv, &       ! Depth integrated meridional mass flux [H m2 s-1 ~> m3 s-1 or kg s-1].
     drag_vel_v      ! A (vertical) viscosity associated with bottom drag at
-                    ! v-points, in m s-1.
+                    ! v-points [m s-1].
   real :: Kh_here, Inv_Kh_max, K4_here
   real :: cdrag2
   real :: advFac
-  real :: mass_neglect ! A negligible mass, in kg m-2.
-  real :: ldamping  ! The MEKE damping rate in s-1.
-  real :: Rho0      ! A density used to convert mass to distance, in kg m-3.
-  real :: sdt  ! dt to use locally (could be scaled to accelerate)
-  real :: sdt_damp  ! dt for damping (sdt could be split).
+  real :: mass_neglect ! A negligible mass [kg m-2].
+  real :: ldamping  ! The MEKE damping rate [s-1].
+  real :: Rho0      ! A density used to convert mass to distance [kg m-3].
+  real :: sdt  ! dt to use locally [s] (could be scaled to accelerate)
+  real :: sdt_damp  ! dt for damping [s] (sdt could be split).
   logical :: use_drag_rate ! Flag to indicate drag_rate is finite
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
@@ -553,8 +553,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
-  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points (s-1).
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [s-1].
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc !< Mean flow contrib. to drag rate
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass.
   ! Local variables
@@ -563,7 +563,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
   real :: FatH    ! Coriolis parameter at h points; to compute topographic beta
   integer :: i, j, is, ie, js, je, n1, n2
-  real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket in m^2 s^-2.
+  real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket [m2 s-2].
   logical :: useSecant, debugIteration
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -682,12 +682,12 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points (s-1).
-  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [s-1].
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy [m2 s-2].
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: bottomFac2 !< gamma_b^2
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2
-  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length (m).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length [m].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
   real :: beta, SN, FatH
@@ -727,19 +727,19 @@ end subroutine MEKE_lengthScales
 subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN, EKE, Z_to_L, &
                                 bottomFac2, barotrFac2, LmixScale, Lrhines, Leady)
   type(MEKE_CS), pointer       :: CS         !< MEKE control structure.
-  real,          intent(in)    :: area       !< Grid cell area (m2)
-  real,          intent(in)    :: beta       !< Planetary beta = |grad F| (s-1 m-1)
-  real,          intent(in)    :: depth      !< Ocean depth (Z)
-  real,          intent(in)    :: Rd_dx      !< Resolution Ld/dx (nondim).
-  real,          intent(in)    :: SN         !< Eady growth rate (s-1).
-  real,          intent(in)    :: EKE        !< Eddy kinetic energy (m s-1).
+  real,          intent(in)    :: area       !< Grid cell area [m2]
+  real,          intent(in)    :: beta       !< Planetary beta = |grad F| [s-1 m-1]
+  real,          intent(in)    :: depth      !< Ocean depth [Z ~> m]
+  real,          intent(in)    :: Rd_dx      !< Resolution Ld/dx [nondim].
+  real,          intent(in)    :: SN         !< Eady growth rate [s-1].
+  real,          intent(in)    :: EKE        !< Eddy kinetic energy [m s-1].
   real,          intent(in)    :: Z_to_L     !< A conversion factor from depth units (Z) to
                                              !! the units for lateral distances (L).
   real,          intent(out)   :: bottomFac2 !< gamma_b^2
   real,          intent(out)   :: barotrFac2 !< gamma_t^2
-  real,          intent(out)   :: LmixScale  !< Eddy mixing length (m).
-  real,          intent(out)   :: Lrhines    !< Rhines length scale (m).
-  real,          intent(out)   :: Leady      !< Eady length scale (m).
+  real,          intent(out)   :: LmixScale  !< Eddy mixing length [m].
+  real,          intent(out)   :: Lrhines    !< Rhines length scale [m].
+  real,          intent(out)   :: Leady      !< Eady length scale [m].
   ! Local variables
   real :: Lgrid, Ldeform, LdeformLim, Ue, Lfrict
 

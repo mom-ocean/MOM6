@@ -26,20 +26,19 @@ type, public :: dumbbell_surface_forcing_CS ; private
   logical :: use_temperature !< If true, temperature and salinity are used as
                              !! state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !<   The density used in the Boussinesq
-                             !! approximation, in kg m-3.
-  real :: G_Earth            !<   The gravitational acceleration in m s-2.
-  real :: Flux_const         !<   The restoring rate at the surface, in m s-1.
-  real :: gust_const         !<   A constant unresolved background gustiness
-                             !! that contributes to ustar, in Pa.
-  real :: slp_amplitude      !< The amplitude of pressure loading (in Pa) applied
+  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
+  real :: G_Earth            !< The gravitational acceleration [m s-2]
+  real :: Flux_const         !< The restoring rate at the surface [m s-1].
+  real :: gust_const         !< A constant unresolved background gustiness
+                             !! that contributes to ustar [Pa].
+  real :: slp_amplitude      !< The amplitude of pressure loading [Pa] applied
                              !! to the reservoirs
   real :: slp_period         !< Period of sinusoidal pressure wave
   real, dimension(:,:), allocatable :: &
     forcing_mask             !< A mask regulating where forcing occurs
   real, dimension(:,:), allocatable :: &
     S_restore                !< The surface salinity field toward which to
-                             !! restore, in PSU.
+                             !! restore [ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
@@ -55,18 +54,18 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                                                          !! have NULL ptrs.
   type(time_type),               intent(in)    :: day    !< Time of the fluxes.
   real,                          intent(in)    :: dt     !< The amount of time over which
-                                                         !! the fluxes apply, in s
+                                                         !! the fluxes apply [s]
   type(ocean_grid_type),         intent(in)    :: G      !< The ocean's grid structure
   type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
                                                          !! call to dumbbell_surface_forcing_init
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward, in C.
-  real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
+  real :: Temp_restore   ! The temperature that is being restored toward [degC].
+  real :: Salin_restore  ! The salinity that is being restored toward [ppt].
   real :: density_restore  ! The potential density that is being restored
-                         ! toward, in kg m-3.
-  real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
+                         ! toward [kg m-3].
+  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -98,7 +97,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -106,7 +105,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      !   Heat fluxes are in units of W m-2 and are positive into the ocean.
+      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
@@ -114,7 +113,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
@@ -123,7 +122,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   if (CS%use_temperature .and. CS%restorebuoy) then
     do j=js,je ; do i=is,ie
       !   Set density_restore to an expression for the surface potential
-      ! density in kg m-3 that is being restored toward.
+      ! density [kg m-3] that is being restored toward.
       if (CS%forcing_mask(i,j)>0.) then
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
           ((CS%S_restore(i,j) - state%SSS(i,j)) / &
@@ -144,7 +143,7 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
                                                        !! have NULL ptrs.
   type(time_type),               intent(in)    :: day  !< Time of the fluxes.
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply, in s
+                                                       !! the fluxes apply [s]
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(dumbbell_surface_forcing_CS),  pointer  :: CS   !< A control structure returned by a previous
                                                        !! call to dumbbell_surface_forcing_init
