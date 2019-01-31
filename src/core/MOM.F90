@@ -1153,7 +1153,10 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, &
 
   call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 
-  call apply_oda_tracer_increments(dtdia,G,tv,h,CS%odaCS)
+  ! added check in order to run MOM with debug flags
+  if (CS%ensemble_ocean) then
+     call apply_oda_tracer_increments(dtdia,G,tv,h,CS%odaCS)
+  end if
 
   if (update_BBL) then
     !   Calculate the BBL properties and store them inside visc (u,h).
