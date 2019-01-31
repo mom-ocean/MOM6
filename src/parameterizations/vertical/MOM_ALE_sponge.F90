@@ -56,6 +56,11 @@ public set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field
 public get_ALE_sponge_thicknesses, get_ALE_sponge_nz_data
 public initialize_ALE_sponge, apply_ALE_sponge, ALE_sponge_end, init_ALE_sponge_diags
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> A structure for creating arrays of pointers to 3D arrays with extra gridding information
 type :: p3d
   integer :: id !< id for FMS external time interpolator
@@ -105,9 +110,9 @@ type, public :: ALE_sponge_CS ; private
   integer, pointer :: col_i_v(:) => NULL() !< Array of the i-indicies of each v-columns being damped.
   integer, pointer :: col_j_v(:) => NULL() !< Array of the j-indicies of each v-columns being damped.
 
-  real, pointer :: Iresttime_col(:)   => NULL() !< The inverse restoring time of each tracer column.
-  real, pointer :: Iresttime_col_u(:) => NULL() !< The inverse restoring time of each u-column.
-  real, pointer :: Iresttime_col_v(:) => NULL() !< The inverse restoring time of each v-column.
+  real, pointer :: Iresttime_col(:)   => NULL() !< The inverse restoring time of each tracer column [s-1].
+  real, pointer :: Iresttime_col_u(:) => NULL() !< The inverse restoring time of each u-column [s-1].
+  real, pointer :: Iresttime_col_v(:) => NULL() !< The inverse restoring time of each v-column [s-1].
 
   type(p3d) :: var(MAX_FIELDS_)      !< Pointers to the fields that are being damped.
   type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
@@ -134,25 +139,25 @@ contains
 !! points are included in the sponges.  It also stores the target interface heights.
 subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_data)
 
-  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure (in).
-  integer,                          intent(in) :: nz_data !< The total number of sponge input layers  (in).
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
+  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
+  integer,                          intent(in) :: nz_data !< The total number of sponge input layers.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file
-                                                             !! to parse for model parameter values (in).
+                                                             !! to parse for model parameter values.
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
   real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thicknesses of the sponge
-                                                     !! input layers, in thickness units (H).
+                                                     !! input layers [H ~> m or kg m-2].
 
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
-  real, allocatable, dimension(:,:,:) :: data_hu !< thickness at u points
-  real, allocatable, dimension(:,:,:) :: data_hv !< thickness at v points
-  real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points, s-1
-  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points, s-1
+  real, allocatable, dimension(:,:,:) :: data_hu !< thickness at u points [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: data_hv !< thickness at v points [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
+  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
@@ -333,7 +338,7 @@ end function get_ALE_sponge_nz_data
 subroutine get_ALE_sponge_thicknesses(G, data_h, sponge_mask, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
   real, allocatable, dimension(:,:,:), &
-                         intent(inout) :: data_h !< The thicknesses of the sponge input layers, in H.
+                         intent(inout) :: data_h !< The thicknesses of the sponge input layers [H ~> m or kg m-2].
   logical, dimension(SZI_(G),SZJ_(G)), &
                          intent(out)   :: sponge_mask !< A logical mask that is true where
                                                  !! sponges are being applied.
@@ -369,10 +374,10 @@ end subroutine get_ALE_sponge_thicknesses
 !! points are included in the sponges.
 subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
-  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure (in).
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
+  type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Iresttime !< The inverse of the restoring time [s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file to parse
-                                                             !! for model parameter values (in).
+                                                             !! for model parameter values.
   type(ALE_sponge_CS),              pointer    :: CS !< A pointer that is set to point to the control
                                                      !! structure for this module (in/out).
 
@@ -382,8 +387,8 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
-    real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points, s-1
-  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points, s-1
+    real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
+  real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
@@ -597,7 +602,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_p
   ! Local variables
   real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
   real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
-  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights in Z.
+  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights [Z ~> m].
   real :: missing_value
   integer :: j, k, col
   integer :: isd,ied,jsd,jed
@@ -607,9 +612,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_p
   character(len=256) :: mesg ! String for error messages
 
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: hsrc ! Source thicknesses in Z
+  real, dimension(:), allocatable :: hsrc ! Source thicknesses [Z ~> m].
   real, dimension(:), allocatable :: tmpT1d
-  real :: zTopOfCell, zBottomOfCell ! Heights in Z
+  real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return
@@ -841,15 +846,15 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   type(verticalGrid_type),   intent(in)    :: GV !< ocean vertical grid structure
   type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(inout) :: h  !< Layer thickness, in H (in)
-  real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
+                             intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2] (in)
+  real,                      intent(in)    :: dt !< The amount of time covered by this call [s].
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).
   type(time_type), optional, intent(in)    :: Time !< The current model date
 
-  real :: damp                                  ! The timestep times the local damping coefficient.  ND.
-  real :: I1pdamp                               ! I1pdamp is 1/(1 + damp).  Nondimensional.
-  real :: Idt                                   ! 1.0/dt, in s-1.
+  real :: damp                                  ! The timestep times the local damping coefficient [nondim].
+  real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
+  real :: Idt                                   ! 1.0/dt [s-1].
   real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
   real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid

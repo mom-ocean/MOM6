@@ -30,6 +30,11 @@ public reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_lis
 public read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 public compute_global_grid_integrals, write_ocean_geometry_file
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 contains
 
 ! -----------------------------------------------------------------------------
@@ -51,7 +56,7 @@ end subroutine MOM_shared_init_init
 !> MOM_initialize_rotation makes the appropriate call to set up the Coriolis parameter.
 subroutine MOM_initialize_rotation(f, G, PF, US)
   type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid type
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter in s-1
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter [s-1]
   type(param_file_type),                        intent(in)  :: PF !< Parameter file structure
   type(unit_scale_type),              optional, intent(in)  :: US !< A dimensional unit scaling type
 
@@ -303,11 +308,11 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 
   ! Local variables
   real :: m_to_Z               ! A dimensional rescaling factor.
-  real :: min_depth            ! The minimum depth in Z.
+  real :: min_depth            ! The minimum depth [Z ~> m].
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum  basin depth MAXIMUM_DEPTH.
-  real :: expdecay             ! A decay scale of associated with the sloping boundaries, in m.
-  real :: Dedge                ! The depth in Z at the basin edge
+  real :: expdecay             ! A decay scale of associated with the sloping boundaries [m].
+  real :: Dedge                ! The depth [Z ~> m], at the basin edge
 ! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   character(len=40)  :: mdl = "initialize_topography_named" ! This subroutine's name.

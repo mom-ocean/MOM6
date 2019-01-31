@@ -32,9 +32,9 @@ type, public :: Neverland_surface_forcing_CS ; private
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq
-                             !! approximation, in kg m-3.
-  real :: G_Earth            !< The gravitational acceleration in m s-2.
-  real :: flux_const         !<  The restoring rate at the surface, in m s-1.
+                             !! approximation [kg m-3].
+  real :: G_Earth            !< The gravitational acceleration [m s-2].
+  real :: flux_const         !<  The restoring rate at the surface [m s-1].
   real, dimension(:,:), pointer :: &
     buoy_restore(:,:) => NULL() !< The pattern to restore buoyancy to.
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
@@ -145,7 +145,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
   real :: density_restore  ! De
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -179,7 +179,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       "Temperature/salinity restoring not coded!" )
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
@@ -197,7 +197,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
+       ! density [kg m-3] that is being restored toward.
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
