@@ -726,7 +726,7 @@ end subroutine chksum_vec_A2d
 function totalStuff(HI, hThick, areaT, stuff)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas [m2]
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed
   real                                         :: totalStuff !< the globally integrated amoutn of stuff
   ! Local variables
@@ -746,7 +746,7 @@ end function totalStuff
 subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas [m2]
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
   character(len=*),                   intent(in) :: mesg        !< An identifying message

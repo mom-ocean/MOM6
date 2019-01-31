@@ -127,14 +127,14 @@ program MOM_main
   type(time_type) :: restart_time       ! The next time to write restart files.
   type(time_type) :: Time_step_ocean    ! A time_type version of dt_forcing.
 
-  real    :: elapsed_time = 0.0   ! Elapsed time in this run in seconds.
+  real    :: elapsed_time = 0.0   ! Elapsed time in this run  [s].
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
                                   ! model's master clock (Time).  This is needed
                                   ! if Time_step_ocean is not an exact
                                   ! representation of dt_forcing.
-  real :: dt_forcing              ! The coupling time step in seconds.
-  real :: dt                      ! The baroclinic dynamics time step, in seconds.
-  real :: dt_off                  ! Offline time step in seconds
+  real :: dt_forcing              ! The coupling time step [s].
+  real :: dt                      ! The baroclinic dynamics time step [s].
+  real :: dt_off                  ! Offline time step [s].
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within dt_forcing.
   real :: dt_therm
@@ -150,7 +150,7 @@ program MOM_main
                                 ! restart file is saved at the end of a run segment
                                 ! unless Restart_control is negative.
 
-  real            :: Time_unit       ! The time unit in seconds for the following input fields.
+  real            :: Time_unit       ! The time unit for the following input fields [s].
   type(time_type) :: restint         ! The time between saves of the restart file.
   type(time_type) :: daymax          ! The final day of the simulation.
 
