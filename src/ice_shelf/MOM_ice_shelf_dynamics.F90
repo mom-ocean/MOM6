@@ -920,7 +920,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, u, v, iters, time)
     call ice_shelf_solve_inner(CS, ISS, G, u, v, TAUDX, TAUDY, H_node, float_cond, &
                                ISS%hmask, conv_flag, iters, time, Phi, Phisub)
 
-    if (CS%DEBUG) then
+    if (CS%debug) then
       call qchksum(u, "u shelf", G%HI, haloshift=2)
       call qchksum(v, "v shelf", G%HI, haloshift=2)
     endif
@@ -3597,7 +3597,7 @@ subroutine ice_shelf_temp(CS, ISS, G, time_step, melt_rate, Time)
   call pass_var(CS%t_shelf, G%domain)
   call pass_var(CS%tmask, G%domain)
 
-  if (CS%DEBUG) then
+  if (CS%debug) then
     call hchksum(CS%t_shelf, "temp after front", G%HI, haloshift=3)
   endif
 
