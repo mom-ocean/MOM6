@@ -49,23 +49,23 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: PFu  !< Zonal pressure force acceleration (m/s2)
+                           intent(out) :: PFu  !< Zonal pressure force acceleration [m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: PFv  !< Meridional pressure force acceleration (m/s2)
+                           intent(out) :: PFv  !< Meridional pressure force acceleration [m s-2]
   type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:), &
                  optional, pointer     :: p_atm !< The pressure at the ice-ocean or
-                                               !! atmosphere-ocean interface in Pa.
+                                               !! atmosphere-ocean interface [Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out) :: pbce !< The baroclinic pressure anomaly in each layer
-                                               !! due to eta anomalies, in m2 s-2 H-1.
+                                               !! due to eta anomalies [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out) :: eta  !< The bottom mass used to calculate PFu and PFv,
-                                               !! in H, with any tidal contributions.
+                                               !! [H ~> m or kg m-2], with any tidal contributions.
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
     if (GV%Boussinesq) then

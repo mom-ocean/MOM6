@@ -24,6 +24,11 @@ implicit none ; private
 
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Global positioning system (aka container for information to describe the grid)
 type, public :: GPS ; private
   real :: len_lon  !< The longitudinal or x-direction length of the domain.
@@ -32,7 +37,7 @@ type, public :: GPS ; private
                    !! starting value for the x-axis.
   real :: south_lat  !< The southern latitude of the domain or the equivalent
                    !! starting value for the y-axis.
-  real :: Rad_Earth !< The radius of the Earth, in m.
+  real :: Rad_Earth !< The radius of the Earth [m].
   real :: Lat_enhance_factor  !< The amount by which the meridional resolution
                    !! is enhanced within LAT_EQ_ENHANCE of the equator.
   real :: Lat_eq_enhance !< The latitude range to the north and south of the equator
@@ -1222,9 +1227,9 @@ subroutine initialize_masks(G, PF, US)
   type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   real :: m_to_Z_scale ! A unit conversion factor from m to Z.
-  real :: Dmin       ! The depth for masking in the same units as G%bathyT (Z).
-  real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT (Z).
-  real :: mask_depth ! The depth shallower than which to mask a point as land, in Z.
+  real :: Dmin       ! The depth for masking in the same units as G%bathyT [Z ~> m].
+  real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT [Z ~> m].
+  real :: mask_depth ! The depth shallower than which to mask a point as land [Z ~> m].
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
   integer :: i, j
 

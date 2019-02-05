@@ -231,7 +231,7 @@ contains
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
@@ -440,19 +440,19 @@ contains
     type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
     type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                             intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                             intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(in) :: ea    !< The amount of fluid entrained from the layer
-                                                 !! above during this call, in m or kg m-2.
+                                                 !! above during this call [H ~> m or kg m-2].
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(in) :: eb    !< The amount of fluid entrained from the layer
-                                                 !! below during this call, in m or kg m-2.
+                                                 !! below during this call [H ~> m or kg m-2].
     type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                                  !! and tracer forcing fields.
-    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth
-    real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth [H ~> m or kg m-2]
+    real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
     type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
     type(optics_type),       intent(in) :: optics !< The structure containing optical properties.
@@ -461,9 +461,9 @@ contains
     real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
                                                 !!  can be applied Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
-    !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+    !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
-! Local variables
+    ! Local variables
     character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_column_physics'
 
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
@@ -600,9 +600,9 @@ contains
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses, in H (usually m or kg m-2)
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
-                                                                !! tracer, in kg times concentration units.
+                                                                !! tracer, in kg times concentration units [kg conc].
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
     character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
@@ -750,7 +750,7 @@ contains
     type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
     type(surface),                         intent(inout) :: state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
 
 ! Local variables

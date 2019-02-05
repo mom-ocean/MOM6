@@ -22,6 +22,11 @@ implicit none ; private
 
 public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Control structure including parameters for CVMix interior shear schemes.
 type, public :: CVMix_shear_cs ! TODO: private
   logical :: use_LMD94                      !< Flags to use the LMD94 scheme
@@ -31,8 +36,8 @@ type, public :: CVMix_shear_cs ! TODO: private
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
   real    :: KPP_exp                        !< Exponent of unitless factor of diff.
                                             !! for KPP internal shear mixing scheme.
-  real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency [s-2]
+  real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency [s-2]
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
   real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
                                                         !! after smoothing
@@ -55,14 +60,14 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points [m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points [m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
-                                                                 !! (not layer!) in Z2 s-1.
+                                                                 !! (not layer!) [Z2 s-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
-                                                                 !! (not layer!) in Z2 s-1.
+                                                                 !! (not layer!) [Z2 s-1 ~> m2 s-1].
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous call to
                                                                  !! CVMix_shear_init.
   ! Local variables
@@ -71,8 +76,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) :: Ri_Grad !< Gradient Richardson number
-  real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces (m2/s)
-  real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces (m2/s)
+  real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
+  real, dimension(G%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
