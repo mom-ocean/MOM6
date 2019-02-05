@@ -298,7 +298,7 @@ end subroutine interpolate_grid
 subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, &
                                       n1, h1, x1, h_neglect, h_neglect_edge)
   type(interp_CS_type), intent(in)  :: CS  !< A control structure for regrid_interp
-  real, dimension(:), intent(in)    :: densities !< Input cell densities, in kg m-3
+  real, dimension(:), intent(in)    :: densities !< Input cell densities [kg m-3]
   real, dimension(:), intent(in)    :: target_values !< Target values of interfaces
   integer,            intent(in)    :: n0  !< The number of points on the input grid
   real, dimension(:), intent(in)    :: h0  !< Initial cell widths

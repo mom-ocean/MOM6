@@ -26,16 +26,21 @@ implicit none ; private
 
 public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> This control structure holds parameters that regulate internal tide energy inputs.
 type, public :: int_tide_input_CS ; private
   logical :: debug      !< If true, write verbose checksums for debugging.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                         !! regulate the timing of diagnostic output.
-  real :: TKE_itide_max !< Maximum Internal tide conversion (W m-2)
-                        !! available to mix above the BBL
+  real :: TKE_itide_max !< Maximum Internal tide conversion
+                        !! available to mix above the BBL [W m-2]
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
-            !< The time-invariant field that enters the TKE_itidal input calculation, in J m-2.
+            !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
   character(len=200) :: inputdir !< The directory for input files.
 
   !>@{ Diagnostic IDs
@@ -46,10 +51,10 @@ end type int_tide_input_CS
 !> This type is used to exchange fields related to the internal tides.
 type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
-    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean, in W m-2.
-    h2, &               !< The squared topographic roughness height, in Z2.
-    tideamp, &          !< The amplitude of the tidal velocities, in m s-1.
-    Nb                  !< The bottom stratification, in s-1.
+    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [W m-2].
+    h2, &               !< The squared topographic roughness height [Z2 ~> m2].
+    tideamp, &          !< The amplitude of the tidal velocities [m s-1].
+    Nb                  !< The bottom stratification [s-1].
 end type int_tide_input_type
 
 contains
@@ -59,22 +64,22 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< A structure containing pointers to the
                                                                  !! thermodynamic fields
   type(forcing),                             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
   type(int_tide_input_type),                 intent(inout) :: itide !< A structure containing fields related
                                                                  !! to the internal tide sources.
-  real,                                      intent(in)    :: dt !< The time increment in s.
+  real,                                      intent(in)    :: dt !< The time increment [s].
   type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    N2_bot        ! The bottom squared buoyancy frequency, in s-2.
+    N2_bot        ! The bottom squared buoyancy frequency [s-2].
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! The temperature and salinity in C and PSU with the values in
+    T_f, S_f      ! The temperature and salinity in [degC] and [ppt] with the values in
                   ! the massless layers filled vertically by diffusion.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
@@ -90,8 +95,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant in m2 s-1.
-  dt_fill    = 7200.              !### Dimensionalconstant in s.
+  kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant [m2 s-1].
+  dt_fill    = 7200.              !### Dimensionalconstant [s].
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -124,35 +129,35 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure containing pointers to the
                                                                 !! thermodynamic fields
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f  !< Temperature after vertical filtering to
-                                                                !! smooth out the values in thin layers, in degC.
+                                                                !! smooth out the values in thin layers [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_f  !< Salinity after vertical filtering to
-                                                                !! smooth out the values in thin layers, in PSU.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness, in Z2
+                                                                !! smooth out the values in thin layers [ppt].
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
   type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
   real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
-                                                                 !! ocean bottom, in s-2.
+                                                                 !! ocean bottom [s-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.
   real, dimension(SZI_(G)) :: &
-    pres, &       ! The pressure at each interface, in Pa.
-    Temp_int, &   ! The temperature at each interface, in degC.
-    Salin_int, &  ! The salinity at each interface, in PSU.
+    pres, &       ! The pressure at each interface [Pa].
+    Temp_int, &   ! The temperature at each interface [degC].
+    Salin_int, &  ! The salinity at each interface [ppt].
     drho_bot, &
-    h_amp, &      ! The amplitude of topographic roughness, in Z.
-    hb, &         ! The depth below a layer, in Z.
-    z_from_bot, & ! The height of a layer center above the bottom, in Z.
+    h_amp, &      ! The amplitude of topographic roughness [Z ~> m].
+    hb, &         ! The depth below a layer [Z ~> m].
+    z_from_bot, & ! The height of a layer center above the bottom [Z ~> m].
     dRho_dT, &    ! The partial derivatives of density with temperature and
-    dRho_dS       ! salinity, in kg m-3 degC-1 and kg m-3 PSU-1.
+    dRho_dS       ! salinity [kg m-3 degC-1] and [kg m-3 ppt-1].
 
-  real :: dz_int  ! The thickness associated with an interface, in Z.
+  real :: dz_int  ! The thickness associated with an interface [Z ~> m].
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density, in Z m3 s-2 kg-1.
+                  ! density [Z m3 s-2 kg-1 ~> m4 s-2 kg-1].
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -255,11 +260,11 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   character(len=200) :: filename, tideamp_file, h2_file
 
   real :: mask_itidal
-  real :: utide              ! constant tidal amplitude (m s-1) to be used if
+  real :: utide              ! constant tidal amplitude [m s-1] to be used if
                              ! tidal amplitude file is not present.
   real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height.
   real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling
-  real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion, in Z.
+  real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion [Z ~> m].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
   if (associated(CS)) then

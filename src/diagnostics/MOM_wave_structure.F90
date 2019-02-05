@@ -27,25 +27,30 @@ implicit none ; private
 
 public wave_structure, wave_structure_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> The control structure for the MOM_wave_structure module
 type, public :: wave_structure_CS ; !private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
-                                   !< Vertical structure of vertical velocity (normalized), in m s-1.
+                                   !< Vertical structure of vertical velocity (normalized) [m s-1].
   real, allocatable, dimension(:,:,:) :: u_strct
-                                   !< Vertical structure of horizontal velocity (normalized), in m s-1.
+                                   !< Vertical structure of horizontal velocity (normalized) [m s-1].
   real, allocatable, dimension(:,:,:) :: W_profile
                                    !< Vertical profile of w_hat(z), where
                                    !! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
-                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z), in m s-1.
+                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z) [m s-1].
   real, allocatable, dimension(:,:,:) :: Uavg_profile
                                    !< Vertical profile of the magnitude of horizontal velocity,
-                                   !! (u^2+v^2)^0.5, averaged over a period, in m s-1.
+                                   !! (u^2+v^2)^0.5, averaged over a period [m s-1].
   real, allocatable, dimension(:,:,:) :: z_depths
-                                   !< Depths of layer interfaces, in m.
+                                   !< Depths of layer interfaces [m].
   real, allocatable, dimension(:,:,:) :: N2
-                                   !< Squared buoyancy frequency at each interface, in S-2.
+                                   !< Squared buoyancy frequency at each interface [s-2].
   integer, allocatable, dimension(:,:):: num_intfaces
                                    !< Number of layer interfaces (including surface and bottom)
   real    :: int_tide_source_x     !< X Location of generation site
@@ -87,33 +92,27 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   type(ocean_grid_type),                    intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses, in H
-                                                              !! (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
                                                               !! thermodynamic variables.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode
-                                                              !! internal gravity wave speed,
-                                                              !! in m s-1.
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode internal
+                                                              !! gravity wave speed [m s-1].
   integer,                                  intent(in)  :: ModeNum !< Mode number
-  real,                                     intent(in)  :: freq !< Intrinsic wave frequency, in s-1.
-  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned
-                                                              !! by a previous call to
-                                                              !! wave_structure_init.
+  real,                                     intent(in)  :: freq !< Intrinsic wave frequency [s-1].
+  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned by a
+                                                              !! previous call to wave_structure_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                                  optional, intent(in)  :: En !< Internal wave energy density,
-                                                              !! in Jm-2.
+                                  optional, intent(in)  :: En !< Internal wave energy density [J m-2].
   logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
-                                                              !! over the entire computational
-                                                              !! domain.
+                                                              !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface, in m2 Z-1 s-2.
+    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it,
-                  ! in units of s2 m-2.
+                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
@@ -125,7 +124,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real :: min_h_frac
   real :: H_to_pres
   real, dimension(SZI_(G)) :: &
-    hmin, &  ! Thicknesses in Z.
+    hmin, &  ! Thicknesses [Z ~> m].
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot
   real :: I_Hnew, drxh_sum
@@ -152,7 +151,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real                       :: w2avg   ! average of squared vertical velocity structure funtion
   real                       :: int_dwdz2, int_w2, int_N2w2, KE_term, PE_term, W0
                                         ! terms in vertically averaged energy equation
-  real                       :: gp_unscaled ! A version of gprime rescaled to units of m s-2.
+  real                       :: gp_unscaled ! A version of gprime rescaled to [m s-2].
   real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
                                         ! interface (excluding surface and bottom)
   real, dimension(SZK_(G)-1) :: a_diag, b_diag, c_diag

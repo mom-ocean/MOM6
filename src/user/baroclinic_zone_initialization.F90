@@ -19,6 +19,11 @@ character(len=40) :: mdl = "baroclinic_zone_initialization" !< This module's nam
 
 public baroclinic_zone_init_temperature_salinity
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 contains
 
 !> Reads the parameters unique to this module
@@ -28,15 +33,15 @@ subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, 
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US    !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< Parameter file handle
-  real,                    intent(out) :: S_ref      !< Reference salinity (ppt)
-  real,                    intent(out) :: dSdz       !< Salinity stratification (ppt/Z)
-  real,                    intent(out) :: delta_S    !< Salinity difference across baroclinic zone (ppt)
-  real,                    intent(out) :: dSdx       !< Linear salinity gradient (ppt/m)
-  real,                    intent(out) :: T_ref      !< Reference temperature (ppt)
-  real,                    intent(out) :: dTdz       !< Temperature stratification (ppt/Z)
-  real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone (ppt)
-  real,                    intent(out) :: dTdx       !< Linear temperature gradient (ppt/m)
-  real,                    intent(out) :: L_zone     !< Width of baroclinic zone (m)
+  real,                    intent(out) :: S_ref      !< Reference salinity [ppt]
+  real,                    intent(out) :: dSdz       !< Salinity stratification [ppt Z-1 ~> ppt m-1]
+  real,                    intent(out) :: delta_S    !< Salinity difference across baroclinic zone [ppt]
+  real,                    intent(out) :: dSdx       !< Linear salinity gradient [ppt m-1]
+  real,                    intent(out) :: T_ref      !< Reference temperature [degC]
+  real,                    intent(out) :: dTdz       !< Temperature stratification [degC Z-1 ~> degC m-1]
+  real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone [degC]
+  real,                    intent(out) :: dTdx       !< Linear temperature gradient [degC m-1]
+  real,                    intent(out) :: L_zone     !< Width of baroclinic zone [m]
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
@@ -75,9 +80,9 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses in H (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing T & S.
@@ -86,7 +91,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
   real      :: S_ref, dSdz, dSdx, delta_S ! Parameters describing salinity distribution
   real      :: L_zone ! Width of baroclinic zone
-  real      :: zc, zi ! Depths in depth units (Z).
+  real      :: zc, zi ! Depths in depth units [Z ~> m]
   real      :: x, xd, xs, y, yd, fn
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
   logical :: just_read    ! If true, just read parameters but set nothing.
