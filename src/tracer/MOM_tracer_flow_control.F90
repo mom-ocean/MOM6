@@ -279,8 +279,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
   type(verticalGrid_type),               intent(in)    :: GV      !< The ocean's vertical grid
                                                                   !! structure.
   type(unit_scale_type),                 intent(in)    :: US      !< A dimensional unit scaling type
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thicknesses, in H
-                                                                  !! (usually m or kg m-2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
   type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for
                                                                   !! run-time parameters
   type(diag_ctrl), target,               intent(in)    :: diag    !< A structure that is used to
@@ -391,19 +390,6 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
   type(tracer_flow_control_CS), pointer       :: CS        !< The control structure returned by a
                                                            !! previous call to call_tracer_register.
 
-!   This subroutine calls the individual tracer modules' subroutines to
-! specify or read quantities related to their surface forcing.
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      day_interval - Length of time over which these fluxes
-!                           will be applied.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
-
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_set_forcing"// &
          "Module must be initialized via call_tracer_register before it is used.")
 !  if (CS%use_ideal_age) &
@@ -412,27 +398,25 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 
 end subroutine call_tracer_set_forcing
 
-!> This subroutine calls all registered tracer column physics
-!! subroutines.
+!> This subroutine calls all registered tracer column physics subroutines.
 subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, tv, optics, CS, &
                                   debug, evap_CFL_limit, minimum_forcing_depth)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old  !< Layer thickness before entrainment,
-                                                              !! in m (Boussinesq) or kg m-2
-                                                              !! (non-Boussinesq).
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_new  !< Layer thickness after entrainment,
-                                                              !! in m or kg m-2.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old  !< Layer thickness before entrainment
+                                                              !! [H ~> m or kg m-2].
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_new  !< Layer thickness after entrainment
+                                                              !! [H ~> m or kg m-2].
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: ea     !< an array to which the amount of
                                           !! fluid entrained from the layer above during this call
-                                          !! will be added, in m or kg m-2, the same as h_old.
+                                          !! will be added [H ~> m or kg m-2].
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: eb     !< an array to which the amount of
                                           !! fluid entrained from the layer below during this call
-                                          !! will be added, in m or kg m-2, the same as h_old.
+                                          !! will be added [H ~> m or kg m-2].
   type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to
                                                               !! any possible forcing fields.
                                                               !! Unused fields have NULL ptrs.
-  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml    !< Mixed layer depth (m)
+  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml    !< Mixed layer depth [H ~> m or kg m-2]
   real,                                  intent(in) :: dt     !< The amount of time covered by this
-                                                              !! call, in s
+                                                              !! call [s]
   type(ocean_grid_type),                 intent(in) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in) :: GV     !< The ocean's vertical grid
                                                               !! structure.
@@ -446,36 +430,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
   logical,                               intent(in) :: debug  !< If true calculate checksums
   real,                        optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of
                                                               !! the water that can be fluxed out
-                                                              !! of the top layer in a timestep (nondim)
+                                                              !! of the top layer in a timestep [nondim]
   real,                        optional, intent(in) :: minimum_forcing_depth !< The smallest depth over
-                                                              !! which fluxes can be applied, in m
-
-!   This subroutine calls all registered tracer column physics
-! subroutines.
-
-! Arguments: h_old -  Layer thickness before entrainment, in m (Boussinesq)
-!                     or kg m-2 (non-Boussinesq).
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2, the same as h_old.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2, the same as h_old.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      tv - The structure containing thermodynamic variables.
-!  (in)      optics - The structure containing optical properties.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
-!  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
-!                             Stored previously in diabatic CS.
-!  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
-!                             Stored previously in diabatic CS.
-!  (in)      debug - Calculates checksums
+                                                              !! which fluxes can be applied [H ~> m or kg m-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
@@ -598,10 +555,9 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
                               num_stocks, stock_index, got_min_max, global_min, global_max, &
                               xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    &
-                                  intent(in)  :: h          !< Layer thicknesses, in H
-                                                            !! (usually m or kg m-2).
+                                  intent(in)  :: h           !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),             intent(out) :: stock_values !< The integrated amounts of a tracer
-                             !! on the current PE, usually in kg x concentration.
+                             !! on the current PE, usually in kg x concentration [kg conc].
   type(ocean_grid_type),          intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(tracer_flow_control_CS),   pointer     :: CS          !< The control structure returned by a
@@ -626,22 +582,8 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
   real, dimension(:), optional, intent(out)   :: xgmax       !< The x-position of the global maximum
   real, dimension(:), optional, intent(out)   :: ygmax       !< The y-position of the global maximum
   real, dimension(:), optional, intent(out)   :: zgmax       !< The z-position of the global maximum
-!   This subroutine calls all registered tracer packages to enable them to
-! add to the surface state returned to the coupler. These routines are optional.
 
-! Arguments: h - Layer thickness, in m (Boussinesq) or kg m-2 (non-Boussinesq).
-!  (out)     stock_values - The integrated amounts of a tracer on the current
-!                           PE, usually in kg x concentration.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
-!  (out,opt) stock_names - Diagnostic names to use for each stock.
-!  (out,opt) stock_units - Units to use in the metadata for each stock.
-!  (out,opt) num_stocks - The number of tracer stocks being returned.
-!  (in,opt)  stock_index - The integer stock index from stocks_constans_mod of
-!                          the stock to be returned.  If this is present and
-!                          greater than 0, only a single stock can be returned.
+  ! Local variables
   character(len=200), dimension(MAX_FIELDS_) :: names, units
   character(len=200) :: set_pkg_name
   real, dimension(MAX_FIELDS_) :: values
@@ -798,20 +740,10 @@ subroutine call_tracer_surface_state(state, h, G, CS)
   type(surface),                intent(inout) :: state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   real, dimension(NIMEM_,NJMEM_,NKMEM_), &
-                                intent(in)    :: h     !< Layer thicknesses, in H
-                                                       !! (usually m or kg m-2).
+                                intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a
                                                        !! previous call to call_tracer_register.
-!   This subroutine calls all registered tracer packages to enable them to
-! add to the surface state returned to the coupler. These routines are optional.
-
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m (Boussinesq) or kg m-2 (non-Boussinesq).
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_surface_state: "// &
          "Module must be initialized via call_tracer_register before it is used.")

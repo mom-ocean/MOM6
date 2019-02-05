@@ -62,6 +62,11 @@ implicit none ; private
 public shelf_calc_flux, add_shelf_flux, initialize_ice_shelf, ice_shelf_end
 public ice_shelf_save_restart, solo_time_step, add_shelf_forces
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Control structure that contains ice shelf parameters and diagnostics handles
 type, public :: ice_shelf_CS ; private
   ! Parameters
@@ -74,32 +79,32 @@ type, public :: ice_shelf_CS ; private
   type(ocean_grid_type), pointer :: ocn_grid => NULL() !< A pointer to the ocean model grid
                                           !! The rest is private
   real ::   flux_factor = 1.0             !< A factor that can be used to turn off ice shelf
-                                          !! melting (flux_factor = 0).
+                                          !! melting (flux_factor = 0) [nondim].
   character(len=128) :: restart_output_dir = ' ' !< The directory in which to write restart files
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
   type(ice_shelf_dyn_CS), pointer :: dCS => NULL() !< The control structure for the ice-shelf dynamics.
 
   real, pointer, dimension(:,:) :: &
-    utide   => NULL()  !< tidal velocity, in m/s
+    utide   => NULL()  !< tidal velocity [m s-1]
 
-  real :: ustar_bg     !< A minimum value for ustar under ice shelves, in Z s-1.
-  real :: cdrag        !< drag coefficient under ice shelves , non-dimensional.
-  real :: g_Earth      !< The gravitational acceleration in m s-2.
-  real :: Cp           !< The heat capacity of sea water, in J kg-1 K-1.
-  real :: Rho0         !< A reference ocean density in kg/m3.
-  real :: Cp_ice       !< The heat capacity of fresh ice, in J kg-1 K-1.
+  real :: ustar_bg     !< A minimum value for ustar under ice shelves [Z s-1 ~> m s-1].
+  real :: cdrag        !< drag coefficient under ice shelves [nondim].
+  real :: g_Earth      !< The gravitational acceleration [m s-2]
+  real :: Cp           !< The heat capacity of sea water [J kg-1 degC-1].
+  real :: Rho0         !< A reference ocean density [kg m-3].
+  real :: Cp_ice       !< The heat capacity of fresh ice [J kg-1 degC-1].
   real :: gamma_t      !< The (fixed) turbulent exchange velocity in the
-                       !< 2-equation formulation, in m s-1.
-  real :: Salin_ice    !< The salinity of shelf ice, in PSU.
-  real :: Temp_ice     !< The core temperature of shelf ice, in C.
-  real :: kv_ice       !< The viscosity of ice, in m2 s-1.
-  real :: density_ice  !< A typical density of ice, in kg m-3.
-  real :: rho_ice      !< Nominal ice density in kg m-2 Z-1
-  real :: kv_molec     !< The molecular kinematic viscosity of sea water, m2 s-1.
-  real :: kd_molec_salt!< The molecular diffusivity of salt, in m2 s-1.
-  real :: kd_molec_temp!< The molecular diffusivity of heat, in m2 s-1.
-  real :: Lat_fusion   !< The latent heat of fusion, in J kg-1.
+                       !< 2-equation formulation [m s-1].
+  real :: Salin_ice    !< The salinity of shelf ice [ppt].
+  real :: Temp_ice     !< The core temperature of shelf ice [degC].
+  real :: kv_ice       !< The viscosity of ice [m2 s-1].
+  real :: density_ice  !< A typical density of ice [kg m-3].
+  real :: rho_ice      !< Nominal ice density [kg m-2 Z-1 ~> kg m-3].
+  real :: kv_molec     !< The molecular kinematic viscosity of sea water [m2 s-1].
+  real :: kd_molec_salt!< The molecular diffusivity of salt [m2 s-1].
+  real :: kd_molec_temp!< The molecular diffusivity of heat [m2 s-1].
+  real :: Lat_fusion   !< The latent heat of fusion [J kg-1].
   real :: Gamma_T_3EQ  !<  Nondimensional heat-transfer coefficient, used in the 3Eq. formulation
                        !<  This number should be specified by the user.
   real :: col_thick_melt_threshold !< if the mixed layer is below this threshold, melt rate
@@ -122,14 +127,14 @@ type, public :: ice_shelf_CS ; private
                             !! should be exclusive)
   real :: density_ocean_avg !< this does not affect ocean circulation OR thermodynamics
                             !! it is to estimate the gravitational driving force at the
-                            !! shelf front(until we think of a better way to do it-
+                            !! shelf front (until we think of a better way to do it,
                             !! but any difference will be negligible)
   logical :: calve_to_mask  !< If true, calve any ice that passes outside of a masked area
-  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving, in Z
-  real :: T0                !< temperature at ocean surface in the restoring region, in degC
-  real :: S0                !< Salinity at ocean surface in the restoring region, in ppt.
-  real :: input_flux        !< Ice volume flux at an upstream open boundary, in m3 s-1.
-  real :: input_thickness   !< Ice thickness at an upstream open boundary, in m.
+  real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
+  real :: T0                !< temperature at ocean surface in the restoring region [degC]
+  real :: S0                !< Salinity at ocean surface in the restoring region [ppt].
+  real :: input_flux        !< Ice volume flux at an upstream open boundary [m3 s-1].
+  real :: input_thickness   !< Ice thickness at an upstream open boundary [m].
 
   type(time_type) :: Time                !< The component's time.
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
@@ -191,7 +196,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                                                  !! thermodynamic or mass-flux forcing fields.
   type(time_type),       intent(in)    :: Time  !< Start time of the fluxes.
   real,                  intent(in)    :: time_step !< Length of time over which
-                                                    !! these fluxes will be applied, in s.
+                                                    !! these fluxes will be applied [s].
   type(ice_shelf_CS),    pointer       :: CS !< A pointer to the control structure
                                              !! returned by a previous call to
                                              !! initialize_ice_shelf.
@@ -204,16 +209,16 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                                           !! the ice-shelf state
 
   real, dimension(SZI_(CS%grid)) :: &
-    Rhoml, &   !< Ocean mixed layer density in kg m-3.
+    Rhoml, &   !< Ocean mixed layer density [kg m-3].
     dR0_dT, &  !< Partial derivative of the mixed layer density
-               !< with temperature, in units of kg m-3 K-1.
+               !< with temperature [kg m-3 degC-1].
     dR0_dS, &  !< Partial derivative of the mixed layer density
-               !< with salinity, in units of kg m-3 psu-1.
-    p_int      !< The pressure at the ice-ocean interface, in Pa.
+               !< with salinity [kg m-3 ppt-1].
+    p_int      !< The pressure at the ice-ocean interface [Pa].
 
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
-    exch_vel_t, &  !< Sub-shelf thermal exchange velocity, in m/s
-    exch_vel_s     !< Sub-shelf salt exchange velocity, in m/s
+    exch_vel_t, &  !< Sub-shelf thermal exchange velocity [m s-1]
+    exch_vel_s     !< Sub-shelf salt exchange velocity [m s-1]
 
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
     mass_flux  !< total mass flux of freshwater across
@@ -226,23 +231,24 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
                !! viscosity is linearly increasing. (Was 1/8. Why?)
   real, parameter :: RC    = 0.20     ! critical flux Richardson number.
   real :: I_ZETA_N !< The inverse of ZETA_N.
-  real :: LF, I_LF !< Latent Heat of fusion (J kg-1) and its inverse.
+  real :: LF, I_LF !< Latent Heat of fusion [J kg-1] and its inverse.
   real :: I_VK     !< The inverse of VK.
-  real :: PR, SC   !< The Prandtl number and Schmidt number, nondim.
+  real :: PR, SC   !< The Prandtl number and Schmidt number [nondim].
 
   ! 3 equations formulation variables
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
-    Sbdry     !< Salinities in the ocean at the interface with the ice shelf, in PSU.
+    Sbdry     !< Salinities in the ocean at the interface with the ice shelf [ppt].
   real :: Sbdry_it
   real :: Sbdry1, Sbdry2, S_a, S_b, S_c  ! use to find salt roots
-  real :: dS_it    !< The interface salinity change during an iteration, in PSU.
-  real :: hBL_neut !< The neutral boundary layer thickness, in m.
+  real :: dS_it    !< The interface salinity change during an iteration [ppt].
+  real :: hBL_neut !< The neutral boundary layer thickness [m].
   real :: hBL_neut_h_molec !< The ratio of the neutral boundary layer thickness
-                   !! to the molecular boundary layer thickness, ND.
-  real :: wT_flux !< The vertical fluxes of heat and buoyancy just inside the
-  real :: wB_flux !< ocean, in C m s-1 and m2 s-3, ###CURRENTLY POSITIVE UPWARD.
-  real :: dB_dS   !< The derivative of buoyancy with salinity, in m s-2 PSU-1.
-  real :: dB_dT   !< The derivative of buoyancy with temperature, in m s-2 C-1.
+                   !! to the molecular boundary layer thickness [nondim].
+  !### THESE ARE CURRENTLY POSITIVE UPWARD.
+  real :: wT_flux !< The vertical flux of heat just inside the ocean [degC m s-1].
+  real :: wB_flux !< The vertical flux of heat just inside the ocean [m2 s-3].
+  real :: dB_dS   !< The derivative of buoyancy with salinity [m s-2 ppt-1].
+  real :: dB_dT   !< The derivative of buoyancy with temperature [m s-2 degC-1].
   real :: I_n_star, n_star_term, absf
   real :: dIns_dwB !< The partial derivative of I_n_star with wB_flux, in ???.
   real :: dT_ustar, dS_ustar
@@ -623,7 +629,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
        !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!!
   enddo ; enddo ! i- and j-loops
 
-  ! mass flux (kg/s), part of ISOMIP diags.
+  ! mass flux [kg s-1], part of ISOMIP diags.
   mass_flux(:,:) = 0.0
   mass_flux(:,:) = ISS%water_flux(:,:) * ISS%area_shelf_h(:,:)
 
@@ -695,10 +701,10 @@ subroutine change_thickness_using_melt(ISS, G, time_step, fluxes, rho_ice, debug
   type(ocean_grid_type), intent(inout) :: G  !< The ocean's grid structure.
   type(ice_shelf_state), intent(inout) :: ISS !< A structure with elements that describe
                                               !! the ice-shelf state
-  real,                  intent(in)    :: time_step !< The time step for this update, in s.
+  real,                  intent(in)    :: time_step !< The time step for this update [s].
   type(forcing),         intent(inout) :: fluxes !< structure containing pointers to any possible
                                                  !! thermodynamic or mass-flux forcing fields.
-  real,                  intent(in)    :: rho_ice !< The density of ice-shelf ice, in kg m-2 Z-1.
+  real,                  intent(in)    :: rho_ice !< The density of ice-shelf ice [kg m-2 Z-1 ~> kg m-3].
   logical,     optional, intent(in)    :: debug !< If present and true, write chksums
 
   ! locals
@@ -750,8 +756,8 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
 
-  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
-  real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) in Pa.
+  real :: kv_rho_ice ! The viscosity of ice divided by its density [m5 kg-1 s-1].
+  real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   logical :: find_area ! If true find the shelf areas at u & v points.
   type(ice_shelf_state), pointer :: ISS => NULL() ! A structure with elements that describe
                                           ! the ice-shelf state
@@ -829,7 +835,7 @@ subroutine add_shelf_pressure(G, CS, fluxes)
   type(ice_shelf_CS),    intent(in)    :: CS   !< This module's control structure.
   type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be updated.
 
-  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) in Pa.
+  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -859,32 +865,32 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be used/updated.
 
   ! local variables
-  real :: Irho0           !< The inverse of the mean density in m3 kg-1.
-  real :: frac_area       !< The fractional area covered by the ice shelf, nondim.
+  real :: Irho0           !< The inverse of the mean density [m3 kg-1].
+  real :: frac_area       !< The fractional area covered by the ice shelf [nondim].
   real :: shelf_mass0     !< Total ice shelf mass at previous time (Time-dt).
   real :: shelf_mass1     !< Total ice shelf mass at current time (Time).
-  real :: delta_mass_shelf!< Change in ice shelf mass over one time step in kg/s
-  real :: taux2, tauy2    !< The squared surface stresses, in Pa.
-  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) in Pa.
+  real :: delta_mass_shelf!< Change in ice shelf mass over one time step [kg s-1]
+  real :: taux2, tauy2    !< The squared surface stresses [Pa].
+  real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [Pa].
   real :: asu1, asu2      !< Ocean areas covered by ice shelves at neighboring u-
-  real :: asv1, asv2      !< and v-points, in m2.
-  real :: fraz            !< refreezing rate in kg m-2 s-1
-  real :: mean_melt_flux  !< spatial mean melt flux kg/s
-  real :: sponge_area     !< total area of sponge region
-  real :: t0              !< The previous time (Time-dt) in sec.
+  real :: asv1, asv2      !< and v-points [m2].
+  real :: fraz            !< refreezing rate [kg m-2 s-1]
+  real :: mean_melt_flux  !< spatial mean melt flux [kg s-1] or [kg m-2 s-1] at various points in the code.
+  real :: sponge_area     !< total area of sponge region [m2]
+  real :: t0              !< The previous time (Time-dt) [s].
   type(time_type) :: Time0!< The previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G)) :: last_mass_shelf !< Ice shelf mass
-                          !! at at previous time (Time-dt), in kg/m^2
-  real, dimension(SZDI_(G),SZDJ_(G))  :: last_h_shelf !< Ice shelf thickness in Z
-                          !! at at previous time (Time-dt), in m
+                          !! at at previous time (Time-dt) [kg m-2]
+  real, dimension(SZDI_(G),SZDJ_(G))  :: last_h_shelf !< Ice shelf thickness [Z ~> m]
+                          !! at at previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G))  :: last_hmask !< Ice shelf mask
                           !! at at previous time (Time-dt)
-  real, dimension(SZDI_(G),SZDJ_(G))  :: last_area_shelf_h !< Ice shelf area
-                          !! at at previous time (Time-dt), m^2
+  real, dimension(SZDI_(G),SZDJ_(G))  :: last_area_shelf_h !< Ice shelf area [m2]
+                          !! at at previous time (Time-dt)
   type(ice_shelf_state), pointer :: ISS => NULL() !< A structure with elements that describe
                                           !! the ice-shelf state
 
-  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
+  real :: kv_rho_ice ! The viscosity of ice divided by its density [m5 kg-1 s-1]
   real, parameter :: rho_fw = 1000.0 ! fresh water density
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
@@ -1050,7 +1056,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     enddo ; enddo
 
     if (CS%DEBUG) then
-      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
+      write(mesg,*) 'Mean melt flux [kg m-2 s-1], dt = ', mean_melt_flux, CS%time_step
       call MOM_mesg(mesg)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, CS%US, haloshift=0)
     endif
@@ -1739,10 +1745,10 @@ end subroutine ice_shelf_end
 !> This routine is for stepping a stand-alone ice shelf model without an ocean.
 subroutine solo_time_step(CS, time_step, nsteps, Time, min_time_step_in)
   type(ice_shelf_CS), pointer    :: CS !< A pointer to the ice shelf control structure
-  real,            intent(in)    :: time_step !< The time interval for this update, in s.
+  real,            intent(in)    :: time_step !< The time interval for this update [s].
   integer,         intent(inout) :: nsteps  !< The running number of ice shelf steps.
   type(time_type), intent(inout) :: Time !< The current model time
-  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step in s.
+  real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step [s].
 
   type(ocean_grid_type), pointer :: G => NULL()
   type(unit_scale_type), pointer :: US => NULL() ! Pointer to a structure containing

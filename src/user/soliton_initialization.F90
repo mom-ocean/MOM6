@@ -33,7 +33,7 @@ subroutine soliton_initialize_thickness(h, G, GV, US)
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h    !< The thickness that is being initialized, in H.
+                           intent(out) :: h    !< The thickness that is being initialized [H ~> m or kg m-2].
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0
@@ -65,9 +65,9 @@ end subroutine soliton_initialize_thickness
 !> Initialization of u and v in the equatorial Rossby soliton test
 subroutine soliton_initialize_velocity(u, v, h, G)
   type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
 
   real    :: x, y, x0, y0
   real    :: val1, val2, val3, val4

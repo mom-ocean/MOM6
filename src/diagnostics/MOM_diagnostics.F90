@@ -42,13 +42,18 @@ public register_surface_diags, post_surface_dyn_diags, post_surface_thermo_diags
 public register_transport_diags, post_transport_diagnostics
 public MOM_diagnostics_init, MOM_diagnostics_end
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> The control structure for the MOM_diagnostics module
 type, public :: diagnostics_CS ; private
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
                                        !! monotonic for the purposes of calculating the equivalent
                                        !! barotropic wave speed.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed. (m)
+                                       !! calculating the equivalent barotropic wave speed [m].
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                        !! regulate the timing of diagnostic output.
@@ -57,49 +62,48 @@ type, public :: diagnostics_CS ; private
 
   ! following fields have nz+1 levels.
   real, pointer, dimension(:,:,:) :: &
-    e => NULL(), &   !< interface height (metre)
-    e_D => NULL()    !< interface height above bottom (metre)
+    e => NULL(), &   !< interface height [Z ~> m]
+    e_D => NULL()    !< interface height above bottom [Z ~> m]
 
   ! following fields have nz layers.
   real, pointer, dimension(:,:,:) :: &
-    du_dt => NULL(), & !< net i-acceleration in m/s2
-    dv_dt => NULL(), & !< net j-acceleration in m/s2
-    dh_dt => NULL(), & !< thickness rate of change in (m/s) or kg/(m2*s)
-    p_ebt => NULL()    !< Equivalent barotropic modal structure
+    du_dt => NULL(), & !< net i-acceleration [m s-2]
+    dv_dt => NULL(), & !< net j-acceleration [m s-2]
+    dh_dt => NULL(), & !< thickness rate of change [H s-1 ~> m s-1 or kg m-2 s-1]
+    p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
-                                              !! coordinates, in m (Bouss) or kg/m2 (non-Bouss)
+                                              !! coordinates [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: uh_Rlay => NULL() !< Zonal transports in potential density
-                                              !! coordinates in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: vh_Rlay => NULL() !< Meridional transports in potential density
-                                              !! coordinates in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: uhGM_Rlay => NULL() !< Zonal Gent-McWilliams transports in potential density
-                                              !! coordinates, in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: vhGM_Rlay => NULL() !< Meridional Gent-McWilliams transports in potential density
-                                              !! coordinates, in m3/s (Bouss) or kg/s (non-Bouss)
+                                              !! coordinates [H m2 s-1 ~> m3 s-1 or kg s-1]
 
   ! following fields are 2-D.
   real, pointer, dimension(:,:) :: &
-    cg1 => NULL(),       & !< First baroclinic gravity wave speed, in m s-1
-    Rd1 => NULL(),       & !< First baroclinic deformation radius, in m
+    cg1 => NULL(),       & !< First baroclinic gravity wave speed [m s-1]
+    Rd1 => NULL(),       & !< First baroclinic deformation radius [m]
     cfl_cg1 => NULL(),   & !< CFL for first baroclinic gravity wave speed, nondim
     cfl_cg1_x => NULL(), & !< i-component of CFL for first baroclinic gravity wave speed, nondim
     cfl_cg1_y => NULL()    !< j-component of CFL for first baroclinic gravity wave speed, nondim
 
-  ! arrays to hold diagnostics in the layer-integrated energy budget.
-  ! all except KE have units of m3 s-3 (when Boussinesq).
+  ! The following arrays hold diagnostics in the layer-integrated energy budget.
   real, pointer, dimension(:,:,:) :: &
-    KE        => NULL(), &  !< KE per unit mass, in m2 s-2
-    dKE_dt    => NULL(), &  !< time derivative of the layer KE
-    PE_to_KE  => NULL(), &  !< potential energy to KE term
-    KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and advection terms.
+    KE        => NULL(), &  !< KE per unit mass [m2 s-2]
+    dKE_dt    => NULL(), &  !< time derivative of the layer KE [m3 s-3]
+    PE_to_KE  => NULL(), &  !< potential energy to KE term [m3 s-3]
+    KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and advection terms [m3 s-3].
                             !! The Coriolis source should be zero, but is not due to truncation
                             !! errors.  There should be near-cancellation of the global integral
                             !! of this spurious Coriolis source.
-    KE_adv     => NULL(),&  !< KE source from along-layer advection
-    KE_visc    => NULL(),&  !< KE source from vertical viscosity
-    KE_horvisc => NULL(),&  !< KE source from horizontal viscosity
-    KE_dia     => NULL()    !< KE source from diapycnal diffusion
+    KE_adv     => NULL(), & !< KE source from along-layer advection [m3 s-3]
+    KE_visc    => NULL(), & !< KE source from vertical viscosity [m3 s-3]
+    KE_horvisc => NULL(), & !< KE source from horizontal viscosity [m3 s-3]
+    KE_dia     => NULL()    !< KE source from diapycnal diffusion [m3 s-3]
 
   !>@{ Diagnostic IDs
   integer :: id_u = -1,   id_v = -1, id_h = -1
@@ -185,28 +189,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: uh   !< Transport through zonal faces = u*h*dy, in H m2 s-1.
-                                                 !! I.e. units are m3/s(Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: uh   !< Transport through zonal faces = u*h*dy,
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: vh   !< Transport through meridional faces = v*h*dx, in H m2 s-1.
-                                                 !! I.e. units are m3/s(Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: vh   !< Transport through meridional faces = v*h*dx,
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< structure with pointers to
                                                  !! accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< structure with pointers to
                                                  !! terms in continuity equation.
-  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [Pa].
                                                  !! If p_surf is not associated, it is the same
                                                  !! as setting the surface pressure to 0.
-  real,                    intent(in)    :: dt   !< The time difference in s since the last
-                                                 !! call to this subroutine.
+  real,                    intent(in)    :: dt   !< The time difference since the last
+                                                 !! call to this subroutine [s].
   type(diag_grid_storage), intent(in)    :: diag_pre_sync !< Target grids from previous timestep
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
                                                  !! previous call to diagnostics_init.
@@ -214,11 +218,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                   optional, intent(in)   :: eta_bt !< An optional barotropic
     !! variable that gives the "correct" free surface height (Boussinesq) or total water column
     !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
-    !! calculating interface heights, in m or kg m-2.
+    !! calculating interface heights [H ~> m or kg m-2].
   ! Local variables
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
-  ! coordinate variable potential density, in kg m-3.
+  ! coordinate variable potential density [kg m-3].
   real :: Rcv(SZI_(G),SZJ_(G),SZK_(G))
   ! Two temporary work arrays
   real :: work_3d(SZI_(G),SZJ_(G),SZK_(G))
@@ -229,13 +233,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
   real :: wt, wt_p
 
-  ! squared Coriolis parameter at to h-points (1/s2)
+  ! squared Coriolis parameter at to h-points [s-2]
   real :: f2_h
 
-  ! magnitude of the gradient of f (1/(m*s))
+  ! magnitude of the gradient of f [s-1 m-1]
   real :: mag_beta
 
-  ! frequency squared used to avoid division by 0 (1/s2)
+  ! frequency squared used to avoid division by 0 [s-2]
   ! value is roughly (pi / (the age of the universe) )^2.
   real, parameter :: absurdly_small_freq2 = 1e-34
 
@@ -323,7 +327,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
-  ! diagnose thickness/volumes of grid cells (meter)
+  ! diagnose thickness/volumes of grid cells [m]
   if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
     if (GV%Boussinesq) then ! thkcello = h for Boussinesq
       if (CS%id_thkcello > 0) then ; if (GV%H_to_m == 1.0) then
@@ -342,7 +346,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-        if (associated(p_surf)) then ! Pressure loading at top of surface layer (Pa)
+        if (associated(p_surf)) then ! Pressure loading at top of surface layer [Pa]
           do i=is,ie
             pressure_1d(i) = p_surf(i,j)
           enddo
@@ -352,16 +356,16 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           enddo
         endif
         do k=1,nz ! Integrate vertically downward for pressure
-          do i=is,ie ! Pressure for EOS at the layer center (Pa)
+          do i=is,ie ! Pressure for EOS at the layer center [Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
-          ! Store in-situ density (kg/m3) in work_3d
+          ! Store in-situ density [kg m-3] in work_3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
                                  work_3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
           do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
             work_3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k)) / work_3d(i,j,k)
           enddo
-          do i=is,ie ! Pressure for EOS at the bottom interface (Pa)
+          do i=is,ie ! Pressure for EOS at the bottom interface [Pa]
             pressure_1d(i) = pressure_1d(i) + 0.5*GV%H_to_Pa*h(i,j,k)
           enddo
         enddo ! k
@@ -695,8 +699,8 @@ end subroutine calculate_diagnostic_fields
 !! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
   real, dimension(:), &
-            intent(in)    :: Rlist !< The list of target densities, in kg m-3
-  real,     intent(in)    :: R_in !< The density being inserted into Rlist, in kg m-3
+            intent(in)    :: Rlist !< The list of target densities [kg m-3]
+  real,     intent(in)    :: R_in !< The density being inserted into Rlist [kg m-3]
   integer,  intent(inout) :: k    !< The value of k such that Rlist(k) <= R_in < Rlist(k+1)
                                   !! The input value is a first guess
   integer,  intent(in)    :: nz   !< The number of layers in Rlist
@@ -765,30 +769,30 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
-  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure [Pa].
                                                  !! If p_surf is not associated, it is the same
                                                  !! as setting the surface pressure to 0.
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
                                                  !! previous call to diagnostics_init.
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    z_top, &  ! Height of the top of a layer or the ocean, in Z.
+    z_top, &  ! Height of the top of a layer or the ocean [Z ~> m].
     z_bot, &  ! Height of the bottom of a layer (for id_mass) or the
-              ! (positive) depth of the ocean (for id_col_ht), in Z.
-    mass, &   ! integrated mass of the water column, in kg m-2.  For
+              ! (positive) depth of the ocean (for id_col_ht) [Z ~> m].
+    mass, &   ! integrated mass of the water column [kg m-2].  For
               ! non-Boussinesq models this is rho*dz. For Boussinesq
               ! models, this is either the integral of in-situ density
               ! (rho*dz for col_mass) or reference density (Rho_0*dz for mass_wt).
     btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
               ! This is the column mass multiplied by gravity plus the pressure
-              ! at the ocean surface.
-    dpress, & ! Change in hydrostatic pressure across a layer, in Pa.
+              ! at the ocean surface [Pa].
+    dpress, & ! Change in hydrostatic pressure across a layer [Pa].
     tr_int    ! vertical integral of a tracer times density,
-              ! (Rho_0 in a Boussinesq model) in TR kg m-2.
-  real    :: IG_Earth  ! Inverse of gravitational acceleration, in s2 m-1.
+              ! (Rho_0 in a Boussinesq model) [TR kg m-2].
+  real    :: IG_Earth  ! Inverse of gravitational acceleration [s2 m-1].
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -879,17 +883,17 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: uh   !< Transport through zonal faces=u*h*dy, in H m2 s-1.
-                                                 !! I.e. units are m3/s (Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: uh   !< Transport through zonal faces=u*h*dy,
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: vh   !< Transport through merid faces=v*h*dx, in H m2 s-1.
-                                                 !! I.e. units are m3/s (Bouss) or kg/s(non-Bouss).
+                           intent(in)    :: vh   !< Transport through merid faces=v*h*dx,
+                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< Structure pointing to accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< Structure pointing to terms in continuity equations.
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a previous call to
@@ -1106,7 +1110,7 @@ end subroutine register_time_deriv
 
 !> This subroutine calculates all registered time derivatives.
 subroutine calculate_derivs(dt, G, CS)
-  real,                  intent(in)    :: dt   !< The time interval over which differences occur, in s.
+  real,                  intent(in)    :: dt   !< The time interval over which differences occur [s].
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   type(diagnostics_CS),  intent(inout) :: CS   !< Control structure returned by previous call to
                                                !! diagnostics_init.
@@ -1136,7 +1140,7 @@ subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
   type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement (m)
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
@@ -1173,18 +1177,18 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
   type(unit_scale_type),    intent(in) :: US  !< A dimensional unit scaling type
   type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
-  real,                     intent(in) :: dt_int !< total time step associated with these diagnostics, in s.
+  real,                     intent(in) :: dt_int !< total time step associated with these diagnostics [s].
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement (m)
+                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh_ibc !< Time mean surface height with corrections
-                                                  !! for ice displacement and the inverse barometer (m)
+                                                  !! for ice displacement and the inverse barometer [m]
 
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
-  real :: I_time_int    ! The inverse of the time interval in s-1.
+    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh [m]
+  real :: I_time_int    ! The inverse of the time interval [s-1].
   real :: zos_area_mean, volo, ssh_ga
   integer :: i, j, is, ie, js, je
 
@@ -1314,26 +1318,29 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
-                                                 !! used to advect tracers (m3 or kg)
+                                                 !! used to advect tracers [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhtr !< Accumulated meridional thickness fluxes
-                                                 !! used to advect tracers (m3 or kg)
+                                                 !! used to advect tracers [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h   !< The updated layer thicknesses, in H
+                            intent(in)    :: h   !< The updated layer thicknesses [H ~> m or kg m-2]
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
-  real,                     intent(in)    :: dt_trans !< total time step associated with the transports, in s.
+  real,                     intent(in)    :: dt_trans !< total time step associated with the transports [s].
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< A control structure for remapping
                                                            !! the transports to depth space
   type(tracer_registry_type), pointer     :: Reg !< Pointer to the tracer registry
 
-  real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport, in kg s-1
-  real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport, in kg s-1
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport, in kg s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics m s-1
-  real :: Idt
-  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
+  ! Local variables
+  real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport [kg s-1]
+  real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport [kg s-1]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport [kg s-1]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport [kg s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics
+                          ! [H s-1 ~> m s-1 or kg m-2 s-1].
+  real :: Idt             ! The inverse of the time interval [s-1]
+  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes
+                          ! [kg m-2 H-1 s-1 ~> kg m-3 s-1 or s-1].
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 

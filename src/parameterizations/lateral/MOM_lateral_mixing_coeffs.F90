@@ -56,11 +56,11 @@ type, public :: VarMix_CS
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
   real, dimension(:,:), pointer :: &
-    SN_u => NULL(), &   !< S*N at u-points (s^-1)
-    SN_v => NULL(), &  !< S*N at v-points (s^-1)
-    L2u => NULL(), &   !< Length scale^2 at u-points (m^2)
-    L2v => NULL(), &   !< Length scale^2 at v-points (m^2)
-    cg1 => NULL(), &   !< The first baroclinic gravity wave speed in m s-1.
+    SN_u => NULL(), &   !< S*N at u-points [s-1]
+    SN_v => NULL(), &  !< S*N at v-points [s-1]
+    L2u => NULL(), &   !< Length scale^2 at u-points [m2]
+    L2v => NULL(), &   !< Length scale^2 at v-points [m2]
+    cg1 => NULL(), &   !< The first baroclinic gravity wave speed [m s-1].
     Res_fn_h => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at h points.
     Res_fn_q => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
@@ -78,19 +78,19 @@ type, public :: VarMix_CS
     beta_dx2_v => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
                             !! times the grid spacing squared at v points.
     f2_dx2_h => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at h, in m2 s-2.
+                          !! spacing squared at h [m-2 s-2].
     f2_dx2_q => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at q, in m2 s-2.
+                          !! spacing squared at q [m-2 s-2].
     f2_dx2_u => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at u, in m2 s-2.
+                          !! spacing squared at u [m-2 s-2].
     f2_dx2_v => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at v, in m2 s-2.
-    Rd_dx_h => NULL()     !< Deformation radius over grid spacing (non-dim.)
+                          !! spacing squared at v [m-2 s-2].
+    Rd_dx_h => NULL()     !< Deformation radius over grid spacing [nondim]
 
   real, dimension(:,:,:), pointer :: &
-    slope_x => NULL(), &  !< Zonal isopycnal slope (non-dimensional)
-    slope_y => NULL(), &  !< Meridional isopycnal slope (non-dimensional)
-    ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with (non-dim)
+    slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
+    slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
+    ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
 
   ! Parameters
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
@@ -101,14 +101,14 @@ type, public :: VarMix_CS
   real :: Res_coef_visc   !< A non-dimensional number that determines the function
                           !! of resolution, used for lateral viscosity, as:
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
-  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers (m2/s)
+  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [m2 s-1]
   integer :: Res_fn_power_khth !< The power of dx/Ld in the KhTh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
   integer :: Res_fn_power_visc !< The power of dx/Ld in the Kh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
-  real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate (nondim).
+  real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate [nondim].
 
   ! Diagnostics
   !>@{
@@ -132,15 +132,15 @@ contains
 !> Calculates and stores the non-dimensional resolution functions
 subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
-  real :: cg1_q  ! The gravity wave speed interpolated to q points, in m s-1.
-  real :: cg1_u  ! The gravity wave speed interpolated to u points, in m s-1.
-  real :: cg1_v  ! The gravity wave speed interpolated to v points, in m s-1.
+  real :: cg1_q  ! The gravity wave speed interpolated to q points [m s-1].
+  real :: cg1_u  ! The gravity wave speed interpolated to u points [m s-1].
+  real :: cg1_v  ! The gravity wave speed interpolated to v points [m s-1].
   real :: dx_term
   integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -174,7 +174,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   endif
 
   ! Calculate and store the ratio between deformation radius and grid-spacing
-  ! at h-points (non-dimensional).
+  ! at h-points [nondim].
   if (CS%calculate_rd_dx) then
     if (.not. associated(CS%Rd_dx_h)) call MOM_error(FATAL, &
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
@@ -382,15 +382,15 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  real,                                     intent(in)    :: dt !< Time increment (s)
+  real,                                     intent(in)    :: dt !< Time increment [s]
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    e             ! The interface heights relative to mean sea level, in m.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points, in s-2
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points, in s-2
+    e             ! The interface heights relative to mean sea level [Z ~> m].
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [s-2]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [s-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
@@ -423,19 +423,18 @@ end subroutine calc_slope_functions
 subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points (1/s2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points [s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points (1/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points [s-2]
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
 
   ! Local variables
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
-  real :: S2            ! Interface slope squared (non-dim)
-  real :: N2            ! Brunt-Vaisala frequency (1/s)
-  real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
-  real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+  real :: S2            ! Interface slope squared [nondim]
+  real :: N2            ! Brunt-Vaisala frequency [s-1]
+  real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
+  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real :: S2max, wNE, wSE, wSW, wNW
@@ -575,27 +574,26 @@ end subroutine calc_Visbeck_coeffs
 !! interface positions only, not accounting for density variations.
 subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes)
   type(ocean_grid_type),                      intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                            pointer       :: CS !< Variable mixing coefficients
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                    intent(in)    :: calculate_slopes !< If true, calculate slopes internally
                                                                   !! otherwise use slopes stored in CS
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points (for diagnostics)
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
-  real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
+  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
+  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
+  real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
-  real :: S2            ! Interface slope squared (non-dim)
-  real :: N2            ! Brunt-Vaisala frequency (1/s)
-  real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
-  real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: S2            ! Interface slope squared [nondim]
+  real :: N2            ! Brunt-Vaisala frequency [s-1]
+  real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
+  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   real :: Z_to_L        ! A conversion factor between from units for e to the
                         ! units for lateral distances.
-  real :: one_meter     ! One meter in thickness units of m or kg m-2.
+  real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real    :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
@@ -722,7 +720,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
   real :: KhTr_passivity_coeff
   real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
-             ! squared that is used to avoid division by 0, in s-2.  This
+             ! squared that is used to avoid division by 0 [s-2].  This
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   real :: MLE_front_length

@@ -15,15 +15,20 @@ public verticalGridInit, verticalGridEnd
 public setVerticalGridAxes, fix_restart_scaling
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Describes the vertical ocean grid, including unit conversion factors
 type, public :: verticalGrid_type
 
   ! Commonly used parameters
   integer :: ke     !< The number of layers/levels in the vertical
-  real :: max_depth !< The maximum depth of the ocean in Z (often m).
-  real :: g_Earth   !< The gravitational acceleration in m2 Z-1 s-2.
+  real :: max_depth !< The maximum depth of the ocean [Z ~> m].
+  real :: g_Earth   !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
-                    !! density used to convert depths into mass units, in kg m-3.
+                    !! density used to convert depths into mass units [kg m-3].
 
   ! Vertical coordinate descriptions for diagnostics and I/O
   character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in
@@ -35,15 +40,15 @@ type, public :: verticalGrid_type
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq !< If true, make the Boussinesq approximation.
-  real :: Angstrom_H    !< A one-Angstrom thickness in the model thickness units.
-  real :: Angstrom_Z    !< A one-Angstrom thickness in the model depth units.
-  real :: Angstrom_m    !< A one-Angstrom thickness in m.
+  real :: Angstrom_H    !< A one-Angstrom thickness in the model thickness units [H ~> m or kg m-2].
+  real :: Angstrom_Z    !< A one-Angstrom thickness in the model depth units [Z ~> m].
+  real :: Angstrom_m    !< A one-Angstrom thickness [m].
   real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
-                        !! Angstrom or larger without changing it at the bit level, in thickness units.
+                        !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real, allocatable, dimension(:) :: &
-    g_prime, &          !< The reduced gravity at each interface, in m2 Z-1 s-2.
-    Rlay                !< The target coordinate value (potential density) in each layer in kg m-3.
+    g_prime, &          !< The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+    Rlay                !< The target coordinate value (potential density) in each layer [kg m-3].
   integer :: nkml = 0   !< The number of layers at the top that should be treated
                         !! as parts of a homogenous region.
   integer :: nk_rho_varies = 0 !< The number of layers at the top where the
@@ -52,7 +57,7 @@ type, public :: verticalGrid_type
   real :: kg_m2_to_H    !< A constant that translates thicknesses from kg m-2 to the units of thickness.
   real :: m_to_H        !< A constant that translates distances in m to the units of thickness.
   real :: H_to_m        !< A constant that translates distances in the units of thickness to m.
-  real :: H_to_Pa       !< A constant that translates the units of thickness to pressure in Pa.
+  real :: H_to_Pa       !< A constant that translates the units of thickness to pressure [Pa].
   real :: H_to_Z        !< A constant that translates thickness units to the units of depth.
   real :: Z_to_H        !< A constant that translates depth units to thickness units.
 
