@@ -28,6 +28,11 @@ public DOME2d_initialize_thickness
 public DOME2d_initialize_temperature_salinity
 public DOME2d_initialize_sponges
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 character(len=40) :: mdl = "DOME2D_initialization" !< This module's name.
 
 contains
@@ -90,17 +95,17 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
   ! Local variables
-  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units (Z), usually
+  real :: e0(SZK_(GV))     ! The resting interface heights, in depth units [Z ~> m], usually
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
-                           ! positive upward, in depth units (Z).
+                           ! positive upward, in depth units [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
@@ -220,9 +225,9 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
                      eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in units of H (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -357,19 +362,19 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp
-  real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO
-  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness, in m.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness
-  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate, in s-1.
+  real :: T(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for temp [degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt [ppt]
+  real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO [kg m-3]
+  real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness [H ~> m or kg m-2].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness [Z ~> m]
+  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [s-1].
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
-  real :: e0(SZK_(G)+1)             ! The resting interface heights, in depth units (Z),
+  real :: e0(SZK_(G)+1)             ! The resting interface heights [Z ~> m],
                                     ! usually negative because it is positive upward.
   real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface
-                                    ! positive upward, in Z.
-  real :: d_eta(SZK_(G))            ! The layer thickness in a column, in Z.
+                                    ! positive upward [Z ~> m].
+  real :: d_eta(SZK_(G))            ! The layer thickness in a column [Z ~> m].
   real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
   real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale
   real :: dome2d_west_sponge_width, dome2d_east_sponge_width

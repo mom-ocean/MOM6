@@ -18,7 +18,7 @@ type, public :: adapt_CS ; private
   !> Number of layers/levels
   integer :: nk
 
-  !> Nominal near-surface resolution in H
+  !> Nominal near-surface resolution [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: coordinateResolution
 
   !> Ratio of optimisation and diffusion timescales
@@ -27,7 +27,7 @@ type, public :: adapt_CS ; private
   !> Nondimensional coefficient determining how much optimisation to apply
   real :: adaptAlpha
 
-  !> Near-surface zooming depth in H
+  !> Near-surface zooming depth [H ~> m or kg m-2]
   real :: adaptZoom
 
   !> Near-surface zooming coefficient
@@ -36,7 +36,7 @@ type, public :: adapt_CS ; private
   !> Stratification-dependent diffusion coefficient
   real :: adaptBuoyCoeff
 
-  !> Reference density difference for stratification-dependent diffusion in kg m-3
+  !> Reference density difference for stratification-dependent diffusion [kg m-3]
   real :: adaptDrho0
 
   !> If true, form a HYCOM1-like mixed layet by preventing interfaces
@@ -52,7 +52,8 @@ contains
 subroutine init_coord_adapt(CS, nk, coordinateResolution, m_to_H)
   type(adapt_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,            intent(in) :: nk !< Number of layers in the grid
-  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution (H)
+  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution [m] or
+                                       !! other units specified with m_to_H
   real,     optional, intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses
 
   real :: m_to_H_rescale  ! A unit conversion factor.
@@ -72,7 +73,7 @@ subroutine init_coord_adapt(CS, nk, coordinateResolution, m_to_H)
   CS%adaptZoom = 200.0 * m_to_H_rescale
   CS%adaptZoomCoeff = 0.0  ! Nondim.
   CS%adaptBuoyCoeff = 0.0  ! Nondim.
-  CS%adaptDrho0     = 0.5  ! kg m-3
+  CS%adaptDrho0     = 0.5  ! [kg m-3]
 
 end subroutine init_coord_adapt
 
@@ -93,7 +94,7 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
   real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales
   real,    optional, intent(in) :: adaptAlpha     !< Nondimensional coefficient determining
                                                   !! how much optimisation to apply
-  real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth, in H
+  real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth [H ~> m or kg m-2]
   real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient
   real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient
   real,    optional, intent(in) :: adaptDrho0  !< Reference density difference for
@@ -121,10 +122,10 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
                                                                      !! thermodynamic variables
   integer,                                     intent(in)    :: i    !< The i-index of the column to work on
   integer,                                     intent(in)    :: j    !< The j-index of the column to work on
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt !< Interface heights, in H (m or kg m-2).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures, in C
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities, in psu
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt !< Interface heights [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext !< updated interface positions
 
   ! Local variables

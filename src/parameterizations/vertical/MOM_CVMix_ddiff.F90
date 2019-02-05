@@ -26,16 +26,16 @@ public CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_is_used, compute_ddiff_coe
 type, public :: CVMix_ddiff_cs
 
   ! Parameters
-  real    :: strat_param_max !< maximum value for the stratification parameter (nondim)
+  real    :: strat_param_max !< maximum value for the stratification parameter [nondim]
   real    :: kappa_ddiff_s   !< leading coefficient in formula for salt-fingering regime
-                             !! for salinity diffusion (m^2/s)
-  real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula (nondim)
-  real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula (nondim)
-  real    :: mol_diff        !< molecular diffusivity (m^2/s)
-  real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime (nondim)
-  real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime (nondim)
-  real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime (nondim)
-  real    :: min_thickness      !< Minimum thickness allowed (m)
+                             !! for salinity diffusion [m2 s-1]
+  real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula [nondim]
+  real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula [nondim]
+  real    :: mol_diff        !< molecular diffusivity [m2 s-1]
+  real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime [nondim]
+  real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime [nondim]
+  real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime [nondim]
+  real    :: min_thickness      !< Minimum thickness allowed [m]
   character(len=4) :: diff_conv_type !< type of diffusive convection to use. Options are Marmorino &
                                 !! Caldwell 1976 ("MC76"; default) and Kelley 1988, 1990 ("K90")
   logical :: debug              !< If true, turn on debugging
@@ -47,9 +47,9 @@ type, public :: CVMix_ddiff_cs
   !!@}
 
   ! Diagnostics arrays
-!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (Z2/s)
-!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (Z2/s)
-  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio (nondim)
+!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp [Z2 s-1 ~> m2 s-1]
+!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt [Z2 s-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio [nondim]
 
 end type CVMix_ddiff_cs
 
@@ -167,32 +167,32 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
   type(ocean_grid_type),                      intent(in)  :: G    !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV   !< Vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for temp (Z2/sec).
+                                                                  !! diffusivity for temp [Z2 s-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for salt (Z2/sec).
-  type(CVMix_ddiff_cs),                           pointer :: CS   !< The control structure returned
+                                                                  !! diffusivity for salt [Z2 s-1 ~> m2 s-1].
+  type(CVMix_ddiff_cs),                       pointer     :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
-  integer,                                   intent(in)   :: j    !< Meridional grid indice.
+  integer,                                    intent(in)  :: j    !< Meridional grid indice.
   ! Local variables
   real, dimension(SZK_(G)) :: &
-    cellHeight, &  !< Height of cell centers (m)
-    dRho_dT,    &  !< partial derivatives of density wrt temp (kg m-3 degC-1)
-    dRho_dS,    &  !< partial derivatives of density wrt saln (kg m-3 PPT-1)
-    pres_int,   &  !< pressure at each interface (Pa)
-    temp_int,   &  !< temp and at interfaces (degC)
-    salt_int,   &  !< salt at at interfaces
+    cellHeight, &  !< Height of cell centers [m]
+    dRho_dT,    &  !< partial derivatives of density wrt temp [kg m-3 degC-1]
+    dRho_dS,    &  !< partial derivatives of density wrt saln [kg m-3 ppt-1]
+    pres_int,   &  !< pressure at each interface [Pa]
+    temp_int,   &  !< temp and at interfaces [degC]
+    salt_int,   &  !< salt at at interfaces [ppt]
     alpha_dT,   &  !< alpha*dT across interfaces
     beta_dS,    &  !< beta*dS across interfaces
-    dT,         &  !< temp. difference between adjacent layers (degC)
-    dS             !< salt difference between adjacent layers
+    dT,         &  !< temp. difference between adjacent layers [degC]
+    dS             !< salt difference between adjacent layers [ppt]
   real, dimension(SZK_(G)+1) :: &
-    Kd1_T,      &  !< Diapycanal diffusivity of temperature, in m2 s-1.
-    Kd1_S          !< Diapycanal diffusivity of salinity, in m2 s-1.
+    Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
+    Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
+  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
   integer :: kOBL                        !< level of OBL extent
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, k

@@ -17,9 +17,7 @@ use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
 use data_override_mod, only : data_override_init, data_override
 
-implicit none
-
-private
+implicit none ; private
 
 #include <MOM_memory.h>
 
@@ -40,6 +38,10 @@ public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acce
                       ! CL2 effects.
 public Waves_end ! public interface to deallocate and free wave related memory.
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Container for all surface wave related parameters
 type, public :: wave_parameters_CS ; private
@@ -67,19 +69,19 @@ type, public :: wave_parameters_CS ; private
 
   ! Surface Wave Dependent 1d/2d/3d vars
   real, allocatable, dimension(:), public :: &
-       WaveNum_Cen        !< Wavenumber bands for read/coupled (1/m)
+       WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
   real, allocatable, dimension(:), public :: &
-       Freq_Cen           !< Frequency bands for read/coupled (1/s)
+       Freq_Cen           !< Frequency bands for read/coupled [s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkX !< Surface Stokes drift if prescribed (m/s)
+       PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:), public :: &
-       PrescribedSurfStkY !< Surface Stokes drift if prescribed (m/s)
+       PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
   real, allocatable, dimension(:,:,:), public :: &
-       Us_x               !< 3d Stokes drift profile (zonal, m/s)
+       Us_x               !< 3d zonal Stokes drift profile [m s-1]
                           !! Horizontal -> U points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-       Us_y               !< 3d Stokes drift profile (meridional, m/s)
+       Us_y               !< 3d meridional Stokes drift profile [m s-1]
                           !! Horizontal -> V points
                           !! Vertical -> Mid-points
   real, allocatable, dimension(:,:), public :: &
@@ -102,7 +104,7 @@ type, public :: wave_parameters_CS ; private
                           !! Horizontal -> V points
                           !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear (Z2/s)
+       KvS                !< Viscosity for Stokes Drift shear [Z2/s ~> m2 s-1]
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -187,7 +189,7 @@ contains
 
 !> Initializes parameters related to MOM_wave_interface
 subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
-  type(time_type), target, intent(in)    :: Time       !< Time (s)
+  type(time_type), target, intent(in)    :: Time       !< Model time
   type(ocean_grid_type),   intent(inout) :: G          !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
@@ -424,8 +426,8 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS)
   type(ocean_grid_type), intent(inout) :: G   !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
-  type(time_type),         intent(in)  :: Day !< Time (s)
-  type(time_type),         intent(in)  :: dt  !< Timestep (s)
+  type(time_type),         intent(in)  :: Day !< Current model time
+  type(time_type),         intent(in)  :: dt  !< Timestep as a time-type
   ! Local variables
   integer :: ii, jj, kk, b
   type(time_type) :: Day_Center
@@ -467,9 +469,9 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   type(verticalGrid_type), intent(in)    :: GV    !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-       intent(in)    :: h     !< Thickness (m or kg/m2)
+       intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
-       intent(in)    :: ustar !< Wind friction velocity (Z/s)
+       intent(in)    :: ustar !< Wind friction velocity [Z s-1 ~> m s-1].
   ! Local Variables
   real    :: Top, MidPoint, Bottom, one_cm
   real    :: DecayScale
@@ -690,14 +692,14 @@ end subroutine Update_Stokes_Drift
 !! using the data_override procedures.
 subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
   use NETCDF
-  type(time_type),          intent(in) :: day_center !< Center of timestep (s)
+  type(time_type),          intent(in) :: day_center !< Center of timestep
   type(wave_parameters_CS), pointer    :: CS         !< Wave structure
   type(ocean_grid_type), intent(inout) :: G          !< Grid structure
   type(verticalGrid_type),  intent(in) :: GV         !< Vertical grid structure
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   ! Local variables
-  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! Stokes drift of band at h-points, in m/s
+  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [m s-1]
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [m s-1]
   real    :: Top, MidPoint
   integer :: b
   integer :: i, j
@@ -864,18 +866,18 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   integer, intent(in) :: i      !< Meridional index of h-point
   integer, intent(in) :: j      !< Zonal index of h-point
-  real, intent(in)    :: ustar  !< Friction velocity (Z/s)
-  real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer (Z)
+  real, intent(in)    :: ustar  !< Friction velocity [Z s-1 ~> m s-1].
+  real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer [Z ~> m].
   logical, optional,       intent(in) :: Override_MA !< Override to use misalignment in LA
                                 !! calculation. This can be used if diagnostic
                                 !! LA outputs are desired that are different than
                                 !! those used by the dynamical model.
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: H     !< Grid layer thickness in H (m or kg/m2)
+       intent(in)      :: H     !< Grid layer thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: U_H   !< Zonal velocity at H point (m/s)
+       intent(in)      :: U_H   !< Zonal velocity at H point [m s-1]
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: V_H   !< Meridional velocity at H point (m/s)
+       intent(in)      :: V_H   !< Meridional velocity at H point [m s-1]
   type(Wave_parameters_CS), &
        pointer         :: Waves !< Surface wave control structure.
 
@@ -964,7 +966,7 @@ end subroutine get_Langmuir_Number
 !!
 !! Original description:
 !! - This function returns the enhancement factor, given the 10-meter
-!!   wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
+!!   wind [m s-1], friction velocity [m s-1] and the boundary layer depth [m].
 !!
 !! Update (Jan/25):
 !! - Converted from function to subroutine, now returns Langmuir number.
@@ -977,11 +979,11 @@ end subroutine get_Langmuir_Number
 !! - BGR remove u10 input
 !! - BGR note: fixed parameter values should be changed to "get_params"
 subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
-  real, intent(in)  :: ustar !< water-side surface friction velocity (Z/s)
-  real, intent(in)  :: hbl   !< boundary layer depth (Z)
+  real, intent(in)  :: ustar !< water-side surface friction velocity [Z s-1 ~> m s-1].
+  real, intent(in)  :: hbl   !< boundary layer depth [Z ~> m].
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  real, intent(out) :: UStokes_SL !< Surface layer averaged Stokes drift (m/s)
+  real, intent(out) :: UStokes_SL !< Surface layer averaged Stokes drift [m s-1]
   real, intent(out) :: LA    !< Langmuir number
   ! Local variables
   ! parameters
@@ -1058,16 +1060,16 @@ end subroutine Get_StokesSL_LiFoxKemper
 subroutine Get_SL_Average_Prof( GV, AvgDepth, H, Profile, Average )
   type(verticalGrid_type),  &
        intent(in)   :: GV       !< Ocean vertical grid structure
-  real, intent(in)  :: AvgDepth !< Depth to average over (Z)
+  real, intent(in)  :: AvgDepth !< Depth to average over [Z ~> m].
   real, dimension(SZK_(GV)), &
-       intent(in)   :: H        !< Grid thickness (H)
+       intent(in)   :: H        !< Grid thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), &
-       intent(in)   :: Profile  !< Profile of quantity to be averaged
-                                !! (used here for Stokes drift, m/s)
-  real, intent(out) :: Average  !< Output quantity averaged over depth AvgDepth
-                                !! (used here for Stokes drift, m/s)
+       intent(in)   :: Profile  !< Profile of quantity to be averaged [arbitrary]
+                                !! (used here for Stokes drift)
+  real, intent(out) :: Average  !< Output quantity averaged over depth AvgDepth [arbitrary]
+                                !! (used here for Stokes drift)
   !Local variables
-  real :: top, midpoint, bottom ! Depths in Z
+  real :: top, midpoint, bottom ! Depths [Z ~> m].
   real :: Sum
   integer :: kk
 
@@ -1097,13 +1099,13 @@ end subroutine Get_SL_Average_Prof
 subroutine Get_SL_Average_Band( GV, AvgDepth, NB, WaveNumbers, SurfStokes, Average )
   type(verticalGrid_type),  &
        intent(in)     :: GV          !< Ocean vertical grid
-  real, intent(in)    :: AvgDepth    !< Depth to average over (Z)
+  real, intent(in)    :: AvgDepth    !< Depth to average over [Z ~> m].
   integer, intent(in) :: NB          !< Number of bands used
   real, dimension(NB), &
-       intent(in)     :: WaveNumbers !< Wavenumber corresponding to each band (1/Z)
+       intent(in)     :: WaveNumbers !< Wavenumber corresponding to each band [Z-1 ~> m-1]
   real, dimension(NB), &
-       intent(in)     :: SurfStokes  !< Surface Stokes drift for each band (m/s)
-  real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth (m/s)
+       intent(in)     :: SurfStokes  !< Surface Stokes drift for each band [m s-1]
+  real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth [m s-1]
 
   ! Local variables
   integer :: bb
@@ -1130,8 +1132,8 @@ end subroutine Get_SL_Average_Band
 subroutine DHH85_mid(GV, US, zpt, UStokes)
   type(verticalGrid_type), intent(in)  :: GV  !< Ocean vertical grid
   type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
-  real, intent(in)  :: ZPT   !< Depth to get Stokes drift (Z) !### THIS IS NOT USED YET.
-  real, intent(out) :: UStokes !< Stokes drift (m/s)
+  real, intent(in)  :: ZPT   !< Depth to get Stokes drift [Z ~> m]. !### THIS IS NOT USED YET.
+  real, intent(out) :: UStokes !< Stokes drift [m s-1]
   !
   real :: ann, Bnn, Snn, Cnn, Dnn
   real :: omega_peak, omega, u10, WA, domega
@@ -1188,16 +1190,16 @@ subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
        intent(in)    :: GV    !< Ocean vertical grid
   real, intent(in)   :: Dt    !< Time step of MOM6 [s] for explicit solver
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
-       intent(in)    :: h     !< Layer/level thicknesses (units of H)
+       intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(inout) :: u     !< Velocity i-component (m/s)
+       intent(inout) :: u     !< Velocity i-component [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(inout) :: v     !< Velocity j-component (m/s)
+       intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables
   real :: dTauUp, dTauDn
-  real :: h_Lay  ! The layer thickness at a velocity point, in Z.
+  real :: h_Lay  ! The layer thickness at a velocity point [Z ~> m].
   integer :: i,j,k
 
 ! This is a template to think about down-Stokes mixing.
@@ -1256,11 +1258,11 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
        intent(in)   :: GV     !< Ocean vertical grid
   real, intent(in)  :: Dt     !< Time step of MOM6 [s] CHECK IF PASSING RIGHT TIMESTEP
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-       intent(in)    :: h     !< Layer/level thicknesses (units of H)
+       intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(inout) :: u     !< Velocity i-component (m/s)
+       intent(inout) :: u     !< Velocity i-component [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(inout) :: v     !< Velocity j-component (m/s)
+       intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables
@@ -1293,8 +1295,8 @@ end subroutine CoriolisStokes
 !! wind speed for wind-wave relationships.  Should be a fine way to estimate
 !! the neutral wind-speed as written here.
 subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
-  real, intent(in)                    :: USTair !< Wind friction velocity (m/s)
-  real, intent(out)                   :: U10    !< 10-m neutral wind speed (m/s)
+  real, intent(in)                    :: USTair !< Wind friction velocity [m s-1]
+  real, intent(out)                   :: U10    !< 10-m neutral wind speed [m s-1]
   type(verticalGrid_type), intent(in) :: GV     !< vertical grid type
   type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
 

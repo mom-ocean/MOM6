@@ -46,7 +46,7 @@ type, public :: oil_tracer_CS ; private
   real :: oil_source_latitude  !< Longitude of source location (geographic)
   integer :: oil_source_i=-999 !< Local i of source location (computational)
   integer :: oil_source_j=-999 !< Local j of source location (computational)
-  real :: oil_source_rate     !< Rate of oil injection (kg/s)
+  real :: oil_source_rate     !< Rate of oil injection [kg s-1]
   real :: oil_start_year      !< The year in which tracers start aging, or at which the
                               !! surface value equals young_val, in years.
   real :: oil_end_year        !< The year in which tracers start aging, or at which the
@@ -57,9 +57,9 @@ type, public :: oil_tracer_CS ; private
   real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
   real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface.
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value, in units of year-1.
-  real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil (in days)
-  real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil (in s^-1) calculated from oil_decay_days
+  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
+  real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
+  real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [s-1] calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
   logical :: oil_may_reinit  !< If true, oil tracers may be reset by the initialization code
                              !! if they are not found in the restart files.
@@ -210,7 +210,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                      intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                                      intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
@@ -303,33 +303,33 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(oil_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
                                               !! call to register_oil_tracer.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
 
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -366,8 +366,8 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
       if (CS%oil_decay_rate(m)>0.) then
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1.-dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
-        ldecay = 12.*(3.0**(-(tv%T(i,j,k)-20.)/10.)) ! Timescale in days
-        ldecay = 1./(86400.*ldecay) ! Rate in s^-1
+        ldecay = 12.*(3.0**(-(tv%T(i,j,k)-20.)/10.)) ! Timescale [days]
+        ldecay = 1./(86400.*ldecay) ! Rate [s-1]
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1.-dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif
     enddo ; enddo ; enddo
@@ -408,9 +408,9 @@ end subroutine oil_tracer_column_physics
 function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                              !! tracer, in kg times concentration units.
+                                                              !! tracer, in kg times concentration units [kg conc].
   type(oil_tracer_CS),                pointer       :: CS   !< The control structure returned by a previous
                                                             !! call to register_oil_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
@@ -460,7 +460,7 @@ subroutine oil_tracer_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(oil_tracer_CS),    pointer       :: CS !< The control structure returned by a previous
                                               !! call to register_oil_tracer.
 

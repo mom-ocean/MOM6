@@ -85,6 +85,11 @@ public adiabatic
 public adiabatic_driver_init
 public legacy_diabatic
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Control structure for this module
 type, public:: diabatic_CS; private
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
@@ -148,15 +153,15 @@ type, public:: diabatic_CS; private
                                      !! operating.
   real    :: Kd_BBL_tr               !< A bottom boundary layer tracer diffusivity that
                                      !! will allow for explicitly specified bottom fluxes
-                                     !! in Z2 s-1.  The entrainment at the bottom is at
+                                     !! [Z2 s-1 ~> m2 s-1].  The entrainment at the bottom is at
                                      !! least sqrt(Kd_BBL_tr*dt) over the same distance.
   real    :: Kd_min_tr               !< A minimal diffusivity that should always be
                                      !! applied to tracers, especially in massless layers
-                                     !! near the bottom, in Z2 s-1.
+                                     !! near the bottom [Z2 s-1 ~> m2 s-1].
   real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
-                                           !! fluxes are applied, in m.
+                                           !! fluxes are applied [m].
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
-                                     !! evaporated in one time-step (non-dim).
+                                     !! evaporated in one time-step [nondim].
   integer :: halo_TS_diff = 0        !< The temperature, salinity and thickness halo size that
                                      !! must be valid for the diffusivity calculations.
   logical :: useKPP = .false.        !< use CVMix/KPP diffusivities and non-local transport
@@ -241,11 +246,11 @@ type, public:: diabatic_CS; private
   type(group_pass_type) :: pass_Kv         !< For group halo pass
   type(diag_grid_storage) :: diag_grids_prev!< Stores diagnostic grids at some previous point in the algorithm
   ! Data arrays for communicating between components
-  real, allocatable, dimension(:,:,:) :: KPP_NLTheat    !< KPP non-local transport for heat (m/s)
-  real, allocatable, dimension(:,:,:) :: KPP_NLTscalar  !< KPP non-local transport for scalars (m/s)
-  real, allocatable, dimension(:,:,:) :: KPP_buoy_flux  !< KPP forcing buoyancy flux (m^2/s^3)
-  real, allocatable, dimension(:,:)   :: KPP_temp_flux  !< KPP effective temperature flux (K m/s)
-  real, allocatable, dimension(:,:)   :: KPP_salt_flux  !< KPP effective salt flux (ppt m/s)
+  real, allocatable, dimension(:,:,:) :: KPP_NLTheat    !< KPP non-local transport for heat [m s-1]
+  real, allocatable, dimension(:,:,:) :: KPP_NLTscalar  !< KPP non-local transport for scalars [m s-1]
+  real, allocatable, dimension(:,:,:) :: KPP_buoy_flux  !< KPP forcing buoyancy flux [m2 s-3]
+  real, allocatable, dimension(:,:)   :: KPP_temp_flux  !< KPP effective temperature flux [degC m s-1]
+  real, allocatable, dimension(:,:)   :: KPP_salt_flux  !< KPP effective salt flux [ppt m s-1]
 
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type diabatic_CS
@@ -265,12 +270,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness (m for Bouss / kg/m2 for non-Bouss)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml       !< mixed layer depth, m
+  real, dimension(:,:),                      pointer       :: Hml       !< mixed layer depth [m]
   type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
                                                                         !! unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
@@ -278,7 +283,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                                                                         !! equations, to enable the later derived
                                                                         !! diagnostics, like energy budgets
   type(cont_diag_ptrs),                      intent(inout) :: CDp       !< points to terms in continuity equations
-  real,                                      intent(in)    :: dt        !< time increment (seconds)
+  real,                                      intent(in)    :: dt        !< time increment [s]
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
@@ -286,29 +291,29 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea_s,     &  ! amount of fluid entrained from the layer above within
-                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                 ! one time step  [H ~> m or kg m-2]
     eb_s,     &  ! amount of fluid entrained from the layer below within
-                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                 ! one time step  [H ~> m or kg m-2]
     ea_t,     &  ! amount of fluid entrained from the layer above within
-                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                 ! one time step  [H ~> m or kg m-2]
     eb_t,     &  ! amount of fluid entrained from the layer below within
-                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-    Kd_lay, &    ! diapycnal diffusivity of layers (Z^2/sec)
-    h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
-    h_prebound, & ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+                 ! one time step  [H ~> m or kg m-2]
+    Kd_lay, &    ! diapycnal diffusivity of layers [Z2 s-1 ~> m2 s-1]
+    h_orig, &    ! initial layer thicknesses [H ~> m or kg m-2]
+    h_prebound, & ! initial layer thicknesses [H ~> m or kg m-2]
 !    hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
-                 ! (m for Bouss, kg/m^2 for non-Bouss)
+                 ! [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivatives of specific volume with temperature
-    dSV_dS, &    ! and salinity in m^3/(kg K) and m^3/(kg ppt).
-    cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
+    dSV_dS, &    ! and salinity in [m3 kg-1 degC-1] and [m3 kg-1 ppt-1].
+    cTKE,   &    ! convective TKE requirements for each layer [J/m^2].
     u_h,    &    ! zonal and meridional velocities at thickness points after
-    v_h          ! entrainment (m/s)
+    v_h          ! entrainment [m s-1]
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux (Z2/s3), used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux [Z2 s-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -321,32 +326,32 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
              ! These are targets so that the space can be shared with eaml & ebml.
     eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries in H (m for Bouss and kg/m^2 for non-Bouss)
+             ! near the boundaries [H ~> m or kg m-2] (for Bous or non-Bouss)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
-    Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
-    Kd_heat,  & ! diapycnal diffusivity of heat (Z^2/s)
-    Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (Z^2/s)
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (Z^2/s)
-    eta, &      ! Interface heights before diapycnal mixing, in m.
-    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt m/s)
-    Sadv_flx    ! advective diapycnal salt flux across interfaces (ppt m/s)
+    Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 s-1 ~> m2 s-1]
+    Kd_heat,  & ! diapycnal diffusivity of heat [Z2 s-1 ~> m2 s-1]
+    Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 s-1 ~> m2 s-1]
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1]
+    eta, &      ! Interface heights before diapycnal mixing [m].
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt m s-1]
+    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt m s-1]
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
-    eaml, &  ! The equivalent of ea and eb due to mixed layer processes, in H
-    ebml     ! (m for Bouss and kg/m^2 for non-Bouss).  These will be
+    eaml, &  ! The equivalent of ea and eb due to mixed layer processes [H ~> m or kg m-2]
+    ebml     ! [H ~> m or kg m-2].  These will be
              ! pointers to eatr and ebtr so as to reuse the memory as
              ! the arrays are not needed at the same time.
 
   integer :: kb(SZI_(G),SZJ_(G)) ! index of the lightest layer denser
-                                 ! than the buffer laye (nondimensional)
+                                 ! than the buffer layer [nondim]
 
   real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential
                                  ! density which defines the coordinate
-                                 ! variable, set to P_Ref, in Pa.
+                                 ! variable, set to P_Ref [Pa].
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -354,28 +359,27 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                                   ! the entrainment - usually sqrt(Kd*dt).
 
   real :: b_denom_1    ! The first term in the denominator of b1
-                       ! (m for Bouss, kg/m^2 for non-Bouss)
+                       ! [H ~> m or kg m-2]
   real :: h_neglect    ! A thickness that is so small it is usually lost
                        ! in roundoff and can be neglected
-                       ! (m for Bouss and kg/m^2 for non-Bouss)
-  real :: h_neglect2   ! h_neglect^2  (m^2 for Bouss, kg^2/m^4 for non-Bouss)
+                       ! [H ~> m or kg m-2]
+  real :: h_neglect2   ! h_neglect^2 [H2 ~> m2 or kg2 m-4]
   real :: add_ent      ! Entrainment that needs to be added when mixing tracers
-                       ! (m for Bouss and kg/m^2 for non-Bouss)
-  real :: eaval        ! eaval is 2*ea at velocity grid points (m for Bouss, kg/m^2 for non-Bouss)
-  real :: hval         ! hval is 2*h at velocity grid points (m for Bouss, kg/m^2 for non-Bouss)
+                       ! [H ~> m or kg m-2]
+  real :: eaval        ! eaval is 2*ea at velocity grid points [H ~> m or kg m-2]
+  real :: hval         ! hval is 2*h at velocity grid points [H ~> m or kg m-2]
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness (m for Bouss, kg/m^2 for non-Bouss)
+                       ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
-                       ! coupled to the bottom within a timestep (m)
+                       ! coupled to the bottom within a timestep [H ~> m or kg m-2]
 
-  real :: htot(SZIB_(G))             ! The summed thickness from the bottom, in H.
+  real :: htot(SZIB_(G))             ! The summed thickness from the bottom [H ~> m or kg m-2].
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
-  real :: Ent_int ! The diffusive entrainment rate at an interface
-                  ! (H units = m for Bouss, kg/m^2 for non-Bouss).
-  real :: dt_mix  ! amount of time over which to apply mixing (seconds)
-  real :: Idt     ! inverse time step (1/s)
+  real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
+  real :: dt_mix  ! amount of time over which to apply mixing [s]
+  real :: Idt     ! inverse time step [s-1]
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -386,7 +390,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
-  real :: Kd_add_here    ! An added diffusivity in Z2/s
+  real :: Kd_add_here    ! An added diffusivity [Z2 s-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1151,9 +1155,9 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness (m for Bouss / kg/m2 for non-Bouss)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields
                                                                         !! unused have NULL ptrs
   real, dimension(:,:),                      pointer       :: Hml       !< active mixed layer depth
@@ -1164,34 +1168,34 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
                                                                         !! equations, to enable the later derived
                                                                         !! diagnostics, like energy budgets
   type(cont_diag_ptrs),                      intent(inout) :: CDp       !< points to terms in continuity equations
-  real,                                      intent(in)    :: dt        !< time increment (seconds)
+  real,                                      intent(in)    :: dt        !< time increment [s]
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within
-                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                 ! one time step  [H ~> m or kg m-2]
     eb,     &    ! amount of fluid entrained from the layer below within
-                 ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-    Kd_lay, &    ! diapycnal diffusivity of layers (Z^2/sec)
-    h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
-    h_prebound, &  ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+                 ! one time step  [H ~> m or kg m-2]
+    Kd_lay, &    ! diapycnal diffusivity of layers [Z2 s-1 ~> m2 s-1]
+    h_orig, &    ! initial layer thicknesses [H ~> m or kg m-2]
+    h_prebound, &  ! initial layer thicknesses [H ~> m or kg m-2]
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
-                 ! (m for Bouss, kg/m^2 for non-Bouss)
-    dSV_dT, &    ! The partial derivatives of specific volume with temperature
-    dSV_dS, &    ! and salinity in m^3/(kg K) and m^3/(kg ppt).
-    cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
+                 ! [H ~> m or kg m-2]
+    dSV_dT, &    ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
+    dSV_dS, &    ! The partial derivative of specific volume with salinity [m3 kg-1 ppt-1].
+    cTKE,   &    ! convective TKE requirements for each layer [J m-2].
     u_h,    &    ! zonal and meridional velocities at thickness points after
-    v_h          ! entrainment (m/s)
+    v_h          ! entrainment [m s-1]
 
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux (m2/s3), used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux [m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -1204,32 +1208,32 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
              ! These are targets so that the space can be shared with eaml & ebml.
     eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
     ebtr     ! eb in that they tend to homogenize tracers in massless layers
-             ! near the boundaries (m for Bouss and kg/m^2 for non-Bouss)
+             ! near the boundaries [H ~> m or kg m-2]
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), target :: &
-    Kd_int,   & ! diapycnal diffusivity of interfaces (m^2/s)
-    Kd_heat,  & ! diapycnal diffusivity of heat (Z^2/s)
-    Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (Z^2/s)
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (Z^2/s)
-    eta, &      ! Interface heights before diapycnal mixing, in m.
-    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt m/s)
-    Sadv_flx    ! advective diapycnal salt flux across interfaces (ppt m/s)
+    Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 s-1 ~> m2 s-1]
+    Kd_heat,  & ! diapycnal diffusivity of heat [Z2 s-1 ~> m2 s-1]
+    Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 s-1 ~> m2 s-1]
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1]
+    eta, &      ! Interface heights before diapycnal mixing [m].
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt m s-1]
+    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt m s-1]
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
     eaml, &  ! The equivalent of ea and eb due to mixed layer processes,
-    ebml     ! (m for Bouss and kg/m^2 for non-Bouss).  These will be
+    ebml     ! [H ~> m or kg m-2].  These will be
              ! pointers to eatr and ebtr so as to reuse the memory as
              ! the arrays are not needed at the same time.
 
   integer :: kb(SZI_(G),SZJ_(G)) ! index of the lightest layer denser
-                                 ! than the buffer laye (nondimensional)
+                                 ! than the buffer layer [nondim]
 
   real :: p_ref_cv(SZI_(G))      ! Reference pressure for the potential
                                  ! density which defines the coordinate
-                                 ! variable, set to P_Ref, in Pa.
+                                 ! variable, set to P_Ref [Pa].
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -1237,28 +1241,27 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
                                   ! the entrainment - usually sqrt(Kd*dt).
 
   real :: b_denom_1    ! The first term in the denominator of b1
-                       ! (m for Bouss, kg/m^2 for non-Bouss)
+                       ! [H ~> m or kg m-2]
   real :: h_neglect    ! A thickness that is so small it is usually lost
                        ! in roundoff and can be neglected
-                       ! (m for Bouss and kg/m^2 for non-Bouss)
-  real :: h_neglect2   ! h_neglect^2  (m^2 for Bouss, kg^2/m^4 for non-Bouss)
+                       ! [H ~> m or kg m-2]
+  real :: h_neglect2   ! h_neglect^2 [H2 ~> m2 or kg2 m-4]
   real :: add_ent      ! Entrainment that needs to be added when mixing tracers
-                       ! (m for Bouss and kg/m^2 for non-Bouss)
-  real :: eaval        ! eaval is 2*ea at velocity grid points (m for Bouss, kg/m^2 for non-Bouss)
-  real :: hval         ! hval is 2*h at velocity grid points (m for Bouss, kg/m^2 for non-Bouss)
+                       ! [H ~> m or kg m-2]
+  real :: eaval        ! eaval is 2*ea at velocity grid points [H ~> m or kg m-2]
+  real :: hval         ! hval is 2*h at velocity grid points [H ~> m or kg m-2]
   real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness (m for Bouss, kg/m^2 for non-Bouss)
+                       ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
-                       ! coupled to the bottom within a timestep (m)
+                       ! coupled to the bottom within a timestep [H ~> m or kg m-2]
 
-  real :: htot(SZIB_(G))             ! The summed thickness from the bottom, in m.
+  real :: htot(SZIB_(G))             ! The summed thickness from the bottom [H ~> m or kg m-2].
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
-  real :: Ent_int ! The diffusive entrainment rate at an interface
-                  ! (H units = m for Bouss, kg/m^2 for non-Bouss).
-  real :: dt_mix  ! amount of time over which to apply mixing (seconds)
-  real :: Idt     ! inverse time step (1/s)
+  real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2].
+  real :: dt_mix  ! amount of time over which to apply mixing [s]
+  real :: Idt     ! inverse time step [s-1]
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -1269,7 +1272,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
-  real :: Kd_add_here    ! An added diffusivity in Z2/s
+  real :: Kd_add_here    ! An added diffusivity [Z2 s-1 ~> m2 s-1].
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -2070,7 +2073,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
-    Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
+    Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)  !### I think this needs GV%Z_to_H
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
@@ -2447,9 +2450,9 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
   type(optics_type), optional, pointer       :: optics_CSp  !< A pointer to be set to the optics control structure
   real,              optional, intent(  out) :: evap_CFL_limit !<The largest fraction of a layer that can be
-                                                            !! evaporated in one time-step (non-dim).
+                                                            !! evaporated in one time-step [nondim].
   real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
-                                                            !! and freshwater fluxes are applied, in m.
+                                                            !! and freshwater fluxes are applied [m].
 
   ! Pointers to control structures
   if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
@@ -2465,10 +2468,10 @@ end subroutine
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
   type(ocean_grid_type),   intent(inout) :: G      !< ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
+                           intent(inout) :: h      !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv     !< points to thermodynamic fields
   type(forcing),           intent(inout) :: fluxes !< boundary fluxes
-  real,                    intent(in)    :: dt     !< time step (seconds)
+  real,                    intent(in)    :: dt     !< time step [s]
   type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
   type(diabatic_CS),       pointer       :: CS     !< module control structure
 
@@ -2489,16 +2492,16 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   type(ocean_grid_type),                     intent(in) :: G        !< ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV       !< ocean vertical grid structure
   type(thermo_var_ptrs),                     intent(in) :: tv       !< points to updated thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h        !< thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h        !< thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: temp_old !< temperature prior to diabatic physics
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: saln_old !< salinity prior to diabatic physics (PPT)
-  real,                                      intent(in) :: dt       !< time step (sec)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: saln_old !< salinity prior to diabatic physics [ppt]
+  real,                                      intent(in) :: dt       !< time step [s]
   type(diabatic_CS),                         pointer    :: CS       !< module control structure
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real :: Idt  ! The inverse of the timestep, in s-1
+  real :: Idt  ! The inverse of the timestep [s-1]
   real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -2575,20 +2578,20 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
   type(thermo_var_ptrs),   intent(in) :: tv       !< points to updated thermodynamic fields
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h        !< thickness after boundary flux application (m or kg/m2)
+                           intent(in) :: h        !< thickness after boundary flux application [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: temp_old !< temperature prior to boundary flux application
+                           intent(in) :: temp_old !< temperature prior to boundary flux application [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: saln_old !< salinity prior to boundary flux application (PPT)
+                           intent(in) :: saln_old !< salinity prior to boundary flux application [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old    !< thickness prior to boundary flux application (m or kg/m2)
-  real,                    intent(in) :: dt       !< time step (sec)
+                           intent(in) :: h_old    !< thickness prior to boundary flux application [H ~> m or kg m-2]
+  real,                    intent(in) :: dt       !< time step [s]
   type(diabatic_CS),       pointer    :: CS       !< module control structure
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real :: Idt  ! The inverse of the timestep, in s-1
+  real :: Idt  ! The inverse of the timestep [s-1]
   real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -2671,9 +2674,9 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS)
   type(verticalGrid_type),                  intent(in) :: GV       !< ocean vertical grid structure
   type(diabatic_CS),                        pointer    :: CS       !< module control structure
   type(thermo_var_ptrs),                    intent(in) :: tv       !< points to updated thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to frazil formation
-  real,                                     intent(in) :: dt       !< time step (sec)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to frazil formation [degC]
+  real,                                     intent(in) :: dt       !< time step [s]
 
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
   real    :: Idt

@@ -26,6 +26,11 @@ implicit none ; private
 public Calculate_kappa_shear, Calc_kappa_shear_vertex, kappa_shear_init
 public kappa_shear_is_used, kappa_shear_at_vertex
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> This control structure holds the parameters that regulate shear mixing
 type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       !< The critical shear Richardson number for
@@ -36,13 +41,13 @@ type, public :: Kappa_shear_CS ; private
                              !! is 0.085-0.089.
   real    :: FRi_curvature   !<   A constant giving the curvature of the function
                              !! of the Richardson number that relates shear to
-                             !! sources in the kappa equation, Nondim.
+                             !! sources in the kappa equation [nondim].
                              !! The values found by Jackson et al. are -0.97 - -0.89.
   real    :: C_N             !<   The coefficient for the decay of TKE due to
-                             !! stratification (i.e. proportional to N*tke), ND.
+                             !! stratification (i.e. proportional to N*tke) [nondim].
                              !! The values found by Jackson et al. are 0.24-0.28.
   real    :: C_S             !<   The coefficient for the decay of TKE due to
-                             !! shear (i.e. proportional to |S|*tke), ND.
+                             !! shear (i.e. proportional to |S|*tke) [nondim].
                              !! The values found by Jackson et al. are 0.14-0.12.
   real    :: lambda          !<   The coefficient for the buoyancy length scale
                              !! in the kappa equation.  Nondimensional.
@@ -50,8 +55,8 @@ type, public :: Kappa_shear_CS ; private
   real    :: lambda2_N_S     !<   The square of the ratio of the coefficients of
                              !! the buoyancy and shear scales in the diffusivity
                              !! equation, 0 to eliminate the shear scale. Nondim.
-  real    :: TKE_bg          !<   The background level of TKE, in m2 s-2.
-  real    :: kappa_0         !<   The background diapycnal diffusivity, in Z2 s-1.
+  real    :: TKE_bg          !<   The background level of TKE [m2 s-2].
+  real    :: kappa_0         !<   The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
   real    :: kappa_tol_err   !<   The fractional error in kappa that is tolerated.
   real    :: Prandtl_turb    !< Prandtl number used to convert Kd_shear into viscosity.
   integer :: nkml            !<   The number of layers in the mixed layer, as
@@ -68,7 +73,7 @@ type, public :: Kappa_shear_CS ; private
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0, in m s-1.
+                             !! are set to 0 [m s-1].
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -93,33 +98,32 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
+                           intent(in)    :: u_in   !< Initial zonal velocity [m s-1]. (Intent in)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
+                           intent(in)    :: v_in   !< Initial meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
-                                                   !! (or NULL).
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
-                                                   !! (not layer!) in Z2 s-1.  Initially this is the
+                                                   !! (not layer!) [Z2 s-1 ~> m2 s-1].  Initially this is the
                                                    !! value from the previous timestep, which may
                                                    !! accelerate the iteration toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
-                                                   !! each interface (not layer!) in m2 s-2.
+                                                   !! each interface (not layer!) [m2 s-2].
                                                    !! Initially this is the value from the previous
                                                    !! timestep, which may accelerate the iteration
                                                    !! toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface
-                                                   !! (not layer!) in Z2 s-1. This discards any
+                                                   !! (not layer!) [Z2 s-1 ~> m2 s-1]. This discards any
                                                    !! previous value (i.e. it is intent out) and
                                                    !! simply sets Kv = Prandtl * Kd_shear
-  real,                    intent(in)    :: dt     !< Time increment, in s.
+  real,                    intent(in)    :: dt     !< Time increment [s].
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
   logical,       optional, intent(in)    :: initialize_all !< If present and false, the previous
@@ -132,29 +136,27 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, tke_2d                ! 2-D versions of various kappa_io and tke_io.
   real, dimension(SZK_(GV)) :: &
-    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
-    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
-    Idz, &      ! The inverse of the distance between TKE points, in Z-1.
-    T, &        ! The potential temperature after a timestep of mixing, in C.
-    Sal, &      ! The salinity after a timestep of mixing, in psu.
-    dz, &       ! The layer thickness, in Z.
-    u0xdz, &    ! The initial zonal velocity times dz, in Z m s-1.
-    v0xdz, &    ! The initial meridional velocity times dz, in Z m s-1.
-    T0xdz, &    ! The initial temperature times dz, in C Z.
-    S0xdz       ! The initial salinity times dz, in PSU Z.
+    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
+    Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
+    T, &        ! The potential temperature after a timestep of mixing [degC].
+    Sal, &      ! The salinity after a timestep of mixing [ppt].
+    dz, &       ! The layer thickness [Z ~> m].
+    u0xdz, &    ! The initial zonal velocity times dz [Z m s-1 ~> m2 s-1].
+    v0xdz, &    ! The initial meridional velocity times dz [Z m s-1 ~> m2 s-1].
+    T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
+    S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
-    kappa, &    ! The shear-driven diapycnal diffusivity at an interface, in
-                ! units of Z2 s-1.
-    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface,
-                ! in units of m2 s-2.
-    kappa_avg, & ! The time-weighted average of kappa, in Z2 s-1.
-    tke_avg     ! The time-weighted average of TKE, in m2 s-2.
-  real :: f2   ! The squared Coriolis parameter of each column, in s-2.
-  real :: surface_pres  ! The top surface pressure, in Pa.
+    kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 s-1 ~> m2 s-1].
+    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
+    kappa_avg, & ! The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
+    tke_avg     ! The time-weighted average of TKE [m2 s-2].
+  real :: f2   ! The squared Coriolis parameter of each column [s-2].
+  real :: surface_pres  ! The top surface pressure [Pa].
 
-  real :: dz_in_lay     !   The running sum of the thickness in a layer, in Z.
-  real :: k0dt          ! The background diffusivity times the timestep, in Z2.
-  real :: dz_massless   ! A layer thickness that is considered massless, in Z.
+  real :: dz_in_lay     !   The running sum of the thickness in a layer [Z ~> m].
+  real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
+  real :: dz_massless   ! A layer thickness that is considered massless [Z ~> m].
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
   logical :: new_kappa = .true. ! If true, ignore the value of kappa from the
@@ -164,7 +166,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                         ! interfaces and the interfaces with massless layers
                         ! merged into nearby massive layers.
   real, dimension(SZK_(GV)+1) :: kf ! The fractional weight of interface kc+1 for
-                        ! interpolating back to the original index space, ND.
+                        ! interpolating back to the original index space [nondim].
   integer :: is, ie, js, je, i, j, k, nz, nzc
 
   ! Diagnostics that should be deleted?
@@ -181,7 +183,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
   real, dimension(SZK_(GV)+1) :: &
     Ri_k, tke_prev, dtke, dkap, dtke_norm, &
-    ksrc_av    ! The average through the iterations of k_src, in s-1.
+    ksrc_av    ! The average through the iterations of k_src [s-1].
   real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
     tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
   real, dimension(SZK_(GV)+1,1:max_debug_itt) :: &
@@ -382,35 +384,35 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)   :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
+                           intent(in)    :: u_in   !< Initial zonal velocity [m s-1]. (Intent in)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   &
-                           intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
+                           intent(in)    :: v_in   !< Initial meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: T_in   !< Layer potential temperatures in degC
+                           intent(in)    :: T_in   !< Layer potential temperatures [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: S_in   !< Layer salinities in ppt.
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
-  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa]
                                                    !! (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: kappa_io !< The diapycnal diffusivity at each interface
-                                                   !! (not layer!) in Z2 s-1.
+                                                   !! (not layer!) [Z2 s-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
-                                                   !! each interface (not layer!) in m2 s-2.
+                                                   !! each interface (not layer!) [m2 s-2].
                                                    !! Initially this is the value from the previous
                                                    !! timestep, which may accelerate the iteration
                                                    !! toward convergence.
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
-                           intent(inout) :: kv_io  !< The vertical viscosity at each interface in Z2 s-1.
+                           intent(inout) :: kv_io  !< The vertical viscosity at each interface [Z2 s-1 ~> m2 s-1].
                                                    !! The previous value is used to initialize kappa
                                                    !! in the vertex columes as Kappa = Kv/Prandtl
                                                    !! to accelerate the iteration toward covergence.
-  real,                    intent(in)    :: dt     !< Time increment, in s.
+  real,                    intent(in)    :: dt     !< Time increment [s].
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
   logical,       optional, intent(in)    :: initialize_all !< If present and false, the previous
@@ -421,34 +423,32 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     h_2d, &                         ! A 2-D version of h, but converted to m.
     u_2d, v_2d, T_2d, S_2d, rho_2d  ! 2-D versions of u_in, v_in, T, S, and rho.
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
-    kappa_2d    ! Quasi 2-D versions of kappa_io, in Z2 s-1.
+    kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 s-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
-    tke_2d      ! 2-D version tke_io in m2 s-2.
+    tke_2d      ! 2-D version tke_io [m2 s-2].
   real, dimension(SZK_(GV)) :: &
-    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
-    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
-    Idz, &      ! The inverse of the distance between TKE points, in Z-1.
-    T, &        ! The potential temperature after a timestep of mixing, in C.
-    Sal, &      ! The salinity after a timestep of mixing, in psu.
-    dz, &       ! The layer thickness, in Z.
-    u0xdz, &    ! The initial zonal velocity times dz, in m Z s-1.
-    v0xdz, &    ! The initial meridional velocity times dz, in m Z s-1.
-    T0xdz, &    ! The initial temperature times dz, in C Z.
-    S0xdz       ! The initial salinity times dz, in PSU Z.
+    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
+    Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
+    T, &        ! The potential temperature after a timestep of mixing [degC].
+    Sal, &      ! The salinity after a timestep of mixing [ppt].
+    dz, &       ! The layer thickness [Z ~> m].
+    u0xdz, &    ! The initial zonal velocity times dz [m Z s-1 ~> m2 s-1].
+    v0xdz, &    ! The initial meridional velocity times dz [m Z s-1 ~> m2 s-1].
+    T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
+    S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
-    kappa, &    ! The shear-driven diapycnal diffusivity at an interface, in
-                ! units of m2 s-1.
-    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface,
-                ! in units of m2 s-2.
-    kappa_avg, & ! The time-weighted average of kappa, in Z2 s-1.
-    tke_avg     ! The time-weighted average of TKE, in m2 s-2.
-  real :: f2   ! The squared Coriolis parameter of each column, in s-2.
-  real :: surface_pres  ! The top surface pressure, in Pa.
+    kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 s-1 ~> m2 s-1].
+    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
+    kappa_avg, & ! The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
+    tke_avg     ! The time-weighted average of TKE [m2 s-2].
+  real :: f2   ! The squared Coriolis parameter of each column [s-2].
+  real :: surface_pres  ! The top surface pressure [Pa].
 
-  real :: dz_in_lay     !   The running sum of the thickness in a layer, in Z.
-  real :: k0dt          ! The background diffusivity times the timestep, in Z2.
-  real :: dz_massless   ! A layer thickness that is considered massless, in Z.
-  real :: I_hwt ! The inverse of the masked thickness weights, in H-1.
+  real :: dz_in_lay     !   The running sum of the thickness in a layer [Z ~> m].
+  real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
+  real :: dz_massless   ! A layer thickness that is considered massless [Z ~> m].
+  real :: I_hwt ! The inverse of the masked thickness weights [H-1 ~> m-1 or m2 kg-1].
   real :: I_Prandtl
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
@@ -460,7 +460,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                         ! interfaces and the interfaces with massless layers
                         ! merged into nearby massive layers.
   real, dimension(SZK_(GV)+1) :: kf ! The fractional weight of interface kc+1 for
-                        ! interpolating back to the original index space, ND.
+                        ! interpolating back to the original index space [nondim].
   integer :: IsB, IeB, JsB, JeB, i, j, k, nz, nzc, J2, J2m1
 
   ! Diagnostics that should be deleted?
@@ -477,7 +477,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
   real, dimension(SZK_(GV)+1) :: &
     Ri_k, tke_prev, dtke, dkappa, dtke_norm, &
-    ksrc_av    ! The average through the iterations of k_src, in s-1.
+    ksrc_av    ! The average through the iterations of k_src [s-1].
   real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
     tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
   real, dimension(SZK_(GV)+1,1:max_debug_itt) :: &
@@ -714,28 +714,28 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZK_(GV)+1), &
-                     intent(inout) :: kappa !< The time-weighted average of kappa, in Z2 s-1.
+                     intent(inout) :: kappa !< The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
                      intent(inout) :: tke  !< The Turbulent Kinetic Energy per unit mass at
-                                           !! an interface, in units of m2 s-2.
+                                           !! an interface [m2 s-2].
   integer,           intent(in)    :: nzc  !< The number of active layers in the column.
-  real,              intent(in)    :: f2   !< The square of the Coriolis parameter, in s-2.
-  real,              intent(in)    :: surface_pres  !< The surface pressure, in Pa.
+  real,              intent(in)    :: f2   !< The square of the Coriolis parameter [s-2].
+  real,              intent(in)    :: surface_pres  !< The surface pressure [Pa].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: dz   !< The layer thickness, in Z.
+                     intent(in)    :: dz   !< The layer thickness [Z ~> m].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: u0xdz !< The initial zonal velocity times dz, in Z m s-1.
+                     intent(in)    :: u0xdz !< The initial zonal velocity times dz [Z m s-1 ~> m2 s-1].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: v0xdz !< The initial meridional velocity times dz, in Z m s-1.
+                     intent(in)    :: v0xdz !< The initial meridional velocity times dz [Z m s-1 ~> m2 s-1].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: T0xdz !< The initial temperature times dz, in C Z.
+                     intent(in)    :: T0xdz !< The initial temperature times dz [degC Z ~> degC m].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: S0xdz !< The initial salinity times dz, in PSU Z.
+                     intent(in)    :: S0xdz !< The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1), &
-                     intent(out)   :: kappa_avg !< The time-weighted average of kappa, in Z2 s-1.
+                     intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
-                     intent(out)   :: tke_avg  !< The time-weighted average of TKE, in m2 s-2.
-  real,                    intent(in)    :: dt !< Time increment, in s.
+                     intent(out)   :: tke_avg  !< The time-weighted average of TKE [m2 s-2].
+  real,                    intent(in)    :: dt !< Time increment [s].
   type(thermo_var_ptrs),   intent(in)    :: tv !< A structure containing pointers to any
                                                !! available thermodynamic fields. Absent fields
                                                !! have NULL ptrs.
@@ -743,70 +743,69 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                                                !! call to kappa_shear_init.
 
   real, dimension(nzc) :: &
-    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
-    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
-    Idz, &      ! The inverse of the distance between TKE points, in Z-1.
-    T, &        ! The potential temperature after a timestep of mixing, in C.
-    Sal, &      ! The salinity after a timestep of mixing, in psu.
+    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
+    Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
+    T, &        ! The potential temperature after a timestep of mixing [degC].
+    Sal, &      ! The salinity after a timestep of mixing [ppt].
     u_test, v_test, T_test, S_test
 
   real, dimension(nzc+1) :: &
-    N2, &       ! The squared buoyancy frequency at an interface, in s-2.
+    N2, &       ! The squared buoyancy frequency at an interface [s-2].
     dz_Int, &   ! The extent of a finite-volume space surrounding an interface,
-                ! as used in calculating kappa and TKE, in Z.
+                ! as used in calculating kappa and TKE [Z ~> m].
     I_dz_int, & ! The inverse of the distance between velocity & density points
-                ! above and below an interface, in Z-1.  This is used to
+                ! above and below an interface [Z-1 ~> m-1].  This is used to
                 ! calculate N2, shear, and fluxes, and it might differ from
                 ! 1/dz_Int, as they have different uses.
-    S2, &       ! The squared shear at an interface, in s-2.
+    S2, &       ! The squared shear at an interface [s-2].
     a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
-                ! velocity, and density equations, in Z s-1 or Z.
+                ! velocity, and density equations [Z s-1 ~> m s-1] or [Z ~> m]
     c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
-    k_src, &    ! The shear-dependent source term in the kappa equation, in s-1.
-    kappa_src, & ! The shear-dependent source term in the kappa equation in s-1.
-    kappa_out, & ! The kappa that results from the kappa equation, in Z2 s-1.
-    kappa_mid, & ! The average of the initial and predictor estimates of kappa,
-                ! in units of Z2 s-1.
-    tke_pred, & ! The value of TKE from a predictor step, in m2 s-2.
-    kappa_pred, & ! The value of kappa from a predictor step, in Z2 s-1.
-    pressure, & ! The pressure at an interface, in Pa.
-    T_int, &    ! The temperature interpolated to an interface, in C.
-    Sal_int, &  ! The salinity interpolated to an interface, in psu.
-    dbuoy_dT, & ! The partial derivatives of buoyancy with changes in
-    dbuoy_dS, & ! temperature and salinity, in Z s-2 K-1 and Z s-2 psu-1.
+    k_src, &    ! The shear-dependent source term in the kappa equation [s-1].
+    kappa_src, & ! The shear-dependent source term in the kappa equation [s-1].
+    kappa_out, & ! The kappa that results from the kappa equation [Z2 s-1 ~> m2 s-1].
+    kappa_mid, & ! The average of the initial and predictor estimates of kappa [Z2 s-1 ~> m2 s-1].
+    tke_pred, & ! The value of TKE from a predictor step [m2 s-2].
+    kappa_pred, & ! The value of kappa from a predictor step [Z2 s-1 ~> m2 s-1].
+    pressure, & ! The pressure at an interface [Pa].
+    T_int, &    ! The temperature interpolated to an interface [degC].
+    Sal_int, &  ! The salinity interpolated to an interface [ppt].
+    dbuoy_dT, & ! The partial derivatives of buoyancy with changes in temperature
+    dbuoy_dS, & ! and salinity, [Z s-2 degC-1 ~> m s-2 degC-1] and [Z s-2 ppt-1 ~> m s-2 ppt-1].
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
-                   ! distance to the top and bottom boundaries, in Z-2.
-    K_Q, &         ! Diffusivity divided by TKE, in Z2 m-2 s.
-    K_Q_tmp, &     ! A temporary copy of diffusivity divided by TKE, in Z2 m-2 s.
-    local_src_avg, & ! The time-integral of the local source, nondim.
-    tol_min, & ! Minimum tolerated ksrc for the corrector step, in s-1.
-    tol_max, & ! Maximum tolerated ksrc for the corrector step, in s-1.
-    tol_chg, & ! The tolerated change integrated in time, nondim.
-    dist_from_top, &  ! The distance from the top surface, in Z.
+                   ! distance to the top and bottom boundaries [Z-2 ~> m-2].
+    K_Q, &         ! Diffusivity divided by TKE [Z2 m-2 s ~> s].
+    K_Q_tmp, &     ! A temporary copy of diffusivity divided by TKE [Z2 m-2 s ~> s].
+    local_src_avg, & ! The time-integral of the local source [nondim].
+    tol_min, & ! Minimum tolerated ksrc for the corrector step [s-1].
+    tol_max, & ! Maximum tolerated ksrc for the corrector step [s-1].
+    tol_chg, & ! The tolerated change integrated in time [nondim].
+    dist_from_top, &  ! The distance from the top surface [Z ~> m].
     local_src     ! The sum of all sources of kappa, including kappa_src and
-                  ! sources from the elliptic term, in s-1.
+                  ! sources from the elliptic term [s-1].
 
-  real :: dist_from_bot ! The distance from the bottom surface, in Z.
+  real :: dist_from_bot ! The distance from the bottom surface [Z ~> m].
   real :: b1            ! The inverse of the pivot in the tridiagonal equations.
   real :: bd1           ! A term in the denominator of b1.
   real :: d1            ! 1 - c1 in the tridiagonal equations.
-  real :: gR0           ! Rho_0 times g in kg m-2 s-2.
-  real :: g_R0          ! g_R0 is g/Rho in Z m3 kg-1 s-2.
-  real :: Norm          ! A factor that normalizes two weights to 1, in Z-2.
+  real :: gR0           ! Rho_0 times g [kg m-2 s-2].
+  real :: g_R0          ! g_R0 is g/Rho [Z m3 kg-1 s-2 ~> m4 kg-1 s-2].
+  real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
   real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
                         ! within an iteration.  0 < tol_dksrc_low < 1.
   real :: Ri_crit       !   The critical shear Richardson number for shear-
                         ! driven mixing. The theoretical value is 0.25.
-  real :: dt_rem        !   The remaining time to advance the solution, in s.
-  real :: dt_now        !   The time step used in the current iteration, in s.
-  real :: dt_wt         !   The fractional weight of the current iteration, ND.
+  real :: dt_rem        !   The remaining time to advance the solution [s].
+  real :: dt_now        !   The time step used in the current iteration [s].
+  real :: dt_wt         !   The fractional weight of the current iteration [nondim].
   real :: dt_test       !   A time-step that is being tested for whether it
-                        ! gives acceptably small changes in k_src, in s.
-  real :: Idtt          !   Idtt = 1 / dt_test, in s-1.
-  real :: dt_inc        !   An increment to dt_test that is being tested, in s.
+                        ! gives acceptably small changes in k_src [s].
+  real :: Idtt          !   Idtt = 1 / dt_test [s-1].
+  real :: dt_inc        !   An increment to dt_test that is being tested [s].
 
-  real :: k0dt          ! The background diffusivity times the timestep, in Z2.
+  real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
   logical :: valid_dt   ! If true, all levels so far exhibit acceptably small
                         ! changes in k_src.
   logical :: use_temperature  !  If true, temperature and salinity have been
@@ -1234,42 +1233,41 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   integer,               intent(in)    :: nz  !< The number of layers (after eliminating massless
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
-                                              !! in Z2 s-1.
-  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity, in m s-1.
-  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity, in m s-1.
-  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature, in C.
-  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity, in PSU.
-  real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers, in Z.
-  real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses,
-                                              !! in Z-1.
+                                              !! [Z2 s-1 ~> m2 s-1].
+  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [m s-1].
+  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [m s-1].
+  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
+  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [ppt].
+  real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers [Z ~> m].
+  real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses
+                                              !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
-                                              !! temperature, in Z s-2 C-1.
+                                              !! temperature [Z s-2 degC-1 ~> m s-2 degC-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
-                                              !! salinity, in Z s-2 PSU-1.
-  real,                  intent(in)    :: dt  !< The time step in s.
-  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt, in m s-1.
-  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt, in m s-1.
-  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt, in C.
-  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt, in PSU.
+                                              !! salinity [Z s-2 ppt-1 ~> m s-2 ppt-1].
+  real,                  intent(in)    :: dt  !< The time step [s].
+  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
+  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
+  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
+  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [ppt].
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), optional, &
-                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces,
-                                              !! in s-2.
+                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces [s-2].
   real, dimension(nz+1), optional, &
-                         intent(inout) :: S2  !< The squared shear at interfaces, in s-2.
+                         intent(inout) :: S2  !< The squared shear at interfaces [s-2].
   integer, optional,     intent(in)    :: ks_int !< The topmost k-index with a non-zero diffusivity.
   integer, optional,     intent(in)    :: ke_int !< The bottommost k-index with a non-zero
                                               !! diffusivity.
   real,    optional,     intent(in)    :: vel_underflow !< If present and true, any velocities that
                                               !! are smaller in magnitude than this value are
-                                              !! set to 0, in m s-1.
+                                              !! set to 0 [m s-1].
 
   ! Local variables
   real, dimension(nz+1) :: c1
   real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
-                         ! units squared, in Z2 m-2.
-  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0, in m s-1.
+                         ! units squared [Z2 m-2 ~> 1].
+  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [m s-1].
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
 
@@ -1370,90 +1368,88 @@ end subroutine calculate_projected_state
 subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                           nz, CS, GV, US, K_Q, tke, kappa, kappa_src, local_src)
   integer,               intent(in)    :: nz  !< The number of layers to work on.
-  real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces,
-                                              !! in s-2.
-  real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces, in s-2.
-  real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity,
-                                              !! in Z2 s-1.
-  real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces,
-                                              !! in Z-1.
+  real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces [s-2].
+  real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces [s-2].
+  real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity
+                                              !! [Z2 s-1 ~> m2 s-1].
+  real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
+                                              !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
-                                              !! boundaries, m2.
-  real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers, in Z-1.
-  real,                  intent(in)    :: f2  !< The squared Coriolis parameter, in s-2.
+                                              !! boundaries [m-2].
+  real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers [Z-1 ~> m-1].
+  real,                  intent(in)    :: f2  !< The squared Coriolis parameter [s-2].
   type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), intent(inout) :: K_Q !< The shear-driven diapycnal diffusivity divided by
                                               !! the turbulent kinetic energy per unit mass at
-                                              !! interfaces, in s.
+                                              !! interfaces [s].
   real, dimension(nz+1), intent(out)   :: tke !< The turbulent kinetic energy per unit mass at
-                                              !! interfaces, in units of m2 s-2.
-  real, dimension(nz+1), intent(out)   :: kappa  !< The diapycnal diffusivity at interfaces,
-                                              !! in Z2 s-1.
+                                              !! interfaces [m2 s-2].
+  real, dimension(nz+1), intent(out)   :: kappa  !< The diapycnal diffusivity at interfaces
+                                              !! [Z2 s-1 ~> m2 s-1].
   real, dimension(nz+1), optional, &
-                         intent(out)   :: kappa_src !< The source term for kappa, in s-1.
+                         intent(out)   :: kappa_src !< The source term for kappa [s-1].
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
-                                              !! in s-1.
+                                              !! [s-1].
 !   This subroutine calculates new, consistent estimates of TKE and kappa.
 
   ! Local variables
   real, dimension(nz) :: &
-    aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE
-                ! equations, in m s-1.
-    dQdz        ! Half the partial derivative of TKE with depth, m s-2.
+    aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE equations [m s-1].
+    dQdz        ! Half the partial derivative of TKE with depth [m s-2].
   real, dimension(nz+1) :: &
-    dK, &         ! The change in kappa, in Z2 s-1.
-    dQ, &         ! The change in TKE, in m2 s-2.
+    dK, &         ! The change in kappa [Z2 s-1 ~> m2 s-1].
+    dQ, &         ! The change in TKE [m2 s-2].
     cQ, cK, &     ! cQ and cK are the upward influences in the tridiagonal and
-                  ! hexadiagonal solvers for the TKE and kappa equations, ND.
+                  ! hexadiagonal solvers for the TKE and kappa equations [nondim].
     I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale
-                  ! for kappa, in units of Z-2.
-    TKE_decay, &  ! The local TKE decay rate in s-1.
-    k_src, &      ! The source term in the kappa equation, in s-1.
-    dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k), m2 s Z-2.
-    dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k), Z2 m-2 s-1.
+                  ! for kappa [Z-2 ~> m-2].
+    TKE_decay, &  ! The local TKE decay rate [s-1].
+    k_src, &      ! The source term in the kappa equation [s-1].
+    dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k) [m2 s Z-2 ~> s].
+    dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k) [Z2 m-2 s-1 ~> s-1].
     e1            ! The fractional change in a layer TKE due to a change in the
                   ! TKE of the layer above when all the kappas below are 0.
                   ! e1 is nondimensional, and 0 < e1 < 1.
   real :: tke_src       ! The net source of TKE due to mixing against the shear
-                        ! and stratification, in m2 s-3.  (For convenience,
+                        ! and stratification [m2 s-3].  (For convenience,
                         ! a term involving the non-dissipation of q0 is also
                         ! included here.)
-  real :: bQ, bK        ! The inverse of the pivot in the tridiagonal equations, in Z-1.
+  real :: bQ, bK        ! The inverse of the pivot in the tridiagonal equations [Z-1 ~> m-1].
   real :: bd1           ! A term in the denominator of bQ or bK.
   real :: cQcomp, cKcomp ! 1 - cQ or 1 - cK in the tridiagonal equations.
   real :: c_s2          !   The coefficient for the decay of TKE due to
                         ! shear (i.e. proportional to |S|*tke), nondimensional.
   real :: c_n2          !   The coefficient for the decay of TKE due to
-                        ! stratification (i.e. proportional to N*tke), nondim.
+                        ! stratification (i.e. proportional to N*tke) [nondim].
   real :: Ri_crit       !   The critical shear Richardson number for shear-
                         ! driven mixing. The theoretical value is 0.25.
-  real :: q0            !   The background level of TKE, in m2 s-2.
+  real :: q0            !   The background level of TKE [m2 s-2].
   real :: Ilambda2      ! 1.0 / CS%lambda**2.
   real :: TKE_min       !   The minimum value of shear-driven TKE that can be
-                        ! solved for, in m2 s-2.
-  real :: kappa0        ! The background diapycnal diffusivity, in Z2 s-1.
-  real :: max_err       ! The maximum value of norm_err in a column, nondim.
-  real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0, Z2 s-1.
+                        ! solved for [m2 s-2].
+  real :: kappa0        ! The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
+  real :: max_err       ! The maximum value of norm_err in a column [nondim].
+  real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0 [Z2 s-1 ~> m2 s-1].
 
   real :: eden1, eden2, I_eden, ome  ! Variables used in calculating e1.
-  real :: diffusive_src ! The diffusive source in the kappa equation, in m s-1.
+  real :: diffusive_src ! The diffusive source in the kappa equation [m s-1].
   real :: chg_by_k0     ! The value of k_src that leads to an increase of
-                        ! kappa_0 if only the diffusive term is a sink, in s-1.
+                        ! kappa_0 if only the diffusive term is a sink [s-1].
 
-  real :: kappa_mean    ! A mean value of kappa, in Z2 s-1.
+  real :: kappa_mean    ! A mean value of kappa [Z2 s-1 ~> m2 s-1].
   real :: Newton_test   ! The value of relative error that will cause the next
                         ! iteration to use Newton's method.
   ! Temporary variables used in the Newton's method iterations.
   real :: decay_term_k  ! The decay term in the diffusivity equation
   real :: decay_term_Q  ! The decay term in the TKE equation
-  real :: I_Q           ! The inverse of TKE, in s2 m-2
+  real :: I_Q           ! The inverse of TKE [s2 m-2]
   real :: kap_src
   real :: v1, v2
   real :: Z2_to_L2       ! A conversion factor from vertical depth units to horizontal length
-                         ! units squared, in m2 Z-2.
+                         ! units squared [m2 Z-2].
   real :: tol_err        ! The tolerance for max_err that determines when to
                          ! stop iterating.
   real :: Newton_err     ! The tolerance for max_err that determines when to
@@ -1478,13 +1474,13 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   integer :: max_debug_itt ; parameter(max_debug_itt=20)
   real :: K_err_lin, Q_err_lin
   real, dimension(nz+1) :: &
-    kappa_prev, & ! The value of kappa at the start of the current iteration, in Z2 s-1.
-    TKE_prev   ! The value of TKE at the start of the current iteration, in m2 s-2.
+    kappa_prev, & ! The value of kappa at the start of the current iteration [Z2 s-1 ~> m2 s-1].
+    TKE_prev   ! The value of TKE at the start of the current iteration [m2 s-2].
   real, dimension(nz+1,1:max_debug_itt) :: &
     tke_it1, kappa_it1, kprev_it1, &  ! Various values from each iteration.
     dkappa_it1, K_Q_it1, d_dkappa_it1, dkappa_norm_it1
   real :: norm_err      ! The absolute change in kappa between iterations,
-                        ! normalized by the value of kappa, nondim.
+                        ! normalized by the value of kappa [nondim].
   real :: max_TKE_err, min_TKE_err, TKE_err(nz)  ! Various normalized TKE changes.
   integer :: it2
 #endif
@@ -1577,7 +1573,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       ! terms.
 
       ke_tke = max(ke_kappa,ke_kappa_prev)+1
-      ! aQ is the coupling between adjacent interfaces in Z s-1.
+      ! aQ is the coupling between adjacent interfaces [Z s-1 ~> m s-1].
       do k=1,min(ke_tke,nz)
         aQ(k) = (0.5*(kappa(K)+kappa(K+1)) + kappa0) * Idz(k)
       enddo

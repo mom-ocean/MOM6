@@ -18,6 +18,11 @@ implicit none ; private
 
 public tracer_Z_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 contains
 
 !>   This function initializes a tracer by reading a Z-space file, returning
@@ -29,7 +34,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(out)   :: tr   !< The tracer to initialize
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                         intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                         intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   character(len=*),      intent(in)    :: filename !< The name of the file to read from
   character(len=*),      intent(in)    :: tr_name !< The name of the tracer in the file
 ! type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
@@ -49,7 +54,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
     tr_in   ! The z-space array of tracer concentrations that is read in.
   real, allocatable, dimension(:) :: &
     z_edges, &  ! The depths of the cell edges or cell centers (depending on
-                ! the value of has_edges) in the input z* data, in depth units (Z).
+                ! the value of has_edges) in the input z* data [Z ~> m].
     tr_1d, &    ! A copy of the input tracer concentrations in a column.
     wt, &   ! The fractional weight for each layer in the range between
             ! k_top and k_bot, nondim.
@@ -57,11 +62,11 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
     z2      ! of a z-cell that contributes to a layer, relative to the cell
             ! center and normalized by the cell thickness, nondim.
             ! Note that -1/2 <= z1 <= z2 <= 1/2.
-  real    :: e(SZK_(G)+1)  ! The z-star interface heights in Z.
+  real    :: e(SZK_(G)+1)  ! The z-star interface heights [Z ~> m].
   real    :: landval    ! The tracer value to use in land points.
   real    :: sl_tr      ! The normalized slope of the tracer
                         ! within the cell, in tracer units.
-  real    :: htot(SZI_(G)) ! The vertical sum of h, in m or kg m-2.
+  real    :: htot(SZI_(G)) ! The vertical sum of h [H ~> m or kg m-2].
   real    :: dilate     ! The amount by which the thicknesses are dilated to
                         ! create a z-star coordinate, nondim or in m3 kg-1.
   real    :: missing    ! The missing value for the tracer.
