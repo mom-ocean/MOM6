@@ -123,8 +123,10 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
         write(logunit,F01)'import: day, secs, j, i, lwrad            = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, q_flux           = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, t_flux           = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, seaice_melt_heat = ',day,secs,j,i,ice_ocean_boundary%seaice_melt_heat(i,j)
-        write(logunit,F01)'import: day, secs, j, i, seaice_melt      = ',day,secs,j,i,ice_ocean_boundary%seaice_melt(i,j)
+        write(logunit,F01)'import: day, secs, j, i, seaice_melt_heat = ',&
+                          day,secs,j,i,ice_ocean_boundary%seaice_melt_heat(i,j)
+        write(logunit,F01)'import: day, secs, j, i, seaice_melt      = ',&
+                          day,secs,j,i,ice_ocean_boundary%seaice_melt(i,j)
         write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',&
                           day,secs,j,i,ice_ocean_boundary%latent_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, runoff          = ',&
