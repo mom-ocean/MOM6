@@ -773,8 +773,6 @@ end subroutine ocean_model_init_sfc
 !! mi, mass of ice (kg/m2)
 !!
 !! Variables in the coupler that are **NOT** used in MOM6 (i.e., no corresponding field in fluxes):
-!! x2o_Fioi_melth, heat flux from snow & ice melt (W/m2)
-!! x2o_Fioi_meltw, snow melt flux (kg/m2/s)
 !! x2o_Si_ifrac, fractional ice wrt ocean
 !! x2o_So_duu10n, 10m wind speed squared (m^2/s^2)
 !! x2o_Sa_co2prog, bottom atm level prognostic CO2
