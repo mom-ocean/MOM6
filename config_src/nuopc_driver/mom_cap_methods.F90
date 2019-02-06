@@ -24,13 +24,13 @@ module mom_cap_methods
   use MOM_grid,            only: ocean_grid_type
   use MOM_domains,         only: pass_var
   use mpp_domains_mod,     only: mpp_get_compute_domain
-  use mom_cap_share
 
   ! By default make data private
   implicit none
   private
 
   ! Public member functions
+  public :: mom_set_geomtype
   public :: mom_import
   public :: mom_export
 
@@ -42,10 +42,25 @@ module mom_cap_methods
      module procedure State_GetFldPtr_2d
   end interface
 
-  integer :: import_cnt = 0
+  integer                  :: import_cnt = 0
+  type(ESMF_GeomType_Flag) :: geomtype 
+  logical                  :: cesm_coupled
 
 !===============================================================================
 contains
+!===============================================================================
+
+  subroutine mom_set_geomtype(geomtype_in, cesm_coupled_in)
+    ! Set module variable geomtype and cesm_coupled
+
+    type(ESMF_GeomType_Flag), intent(in)    :: geomtype_in     !< mesh or grid
+    logical                 , intent(in)    :: cesm_coupled_in !< nems or cmeps
+
+    geomtype = geomtype_in
+    cesm_coupled = cesm_coupled_in
+
+  end subroutine mom_set_geomtype
+
 !===============================================================================
 
   !> This function has a few purposes:

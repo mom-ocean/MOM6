@@ -394,8 +394,11 @@ module mom_cap_mod
   use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
   use MOM_ocean_model,          only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
   use mom_cap_time,             only: AlarmInit
-  use mom_cap_methods,          only: mom_import, mom_export
-  use mom_cap_share
+  use mom_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
+#ifdef CESMCOUPLED
+  use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
+#endif
+  use time_utils_mod,           only: esmf2fms_time
 
   use, intrinsic :: iso_fortran_env, only: output_unit
 
@@ -407,8 +410,6 @@ module mom_cap_mod
     model_label_DataInitialize => label_DataInitialize, &
     model_label_SetRunClock    => label_SetRunClock, &
     model_label_Finalize       => label_Finalize
-
-  use time_utils_mod,           only: esmf2fms_time
 
   implicit none
   private
@@ -452,6 +453,14 @@ module mom_cap_mod
   integer              :: scalar_field_idx_grid_ny
   character(len=*),parameter :: u_file_u = &
        __FILE__
+
+#ifdef CESMCOUPLED
+  logical :: cesm_coupled = .true.
+  type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
+#else
+  logical :: cesm_coupled = .false.
+  type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
+#endif
 
 !=======================================================================
 contains
@@ -1767,6 +1776,11 @@ contains
     end if
 
     !---------------------------------
+    ! Set module variable geomtype in mom_cap_methods
+    !---------------------------------
+    call mom_set_geomtype(geomtype, cesm_coupled)
+
+    !---------------------------------
     ! write out diagnostics
     !---------------------------------
 
@@ -2622,5 +2636,21 @@ contains
     fldlist(num)%transferOffer  = trim(transferOffer)
 
   end subroutine fld_list_add
+
+!=======================================================================
+
+#ifndef CESMCOUPLED
+  subroutine shr_file_setLogUnit(nunit)
+    integer, intent(in) :: nunit
+    ! do nothing for this stub - its just here to replace
+    ! having cppdefs in the main program
+  end subroutine shr_file_setLogUnit
+
+  subroutine shr_file_getLogUnit(nunit)
+    integer, intent(in) :: nunit
+    ! do nothing for this stub - its just here to replace
+    ! having cppdefs in the main program
+  end subroutine shr_file_getLogUnit
+#endif
 
 end module mom_cap_mod
