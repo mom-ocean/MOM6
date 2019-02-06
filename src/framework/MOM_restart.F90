@@ -19,7 +19,15 @@ use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum,mpp_pe
 use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
-
+use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
+                           fms2_register_axis => register_axis, &
+                           fms2_register_field => register_field, &
+                           fms2_open_file => open_file, &
+                           fms2_close_file => close_file, &
+                           fms2_register_variable_attribute => register_variable_attribute, &
+                           FmsNetcdfDomainFile_t
+                           
+                           
 implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
@@ -90,6 +98,8 @@ type, public :: MOM_restart_CS ; private
   type(p4d), pointer :: var_ptr4d(:) => NULL()
   !!@}
   integer :: max_fields !< The maximum number of restart fields
+  type(FmsNetcdfDomainFile_t) :: fileObj
+  
 end type MOM_restart_CS
 
 !> Register fields for restarts
@@ -284,6 +294,8 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
   type(vardesc) :: vd
+  type(MOM_restart_CS) :: fileObj
+  logical :: file_is_open = .false.
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_4d: Module must be initialized before "//&
@@ -291,7 +303,14 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+  !call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+!  id_restart = fms_register_restart_field(CS%fileObj, filename, name, f_ptr, &
+!G%Domain%mpp_domain, read_only=.true.) 
+ 
+ ! 
+  call fms2_register_variable_attribute(CS$fileObj, variable_name or axis_name, attribute_name (t_grid), value (scalar or 1-d array)
+
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr, (array of string axis names))
 
 end subroutine register_restart_field_4d
 
@@ -997,19 +1016,37 @@ subroutine restore_state(filename, directory, day, G, CS)
   logical                          :: check_exist, is_there_a_checksum
   integer(kind=8),dimension(3)     :: checksum_file
   integer(kind=8)                  :: checksum_data
+  logical file_is_open
+  type(MOM_restart_CS) :: fileObj
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
-! Get NetCDF ids for all of the restart files.
-  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
-    num_file = open_restart_units('r', directory, G, CS, units=unit, &
-                     file_paths=unit_path, global_files=unit_is_global)
-  else
-    num_file = open_restart_units(filename, directory, G, CS, units=unit, &
-                     file_paths=unit_path, global_files=unit_is_global)
+  !! FMS2: INSERT open_file w/ read mode call here
+  if( .not. file_is_open) then
+     file_is_open = open_file(CS%fileObj, filename, 'read', domain=G%Domain%mpp_domain, is_restart = .true.)
+     if(.not. file_is_open) then
+        call MOM_error(FATAL, "MOM restore_state failed because the file " //filename " was not opened")
+     endif
   endif
+  !! read
+
+  call fms2_register_axis(CS%fileObj, axis_name, axis_size) ! use for non x/y axes (z, time)
+  call fms2_register_axis(CS%fileObj, axis_name, "x" for x-axis or "y" for y-axis)
+
+  call fms2_register_field(CS%fileObj, axis_name, variable_type (e.g., "double"), (/axis_name/))
+
+    
+
+! Get NetCDF ids for all of the restart files.
+! if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
+ !   num_file = open_restart_units('r', directory, G, CS, units=unit, &
+ !                    file_paths=unit_path, global_files=unit_is_global)
+ ! else
+ !   num_file = open_restart_units(filename, directory, G, CS, units=unit, &
+ !                    file_paths=unit_path, global_files=unit_is_global)
+ ! endif
 
   if (num_file == 0) then
     write(mesg,'("Unable to find any restart files specified by  ",A,"  in directory ",A,".")') &
@@ -1057,7 +1094,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Read each variable from the first file in which it is found.
   do n=1,num_file
-    call get_file_info(unit(n), ndim, nvar, natt, ntime)
+    !call get_file_info(unit(n), ndim, nvar, natt, ntime)
 
     allocate(fields(nvar))
     call get_file_fields(unit(n),fields(1:nvar))
@@ -1081,6 +1118,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         case default ; pos = 0
       end select
 
+      
       call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
       do i=1, nvar
         call get_file_atts(fields(i),name=varname)
@@ -1094,11 +1132,13 @@ subroutine restore_state(filename, directory, day, G, CS)
             is_there_a_checksum = .true.
           endif
           if (.NOT. CS%checksum_required) is_there_a_checksum = .false. ! Do not need to do data checksumming.
-
+      
           if (associated(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
-            call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
-                           G%Domain%mpp_domain, timelevel=1)
+            !call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
+            !               G%Domain%mpp_domain, timelevel=1)
+            call fms2_read_data(fileObj,varname,  CS%var_ptr1d(m)%p)
+
             if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
