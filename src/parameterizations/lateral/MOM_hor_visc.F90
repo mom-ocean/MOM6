@@ -981,6 +981,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: Ah               ! biharmonic horizontal viscosity (m4/s)
   real :: Kh_vel_scale     ! this speed (m/s) times grid spacing gives Lap visc
   real :: Ah_vel_scale     ! this speed (m/s) times grid spacing cubed gives bih visc
+  real :: Ah_time_scale    ! damping time-scale for biharmonic visc
   real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
   real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
@@ -1142,6 +1143,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky and Leith viscosities, and AH.", &
                  units="m s-1", default=0.0)
+    call get_param(param_file, mdl, "AH_TIME_SCALE", Ah_time_scale, &
+                 "A time scale whose inverse is multiplied by the fourth \n"//&
+                 "power of the grid spacing to calculate biharmonic viscosity. \n"//&
+                 "The final viscosity is the largest of all viscosity  \n"//&
+                 "formulations in use. 0.0 means that it's not used.", &
+                 units="s", default=0.0)
     call get_param(param_file, mdl, "SMAGORINSKY_AH", CS%Smagorinsky_Ah, &
                  "If true, use a biharmonic Smagorinsky nonlinear eddy \n"//&
                  "viscosity.", default=.false.)
@@ -1459,6 +1466,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
+      CS%Ah_bg_xx(i,j) = MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / &
+                                               Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
         CS%Ah_bg_xx(i,j) = MIN(CS%Ah_bg_xx(i,j), CS%Ah_Max_xx(i,j))
@@ -1481,6 +1490,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
+      CS%Ah_bg_xy(i,j) = MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / &
+                                               Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xy(I,J) = Ah_Limit * (grid_sp_q2 * grid_sp_q2)
         CS%Ah_bg_xy(I,J) = MIN(CS%Ah_bg_xy(I,J), CS%Ah_Max_xy(I,J))
