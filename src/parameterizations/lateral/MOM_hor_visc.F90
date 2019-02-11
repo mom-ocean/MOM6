@@ -5,8 +5,8 @@ module MOM_hor_visc
 
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
-use MOM_domains,               only : pass_var, CORNER
-use MOM_error_handler,         only : MOM_error, FATAL, WARNING
+use MOM_domains,               only : pass_var, CORNER, pass_vector
+use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS, calc_QG_Leith_viscosity
@@ -303,6 +303,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
   real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
+  real :: GME_is_on ! If use_GME = True, equals one. Otherwise, equals zero.
   real :: epsilon
   real :: GME_coeff ! The GME (negative) viscosity coefficient (m2 s-1)
   real :: DY_dxBu, DX_dyBu
@@ -365,16 +366,42 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
 
+  GME_is_on = 0.0
 
   if (CS%use_GME) then
+    GME_is_on = 1.0
+    ! initialize diag. array with zeros
+    if (CS%id_GME_coeff_h>0) then
+      do k=1,G%ke+1 ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
+        GME_coeff_h(i,j,k) = 0.0
+      enddo; enddo; enddo
+    endif
+    do j=js,je ; do i=is,ie
+      str_xx_GME(i,j) = 0.0
+    enddo; enddo
+    do j=jsq,jeq ; do i=isq,ieq
+      str_xy_GME(i,j) = 0.0
+    enddo; enddo
 
     call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
 
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+    call pass_vector(ubtav, vbtav, G%Domain)
+
+    do j=js,je ; do i=is,ie
       dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
       dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
                                      G%IdxCv(i,J-1) * vbtav(i,J-1))
+    enddo; enddo
+
+    call pass_var(dudx_bt, G%Domain, complete=.true.)
+    call pass_var(dvdy_bt, G%Domain, complete=.true.)
+
+    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+!      dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
+!                                     G%IdyCu(I-1,j) * ubtav(I-1,j))
+!      dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
+!                                     G%IdxCv(i,J-1) * vbtav(i,J-1))
       sh_xx_bt(i,j) = dudx_bt(i,j) - dvdy_bt(i,j)
     enddo ; enddo
 
@@ -386,6 +413,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
 
+    call pass_var(dvdx_bt, G%Domain, position=CORNER, complete=.true.)
+    call pass_var(dudy_bt, G%Domain, position=CORNER, complete=.true.)
+
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy_bt(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx_bt(I,J) + dudy_bt(I,J) )
@@ -395,6 +425,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         sh_xy_bt(I,J) = G%mask2dBu(I,J) * ( dvdx_bt(I,J) + dudy_bt(I,J) )
       enddo ; enddo
     endif
+
+    call thickness_diffuse_get_KH(thickness_diffuse, KH_u_GME, KH_v_GME, G)
+
+    ! halo updates
+    call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
+    call pass_vector(VarMix%slope_x, VarMix%slope_y, G%Domain)
+    call pass_vector(VarMix%N2_u, VarMix%N2_v, G%Domain)
 
   endif ! use_GME
 
@@ -752,21 +789,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif ! Laplacian
 
       if (CS%use_GME) then
-        call thickness_diffuse_get_KH(thickness_diffuse, KH_t_GME, KH_u_GME, KH_v_GME, G)
-        GME_coeff = 0.001 * KH_t_GME(i,j,k) * &
+        GME_coeff = 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I-1,j,k) + &
+                     KH_v_GME(i,J,k) + KH_v_GME(i,J-1,k)) * &
                     0.5*(VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I-1,j,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i,J-1,k)) )**2 ) / &
                     ( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
                       (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
                       (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
-                      epsilon)
-
-        str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
-
-      endif
+                     epsilon)
 
       if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
+      str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
+      endif ! CS%use_GME
 
       if (CS%anisotropic) then
         ! Shearing-strain averaged to h-points
@@ -940,21 +975,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif ! Laplacian
 
       if (CS%use_GME) then
-        GME_coeff = 0.001 * ( 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
+        GME_coeff =  0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
                             KH_v_GME(i,J,k) + KH_v_GME(i+1,J,k)) * &
                       0.25*(VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
                             VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I,j+1,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i+1,J,k)) )**2 ) / &
-                      ( dvdx_bt(i,j)**2 + dudy(i,j)**2 + &
+                      ( dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
                         (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
-                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
-                         epsilon))
+                       (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
+                         epsilon)
 
+        if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
         str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
-      endif
 
-      if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
+      endif
 
       if (CS%anisotropic) then
         ! Horizontal-tension averaged to q-points
@@ -996,25 +1031,24 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                         (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
 
       endif  ! biharmonic
-
-      if (CS%no_slip) then
-        str_xy(I,J) = str_xy(I,J) * (hq * CS%reduction_xy(I,J))
-      else
-        str_xy(I,J) = str_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-      endif
     enddo ; enddo
 
     ! applying GME diagonal term
     if (CS%use_GME) then
       call smooth_GME(CS,G,GME_flux_q=str_xy_GME)
       do J=js-1,Jeq ; do I=is-1,Ieq
-        if (CS%no_slip) then
-          str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq * CS%reduction_xy(I,J))
-        else
-          str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-        endif
+        str_xy(i,j) = str_xy(i,j) + str_xy_GME(i,j)
       enddo ; enddo
     endif
+
+    do J=js-1,Jeq ; do I=is-1,Ieq
+      ! GME is applied below
+      if (CS%no_slip) then
+        str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq * CS%reduction_xy(I,J))
+      else
+        str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+      endif
+    enddo ; enddo
 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
@@ -1863,8 +1897,10 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
   ! Arguments
   type(hor_visc_CS),                            pointer       :: CS        !< Control structure
   type(ocean_grid_type),                        intent(in)    :: G         !< Ocean grid
-  real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: GME_flux_h!<
-  real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: GME_flux_q!<
+  real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: GME_flux_h!< GME diffusive flux
+                                                              !! at h points
+  real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: GME_flux_q!< GME diffusive flux
+                                                              !! at q points
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: GME_flux_h_original
