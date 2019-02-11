@@ -73,6 +73,7 @@ type, public :: neutral_diffusion_CS ; private
   real,    allocatable, dimension(:,:,:,:) :: P_i    !< Interface pressure (Pa)
   real,    allocatable, dimension(:,:,:,:) :: dRdT_i !< dRho/dT (kg/m3/degC) at top edge
   real,    allocatable, dimension(:,:,:,:) :: dRdS_i !< dRho/dS (kg/m3/ppt) at top edge
+  real,    allocatable, dimension(:,:,:,:) :: dRdP_i !< dRho/dp (kg/m3/pascal) at top edge
   integer, allocatable, dimension(:,:)     :: ns     !< Number of interfacs in a column
   logical, allocatable, dimension(:,:,:) :: stable_cell !< True if the cell is stably stratified wrt to the next cell
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -250,6 +251,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
+  real, dimension(SZI_(G)) :: rho_tmp  ! Routiine to calculate drho_dp, returns density which is not used
   real :: h_neglect, h_neglect_edge
   real :: pa_to_H
 
@@ -311,6 +313,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
                                        CS%S_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
       endif
     enddo
+    ! In the current ALE formulation, interface values are not exactly at the 0. or 1. of the 
+    ! polynomial reconstructions
     do k=1,G%ke
        CS%T_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 0. )
        CS%T_i(i,j,k,2) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 1. )
@@ -328,13 +332,19 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
+        ! Calculate derivatives for the top interface
         call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
                                       CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
+        call calculate_compress(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, rho_tmp(:), &
+                                CS%dRdP_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
         if (CS%ref_pres<0) then
           ref_pres(:) = CS%Pint(:,j,k+1)
         endif
+        ! Calcualte derivatives at the bottom interface
         call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
                                       CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
+        call calculate_compress(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, rho_tmp(:), &
+                                CS%dRdP_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
       enddo
     endif
   enddo
@@ -366,13 +376,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
                 CS%Pint(i+1,j,:), CS%Tint(i+1,j,:), CS%Sint(i+1,j,:), CS%dRdT(i+1,j,:), CS%dRdS(i+1,j,:),  &
                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
       else
-        call find_neutral_surface_positions_discontinuous(CS, G%ke,                          &
-            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                     &
-            CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%stable_cell(i,j,:),                   &
-            CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:),             &
-            CS%dRdT_i(i+1,j,:,:), CS%dRdS_i(i+1,j,:,:), CS%stable_cell(i+1,j,:),             &
-            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:), &
-            CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                          &
+        call find_neutral_surface_positions_discontinuous(CS, G%ke,                                     &
+            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                                &
+            CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%dRdP_i(i,j,:,:), CS%stable_cell(i,j,:),          &
+            CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:),                        &
+            CS%dRdT_i(i+1,j,:,:), CS%dRdS_i(i+1,j,:,:), CS%dRdP_i(i+1,j,:,:), CS%stable_cell(i+1,j,:),  &
+            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),            &
+            CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                                     &
             CS%ppoly_coeffs_T(i+1,j,:,:), CS%ppoly_coeffs_S(i+1,j,:,:))
       endif
     endif
@@ -387,13 +397,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
                 CS%Pint(i,j+1,:), CS%Tint(i,j+1,:), CS%Sint(i,j+1,:), CS%dRdT(i,j+1,:), CS%dRdS(i,j+1,:), &
                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
       else
-        call find_neutral_surface_positions_discontinuous(CS, G%ke,                          &
-            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                     &
-            CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%stable_cell(i,j,:),                   &
-            CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:),             &
-            CS%dRdT_i(i,j+1,:,:), CS%dRdS_i(i,j+1,:,:), CS%stable_cell(i,j+1,:),             &
-            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:), &
-            CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                          &
+        call find_neutral_surface_positions_discontinuous(CS, G%ke,                                     &
+            CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:),                                &
+            CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%dRdP_i(i,j,:,:), CS%stable_cell(i,j,:),          &
+            CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:),                        &
+            CS%dRdT_i(i,j+1,:,:), CS%dRdS_i(i,j+1,:,:), CS%dRdP_i(i,j+1,:,:), CS%stable_cell(i,j+1,:),  &
+            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:),            &
+            CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                                     &
             CS%ppoly_coeffs_T(i,j+1,:,:), CS%ppoly_coeffs_S(i,j+1,:,:))
 
       endif
@@ -402,8 +412,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
 
   ! Continuous reconstructions calculate hEff as the difference between the pressures of the
   ! neutral surfaces which need to be reconverted to thickness units. The discontinuous version
-  ! calculates hEff from the fraction of the nondimensional fraction of the layer occupied by
-  ! the... (Please finish this thought. -RWH)
+  ! calculates hEff from the fraction of the nondimensional fraction of the layer spanned by
+  ! adjacent neutral surfaces.
   if (CS%continuous_reconstruction) then
     do k = 1, CS%nsurf-1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
       if (G%mask2dCu(I,j) > 0.) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
@@ -1048,7 +1058,7 @@ end function interpolate_for_nondim_position
 !> Higher order version of find_neutral_surface_positions. Returns positions within left/right columns
 !! of combined interfaces using intracell reconstructions of T/S
 subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, Tl, Sl, &
-                dRdT_l, dRdS_l, stable_l, Pres_r, hcol_r, Tr, Sr, dRdT_r, dRdS_r, stable_r, &
+                dRdT_l, dRdS_l, dRdP_l, stable_l, Pres_r, hcol_r, Tr, Sr, dRdT_r, dRdS_r, dRdP_r, stable_r, &
                 PoL, PoR, KoL, KoR, hEff, ppoly_T_l, ppoly_S_l, ppoly_T_r, ppoly_S_r)
   type(neutral_diffusion_CS),     intent(inout) :: CS        !< Neutral diffusion control structure
   integer,                        intent(in)    :: nk        !< Number of levels
@@ -1090,10 +1100,10 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   logical :: poly_present           ! True if all polynomial coefficients were passed
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   real    :: z0, pos
-  real    :: dRdT_from_top, dRdS_from_top   ! Alpha and beta at the searched from interface
-  real    :: dRdT_from_bot, dRdS_from_bot   ! Alpha and beta at the searched from interface
-  real    :: dRdT_to_top, dRdS_to_top       ! Alpha and beta at the interfaces being searched
-  real    :: dRdT_to_bot, dRdS_to_bot       ! Alpha and beta at the interfaces being searched
+  real    :: dRdT_from_top, dRdS_from_top   ! Density derivatives at the searched from interface
+  real    :: dRdT_from_bot, dRdS_from_bot   ! Density derivatives at the searched from interface
+  real    :: dRdT_to_top, dRdS_to_top       ! Density derivatives at the interfaces being searched
+  real    :: dRdT_to_bot, dRdS_to_bot       ! Density derivatives at the interfaces being searched
 
   ! Initialize variables for the search
   ns = 4*nk
@@ -1150,15 +1160,17 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
       ! For convenience, the left column uses the searched "from" interface variables, and the right column
       ! uses the searched 'to'. These will get reset in subsequent calc_delta_rho calls
 
-      dRdT_from = dRdT_l(kl_left,ki_left)
-      dRdS_from = dRdS_l(kl_left,ki_left)
-      dRdT_to_top  = dRdT_r(kl_right,ki_right)
-      dRdS_to_top  = dRdS_r(kl_right,ki_right)
+      if (TRIM(S%delta_rho_form) == 'no_pressure') then
+        dRdT_from = dRdT_l(kl_left,ki_left)
+        dRdS_from = dRdS_l(kl_left,ki_left)
+        dRdT_to_top  = dRdT_r(kl_right,ki_right)
+        dRdS_to_top  = dRdS_r(kl_right,ki_right)
+      endif
       drho = calc_delta_rho(CS,                                                                         &
                             Tr(kl_right, ki_right),     Sr(kl_right, ki_right),                         &
                             Tl(kl_left, ki_left),       Sl(kl_left, ki_left)  ,                         &
                             dRdT_to_top,                dRdS_to_top,                                    &
-                            dRdT_from_top,              dRdS_from_top,                                  &
+                            dRdT_from,                  dRdS_from,                                      &
                             Pres_r(kl_right, ki_right), Pres_l(kl_left, ki_left))
       if (CS%debug)  write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho, &
           "kl_left=",kl_left, "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
@@ -1188,24 +1200,23 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
         ! interfaces to their average pressures, dRdT and dRdS for both columns are the pre-calculated
         ! ones
         if (TRIM(S%delta_rho_form) == 'no_pressure') then
-          dRdT_to_top = dRdT_l(kl_left,1); dRdS_to_top = dRdS_l(kl_left,1)
-          dRdT_to_bot = dRdT_l(kl_left,2); dRdS_to_top = dRdS_l(kl_left,2)
-          dRdT_from_top = dRdT_r(kl_right,1); dRdS_from_Bot = dRdS_r(kl_right,1)
-          dRdT_from_bot = dRdT_r(kl_right,2); dRdS_from_Bot = dRdS_r(kl_right,2)
+          dRdT_to_top = dRdT_l(kl_left,1) ; dRdS_to_top = dRdS_l(kl_left,1)
+          dRdT_to_bot = dRdT_l(kl_left,2) ; dRdS_to_bot = dRdS_l(kl_left,2)
+          dRdT_from   = dRdT_r(kl_right,ki_right) ; dRdS_from = dRdS_r(kl_right,ki_right)
         endif
         ! Calculate difference in density between left top interface and right interface
         dRhoTop = calc_delta_rho(CS,                                                     &
                                  Tl(kl_left,1),              Sl(kl_left,1),              &
                                  Tr(kl_right, ki_right),     Sr(kl_right, ki_right),     &
                                  dRdT_to_top,                dRdS_to_top,                &
-                                 dRdT_from_top,              dRdS_from_top,              &
+                                 dRdT_from,                  dRdS_from,                  &
                                  Pres_l(kl_left,1),          Pres_r(kl_right, ki_right))
         ! Calculate difference in density between left bottom interface and right interface
         dRhoBot = calc_delta_rho(CS,                                                     &
                                  Tl(kl_left,2),              Sl(kl_left,2),              &
                                  Tr(kl_right, ki_right),     Sr(kl_right, ki_right),     &
                                  dRdT_to_bot,                dRdS_to_bot,                &
-                                 dRdT_from_bot,              dRdS_from_bot,              &
+                                 dRdT_from,                  dRdS_from,                  &
                                  Pres_l(kl_left,2),          Pres_r(kl_right, ki_right))
 
         ! search_other_column returns -1 if the surface connects somewhere between the layer
@@ -1252,21 +1263,28 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
         ! Position of the left interface is known
         PoL(k_surface) = ki_left - 1.
         KoL(k_surface) = kl_left
+        ! For the delta rhoe case wehre density differences are not calculated by displacing the two
+        ! interfaces to their average pressures, dRdT and dRdS for both columns are the pre-calculated
+        ! ones
+        if (TRIM(S%delta_rho_form) == 'no_pressure') then
+          dRdT_to_top = dRdT_r(kl_right,1); dRdS_to_top = dRdS_r(kl_right,1)
+          dRdT_to_bot = dRdT_r(kl_right,2); dRdS_to_top = dRdS_r(kl_right,2)
+          dRdT_from   = dRdT_l(kl_left,ki_left); dRdS_from = dRdS_l(kl_left,ki_left)
+        endif
 
         ! Calculate difference in density between left top interface and right interface
         dRhoTop = calc_delta_rho(CS,                                                &
                                  Tr(kl_right,1),           Sr(kl_right,1),          &
                                  Tl(kl_left,ki_left),      Sl(kl_left,ki_left),     &
-
-                                 dRdT_r(kl_right,1),       dRdS_r(kl_right,1),      &
-                                 dRdT_l(kl_left, ki_left), dRdS_l(kl_left,ki_left), &
+                                 dRdT_to_top,              dRdS_to_top,             &
+                                 dRdT_from_top,            dRdS_from_top,           &
                                  Pres_r(kl_right,1),       Pres_l(kl_left,ki_left))
         ! Calculate difference in density between left bottom interface and right interface
         dRhoBot = calc_delta_rho(CS,                                                &
                                  Tr(kl_right,2),           Sr(kl_right,2),          &
                                  Tl(kl_left,ki_left),      Sl(kl_left,ki_left),     &
-                                 dRdT_r(kl_right,2),       dRdS_r(kl_right,2),      &
-                                 dRdT_l(kl_left, ki_left), dRdS_l(kl_left,ki_left), &
+                                 dRdT_to_bot,              dRdS_to_bot,             &
+                                 dRdT_from_bot,            dRdS_from_bot,           &
                                  Pres_r(kl_right,2),       Pres_l(kl_left,ki_left))
         ! search_other_column returns -1 if the surface connects somewhere between the layer
         pos = search_other_column(dRhoTop, dRhoBot, ki_left, k_surface)
@@ -1441,13 +1459,16 @@ real function neutral_pos(CS, z0, dRhoTop, dRhoBot, T_ref, S_ref, P_ref, dRdT_re
 end function neutral_pos
 
 !> Search a layer to find where delta_rho = 0 based on a linear interpolation of alpha and beta of the top and bottom
-!! being searched and polynomial reconstructions of T and S. We need Newton's method because the T and S
-!! reconstructions make delta_rho a polynomial function of z if using PPM or higher. If Newton's method would search
-!! fall out of the interval [0,1], a bisection step would be taken instead. Also this linearization of alpha, beta
-!! means that second derivatives of the EOS are not needed. Note that delta in variable names below refers to
-!! horizontal differences and 'd' refers to vertical differences
-function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, P_ref, dRdT_top, dRdS_top, &
-                                  P_top, dRdT_bot, dRdS_bot, P_bot, ppoly_T, ppoly_S )      result( z )
+!! being searched and polynomial reconstructions of T and S. Compressibility is not needed because either, we are 
+!! assuming incompressibility in the equation of state for this module or alpha and beta are calculated having been 
+!! displaced to the average pressures of the two pressures We need Newton's method because the T and S reconstructions
+!! make delta_rho a polynomial function of z if using PPM or higher. If Newton's method would search fall out of the 
+!! interval [0,1], a bisection step would be taken instead. Also this linearization of alpha, beta means that second 
+!! derivatives of the EOS are not needed. Note that delta in variable names below refers to horizontal differences and
+!! 'd' refers to vertical differences
+function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, dRdP_ref, P_ref, &
+                                  dRdT_top, dRdS_top, dRdP_top, P_top,                       & 
+                                  dRdT_bot, dRdS_bot, dRdP_bot, P_bot, ppoly_T, ppoly_S )    result( z )
   type(neutral_diffusion_CS),intent(in) :: CS        !< Control structure with parameters for this module
   real,                      intent(in) :: z0        !< Lower bound of position, also serves as the initial guess
   real,                      intent(in) :: T_ref     !< Temperature at the searched from interface
@@ -1488,7 +1509,8 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, P_re
   dRdT_z = a1*dRdT_top + a2*dRdT_bot
   dRdS_z = a1*dRdS_top + a2*dRdS_bot
   P_z = a1*P_top + a2*P_bot
-  drho_min = calc_delta_rho(CS, T_z, S_z, T_ref, S_ref, dRdT_z, dRdS_z, dRdT_ref, dRdS_ref, P_z, P_ref)
+  drho_min = calc_delta_rho(CS, T_z, S_z, T_ref, S_ref, &
+                            dRdT_z, dRdS_z, dRdT_ref, dRdS_ref, dRdP_z, dRdP_ref, P_z, P_ref)
 
   T_z = evaluation_polynomial( ppoly_T, nterm, zmax )
   S_z = evaluation_polynomial( ppoly_S, nterm, zmax )
@@ -1593,8 +1615,7 @@ real function calc_delta_rho(CS, T1, S1, T2, S2, drdt1, drds1, drdt2, drds2, p1_
   elseif (TRIM(CS%delta_rho_form) == 'mid_pressure') then
     pmid = 0.5 * (p1 + p2)
     if (CS%ref_pres>=0) pmid = CS%ref_pres
-      call calculate_density_derivs(T1, S1, pmid, CS%dRdT(:,j,k), CS%dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, CS%EOS)
-    call
+    call calculate_density_derivs(T1, S1, pmid, CS%dRdT(:,j,k), CS%dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, CS%EOS)
     delta_rho = 0.5 *( (drdt1+drdt2)*(T1-T2) + (drds1+drds2)*(S1-S2) )
   else
       call MOM_error(FATAL, "delta_rho_form is not recognized")
