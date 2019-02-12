@@ -254,7 +254,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Leith_Ah_q, & ! Leith bi-harmonic viscosity at q-points (m4 s-1)
     beta_q,     & ! Gradient of planetary vorticity at q-points (m-1 s-1)
     grad_vort_mag_q, & ! Magnitude of vorticity gradient at q-points (m-1 s-1)
-    grad_div_mag_q     ! Magnitude of divergence gradient at q-points (m-1 s-1)
+    grad_div_mag_q, &  ! Magnitude of divergence gradient at q-points (m-1 s-1)
+    hq                 ! harmonic mean of the harmonic means of the u- & v-
+                       ! point thicknesses, in H; This form guarantees that hq/hu < 4.
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &      ! biharmonic viscosity at corner points (m4/s)
@@ -290,8 +292,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
                      ! points where masks are applied, in units of H (i.e. m or kg m-2).
-  real :: hq         ! harmonic mean of the harmonic means of the u- & v-
-                     ! point thicknesses, in H; This form guarantees that hq/hu < 4.
+!  real :: hq         ! harmonic mean of the harmonic means of the u- & v-
+!                     ! point thicknesses, in H; This form guarantees that hq/hu < 4.
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected (H)
   real :: h_neglect3 ! h_neglect^3, in H3
   real :: hrat_min   ! minimum thicknesses at the 4 neighboring
@@ -357,7 +359,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
 !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
 !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE, hq, &
 !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
@@ -365,7 +367,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
 !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
 !$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
-!$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
+!$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
 
   GME_is_on = 0.0
 
@@ -907,12 +909,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
       !hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
       !    ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
-      hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
-          ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
+      hq(I,J) = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
+              ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
 
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J)) / &
-                            (hq + h_neglect) )
+                            (hq(I,J) + h_neglect) )
         visc_bound_rem = 1.0
       endif
 
@@ -926,12 +928,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
           if ((G%mask2dCu(I,j) + G%mask2dCu(I,j+1)) * &
               (G%mask2dCv(i,J) + G%mask2dCv(i+1,J)) == 0.0) then
             ! Only one of hu and hv is nonzero, so just add them.
-            hq = hu + hv
+            hq(I,J) = hu + hv
             hrat_min = 1.0
           else
             ! Both hu and hv are nonzero, so take the harmonic mean.
-            hq = 2.0 * (hu * hv) / ((hu + hv) + h_neglect)
-            hrat_min = min(1.0, min(hu, hv) / (hq + h_neglect) )
+            hq(I,J) = 2.0 * (hu * hv) / ((hu + hv) + h_neglect)
+            hrat_min = min(1.0, min(hu, hv) / (hq(I,J) + h_neglect) )
           endif
         endif
       endif
@@ -1030,9 +1032,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
         bhstr_xy(I,J) = Ah * ( dvdx(I,J) + dudy(I,J) ) * &
-                        (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+                        (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
 
       endif  ! biharmonic
+
     enddo ; enddo
 
     ! applying GME diagonal term
@@ -1043,14 +1046,27 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       !enddo ; enddo
     !endif
 
-    do J=js-1,Jeq ; do I=is-1,Ieq
-      ! GME is applied below
-      if (CS%no_slip) then
-        str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq * CS%reduction_xy(I,J))
-      else
-        str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-      endif
-    enddo ; enddo
+    if (CS%use_GME) then
+      do J=js-1,Jeq ; do I=is-1,Ieq
+        ! GME is applied below
+        if (CS%no_slip) then
+          str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq(I,J) * CS%reduction_xy(I,J))
+        else
+          str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+        endif
+      enddo ; enddo
+    else
+      do J=js-1,Jeq ; do I=is-1,Ieq
+        ! GME is applied below
+        if (CS%no_slip) then
+        str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
+        !  str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq(I,J) * CS%reduction_xy(I,J))
+        else
+        str_xy(I,J) = str_xy(I,J) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+        !  str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+        endif
+      enddo ; enddo
+    endif
 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
