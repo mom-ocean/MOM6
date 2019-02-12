@@ -271,7 +271,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     FrictWork, &     ! energy dissipated by lateral friction (W/m2)
     div_xx_h         ! horizontal divergence (s-1)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  !real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     KH_t_GME, &      !< interface height diffusivities in t-columns (m2 s-1)
     GME_coeff_h      !< GME coeff. at h-points (m2 s-1)
   real :: Ah         ! biharmonic viscosity (m4/s)
@@ -371,17 +372,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   if (CS%use_GME) then
     GME_is_on = 1.0
     ! initialize diag. array with zeros
-    if (CS%id_GME_coeff_h>0) then
-      do k=1,G%ke+1 ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
-        GME_coeff_h(i,j,k) = 0.0
-      enddo; enddo; enddo
-    endif
-    do j=js,je ; do i=is,ie
-      str_xx_GME(i,j) = 0.0
-    enddo; enddo
-    do j=jsq,jeq ; do i=isq,ieq
-      str_xy_GME(i,j) = 0.0
-    enddo; enddo
+    GME_coeff_h(:,:,:) = 0.0
+    GME_coeff_q(:,:,:) = 0.0
+    str_xx_GME(:,:) = 0.0
+    str_xy_GME(:,:) = 0.0
 
     call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
 
@@ -398,10 +392,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     call pass_var(dvdy_bt, G%Domain, complete=.true.)
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-!      dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
-!                                     G%IdyCu(I-1,j) * ubtav(I-1,j))
-!      dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
-!                                     G%IdxCv(i,J-1) * vbtav(i,J-1))
       sh_xx_bt(i,j) = dudx_bt(i,j) - dvdy_bt(i,j)
     enddo ; enddo
 
@@ -791,7 +781,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       if (CS%use_GME) then
         GME_coeff = 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I-1,j,k) + &
                      KH_v_GME(i,J,k) + KH_v_GME(i,J-1,k)) * &
-                    0.5*(VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)) * &
+                    0.5*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)),0.0) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I-1,j,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i,J-1,k)) )**2 ) / &
                     ( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
@@ -799,8 +789,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                       (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
                      epsilon)
 
-      if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
-      str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
+        ! simple way to limit this coeff
+        GME_coeff = 0.0 !MIN(GME_coeff,0.0)
+
+        !if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
+
+        str_xx_GME(i,j) = 0.0 !GME_coeff * sh_xx_bt(i,j)
+        if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = str_xx_GME(i,j)
+
       endif ! CS%use_GME
 
       if (CS%anisotropic) then
@@ -849,14 +845,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
       endif  ! biharmonic
 
-      str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
     enddo ; enddo
 
     ! applying GME diagonal term
     if (CS%use_GME) then
-      call smooth_GME(CS,G,GME_flux_h=str_xx_GME)
+      !call smooth_GME(CS,G,GME_flux_h=str_xx_GME)
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        str_xx(i,j) = str_xx(i,j) + str_xx_GME(i,j)
+        str_xx(i,j) = (str_xx(i,j) + str_xx_GME(i,j)) * (h(i,j,k) * CS%reduction_xx(i,j))
+      enddo ; enddo
+    else
+      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
     endif
 
@@ -977,17 +976,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       if (CS%use_GME) then
         GME_coeff =  0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
                             KH_v_GME(i,J,k) + KH_v_GME(i+1,J,k)) * &
-                      0.25*(VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
-                            VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)) * &
+                      0.25*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
+                            VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)),0.0) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I,j+1,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i+1,J,k)) )**2 ) / &
                       ( dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
                         (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
                          epsilon)
+        ! simple way to limit this coeff
+        GME_coeff = 0.0 !MIN(GME_coeff,0.0)
 
-        if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
-        str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
+        !if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
+        str_xy_GME(I,J) = 0.0 !GME_coeff * sh_xy_bt(I,J)
+        if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = str_xy_GME(I,J)
 
       endif
 
@@ -1034,12 +1036,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     enddo ; enddo
 
     ! applying GME diagonal term
-    if (CS%use_GME) then
-      call smooth_GME(CS,G,GME_flux_q=str_xy_GME)
-      do J=js-1,Jeq ; do I=is-1,Ieq
-        str_xy(i,j) = str_xy(i,j) + str_xy_GME(i,j)
-      enddo ; enddo
-    endif
+    !if (CS%use_GME) then
+      !call smooth_GME(CS,G,GME_flux_q=str_xy_GME)
+      !do J=js-1,Jeq ; do I=is-1,Ieq
+      !  str_xy(i,j) = str_xy(i,j) + str_xy_GME(i,j)
+      !enddo ; enddo
+    !endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       ! GME is applied below
@@ -1850,7 +1852,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%use_GME) then
-      CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTi, Time, &
+      CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTL, Time, &
         'GME coefficient at h Points', 'm^2 s-1')
 
       CS%id_GME_coeff_q = register_diag_field('ocean_model', 'GME_coeff_q', diag%axesBL, Time, &
