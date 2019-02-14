@@ -306,7 +306,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: RoScl     ! The scaling function for MEKE source term
   real :: FatH      ! abs(f) at h-point for MEKE source term (s-1)
   real :: local_strain ! Local variable for interpolating computed strain rates (s-1).
-  real :: GME_is_on ! If use_GME = True, equals one. Otherwise, equals zero.
   real :: epsilon
   real :: GME_coeff ! The GME (negative) viscosity coefficient (m2 s-1)
   real :: DY_dxBu, DX_dyBu
@@ -369,10 +368,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
 !$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
 
-  GME_is_on = 0.0
-
   if (CS%use_GME) then
-    GME_is_on = 1.0
     ! initialize diag. array with zeros
     GME_coeff_h(:,:,:) = 0.0
     GME_coeff_q(:,:,:) = 0.0
@@ -792,12 +788,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                      epsilon)
 
         ! simple way to limit this coeff
-        GME_coeff = 0.0 !MIN(GME_coeff,0.0)
+        GME_coeff = MIN(GME_coeff,1.0E6)
 
-        !if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
+        if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
 
-        str_xx_GME(i,j) = 0.0 !GME_coeff * sh_xx_bt(i,j)
-        if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = str_xx_GME(i,j)
+        str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
 
       endif ! CS%use_GME
 
@@ -851,7 +846,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
     ! applying GME diagonal term
     if (CS%use_GME) then
-      !call smooth_GME(CS,G,GME_flux_h=str_xx_GME)
+      call smooth_GME(CS,G,GME_flux_h=str_xx_GME)
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = (str_xx(i,j) + str_xx_GME(i,j)) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
@@ -987,11 +982,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
                          epsilon)
         ! simple way to limit this coeff
-        GME_coeff = 0.0 !MIN(GME_coeff,0.0)
+        GME_coeff = MIN(GME_coeff,1.0E6)
 
-        !if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
-        str_xy_GME(I,J) = 0.0 !GME_coeff * sh_xy_bt(I,J)
-        if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = str_xy_GME(I,J)
+        if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
+        str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
 
       endif
 
@@ -1039,12 +1033,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     enddo ; enddo
 
     ! applying GME diagonal term
-    !if (CS%use_GME) then
-      !call smooth_GME(CS,G,GME_flux_q=str_xy_GME)
-      !do J=js-1,Jeq ; do I=is-1,Ieq
-      !  str_xy(i,j) = str_xy(i,j) + str_xy_GME(i,j)
-      !enddo ; enddo
-    !endif
+    if (CS%use_GME) then
+      call smooth_GME(CS,G,GME_flux_q=str_xy_GME)
+    endif
 
     if (CS%use_GME) then
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1057,13 +1048,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       enddo ; enddo
     else
       do J=js-1,Jeq ; do I=is-1,Ieq
-        ! GME is applied below
         if (CS%no_slip) then
-        str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
-        !  str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq(I,J) * CS%reduction_xy(I,J))
+          str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
         else
-        str_xy(I,J) = str_xy(I,J) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-        !  str_xy(I,J) = (str_xy(I,J) + GME_is_on * str_xy_GME(I,J)) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+          str_xy(I,J) = str_xy(I,J) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
         endif
       enddo ; enddo
     endif
