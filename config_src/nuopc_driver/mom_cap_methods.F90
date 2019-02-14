@@ -614,14 +614,14 @@ contains
     end if
 
     call State_SetExport(exportState, trim(fldname_x), &
-         isc, iec, jsc, jec, ocean_public%u_surf, ocean_grid, rc=rc)
+         isc, iec, jsc, jec,             ocz_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
 
     call State_SetExport(exportState, trim(fldname_y), &
-         isc, iec, jsc, jec, ocean_public%v_surf, ocean_grid, rc=rc)
+         isc, iec, jsc, jec,             ocm_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
@@ -840,7 +840,7 @@ contains
              ig = i + ocean_grid%isc - isc
              dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
                            - ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
-             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
+             dhdy_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
                            + ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
           end do
        end do
@@ -851,19 +851,19 @@ contains
              ig = i + ocean_grid%isc - isc
              dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
                            + ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
-             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
+             dhdy_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
                            - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
           end do
        end do
     end if
 
-    call State_SetExport(exportState, trim(fldname_x), isc, iec, jsc, jec, dhdx, ocean_grid, rc=rc)
+    call State_SetExport(exportState, trim(fldname_x), isc, iec, jsc, jec, dhdx_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
 
-    call State_SetExport(exportState, trim(fldname_y), isc, iec, jsc, jec, dhdy, ocean_grid, rc=rc)
+    call State_SetExport(exportState, trim(fldname_y), isc, iec, jsc, jec, dhdy_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
@@ -1036,7 +1036,7 @@ contains
     integer                       :: lbnd1,lbnd2
     real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
     real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
-    character(len=*)  , parameter :: subname='(mom_cap_methods_:state_setimport)'
+    character(len=*)  , parameter :: subname='(mom_cap_methods_:state_setexport)'
     ! ----------------------------------------------
 
     rc = ESMF_SUCCESS
