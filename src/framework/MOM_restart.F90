@@ -26,6 +26,8 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_close_file => close_file, &
                            fms2_register_variable_attribute => register_variable_attribute, &
                            FmsNetcdfDomainFile_t
+
+!!
                            
                            
 implicit none ; private
