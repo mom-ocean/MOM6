@@ -1040,15 +1040,18 @@ subroutine restore_state(filename, directory, day, G, CS)
   call fms2_register_field(CS%fileObj, axis_name, variable_type (e.g., "double"), (/axis_name/))
 
     
-
-! Get NetCDF ids for all of the restart files.
-! if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
- !   num_file = open_restart_units('r', directory, G, CS, units=unit, &
- !                    file_paths=unit_path, global_files=unit_is_global)
- ! else
- !   num_file = open_restart_units(filename, directory, G, CS, units=unit, &
- !                    file_paths=unit_path, global_files=unit_is_global)
- ! endif
+ Get NetCDF ids for all of the restart files.
+  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
+    !num_file = open_restart_units('r', directory, G, CS, units=unit, &
+    !                 file_paths=unit_path, global_files=unit_is_global)
+    num_file = open_restart_units('r', directory, G, CS, &
+                     file_paths=unit_path, global_files=unit_is_global)
+  else
+    !num_file = open_restart_units(filename, directory, G, CS, units=unit, &
+     !                file_paths=unit_path, global_files=unit_is_global)
+    num_file = open_restart_units(filename, directory, G, CS, &
+                     file_paths=unit_path, global_files=unit_is_global)
+  endif
 
   if (num_file == 0) then
     write(mesg,'("Unable to find any restart files specified by  ",A,"  in directory ",A,".")') &
@@ -1058,17 +1061,41 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
-    call get_file_info(unit(n), ndim, nvar, natt, ntime)
+    !call get_file_info(unit(n), ndim, nvar, natt, ntime)
     if (ntime < 1) cycle
 
     allocate(time_vals(ntime))
-    call get_file_times(unit(n), time_vals)
+    !call get_file_times(unit(n), time_vals)
     t1 = time_vals(1)
     deallocate(time_vals)
 
     day = real_to_time(t1*86400.0)
     exit
   enddo
+
+  if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
+                                 "No times found in restart files.")
+! Jess:Move this into the main loop
+! Check the remaining files for different times and issue a warning
+! if they differ from the first time.
+  !if (is_root_pe()) then
+    !do m = n+1,num_file
+    !  call get_file_info(unit(n), ndim, nvar, natt, ntime)
+     ! if (ntime < 1) cycle
+
+     ! allocate(time_vals(ntime))
+     ! call get_file_times(unit(n), time_vals)
+     ! t2 = time_vals(1)
+     ! deallocate(time_vals)
+!
+     ! if (t1 /= t2) then
+     !  write(mesg,'("WARNING: Restart file ",I2," has time ",F10.4,"whereas &
+      !   &simulation is restarted at ",F10.4," (differing by ",F10.4,").")')&
+       !        m,t1,t2,t1-t2
+       ! call MOM_error(WARNING, "MOM_restart: "//mesg)
+      !endif
+   ! enddo
+  endif
 
   if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
                                  "No times found in restart files.")
@@ -1098,6 +1125,11 @@ subroutine restore_state(filename, directory, day, G, CS)
   do n=1,num_file
     !call get_file_info(unit(n), ndim, nvar, natt, ntime)
 
+    fileOpenSuccess=fms2_open_file(fileObj, trim(file_path(n),"read", is_restart = .true.)
+    if(.not. fileOpenSuccess) then 
+       write(mesg,' "ERROR, unable to open restart file  ",A ') trim(file_path(n))
+       call MOM_error(FATAL,"MOM_restart: "//mesg)
+    endif
     allocate(fields(nvar))
     call get_file_fields(unit(n),fields(1:nvar))
 
