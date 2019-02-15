@@ -25,7 +25,8 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_register_variable_attribute => register_variable_attribute, &
-                           FmsNetcdfDomainFile_t
+                           fms2_get_dimension_size => get_dimension_size, &
+                           FmsNetcdfDomainFile_t, unlimited
 
 !!
                            
@@ -305,14 +306,14 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  !call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
 !  id_restart = fms_register_restart_field(CS%fileObj, filename, name, f_ptr, &
 !G%Domain%mpp_domain, read_only=.true.) 
  
  ! 
-  call fms2_register_variable_attribute(CS$fileObj, variable_name or axis_name, attribute_name (t_grid), value (scalar or 1-d array)
+ ! call fms2_register_variable_attribute(CS%fileObj, variable_name or axis_name, attribute_name (t_grid), value (scalar or 1-d array)
 
-  call fms2_register_restart_field(CS%fileObj, name, f_ptr, (array of string axis names))
+ !call fms2_register_restart_field(CS%fileObj, name, f_ptr, (array of string axis names))
 
 end subroutine register_restart_field_4d
 
@@ -989,13 +990,13 @@ subroutine restore_state(filename, directory, day, G, CS)
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
 
-!    This subroutine reads the model state from previously
+!  This subroutine reads the model state from previously
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
 
   ! Local variables
   character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
-  character(len=80) :: fname     ! The name of the current file.
+  character(len=80) :: fname      ! The name of the current file.
   character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
   character(len=512) :: mesg      ! A message for warnings.
@@ -1005,8 +1006,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: i, n, m, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
-  integer :: ndim, nvar, natt, ntime, pos
-
+  !integer :: ndim, nvar, natt, ntime, pos
+  integer :: nvar, natt, ndim, pos
+  integer,allocatable :: ntime
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
@@ -1018,29 +1020,15 @@ subroutine restore_state(filename, directory, day, G, CS)
   logical                          :: check_exist, is_there_a_checksum
   integer(kind=8),dimension(3)     :: checksum_file
   integer(kind=8)                  :: checksum_data
-  logical file_is_open
-  type(MOM_restart_CS) :: fileObj
+  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  type(MOM_restart_CS) :: fileObj   ! fms2 data structure
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
-  !! FMS2: INSERT open_file w/ read mode call here
-  if( .not. file_is_open) then
-     file_is_open = open_file(CS%fileObj, filename, 'read', domain=G%Domain%mpp_domain, is_restart = .true.)
-     if(.not. file_is_open) then
-        call MOM_error(FATAL, "MOM restore_state failed because the file " //filename " was not opened")
-     endif
-  endif
-  !! read
-
-  call fms2_register_axis(CS%fileObj, axis_name, axis_size) ! use for non x/y axes (z, time)
-  call fms2_register_axis(CS%fileObj, axis_name, "x" for x-axis or "y" for y-axis)
-
-  call fms2_register_field(CS%fileObj, axis_name, variable_type (e.g., "double"), (/axis_name/))
-
     
- Get NetCDF ids for all of the restart files.
+! Get number of restart files and full paths to files 
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
     !num_file = open_restart_units('r', directory, G, CS, units=unit, &
     !                 file_paths=unit_path, global_files=unit_is_global)
@@ -1059,23 +1047,33 @@ subroutine restore_state(filename, directory, day, G, CS)
     call MOM_error(FATAL,"MOM_restart: "//mesg)
   endif
 
+! Jess: Move this into the main loop
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
+     file_open_success=fms2_open_file(CS%fileObj, trim(unit_path(n)),"read", is_restart = .true.)
+                                                
+     if(.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
+        call MOM_error(FATAL,"MOM_restart: "//mesg)
+     endif
+     call fms2_get_dimension_size(CS%fileObj, "time", ntime)
+
     !call get_file_info(unit(n), ndim, nvar, natt, ntime)
     if (ntime < 1) cycle
 
     allocate(time_vals(ntime))
     !call get_file_times(unit(n), time_vals)
+    call fms2_register_restart_field(CS%fileObj, "time","float")
+    call fms2_read_data(CS%fileObj,"time", time_vals)
     t1 = time_vals(1)
     deallocate(time_vals)
-
     day = real_to_time(t1*86400.0)
     exit
   enddo
 
   if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
                                  "No times found in restart files.")
-! Jess:Move this into the main loop
+! Jess: Move this into the main loop
 ! Check the remaining files for different times and issue a warning
 ! if they differ from the first time.
   !if (is_root_pe()) then
@@ -1095,41 +1093,27 @@ subroutine restore_state(filename, directory, day, G, CS)
        ! call MOM_error(WARNING, "MOM_restart: "//mesg)
       !endif
    ! enddo
-  endif
+!  endif
 
-  if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
-                                 "No times found in restart files.")
-
-! Check the remaining files for different times and issue a warning
-! if they differ from the first time.
-  if (is_root_pe()) then
-    do m = n+1,num_file
-      call get_file_info(unit(n), ndim, nvar, natt, ntime)
-      if (ntime < 1) cycle
-
-      allocate(time_vals(ntime))
-      call get_file_times(unit(n), time_vals)
-      t2 = time_vals(1)
-      deallocate(time_vals)
-
-      if (t1 /= t2) then
-        write(mesg,'("WARNING: Restart file ",I2," has time ",F10.4,"whereas &
-         &simulation is restarted at ",F10.4," (differing by ",F10.4,").")')&
-               m,t1,t2,t1-t2
-        call MOM_error(WARNING, "MOM_restart: "//mesg)
-      endif
-    enddo
-  endif
+!  if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
+!                                 "No times found in restart files.")
 
 ! Read each variable from the first file in which it is found.
   do n=1,num_file
     !call get_file_info(unit(n), ndim, nvar, natt, ntime)
 
-    fileOpenSuccess=fms2_open_file(fileObj, trim(file_path(n),"read", is_restart = .true.)
-    if(.not. fileOpenSuccess) then 
-       write(mesg,' "ERROR, unable to open restart file  ",A ') trim(file_path(n))
+    file_open_success=fms2_open_file(CS%fileObj, trim(unit_path(n)),"read", is_restart = .true.)
+                                                
+    if(.not. file_open_success) then 
+       write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
        call MOM_error(FATAL,"MOM_restart: "//mesg)
     endif
+    ! register restart time axis
+    call fms2_register_axis(CS%fileobj,"time", unlimited)
+  
+    ! read in file time
+   
+
     allocate(fields(nvar))
     call get_file_fields(unit(n),fields(1:nvar))
 
@@ -1171,7 +1155,7 @@ subroutine restore_state(filename, directory, day, G, CS)
             ! Read a 1d array, which should be invariant to domain decomposition.
             !call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
             !               G%Domain%mpp_domain, timelevel=1)
-            call fms2_read_data(fileObj,varname,  CS%var_ptr1d(m)%p)
+           !call fms2_read_data(CS%fileObj,varname,  CS%var_ptr1d(m)%p)
 
             if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
@@ -1339,7 +1323,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
   integer :: num_files  !< The number of files (both automatically named restart
                         !! files and others explicitly in filename) that have been opened.
 
-!    This subroutine reads the model state from previously
+!  This subroutine reads the model state from previously
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
 
