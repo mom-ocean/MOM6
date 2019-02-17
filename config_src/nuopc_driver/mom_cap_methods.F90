@@ -744,7 +744,7 @@ contains
        fldname_y = 'So_dhdy'
     else
        fldname_x = 'sea_surface_slope_zonal'
-       fldname_x = 'sea_surface_slope_merid'
+       fldname_y = 'sea_surface_slope_merid'
     end if
 
     allocate(ssh(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !global indices
@@ -1036,7 +1036,7 @@ contains
     integer                       :: lbnd1,lbnd2
     real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
     real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
-    character(len=*)  , parameter :: subname='(mom_cap_methods_:state_setexport)'
+    character(len=*)  , parameter :: subname='(mom_cap_methods:state_setexport)'
     ! ----------------------------------------------
 
     rc = ESMF_SUCCESS
