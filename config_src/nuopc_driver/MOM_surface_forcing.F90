@@ -155,7 +155,6 @@ end type surface_forcing_CS
 ! the elements, units, and conventions that exactly conform to the use for
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: latent_flux     =>NULL() !< latent flux (W/m2)
   real, pointer, dimension(:,:) :: rofl_flux       =>NULL() !< liquid runoff (W/m2)
   real, pointer, dimension(:,:) :: rofi_flux       =>NULL() !< ice runoff (W/m2)
   real, pointer, dimension(:,:) :: u_flux          =>NULL() !< i-direction wind stress (Pa)
@@ -293,15 +292,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)
 
-    if (.not. cesm_coupled) then
-       call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
-       call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
-       if (CS%use_limited_P_SSH) then
-          fluxes%p_surf_SSH => fluxes%p_surf
-       else
-          fluxes%p_surf_SSH => fluxes%p_surf_full
-       endif
-    end if
+    call safe_alloc_ptr(fluxes%p_surf     ,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
+    if (CS%use_limited_P_SSH) then
+       fluxes%p_surf_SSH => fluxes%p_surf
+    else
+       fluxes%p_surf_SSH => fluxes%p_surf_full
+    endif
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
@@ -470,25 +467,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, &
     if (associated(IOB%t_flux)) &
       fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    ! Note: currently latent heat flux is treated differently for nems and cesm
-    if (associated(IOB%latent_flux)) then
-         fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
-    else
-       fluxes%latent(i,j) = 0.0
-       if (associated(IOB%fprec)) then
-          fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-          fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-       endif
-       if (associated(IOB%calving)) then
-          fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-          fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-       endif
-       if (associated(IOB%q_flux)) then
-          fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-          fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-       endif
-       fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
-    end if
+    fluxes%latent(i,j) = 0.0
+    if (associated(IOB%fprec)) then
+       fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+    endif
+    if (associated(IOB%calving)) then
+       fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+    endif
+    if (associated(IOB%q_flux)) then
+       fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+       fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+    endif
+    fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
     if (associated(IOB%sw_flux_vis_dir)) &
       fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)

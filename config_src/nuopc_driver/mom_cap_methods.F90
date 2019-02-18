@@ -43,21 +43,18 @@ module mom_cap_methods
   end interface
 
   integer                  :: import_cnt = 0
-  type(ESMF_GeomType_Flag) :: geomtype 
-  logical                  :: cesm_coupled
+  type(ESMF_GeomType_Flag) :: geomtype
 
 !===============================================================================
 contains
 !===============================================================================
 
-  subroutine mom_set_geomtype(geomtype_in, cesm_coupled_in)
-    ! Set module variable geomtype and cesm_coupled
+  subroutine mom_set_geomtype(geomtype_in)
+    ! Set module variable geomtype
 
     type(ESMF_GeomType_Flag), intent(in)    :: geomtype_in     !< mesh or grid
-    logical                 , intent(in)    :: cesm_coupled_in !< nems or cmeps
 
     geomtype = geomtype_in
-    cesm_coupled = cesm_coupled_in
 
   end subroutine mom_set_geomtype
 
@@ -66,8 +63,6 @@ contains
   !> This function has a few purposes:
   !! (1) it imports surface fluxes using data from the mediator; and
   !! (2) it can apply restoring in SST and SSS.
-  !! See \ref section_ocn_import for a summary of the surface fluxes that are
-  !! passed from MCT to MOM6, including fluxes that need to be included in the future.
 
   subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype, rc)
 
@@ -80,16 +75,13 @@ contains
     integer                       , intent(inout) :: rc
 
     ! Local Variables
-    type(ESMF_StateItem_Flag)       :: itemFlag
     integer                         :: i, j, ig, jg, n
     integer                         :: isc, iec, jsc, jec
     logical                         :: do_import
     character(len=128)              :: fldname
-    character(len=128)              :: fldname_x
-    character(len=128)              :: fldname_y
     real(ESMF_KIND_R8), allocatable :: taux(:,:)
     real(ESMF_KIND_R8), allocatable :: tauy(:,:)
-    character(len=*)  , parameter   :: subname = '(mom_import_cesm)'
+    character(len=*)  , parameter   :: subname = '(mom_import)'
     !-----------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
@@ -110,17 +102,13 @@ contains
     end if
 
     if (do_import) then
+       ! The following are global indices without halos
        call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
        !----
        ! surface height pressure
        !----
-       if (cesm_coupled) then
-          fldname = 'Sa_pslv'
-       else
-          fldname = 'inst_pres_height_surface'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'inst_pres_height_surface', &
             isc, iec, jsc, jec, ice_ocean_boundary%p, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -130,12 +118,7 @@ contains
        !----
        ! near-IR, direct shortwave  (W/m2)
        !----
-       if (cesm_coupled) then
-          fldname = 'Foxx_swnet_idr'
-       else
-          fldname = 'mean_net_sw_ir_dir_flx'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_net_sw_ir_dir_flx', &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dir, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -145,12 +128,7 @@ contains
        !----
        ! near-IR, diffuse shortwave  (W/m2)
        !----
-       if (cesm_coupled) then
-          fldname = 'Foxx_swnet_idf'
-       else
-          fldname = 'mean_net_sw_ir_dif_flx'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_net_sw_ir_dif_flx', &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -160,12 +138,7 @@ contains
        !----
        ! visible, direct shortwave  (W/m2)
        !----
-       if (cesm_coupled) then
-          fldname = 'Foxx_swnet_vdr'
-       else
-          fldname = 'mean_net_sw_vis_dir_flx'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_net_sw_vis_dir_flx', &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -175,12 +148,7 @@ contains
        !----
        ! visible, diffuse shortwave (W/m2)
        !----
-       if (cesm_coupled) then
-          fldname = 'Foxx_swnet_vdf'
-       else
-          fldname = 'mean_net_sw_vis_dif_flx'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_net_sw_vis_dif_flx', &
             isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -190,12 +158,7 @@ contains
        ! -------
        ! Net longwave radiation (W/m2)
        ! -------
-       if (cesm_coupled) then
-          fldname = 'Foxx_lwnet'
-       else
-          fldname = 'mean_net_lw_flx'
-       end if
-       call state_getimport(importState, trim(fldname),  &
+       call state_getimport(importState, 'mean_net_lw_flx',  &
             isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -205,62 +168,38 @@ contains
        !----
        ! zonal and meridional surface stress
        !----
-       if (cesm_coupled) then
-          fldname_x = 'Foxx_taux'
-          fldname_y = 'Foxx_tauy'
-       else
-          fldname_x = 'mean_zonal_moment_flx'
-          fldname_y = 'mean_merid_moment_flx'
-       end if
-
        allocate (taux(isc:iec,jsc:jec))
        allocate (tauy(isc:iec,jsc:jec))
-       call state_getimport(importState, trim(fldname_x), isc, iec, jsc, jec, taux, rc=rc)
+
+       call state_getimport(importState, 'mean_zonal_moment_flx', isc, iec, jsc, jec, taux, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
-       call state_getimport(importState, trim(fldname_y), isc, iec, jsc, jec, tauy, rc=rc)
+       call state_getimport(importState, 'mean_merid_moment_flx', isc, iec, jsc, jec, tauy, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
             file=__FILE__)) &
             return  ! bail out
 
        ! rotate taux and tauy from true zonal/meridional to local coordinates
-       ! Note - this is the latest calculation from Gustavo - pointed out that the NEMS calculation is incorrect
-       if (cesm_coupled) then
-          do j = jsc, jec
-             jg = j + ocean_grid%jsc - jsc
-             do i = isc, iec
-                ig = i + ocean_grid%isc - isc
-                ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg) * taux(i,j) &
-                                               + ocean_grid%sin_rot(ig,jg) * tauy(i,j)
-                ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg) * tauy(i,j) &
-                                               - ocean_grid%sin_rot(ig,jg) * taux(i,j)
-             end do
+       do j = jsc, jec
+          jg = j + ocean_grid%jsc - jsc
+          do i = isc, iec
+             ig = i + ocean_grid%isc - isc
+             ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg)*taux(i,j) &
+                                            - ocean_grid%sin_rot(ig,jg)*tauy(i,j)
+             ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg)*tauy(i,j) &
+                                            + ocean_grid%sin_rot(ig,jg)*taux(i,j)
           end do
-       else
-          do j = jsc, jec
-             jg = j + ocean_grid%jsc - jsc
-             do i = isc, iec
-                ig = i + ocean_grid%isc - isc
-                ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg)*taux(i,j) &
-                                               - ocean_grid%sin_rot(ig,jg)*tauy(i,j)
-                ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg)*tauy(i,j) &
-                                               + ocean_grid%sin_rot(ig,jg)*taux(i,j)
-             end do
-          end do
-       end if
+       end do
+
+       deallocate(taux, tauy)
 
        !----
        ! sensible heat flux (W/m2)
        !----
-       if (cesm_coupled) then
-          fldname = 'Foxx_sen'
-       else
-          fldname = 'mean_sensi_heat_flx'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_sensi_heat_flx', &
             isc, iec, jsc, jec, ice_ocean_boundary%t_flux, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -268,28 +207,9 @@ contains
             return  ! bail out
 
        !----
-       ! latent heat flux (W/m2)
+       ! evaporation flux (W/m2)
        !----
-       if (cesm_coupled) then
-          ! Note - this field is not exported by the nems mediator
-          fldname = 'Foxx_lat'
-          call state_getimport(importState, trim(fldname), &
-               isc, iec, jsc, jec, ice_ocean_boundary%latent_flux, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-       end if
-
-       !----
-       ! specific humidity flux (W/m2)
-       !----
-       if (cesm_coupled) then
-          fldname = 'Foxx_evap'
-       else
-          fldname = 'mean_evap_rate'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_evap_rate', &
             isc, iec, jsc, jec, ice_ocean_boundary%q_flux, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -299,12 +219,7 @@ contains
        !----
        ! liquid precipitation (rain)
        !----
-       if (cesm_coupled) then
-          fldname = 'Faxa_rain'
-       else
-          fldname = 'mean_prec_rate'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_prec_rate', &
             isc, iec, jsc, jec, ice_ocean_boundary%lprec, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -314,12 +229,7 @@ contains
        !----
        ! frozen precipitation (snow)
        !----
-       if (cesm_coupled) then
-          fldname = 'Faxa_snow'
-       else
-          fldname = 'mean_fprec_rate'
-       end if
-       call state_getimport(importState, trim(fldname), &
+       call state_getimport(importState, 'mean_fprec_rate', &
             isc, iec, jsc, jec, ice_ocean_boundary%fprec, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -329,109 +239,97 @@ contains
        !----
        ! runoff and heat content of runoff
        !----
-       if (cesm_coupled) then
-          ! liquid runoff
-          fldname = 'Foxx_rofl'
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%rofl_flux,rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
+       ! Note - preset values to 0, if field does not exist in importState, then will simply return
+       ! and preset value will be used
 
-          ! ice runoff
-          fldname = 'Foxx_rofi'
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%rofi_flux,rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
+       ! liquid runoff
+       ice_ocean_boundary%rofl_flux (:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'Foxx_rofl',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%rofl_flux,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
-          ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
-          ! heat_content_frunoff. Setting these to zero for now.
-          ice_ocean_boundary%runoff_hflx(:,:)  = 0._ESMF_KIND_R8
-          ice_ocean_boundary%calving_hflx(:,:) = 0._ESMF_KIND_R8
+       ! ice runoff
+       ice_ocean_boundary%rofi_flux (:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'Foxx_rofi',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%rofi_flux,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
-       else
-          ! total runoff
-          fldname = 'mean_runoff_rate'
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%runoff, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
+       ! total runoff
+       ice_ocean_boundary%runoff (:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'mean_runoff_rate',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%runoff, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
-          ! heat content of runoff
-          fldname = 'mean_runoff_heat_flux'
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%runoff_hflx, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-       end if
+       ! heat content of runoff
+       ice_ocean_boundary%runoff_hflx(:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'mean_runoff_heat_flux',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%runoff_hflx, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
        !----
        ! calving rate and heat flux
        !----
-       if (.not. cesm_coupled) then
-          fldname = 'mean_calving_rate'
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%calving, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
+       ! Note - preset values to 0, if field does not exist in importState, then will simply return
+       ! and preset value will be used
 
-          fldname = 'mean_calving_heat_flux'
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%calving_hflx, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-       end if
+       ice_ocean_boundary%calving(:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'mean_calving_rate',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%calving, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+
+       ice_ocean_boundary%calving_hflx(:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'mean_calving_heat_flux',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%calving_hflx, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
        !----
        ! salt flux from ice
        !----
-       if (cesm_coupled) then
-          fldname = 'Fioi_salt'
-       else
-          fldname = 'mean_salt_rate'
-       end if
-       call state_getimport(importState, trim(fldname),  &
+       call state_getimport(importState, 'mean_salt_rate',  &
             isc, iec, jsc, jec, ice_ocean_boundary%salt_flux,rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
-       if (cesm_coupled) then
-          ! salt flux (minus sign needed here -GMM)
-          ! TODO (mvertens, 2018-12-28): NEMS does not have a minus sign - which one is right?
-          do j = jsc,jec
-             do i = isc,iec
-                ice_ocean_boundary%salt_flux(i,j) = - ice_ocean_boundary%salt_flux(i,j)
-             enddo
+       ! TODO: salt flux (minus sign needed here -GMM) - this does not match either NEMS or MCT - so not put in below
+       do j = jsc,jec
+          do i = isc,iec
+             ice_ocean_boundary%salt_flux(i,j) = ice_ocean_boundary%salt_flux(i,j)
           enddo
-       end if
+       enddo
 
        !----
        ! mass of overlying ice
        !----
-       fldname = 'mass_of_overlying_ice'
-       call ESMF_StateGet(importState, trim(fldname), itemFlag)
-       if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-          call state_getimport(importState, trim(fldname),  &
-               isc, iec, jsc, jec, ice_ocean_boundary%mi, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-       end if
+       ! Note - preset values to 0, if field does not exist in importState, then will simply return
+       ! and preset value will be used
+
+       ice_ocean_boundary%mi(:,:) = 0._ESMF_KIND_R8
+       call state_getimport(importState, 'mass_of_overlying_ice',  &
+            isc, iec, jsc, jec, ice_ocean_boundary%mi, rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
 
     end if
 
@@ -440,21 +338,21 @@ contains
 !===============================================================================
 
   !> Maps outgoing ocean data to ESMF State
-  subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, dt_cpld, rc)
+  subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc)
 
     ! Input/output variables
     type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
     type(ocean_grid_type)   , intent(in)    :: ocean_grid   !< Ocean model grid
-    type (ocean_state_type) , pointer       :: ocean_state
+    type(ocean_state_type)  , pointer       :: ocean_state
     type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
-    type(ESMF_Clock)        , intent(in)    :: clock        ! cesm
-    integer                 , intent(in)    :: dt_cpld      ! nems
+    type(ESMF_Clock)        , intent(in)    :: clock
     integer                 , intent(inout) :: rc
 
     ! Local variables
-    integer                         :: i, j, ig, jg         ! grid indices
-    integer                         :: isc, iec, jsc, jec   ! local indices
-    integer                         :: iloc, jloc           ! local indices
+    integer                         :: i, j, ig, jg         ! indices
+    integer                         :: isc, iec, jsc, jec   ! indices
+    integer                         :: iloc, jloc           ! indices
+    integer                         :: iglob, jglob         ! indices
     integer                         :: n
     integer                         :: icount
     real                            :: slp_L, slp_R, slp_C
@@ -464,21 +362,14 @@ contains
     integer                         :: dt_int
     real                            :: inv_dt_int  !< The inverse of coupling time interval in s-1.
     type(ESMF_StateItem_Flag)       :: itemFlag
-    type(ESMF_StateItem_Flag)       :: itemFlag1
-    type(ESMF_StateItem_Flag)       :: itemFlag2
-    character(len=128)              :: fldname
-    character(len=128)              :: fldname_x
-    character(len=128)              :: fldname_y
     real(ESMF_KIND_R8), allocatable :: omask(:,:)
     real(ESMF_KIND_R8), allocatable :: melt_potential(:,:)
-    real(ESMF_KIND_R8), allocatable :: frazil(:,:)
-    real(ESMF_KIND_R8), allocatable :: frzmlt(:,:)
     real(ESMF_KIND_R8), allocatable :: ocz(:,:), ocm(:,:)
     real(ESMF_KIND_R8), allocatable :: ocz_rot(:,:), ocm_rot(:,:)
     real(ESMF_KIND_R8), allocatable :: ssh(:,:)
     real(ESMF_KIND_R8), allocatable :: dhdx(:,:), dhdy(:,:)
     real(ESMF_KIND_R8), allocatable :: dhdx_rot(:,:), dhdy_rot(:,:)
-    character(len=*), parameter :: subname = '(mom_export)'
+    character(len=*)  , parameter   :: subname = '(mom_export)'
     !-----------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
@@ -489,11 +380,13 @@ contains
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
     call ESMF_TimeIntervalGet( timeStep, s=dt_int, rc=rc )
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
     if (real(dt_int) > 0.0) then
        inv_dt_int = 1.0 / real(dt_int)
     else
@@ -509,39 +402,27 @@ contains
     ! -------
     ! ocean mask
     ! -------
-    if (cesm_coupled) then
-       fldname = 'So_omask'
-    else
-       fldname = 'ocean_mask'
-    end if
     allocate(omask(isc:iec, jsc:jec))
-    ! TODO (mvertens, 2018-12-29): which is the correct formulation?
-    if (cesm_coupled) then
-       omask(:,:) = 1._ESMF_KIND_R8
-    else
-       call ocean_model_data_get(ocean_state, ocean_public, 'mask', omask, isc, jsc)
-       do j = jsc,jec
-          do i = isc,iec
-             omask(i,j) = nint(omask(i,j))
-          enddo
+    call ocean_model_data_get(ocean_state, ocean_public, 'mask', omask, isc, jsc)
+    do j = jsc,jec
+       do i = isc,iec
+          omask(i,j) = nint(omask(i,j))
        enddo
-    end if
-    call State_SetExport(exportState, trim(fldname), &
+    enddo
+
+    call State_SetExport(exportState, 'ocean_mask', &
          isc, iec, jsc, jec, omask, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
 
+    deallocate(omask)
+
     ! -------
     ! Sea surface temperature
     ! -------
-    if (cesm_coupled) then
-       fldname = 'So_t'
-    else
-       fldname = 'sea_surface_temperature'
-    end if
-    call State_SetExport(exportState, trim(fldname), &
+    call State_SetExport(exportState, 'sea_surface_temperature', &
          isc, iec, jsc, jec, ocean_public%t_surf, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -551,12 +432,7 @@ contains
     ! -------
     ! Sea surface salinity
     ! -------
-    if (cesm_coupled) then
-       fldname = 'So_s'
-    else
-       fldname = 's_surf'
-    end if
-    call State_SetExport(exportState, trim(fldname), &
+    call State_SetExport(exportState, 's_surf', &
          isc, iec, jsc, jec, ocean_public%s_surf, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
@@ -566,74 +442,47 @@ contains
     ! -------
     ! zonal and meridional currents
     ! -------
-    if (cesm_coupled) then
-       fldname_x = 'So_u'
-       fldname_y = 'So_v'
-    else
-       fldname_x = 'ocn_current_zonal'
-       fldname_y = 'ocn_current_merid'
-    end if
 
     ! rotate ocn current from tripolar grid back to lat/lon grid x,y => latlon (CCW)
-    ! "ocean_grid" has halos and uses global indexing.
-
-    ! TODO (mvertens, 2018-12-30): Only one of these is correct - the cesm_coupled one is the
-    ! latest and is the one that GM feels is the correct one
+    ! "ocean_grid%isc" has no halos and uses local indexing.
 
     allocate(ocz(isc:iec, jsc:jec))
     allocate(ocm(isc:iec, jsc:jec))
     allocate(ocz_rot(isc:iec, jsc:jec))
     allocate(ocm_rot(isc:iec, jsc:jec))
 
-    if (cesm_coupled) then
-       do j = jsc, jec
-          jg = j + ocean_grid%jsc - jsc
-          do i = isc, iec
-             ig = i + ocean_grid%isc - isc
-             ocz(i,j) = ocean_public%u_surf(i,j)
-             ocm(i,j) = ocean_public%v_surf(i,j)
-             ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) &
-                          - ocean_grid%sin_rot(ig,jg)*ocm(i,j)
-             ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) &
-                          + ocean_grid%sin_rot(ig,jg)*ocz(i,j)
-          end do
+    do j = jsc, jec
+       jg = j + ocean_grid%jsc - jsc
+       do i = isc, iec
+          ig = i + ocean_grid%isc - isc
+          ocz(i,j) = ocean_public%u_surf(i,j)
+          ocm(i,j) = ocean_public%v_surf(i,j)
+          ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) + ocean_grid%sin_rot(ig,jg)*ocm(i,j)
+          ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) - ocean_grid%sin_rot(ig,jg)*ocz(i,j)
        end do
-    else
-       do j = jsc, jec
-          jg = j + ocean_grid%jsc - jsc
-          do i = isc, iec
-             ig = i + ocean_grid%isc - isc
-             ocz(i,j) = ocean_public%u_surf(i,j)
-             ocm(i,j) = ocean_public%v_surf(i,j)
-             ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) &
-                          + ocean_grid%sin_rot(ig,jg)*ocm(i,j)
-             ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) &
-                          - ocean_grid%sin_rot(ig,jg)*ocz(i,j)
-          end do
-       end do
-    end if
+    end do
 
-    call State_SetExport(exportState, trim(fldname_x), &
-         isc, iec, jsc, jec, ocean_public%u_surf, ocean_grid, rc=rc)
+    call State_SetExport(exportState, 'ocn_current_zonal', &
+         isc, iec, jsc, jec, ocz_rot, ocean_grid, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
+    call State_SetExport(exportState, 'ocn_current_merid', &
+         isc, iec, jsc, jec, ocm_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
 
-    call State_SetExport(exportState, trim(fldname_y), &
-         isc, iec, jsc, jec, ocean_public%v_surf, ocean_grid, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-         line=__LINE__, &
-         file=__FILE__)) &
-         return  ! bail out
+    deallocate(ocz, ocm, ocz_rot, ocm_rot)
 
     ! -------
     ! Boundary layer depth
     ! -------
-    fldname = 'So_bldepth'
-    call ESMF_StateGet(exportState, trim(fldname), itemFlag, rc=rc)
+    call ESMF_StateGet(exportState, 'So_bldepth', itemFlag, rc=rc)
     if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-       call State_SetExport(exportState, trim(fldname), &
+       call State_SetExport(exportState, 'So_bldepth', &
             isc, iec, jsc, jec, ocean_public%obld, ocean_grid, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -642,92 +491,39 @@ contains
     end if
 
     ! -------
-    ! Oean melt and freeze potential
+    ! Freezing melting potential
     ! -------
     ! melt_potential, defined positive for T>Tfreeze, so need to change sign
     ! Convert from J/m^2 to W/m^2 and make sure Melt_potential is always <= 0
 
-    if (cesm_coupled) then
-       fldname = 'Fioo_q'
-    else
-       fldname = 'inst_melt_potential'
-    end if
     allocate(melt_potential(isc:iec, jsc:jec))
-    if (cesm_coupled) then
-       do j = jsc,jec
-          do i = isc,iec
-             if (ocean_public%frazil(i,j) > 0.0) then
-                melt_potential(i,j) =  ocean_public%frazil(i,j) * inv_dt_int
-             else
-                melt_potential(i,j) = -ocean_public%melt_potential(i,j) * inv_dt_int
-                if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
-             end if
-          end do
-       end do
-    else
-       do j = jsc,jec
-          do i = isc,iec
-             ! TODO (mvertens, 2018-12-29): use inv_dt_int from cesm - and not the original implementation?
-             melt_potential(i,j) = -melt_potential(i,j) / dt_cpld
+
+    do j = jsc,jec
+       do i = isc,iec
+          if (ocean_public%frazil(i,j) > 0.0) then
+             melt_potential(i,j) =  ocean_public%frazil(i,j) * inv_dt_int
+          else
+             melt_potential(i,j) = -ocean_public%melt_potential(i,j) * inv_dt_int
              if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
-          end do
+          end if
        end do
-    end if
-    call State_SetExport(exportState, trim(fldname), &
+    end do
+
+    call State_SetExport(exportState, 'freezing_melting_potential', &
          isc, iec, jsc, jec, melt_potential, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
 
-    ! -------
-    ! frazil and freezing melting potential
-    ! -------
-
-    call ESMF_StateGet(exportState, 'accum_heat_frazil'         , itemFlag1)
-    call ESMF_StateGet(exportState, 'freezing_melting_potential', itemFlag2)
-    if (itemFlag1 /= ESMF_STATEITEM_NOTFOUND .and. itemFlag2 /= ESMF_STATEITEM_NOTFOUND) then
-
-       allocate(frazil(isc:iec, jsc:jec))
-       allocate(frzmlt(isc:iec, jsc:jec))
-
-       do j = jsc,jec
-          do i = isc,iec
-             !convert from J/m^2 to W/m^2 for CICE coupling
-             frazil(i,j) = ocean_public%frazil(i,j)/dt_cpld
-             if (frazil(i,j) == 0.0) then
-                frzmlt(i,j) = melt_potential(i,j)
-             else
-                frzmlt(i,j) = frazil(i,j)
-             endif
-             frzmlt(i,j) = max(-1000.0,min(1000.0,frzmlt(i,j)))
-          end do
-       end do
-
-       fldname = 'accum_heat_frazil'
-       call State_SetExport(exportState, trim(fldname), &
-            isc, iec, jsc, jec, frazil, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-
-       fldname = 'freezing_melting_potential'
-       call State_SetExport(exportState, trim(fldname), &
-            isc, iec, jsc, jec, frzmlt, ocean_grid, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-    end if
+    deallocate(melt_potential)
 
     ! -------
     ! Sea level
     ! -------
-    fldname = 'sea_level'
-    call ESMF_StateGet(exportState, trim(fldname), itemFlag, rc=rc)
+    call ESMF_StateGet(exportState, 'sea_level', itemFlag, rc=rc)
     if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-       call State_SetExport(exportState, trim(fldname), &
+       call State_SetExport(exportState, 'sea_level', &
             isc, iec, jsc, jec, ocean_public%sea_lev, ocean_grid, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -739,24 +535,17 @@ contains
     ! Sea-surface zonal and meridional slopes
     !----------------
 
-    if (cesm_coupled) then
-       fldname_x = 'So_dhdx'
-       fldname_y = 'So_dhdy'
-    else
-       fldname_x = 'sea_surface_slope_zonal'
-       fldname_x = 'sea_surface_slope_merid'
-    end if
+    allocate(ssh(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) ! local indices with halos
+    allocate(dhdx(isc:iec, jsc:jec))     !global indices without halos
+    allocate(dhdy(isc:iec, jsc:jec))     !global indices without halos
+    allocate(dhdx_rot(isc:iec, jsc:jec)) !global indices without halos
+    allocate(dhdy_rot(isc:iec, jsc:jec)) !global indices without halos
 
-    allocate(ssh(ocean_grid%isd:ocean_grid%ied,ocean_grid%jsd:ocean_grid%jed)) !global indices
-    allocate(dhdx(isc:iec, jsc:jec))     !local indices
-    allocate(dhdy(isc:iec, jsc:jec))     !local indices
-    allocate(dhdx_rot(isc:iec, jsc:jec)) !local indices
-    allocate(dhdy_rot(isc:iec, jsc:jec)) !local indices
     ssh  = 0.0_ESMF_KIND_R8
     dhdx = 0.0_ESMF_KIND_R8
     dhdy = 0.0_ESMF_KIND_R8
 
-    ! Make a copy of ssh in order to do a halo update (ssh has global indexing with halos)
+    ! Make a copy of ssh in order to do a halo update (ssh has local indexing with halos)
     do j = ocean_grid%jsc, ocean_grid%jec
        jloc = j + ocean_grid%jdg_offset
        do i = ocean_grid%isc,ocean_grid%iec
@@ -765,17 +554,17 @@ contains
        end do
     end do
 
-    ! Update halo of ssh so we can calculate gradients
+    ! Update halo of ssh so we can calculate gradients (local indexing)
     call pass_var(ssh, ocean_grid%domain)
 
     ! d/dx ssh
     ! This is a simple second-order difference
     ! dhdx(i,j) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(ig,jg)
 
-    do jloc = jsc, jec
-      j  = jloc + ocean_grid%jsc - jsc
-      do iloc = isc,iec
-        i  = iloc + ocean_grid%isc - isc
+    do jglob = jsc, jec
+      j  = jglob + ocean_grid%jsc - jsc
+      do iglob = isc,iec
+        i  = iglob + ocean_grid%isc - isc
         ! This is a PLM slope which might be less prone to the A-grid null mode
         slp_L = (ssh(I,j) - ssh(I-1,j)) * ocean_grid%mask2dCu(i-1,j)
         if (ocean_grid%mask2dCu(i-1,j)==0.) slp_L = 0.
@@ -793,8 +582,8 @@ contains
           ! larger extreme values.
           slope = 0.0
         end if
-        dhdx(iloc,jloc) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
-        if (ocean_grid%mask2dT(i,j)==0.) dhdx(iloc,jloc) = 0.0
+        dhdx(iglob,jglob) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
+        if (ocean_grid%mask2dT(i,j)==0.) dhdx(iglob,jglob) = 0.0
       end do
     end do
 
@@ -802,10 +591,10 @@ contains
     ! This is a simple second-order difference
     ! dhdy(i,j) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(ig,jg)
 
-    do jloc = jsc, jec
-      j = jloc + ocean_grid%jsc - jsc
-      do iloc = isc,iec
-         i = iloc + ocean_grid%isc - isc
+    do jglob = jsc, jec
+      j = jglob + ocean_grid%jsc - jsc
+      do iglob = isc,iec
+         i = iglob + ocean_grid%isc - isc
         ! This is a PLM slope which might be less prone to the A-ocean_grid null mode
         slp_L = ssh(i,J) - ssh(i,J-1) * ocean_grid%mask2dCv(i,j-1)
         if (ocean_grid%mask2dCv(i,j-1)==0.) slp_L = 0.
@@ -823,51 +612,38 @@ contains
           ! larger extreme values.
           slope = 0.0
         end if
-        dhdy(iloc,jloc) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
-        if (ocean_grid%mask2dT(i,j)==0.) dhdy(iloc,jloc) = 0.0
+        dhdy(iglob,jglob) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
+        if (ocean_grid%mask2dT(i,j)==0.) dhdy(iglob,jglob) = 0.0
       end do
     end do
 
     ! rotate slopes from tripolar grid back to lat/lon grid,  x,y => latlon (CCW)
     ! "ocean_grid" uses has halos and uses global indexing.
 
-    ! TODO (mvertens, 2018-12-30): Only one of these is correct - the cesm_coupled one is the
-    ! latest and is the one that GM feels is the correct one
-    if (cesm_coupled) then
-       do j = jsc, jec
-          jg = j + ocean_grid%jsc - jsc
-          do i = isc, iec
-             ig = i + ocean_grid%isc - isc
-             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
-                           - ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
-             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
-                           + ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
-          end do
+    do j = jsc, jec
+       jg = j + ocean_grid%jsc - jsc
+       do i = isc, iec
+          ig = i + ocean_grid%isc - isc
+          dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) + ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
+          dhdy_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
        end do
-    else
-       do j = jsc, jec
-          jg = j + ocean_grid%jsc - jsc
-          do i = isc, iec
-             ig = i + ocean_grid%isc - isc
-             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) &
-                           + ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
-             dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) &
-                           - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
-          end do
-       end do
-    end if
+    end do
 
-    call State_SetExport(exportState, trim(fldname_x), isc, iec, jsc, jec, dhdx, ocean_grid, rc=rc)
+    call State_SetExport(exportState, 'sea_surface_slope_zonal', &
+         isc, iec, jsc, jec, dhdx_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
 
-    call State_SetExport(exportState, trim(fldname_y), isc, iec, jsc, jec, dhdy, ocean_grid, rc=rc)
+    call State_SetExport(exportState, 'sea_surface_slope_merid', &
+         isc, iec, jsc, jec, dhdy_rot, ocean_grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return  ! bail out
+
+    deallocate(ssh, dhdx, dhdy, dhdx_rot, dhdy_rot)
 
   end subroutine mom_export
 
