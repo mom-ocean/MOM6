@@ -581,9 +581,11 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
 
     FatH = 0.25*((G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) + &
            (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1))) !< Coriolis parameter at h points
-    beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j)* &
-           (G%bathyT(i+1,j) - G%bathyT(i-1,j))/2./G%dxT(i,j) )**2. &
-           + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
+    beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH &
+           /max(G%bathyT(i,j),G%bathyT(i+1,j),G%bathyT(i-1,j),1.e-30) &
+           *(G%bathyT(i+1,j) - G%bathyT(i-1,j))/2./G%dxT(i,j) )**2. &
+           + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH   &
+           /max(G%bathyT(i,j),G%bathyT(i,j+1),G%bathyT(i,j-1),1.e-30) &
            *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
 
     I_H = GV%Rho0 * I_mass(i,j)
@@ -705,9 +707,11 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
       endif
       FatH = 0.25*( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
              ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  ! Coriolis parameter at h points
-      beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
+      beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH &
+             /max(G%bathyT(i,j),G%bathyT(i+1,j),G%bathyT(i-1,j),1.e-30) &
              *(G%bathyT(i+1,j) - G%bathyT(i-1,j)) /2./G%dxT(i,j) )**2. &
-             + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
+             + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH &
+             /max(G%bathyT(i,j),G%bathyT(i,j-1),G%bathyT(i,j+1),1.e-30) &
              *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
