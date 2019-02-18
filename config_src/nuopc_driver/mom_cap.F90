@@ -2373,7 +2373,7 @@ contains
          return
       endif
 
-      farrayptr(1,scalar_id) = value
+      farrayptr(scalar_id,1) = value
     endif
 
   end subroutine State_SetScalar
@@ -2519,7 +2519,7 @@ contains
            return  ! bail out
 
       field = ESMF_FieldCreate(name=trim(scalar_field_name), grid=grid, typekind=ESMF_TYPEKIND_R8, &
-           ungriddedLBound=(/1/), ungriddedUBound=(/scalar_field_count/), rc=rc) ! num of scalar values
+           ungriddedLBound=(/1/), ungriddedUBound=(/scalar_field_count/), gridToFieldMap=(/2/), rc=rc) ! num of scalar values
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
            line=__LINE__, &
            file=__FILE__)) &
