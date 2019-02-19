@@ -77,6 +77,10 @@ interface calculate_TFreeze
   module procedure calculate_TFreeze_scalar, calculate_TFreeze_array
 end interface calculate_TFreeze
 
+interface calculate_compress
+  module procedure calculate_compress_scalar, calculate_compress_array
+end interface calculate_compress
+
 !> A control structure for the equation of state
 type, public :: EOS_type ; private
   integer :: form_of_EOS = 0 !< The equation of state to use.
@@ -508,7 +512,7 @@ subroutine calculate_specific_vol_derivs(T, S, pressure, dSV_dT, dSV_dS, start, 
 end subroutine calculate_specific_vol_derivs
 
 !> Calls the appropriate subroutine to calculate the density and compressibility for 1-D array inputs.
-subroutine calculate_compress(T, S, pressure, rho, drho_dp, start, npts, EOS)
+subroutine calculate_compress_array(T, S, pressure, rho, drho_dp, start, npts, EOS)
   real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface (degC)
   real, dimension(:), intent(in)  :: S !< Salinity (PSU)
   real, dimension(:), intent(in)  :: pressure !< Pressure (Pa)
@@ -539,8 +543,29 @@ subroutine calculate_compress(T, S, pressure, rho, drho_dp, start, npts, EOS)
            "calculate_compress: EOS%form_of_EOS is not valid.")
   end select
 
-end subroutine calculate_compress
+end subroutine calculate_compress_array
 
+!> Calculate density and compressibility for a scalar. This just promotes the scalar to an array with a singleton
+!! dimension and calls calculate_compress_array
+subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
+  real, intent(in)        :: T        !< Potential temperature referenced to the surface (degC)
+  real, intent(in)        :: S        !< Salinity (PSU)
+  real, intent(in)        :: pressure !< Pressure (Pa)
+  real, intent(out)       :: rho      !< In situ density in kg m-3.
+  real, intent(out)       :: drho_dp  !< The partial derivative of density with pressure
+                                      !! (also the inverse of the square of sound speed) in s2 m-2.
+  type(EOS_type), pointer :: EOS      !< Equation of state structure
+
+  real, dimension(1) :: Ta, Sa, pa, rhoa, drho_dpa
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_compress called with an unassociated EOS_type EOS.")
+  Ta(1) = T ; Sa(1) = S; pa(1) = pressure
+
+  call calculate_compress_array(Ta, Sa, pa, rhoa, drho_dpa, 1, 1, EOS)
+  rho = rhoa(1) ; drho_dp = drho_dpa(1)
+
+end subroutine calculate_compress_scalar
 !> Calls the appropriate subroutine to alculate analytical and nearly-analytical
 !! integrals in pressure across layers of geopotential anomalies, which are
 !! required for calculating the finite-volume form pressure accelerations in a
