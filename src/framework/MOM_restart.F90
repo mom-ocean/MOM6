@@ -26,8 +26,11 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_read_data => read_data, &
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
+                           fms2_get_variable_attribute => get_variable_attribute, &
+                           fms2_attribute_exists => attribute_exists, &
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
+                           fms2_get_num_variables => get_num_variables, &
                            FmsNetcdfDomainFile_t, unlimited
 
 !!
@@ -1115,92 +1118,104 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 ! Read each variable from the first file in which it is found.
    do n=1,num_file
-     !call get_file_info(unit(n), ndim, nvar, natt, ntime)
-
+      !call get_file_info(unit(n), ndim, nvar, natt, ntime)
       file_open_success=fms2_open_file(CS%fileObj, trim(unit_path(n)),"read", G%Domain%mpp_domain, is_restart = .true.)
                                                 
-       if (.not. file_open_success) then 
-          write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
-          call MOM_error(FATAL,"MOM_restart: "//mesg)
-       endif
-       ! get number of variables in file
-   
+      if (.not. file_open_success) then 
+         write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
+         call MOM_error(FATAL,"MOM_restart: "//mesg)
+      endif
+      ! get number of variables in file
+      nvar=fms2_get_num_variables(CS%fileObj)
 
-       allocate(fields(nvar))
-       !call get_file_fields(unit(n),fields(1:nvar))
+      allocate(fields(nvar))
+      !call get_file_fields(unit(n),fields(1:nvar))
 
-       missing_fields = 0
+      missing_fields = 0
 
-       do m=1,CS%novars
-          if (CS%restart_field(m)%initialized) cycle
-          call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+      do m=1,CS%novars
+         if (CS%restart_field(m)%initialized) cycle
+         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                              caller="restore_state")
-          select case (hor_grid)
-             case ('q') ; pos = CORNER
-             case ('h') ; pos = CENTER
-             case ('u') ; pos = EAST_FACE
-             case ('v') ; pos = NORTH_FACE
-             case ('Bu') ; pos = CORNER
-             case ('T')  ; pos = CENTER
-             case ('Cu') ; pos = EAST_FACE
-             case ('Cv') ; pos = NORTH_FACE
-             case ('1') ; pos = 0
-             case default ; pos = 0
-          end select
+         select case (hor_grid)
+            case ('q') ; pos = CORNER
+            case ('h') ; pos = CENTER
+            case ('u') ; pos = EAST_FACE
+            case ('v') ; pos = NORTH_FACE
+            case ('Bu') ; pos = CORNER
+            case ('T')  ; pos = CENTER
+            case ('Cu') ; pos = EAST_FACE
+            case ('Cv') ; pos = NORTH_FACE
+            case ('1') ; pos = 0
+            case default ; pos = 0
+         end select
 
-          call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
-          do i=1, nvar
-             call get_file_atts(fields(i),name=varname)
-             if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
-                check_exist = mpp_attribute_exist(fields(i),"checksum")
-                checksum_file(:) = -1
-                checksum_data = -1
-                is_there_a_checksum = .false.
-                if ( check_exist ) then
-                   call mpp_get_atts(fields(i),checksum=checksum_file)
-                   is_there_a_checksum = .true.
-                endif
-                if (.NOT. CS%checksum_required) is_there_a_checksum = .false. ! Do not need to do data checksumming.
-      
-                if (associated(CS%var_ptr1d(m)%p))  then
-                ! Read a 1d array, which should be invariant to domain decomposition.
-                   !call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
-                    !               G%Domain%mpp_domain, timelevel=1)
-                   !call fms2_read_data(CS%fileObj,varname,  CS%var_ptr1d(m)%p)
-
-                    if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
-                elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
-                   call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
-                           G%Domain%mpp_domain, timelevel=1)
-                if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
-          elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
-            if (pos /= 0) then
-              call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos)
-            else ! This array is not domain-decomposed.  This variant may be under-tested.
-              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             no_domain=.true., timelevel=1)
-            endif
-            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-           elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
-              if (pos /= 0) then
-                 call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos)
-              else ! This array is not domain-decomposed.  This variant may be under-tested.
-                  call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             no_domain=.true., timelevel=1)
-              endif
-              if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-            elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
-               if (pos /= 0) then
-                  call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos)
-               else ! This array is not domain-decomposed.  This variant may be under-tested.
-                  call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             no_domain=.true., timelevel=1)
+         call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+         do i=1, nvar
+            !call get_file_atts(fields(i),name=varname)
+            call fms2_get_variable_attribute(CS%fileObj, lowercase(trim(CS%restart_field(m)%var_name)), "name",varname)
+            if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
+               if (.NOT. CS%checksum_required) then
+                   is_there_a_checksum = .false. ! Do not need to do data checksumming.
+               else
+                  !check_exist = mpp_attribute_exist(fields(i),"checksum")
+                  check_exist = fms2_attribute_exists(fileObj, varname, "checksum")
+                  checksum_file(:) = -1
+                  checksum_data = -1
+                  is_there_a_checksum = .false.
+                  if ( check_exist ) then
+                      !call mpp_get_atts(fields(i),checksum=checksum_file)
+                      call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_file)
+                      is_there_a_checksum = .true.
+                  endif
                endif
+               ! register restart variable
+                call fms2_register_restart_variable(CS%fileObj,varname,'float')
 
-               if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+               if (associated(CS%var_ptr1d(m)%p))  then
+                  ! Read a 1d array, which should be invariant to domain decomposition.
+                  !call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
+                  !               G%Domain%mpp_domain, timelevel=1)
+                  call fms2_read_data(CS%fileObj,varname,  CS%var_ptr1d(m)%p)
+
+                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
+               elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
+                  !call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
+                  !     G%Domain%mpp_domain, timelevel=1)
+                  call fms2_read_data(CS%fileObj,varname,  CS%var_ptr0d(m)%p)
+                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+                   
+               elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
+                  if (pos /= 0) then
+                     !call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                     !            G%Domain, timelevel=1, position=pos)
+                     call fms2_read_data(CS%fileObj,varname,  CS%var_ptr2d(m)%p)
+                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
+                  !   call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                  !          no_domain=.true., timelevel=1)
+                  endif
+                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+               elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
+                  if (pos /= 0) then
+                     !call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                     !            G%Domain, timelevel=1, position=pos)
+                     call fms2_read_data(CS%fileObj,varname,  CS%var_ptr3d(m)%p)
+                  else ! This array is not domain-decomposed.  This variant may be under-tested.
+                     !call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                     !        no_domain=.true., timelevel=1)
+                  endif
+                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+               elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
+                  if (pos /= 0) then
+                  !    call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                  !               G%Domain, timelevel=1, position=pos)
+                  call fms2_read_data(CS%fileObj,varname,  CS%var_ptr4d(m)%p)
+                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
+                  !    call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                  !           no_domain=.true., timelevel=1)
+                  endif
+
+                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
                else
                   call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
                endif
