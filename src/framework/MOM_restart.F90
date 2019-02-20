@@ -27,7 +27,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_get_variable_attribute => get_variable_attribute, &
-                           fms2_attribute_exists => attribute_exists, &
+                           fms2_attribute_exists => variable_att_exists, &
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
                            fms2_get_num_variables => get_num_variables, &
@@ -1075,7 +1075,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     deallocate(time_vals)
     day = real_to_time(t1*86400.0)
 
-    fms2_close_file(CS%fileObj)
+    call fms2_close_file(CS%fileObj)
     exit
   enddo
 
@@ -1110,6 +1110,7 @@ subroutine restore_state(filename, directory, day, G, CS)
               m,t1,t2,t1-t2
            call MOM_error(WARNING, "MOM_restart: "//mesg)
         endif
+        call fms2_close_file(CS%fileObj)
       enddo
    endif
 
@@ -1159,7 +1160,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                    is_there_a_checksum = .false. ! Do not need to do data checksumming.
                else
                   !check_exist = mpp_attribute_exist(fields(i),"checksum")
-                  check_exist = fms2_attribute_exists(fileObj, varname, "checksum")
+                  check_exist = fms2_attribute_exists(CS%fileObj, varname, "checksum")
                   checksum_file(:) = -1
                   checksum_data = -1
                   is_there_a_checksum = .false.
@@ -1170,7 +1171,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                   endif
                endif
                ! register restart variable
-                call fms2_register_restart_variable(CS%fileObj,varname,'float')
+                call fms2_register_restart_field(CS%fileObj,varname,'float')
 
                if (associated(CS%var_ptr1d(m)%p))  then
                   ! Read a 1d array, which should be invariant to domain decomposition.
@@ -1236,7 +1237,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
       deallocate(fields)
 
-      call fms2_close_file(fileObj)
+      call fms2_close_file(CS%fileObj)
 
       if (missing_fields == 0) exit   
    enddo
