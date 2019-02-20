@@ -590,8 +590,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
 
- isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
- jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
+ !isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
+ !jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
  !if (is_root_pe()) write(*,*)'isc_bnd, jsc_bnd, iec_bnd, jec_bnd',isc_bnd, jsc_bnd, iec_bnd, jec_bnd
  !i0 = is - isc_bnd ; j0 = js - jsc_bnd
  i0 = 0; j0 = 0 ! TODO: is this right?
