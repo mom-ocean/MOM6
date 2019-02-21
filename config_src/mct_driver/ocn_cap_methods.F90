@@ -50,11 +50,11 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ! rotate taux and tauy from true zonal/meridional to local coordinates
       ! taux
       ice_ocean_boundary%u_flux(i,j) = GRID%cos_rot(i,j) * x2o(ind%x2o_Foxx_taux,k) &
-                                      + GRID%sin_rot(i,j) * x2o(ind%x2o_Foxx_tauy,k)
+                                      - GRID%sin_rot(i,j) * x2o(ind%x2o_Foxx_tauy,k)
 
       ! tauy
       ice_ocean_boundary%v_flux(i,j) = GRID%cos_rot(i,j) * x2o(ind%x2o_Foxx_tauy,k) &
-                                      - GRID%sin_rot(i,j) * x2o(ind%x2o_Foxx_taux,k)
+                                      + GRID%sin_rot(i,j) * x2o(ind%x2o_Foxx_taux,k)
 
       ! liquid precipitation (rain)
       ice_ocean_boundary%lprec(i,j) = x2o(ind%x2o_Faxa_rain,k)
@@ -75,10 +75,10 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
       ice_ocean_boundary%latent_flux(i,j) = x2o(ind%x2o_Foxx_lat,k)
 
       ! snow&ice melt heat flux  (W/m^2)
-      ice_ocean_boundary%melth(i,j) = x2o(ind%x2o_Fioi_melth,k)
+      ice_ocean_boundary%seaice_melt_heat(i,j) = x2o(ind%x2o_Fioi_melth,k)
 
       ! water flux from snow&ice melt (kg/m2/s)
-      ice_ocean_boundary%meltw(i,j) = x2o(ind%x2o_Fioi_meltw,k)
+      ice_ocean_boundary%seaice_melt(i,j) = x2o(ind%x2o_Fioi_meltw,k)
 
       ! liquid runoff
       ice_ocean_boundary%rofl_flux(i,j) = x2o(ind%x2o_Foxx_rofl,k) * GRID%mask2dT(i,j)
@@ -117,14 +117,16 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
 
     do j = GRID%jsc, GRID%jec
       do i = GRID%isc, GRID%iec
-        write(logunit,F01)'import: day, secs, j, i, u_flux          = ',day,secs,j,i,ice_ocean_boundary%u_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, v_flux          = ',day,secs,j,i,ice_ocean_boundary%v_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, lprec           = ',day,secs,j,i,ice_ocean_boundary%lprec(i,j)
-        write(logunit,F01)'import: day, secs, j, i, lwrad           = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, q_flux          = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, t_flux          = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, melth           = ',day,secs,j,i,ice_ocean_boundary%melth(i,j)
-        write(logunit,F01)'import: day, secs, j, i, meltw           = ',day,secs,j,i,ice_ocean_boundary%meltw(i,j)
+        write(logunit,F01)'import: day, secs, j, i, u_flux           = ',day,secs,j,i,ice_ocean_boundary%u_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, v_flux           = ',day,secs,j,i,ice_ocean_boundary%v_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, lprec            = ',day,secs,j,i,ice_ocean_boundary%lprec(i,j)
+        write(logunit,F01)'import: day, secs, j, i, lwrad            = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, q_flux           = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, t_flux           = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
+        write(logunit,F01)'import: day, secs, j, i, seaice_melt_heat = ',day,secs,j,i, &
+                                                                         ice_ocean_boundary%seaice_melt_heat(i,j)
+        write(logunit,F01)'import: day, secs, j, i, seaice_melt      = ',day,secs,j,i, &
+                                                                         ice_ocean_boundary%seaice_melt(i,j)
         write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',&
                           day,secs,j,i,ice_ocean_boundary%latent_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, runoff          = ',&
@@ -186,9 +188,9 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg) * grid%mask2dT(i,j)
       o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
       ! rotate ocn current from local tripolar grid to true zonal/meridional (inverse transformation)
-      o2x(ind%o2x_So_u, n) = (grid%cos_rot(i,j) * ocn_public%u_surf(ig,jg) - &
+      o2x(ind%o2x_So_u, n) = (grid%cos_rot(i,j) * ocn_public%u_surf(ig,jg) + &
                               grid%sin_rot(i,j) * ocn_public%v_surf(ig,jg)) * grid%mask2dT(i,j)
-      o2x(ind%o2x_So_v, n) = (grid%cos_rot(i,j) * ocn_public%v_surf(ig,jg) + &
+      o2x(ind%o2x_So_v, n) = (grid%cos_rot(i,j) * ocn_public%v_surf(ig,jg) - &
                               grid%sin_rot(i,j) * ocn_public%u_surf(ig,jg)) * grid%mask2dT(i,j)
 
       ! boundary layer depth (m)
@@ -268,8 +270,8 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
   n = 0
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
     n = n+1
-    o2x(ind%o2x_So_dhdx, n) = grid%cos_rot(i,j) * sshx(i,j) - grid%sin_rot(i,j) * sshy(i,j)
-    o2x(ind%o2x_So_dhdy, n) = grid%cos_rot(i,j) * sshy(i,j) + grid%sin_rot(i,j) * sshx(i,j)
+    o2x(ind%o2x_So_dhdx, n) = grid%cos_rot(i,j) * sshx(i,j) + grid%sin_rot(i,j) * sshy(i,j)
+    o2x(ind%o2x_So_dhdy, n) = grid%cos_rot(i,j) * sshy(i,j) - grid%sin_rot(i,j) * sshx(i,j)
   enddo; enddo
 
 end subroutine ocn_export
