@@ -8,7 +8,7 @@ stages:
 # Merges MOM6 with dev/gfdl. Changes directory to test directory, if it exists.
 before_script:
   - MOM6_SRC=$CI_PROJECT_DIR
-  - CACHE_DIR=/lustre/f1/oar.gfdl.ogrp-account/runner/cache/
+  - echo Cache directory set to ${CACHE_DIR:=/lustre/f2/scratch/oar.gfdl.ogrp-account/runner/cache/}
   - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl && git submodule init && git submodule update
   - pwd ; ls
 
