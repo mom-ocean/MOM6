@@ -821,6 +821,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
+  integer :: str_split_index = 1
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -836,9 +837,16 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   nz = 1 ; if (present(GV)) nz = GV%ke
 
   restart_time = time_type_to_real(time) / 86400.0
-
-  restartname = trim(CS%restartfile)
+ 
   if (present(filename)) restartname = trim(filename)
+  ! remove .res. from name because fms2 adds it
+  str_split_index = SCAN(restartname,'.res.')
+  if (str_split_index > 1) then 
+     restartname = trim(CS%restartfile(1:str_split_index-1))
+  else
+     restartname = trim(CS%restartfile)
+  endif
+
   if (PRESENT(time_stamped)) then ; if (time_stamped) then
     call get_date(time,year,month,days,hour,minute,seconds)
     ! Compute the year-day, because I don't like months. - RWH
@@ -892,15 +900,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     next_var = m
 
     !query fms_io if there is a filename_appendix (for ensemble runs)
-    call get_filename_appendix(filename_appendix)
-    if (len_trim(filename_appendix) > 0) then
-      length = len_trim(restartname)
-      if (restartname(length-2:length) == '.nc') then
-        restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-      else
-        restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-      endif
-    endif
+    !call get_filename_appendix(filename_appendix)
+    !if (len_trim(filename_appendix) > 0) then
+    !  length = len_trim(restartname)
+    !  if (restartname(length-2:length) == '.nc') then
+    !    restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+    !  else
+    !    restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+    !  endif
+    !endif
 
     restartpath = trim(directory)// trim(restartname)
 
@@ -1011,9 +1019,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: i, n, m, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
-  !integer :: ndim, nvar, natt, ntime, pos
-  integer :: nvar, natt, ndim, pos
-  integer,allocatable :: ntime
+  integer :: ndim, nvar, natt, ntime, pos
+
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
@@ -1027,11 +1034,13 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer(kind=8)                  :: checksum_data
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
   type(MOM_restart_CS) :: fileObj   ! fms2 data structure
+  integer :: str_split_index = 1
+  integer :: str_end_index = 1
+  character(len=200) :: file_path_1,file_path_2
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
-
     
 ! Get number of restart files and full paths to files 
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
@@ -1052,25 +1061,32 @@ subroutine restore_state(filename, directory, day, G, CS)
     call MOM_error(FATAL,"MOM_restart: "//mesg)
   endif
 
-  call fms2_get_dimension_size(CS%fileObj, "time", ntime)
-   
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
-     file_open_success=fms2_open_file(CS%fileObj, trim(unit_path(n)),"read",  G%Domain%mpp_domain, is_restart = .true.)
+     file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
+     str_split_index = INDEX(file_path_1,'.res')
+     str_end_index = INDEX(file_path_1,'.nc')
+     if (str_split_index > 1 .and. str_end_index > 1 )then
+         file_path_2 = trim(file_path_1(1:str_split_index-1)// &
+                         file_path_1(str_split_index+4:str_end_index-1))//'.nc'                         
+     else 
+         file_path_2 = trim(file_path_1)
+     endif
+     file_open_success=fms2_open_file(CS%fileObj, trim(file_path_2),"read",  G%Domain%mpp_domain, is_restart = .true.)
                                                 
      if(.not. file_open_success) then 
         write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
         call MOM_error(FATAL,"MOM_restart: "//mesg)
      endif
-     call fms2_get_dimension_size(CS%fileObj, "time", ntime)
+     call fms2_get_dimension_size(CS%fileObj, "Time", ntime)
 
     !call get_file_info(unit(n), ndim, nvar, natt, ntime)
     if (ntime < 1) cycle
 
     allocate(time_vals(ntime))
     !call get_file_times(unit(n), time_vals)
-    call fms2_register_restart_field(CS%fileObj, "time","float")
-    call fms2_read_data(CS%fileObj,"time", time_vals)
+    call fms2_register_restart_field(CS%fileObj, "Time","float")
+    call fms2_read_data(CS%fileObj,"Time", time_vals)
     t1 = time_vals(1)
     deallocate(time_vals)
     day = real_to_time(t1*86400.0)
@@ -1087,21 +1103,30 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (is_root_pe()) then
      do m = n+1,num_file
         !  call get_file_info(unit(n), ndim, nvar, natt, ntime)
-        file_open_success=fms2_open_file(CS%fileObj, trim(unit_path(n)),"read", G%Domain%mpp_domain, is_restart = .true.)
+        file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
+        str_split_index = INDEX(file_path_1,'.res')
+        str_end_index = INDEX(file_path_1,'.nc')
+        if (str_split_index > 1 .and. str_end_index > 1 )then
+           file_path_2 = trim(file_path_1(1:str_split_index-1)// &
+                         file_path_1(str_split_index+4:str_end_index-1))//'.nc'                         
+        else 
+          file_path_2 = trim(file_path_1)
+        endif
+        file_open_success=fms2_open_file(CS%fileObj, trim(file_path_2),"read", G%Domain%mpp_domain, is_restart = .true.)
                                                 
         if(.not. file_open_success) then 
            write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
            call MOM_error(FATAL,"MOM_restart: "//mesg)
         endif
         
-        call fms2_get_dimension_size(CS%fileObj, "time", ntime)
+        call fms2_get_dimension_size(CS%fileObj, "Time", ntime)
 
         if (ntime < 1) cycle
 
         allocate(time_vals(ntime))
         ! call get_file_times(unit(n), time_vals)
-        call fms2_register_restart_field(CS%fileObj, "time","float")
-        call fms2_read_data(CS%fileObj,"time", time_vals)
+        call fms2_register_restart_field(CS%fileObj, "Time","float")
+        call fms2_read_data(CS%fileObj,"Time", time_vals)
         t2 = time_vals(1)
         deallocate(time_vals)
 
@@ -1120,7 +1145,16 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! Read each variable from the first file in which it is found.
    do n=1,num_file
       !call get_file_info(unit(n), ndim, nvar, natt, ntime)
-      file_open_success=fms2_open_file(CS%fileObj, trim(unit_path(n)),"read", G%Domain%mpp_domain, is_restart = .true.)
+      file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
+       str_split_index = INDEX(file_path_1,'.res')
+       str_end_index = INDEX(file_path_1,'.nc')
+      if (str_split_index > 1 .and. str_end_index > 1 )then
+          file_path_2 = trim(file_path_1(1:str_split_index-1)// &
+                         file_path_1(str_split_index+4:str_end_index-1))//'.nc'                         
+      else 
+          file_path_2 = trim(file_path_1)
+      endif
+      file_open_success=fms2_open_file(CS%fileObj, trim(file_path_2),"read", G%Domain%mpp_domain, is_restart = .true.)
                                                 
       if (.not. file_open_success) then 
          write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
@@ -1405,7 +1439,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
        if (len_trim(filename_appendix) > 0) then
          length = len_trim(restartname)
          if (restartname(length-2:length) == '.nc') then
-           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+         restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
          else
            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
          endif
