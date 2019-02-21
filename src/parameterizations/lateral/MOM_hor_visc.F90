@@ -788,7 +788,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                      epsilon)
 
         ! simple way to limit this coeff
-        GME_coeff = MIN(GME_coeff,1.0E5)
+        GME_coeff = MIN(GME_coeff,1.0E4)
 
         if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
 
@@ -982,7 +982,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
                          epsilon)
         ! simple way to limit this coeff
-        GME_coeff = MIN(GME_coeff,1.0E5)
+        GME_coeff = MIN(GME_coeff,1.0E4)
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
         str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
