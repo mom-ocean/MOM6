@@ -28,6 +28,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_close_file => close_file, &
                            fms2_get_variable_attribute => get_variable_attribute, &
                            fms2_attribute_exists => variable_att_exists, &
+                           fms2_get_variable_names => get_variable_names, &
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
                            fms2_get_num_variables => get_num_variables, &
@@ -1037,6 +1038,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: str_split_index = 1
   integer :: str_end_index = 1
   character(len=200) :: file_path_1,file_path_2
+  character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1085,7 +1087,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
     allocate(time_vals(ntime))
     !call get_file_times(unit(n), time_vals)
-    call fms2_register_restart_field(CS%fileObj, "Time","float")
+    call fms2_register_restart_field(CS%fileObj, "Time","double")
     call fms2_read_data(CS%fileObj,"Time", time_vals)
     t1 = time_vals(1)
     deallocate(time_vals)
@@ -1125,7 +1127,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
         allocate(time_vals(ntime))
         ! call get_file_times(unit(n), time_vals)
-        call fms2_register_restart_field(CS%fileObj, "Time","float")
+        call fms2_register_restart_field(CS%fileObj, "Time","double")
         call fms2_read_data(CS%fileObj,"Time", time_vals)
         t2 = time_vals(1)
         deallocate(time_vals)
@@ -1160,9 +1162,12 @@ subroutine restore_state(filename, directory, day, G, CS)
          write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
          call MOM_error(FATAL,"MOM_restart: "//mesg)
       endif
-      ! get number of variables in file
+      ! get number of variables in the file
       nvar=fms2_get_num_variables(CS%fileObj)
-
+      ! get the names of the variables in the file
+      allocate(variable_names(nvar))
+      call fms2_get_variable_names(CS%fileObj, variable_names)
+      ! allocate the fields to hold the variable data
       allocate(fields(nvar))
       !call get_file_fields(unit(n),fields(1:nvar))
 
@@ -1188,7 +1193,8 @@ subroutine restore_state(filename, directory, day, G, CS)
          call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
          do i=1, nvar
             !call get_file_atts(fields(i),name=varname)
-            call fms2_get_variable_attribute(CS%fileObj, lowercase(trim(CS%restart_field(m)%var_name)), "name",varname)
+            varname(1:len_trim(CS%restart_field(m)%var_name)) = trim(CS%restart_field(m)%var_name)
+     
             if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
                if (.NOT. CS%checksum_required) then
                    is_there_a_checksum = .false. ! Do not need to do data checksumming.
@@ -1200,18 +1206,20 @@ subroutine restore_state(filename, directory, day, G, CS)
                   is_there_a_checksum = .false.
                   if ( check_exist ) then
                       !call mpp_get_atts(fields(i),checksum=checksum_file)
-                      call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_file)
+                      call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char)
+                      read (checksum_char(is:is+15),'(Z16)') checksum_hexformat
+
                       is_there_a_checksum = .true.
                   endif
                endif
                ! register restart variable
-                call fms2_register_restart_field(CS%fileObj,varname,'float')
+                call fms2_register_restart_field(CS%fileObj,varname,'double')
 
                if (associated(CS%var_ptr1d(m)%p))  then
                   ! Read a 1d array, which should be invariant to domain decomposition.
                   !call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
                   !               G%Domain%mpp_domain, timelevel=1)
-                  call fms2_read_data(CS%fileObj,varname,  CS%var_ptr1d(m)%p)
+                  call fms2_read_data(CS%fileObj, varname, CS%var_ptr1d(m)%p)
 
                   if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
                elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
@@ -1224,7 +1232,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                   if (pos /= 0) then
                      !call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                      !            G%Domain, timelevel=1, position=pos)
-                     call fms2_read_data(CS%fileObj,varname,  CS%var_ptr2d(m)%p)
+                     call fms2_read_data(CS%fileObj, varname, CS%var_ptr2d(m)%p)
                   !else ! This array is not domain-decomposed.  This variant may be under-tested.
                   !   call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                   !          no_domain=.true., timelevel=1)
@@ -1234,7 +1242,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                   if (pos /= 0) then
                      !call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                      !            G%Domain, timelevel=1, position=pos)
-                     call fms2_read_data(CS%fileObj,varname,  CS%var_ptr3d(m)%p)
+                     call fms2_read_data(CS%fileObj, varname,  CS%var_ptr3d(m)%p)
                   else ! This array is not domain-decomposed.  This variant may be under-tested.
                      !call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                      !        no_domain=.true., timelevel=1)
@@ -1244,7 +1252,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                   if (pos /= 0) then
                   !    call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                   !               G%Domain, timelevel=1, position=pos)
-                  call fms2_read_data(CS%fileObj,varname,  CS%var_ptr4d(m)%p)
+                  call fms2_read_data(CS%fileObj, varname, CS%var_ptr4d(m)%p)
                   !else ! This array is not domain-decomposed.  This variant may be under-tested.
                   !    call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                   !           no_domain=.true., timelevel=1)
@@ -1270,6 +1278,7 @@ subroutine restore_state(filename, directory, day, G, CS)
       enddo
 
       deallocate(fields)
+      deallocate(variable_names)
 
       call fms2_close_file(CS%fileObj)
 
@@ -1602,6 +1611,38 @@ subroutine restart_error(CS)
     call MOM_error(FATAL,"MOM_restart: Unspecified fatal error.")
   endif
 end subroutine restart_error
+!> Convert the checksum character array to a hex value
+function convert_checksum_to_hex(checksum_char) result(checksum_hex_value)
+  character(len=*), intent(in) :: checksum_char
+  ! local
+  integer(LONG_KIND), allocatable(:) :: checksum_hexvalue
+  character(len=64)  :: checksum_char
+  integer :: num_checksumf, last, is, k
+
+  checksumf = 0
+  num_checksumf = 1
+
+! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
+! has multiple time levels.
+  last = len_trim(checksum_char)
+  is = index (trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
+
+  do while ((is > 0) .and. (is < (last-15)))
+     is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
+     num_checksumf = num_checksumf + 1
+  enddo
+  
+  is = 1
+  allocate(checksum_hexvalue(num_checksumf))
+
+  do k = 1, num_checksumf
+     read (checksum_char(is:is+15),'(Z16)') checksumf
+     checksum_hexvalue(k) = checksumf
+     is = is + 17 ! Move index past the ,
+  enddo
+  deallocate(checksum_hexvalue)
+
+end function convert_checksum_to_hex
 
 !> Return bounds for computing checksums to store in restart files
 subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
