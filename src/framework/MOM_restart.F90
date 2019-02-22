@@ -18,7 +18,7 @@ use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum,mpp_pe
-use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
+use mpp_io_mod,      only: mpp_attribute_exist, mpp_get_atts
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_axis => register_axis, &
                            fms2_register_field => register_field, &
@@ -1017,7 +1017,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
-  integer :: i, n, m, missing_fields
+  integer :: i, n, m, missing_fields, ic
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
@@ -1039,6 +1039,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: str_end_index = 1
   character(len=200) :: file_path_1,file_path_2
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
+  integer(kind=8), dimension(50) :: checksum_hex
+  character(len=64) :: checksum_char
+  
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1207,8 +1210,10 @@ subroutine restore_state(filename, directory, day, G, CS)
                   if ( check_exist ) then
                       !call mpp_get_atts(fields(i),checksum=checksum_file)
                       call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char)
-                      read (checksum_char(is:is+15),'(Z16)') checksum_hexformat
-
+                      
+                      checksum_hex=convert_checksum_to_hex(checksum_char)
+                     
+                      !CS%fileObj%var_name%checksum=convert_checksum_to_hex(checksum_char)
                       is_there_a_checksum = .true.
                   endif
                endif
@@ -1258,12 +1263,17 @@ subroutine restore_state(filename, directory, day, G, CS)
                   !           no_domain=.true., timelevel=1)
                   endif
 
-                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+                  if (is_there_a_checksum) then 
+                      checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+
+                  endif
+                  
                else
                   call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
                endif
 
-               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
+              ! if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
+               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_hex(1) /= checksum_data)) then
                   write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                                           " does not match value ", checksum_file(1), &
                                           " stored in "//trim(unit_path(n)//"." )
@@ -1271,6 +1281,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                endif
 
                CS%restart_field(m)%initialized = .true.
+                
                exit ! Start search for next restart variable.
             endif
          enddo
@@ -1611,16 +1622,14 @@ subroutine restart_error(CS)
     call MOM_error(FATAL,"MOM_restart: Unspecified fatal error.")
   endif
 end subroutine restart_error
-!> Convert the checksum character array to a hex value
-function convert_checksum_to_hex(checksum_char) result(checksum_hex_value)
+!> Convert the restart variable checksum character array to a hexadecimal integer value
+function convert_checksum_to_hex(checksum_char) result(checksum_hex)
   character(len=*), intent(in) :: checksum_char
   ! local
-  integer(LONG_KIND), allocatable(:) :: checksum_hexvalue
-  character(len=64)  :: checksum_char
-  integer :: num_checksumf, last, is, k
+  integer(kind=8), dimension(50) :: checksum_hex(:)
+  integer :: num_checksumh, last, is, k
 
-  checksumf = 0
-  num_checksumf = 1
+  num_checksumh = 1
 
 ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
 ! has multiple time levels.
@@ -1629,18 +1638,15 @@ function convert_checksum_to_hex(checksum_char) result(checksum_hex_value)
 
   do while ((is > 0) .and. (is < (last-15)))
      is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
-     num_checksumf = num_checksumf + 1
+     num_checksumh = num_checksumh + 1
   enddo
   
   is = 1
-  allocate(checksum_hexvalue(num_checksumf))
-
-  do k = 1, num_checksumf
-     read (checksum_char(is:is+15),'(Z16)') checksumf
-     checksum_hexvalue(k) = checksumf
-     is = is + 17 ! Move index past the ,
+  
+  do k = 1, num_checksumh
+     read (checksum_char(is:is+15),'(Z16)') checksum_hex(k) ! Z=transfer hexadecimal integers 
+     is = is + 17 ! Move index past the ',' in checksum_char
   enddo
-  deallocate(checksum_hexvalue)
 
 end function convert_checksum_to_hex
 
