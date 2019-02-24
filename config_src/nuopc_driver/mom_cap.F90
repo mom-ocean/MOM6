@@ -439,7 +439,6 @@ module mom_cap_mod
   integer              :: debug = 0
   integer              :: import_slice = 1
   integer              :: export_slice = 1
-  integer              :: internal_slice = 1
   character(len=256)   :: tmpstr
   logical              :: write_diagnostics = .false.
   character(len=32)    :: runtype  ! run type
@@ -459,8 +458,6 @@ module mom_cap_mod
 #else
   logical :: cesm_coupled = .false.
   type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
-  ! for internal field dumps
-  type(ESMF_Grid), save    :: mom_grid_i
 #endif
 
 !=======================================================================
@@ -1399,9 +1396,6 @@ contains
             file=__FILE__)) &
             return  ! bail out
 
-       ! save a copy to dump internal fields
-       mom_grid_i = gridIn
-
        call ESMF_GridAddCoord(gridIn, staggerLoc=ESMF_STAGGERLOC_CENTER, rc=rc)
        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, &
@@ -1476,7 +1470,12 @@ contains
                return  ! bail out
        endif
 
-
+       ! TODO: This should be cleaned up now that the ocean_grid is available. 
+       ! Mask, area, center and corner positions are all available. The mask
+       ! area and center points can be placed in the grid using the same scheme
+       ! as all other ocean_grid variables are used. The corner points require
+       ! special treatment to reproduce the original ESMF grid (DLW)
+        
        ! load up area, mask, center and corner values
        ! area, mask, and centers should be same size in mom and esmf grid
        ! corner points may not be, need to offset corner points by 1 in i and j
@@ -2114,17 +2113,6 @@ contains
        export_slice = export_slice + 1
     endif
 
-#ifndef CESMCOUPLED
-     ! dump specified internal files; uncommentd lines will dump fields even if mediator dumps are turned off
-     !call dumpMomInternal(mom_grid_i, internal_slice, "mean_zonal_moment_flx",  Ice_ocean_boundary%u_flux)
-     !call dumpMomInternal(mom_grid_i, internal_slice, "mean_merid_moment_flx",  Ice_ocean_boundary%v_flux)
-     call dumpMomInternal(mom_grid_i, internal_slice, "mean_sensi_heat_flx"  ,  Ice_ocean_boundary%t_flux)
-     call dumpMomInternal(mom_grid_i, internal_slice, "mean_evap_rate"       ,  Ice_ocean_boundary%q_flux)
-     call dumpMomInternal(mom_grid_i, internal_slice, "mean_salt_rate"       ,  Ice_ocean_boundary%salt_flux)
-     !call dumpMomInternal(mom_grid_i, internal_slice, "mean_prec_rate"       ,  Ice_ocean_boundary%lprec  )
-     !call dumpMomInternal(mom_grid_i, internal_slice, "mean_fprec_rate"      ,  Ice_ocean_boundary%fprec  )
-     internal_slice = internal_slice + 1
-#endif
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
 
   end subroutine ModelAdvance
@@ -2597,49 +2585,4 @@ contains
   end subroutine shr_file_getLogUnit
 #endif
 
-!=======================================================================
-
-#ifndef CESMCOUPLED
-  subroutine dumpMomInternal(grid, slice, stdname, farray)
-
-    type(ESMF_Grid)          :: grid
-    integer, intent(in)      :: slice
-    character(len=*)         :: stdname
-    real(ESMF_KIND_R8), dimension(:,:), target :: farray
-
-    type(ESMF_Field)         :: field
-    real(ESMF_KIND_R8), dimension(:,:), pointer  :: f2d
-    integer                  :: rc
-
-    field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, &
-      indexflag=ESMF_INDEX_DELOCAL, &
-      name=stdname, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    call ESMF_FieldGet(field, farrayPtr=f2d, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    f2d(:,:) = farray(:,:)
-
-    call ESMF_FieldWrite(field, fileName='field_ocn_internal_'//trim(stdname)//'.nc', &
-      timeslice=slice, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    call ESMF_FieldDestroy(field, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-  end subroutine dumpMomInternal
-#endif
 end module mom_cap_mod

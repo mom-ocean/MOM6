@@ -2,9 +2,6 @@ module mom_cap_methods
 
   ! Cap import/export methods for both NEMS and CMEPS
 
-  ! Masks, areas, center (tlat, tlon), and corner (ulat, ulon) coordinates are then added to the `ESMF_Grid`
-  ! by retrieving those fields from MOM with calls to `ocean_model_data_get()`.
-
   use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
   use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
   use ESMF,                only: ESMF_State, ESMF_StateGet
@@ -19,7 +16,8 @@ module mom_cap_methods
   use ESMF,                only: ESMF_RC_VAL_OUTOFRANGE, ESMF_INDEX_DELOCAL, ESMF_MESHLOC_ELEMENT
   use ESMF,                only: ESMF_TYPEKIND_R8
   use ESMF,                only: operator(/=), operator(==)
-  use MOM_ocean_model,     only: ocean_public_type, ocean_state_type, ocean_model_data_get
+  !DLW
+  use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
   use MOM_domains,         only: pass_var
@@ -82,6 +80,7 @@ contains
     real(ESMF_KIND_R8), allocatable :: taux(:,:)
     real(ESMF_KIND_R8), allocatable :: tauy(:,:)
     character(len=*)  , parameter   :: subname = '(mom_import)'
+
     !-----------------------------------------------------------------------
 
     rc = ESMF_SUCCESS
@@ -402,11 +401,14 @@ contains
     ! -------
     ! ocean mask
     ! -------
+
+    !DLW: Retrieve omask from ocean_grid, as for other grid variables
     allocate(omask(isc:iec, jsc:jec))
-    call ocean_model_data_get(ocean_state, ocean_public, 'mask', omask, isc, jsc)
-    do j = jsc,jec
-       do i = isc,iec
-          omask(i,j) = nint(omask(i,j))
+    do j = jsc, jec
+       jg = j + ocean_grid%jsc - jsc
+       do i = isc, iec
+          ig = i + ocean_grid%isc - isc
+          omask(i,j) = nint(ocean_grid%mask2dT(ig,jg))
        enddo
     enddo
 
