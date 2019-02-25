@@ -32,11 +32,10 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
                            fms2_get_num_variables => get_num_variables, &
-                           FmsNetcdfDomainFile_t, unlimited
-
-!!
-                           
-                           
+   
+                        FmsNetcdfDomainFile_t, unlimited
+#include <fms_platform.h>
+!!                           
 implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
@@ -1031,7 +1030,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
   logical                          :: check_exist, is_there_a_checksum
-  integer(kind=8),dimension(3)     :: checksum_file
+  integer(LONG_KIND),dimension(3)     :: checksum_file
   integer(kind=8)                  :: checksum_data
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
   type(MOM_restart_CS) :: fileObj   ! fms2 data structure
@@ -1039,9 +1038,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: str_end_index = 1
   character(len=200) :: file_path_1,file_path_2
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
-  integer(kind=8), dimension(50) :: checksum_hex
   character(len=64) :: checksum_char
-  
+  integer(LONG_KIND) :: checksum_hex
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1210,8 +1208,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                   if ( check_exist ) then
                       !call mpp_get_atts(fields(i),checksum=checksum_file)
                       call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char)
-                      
-                      checksum_hex=convert_checksum_to_hex(checksum_char)
+                      call convert_checksum_to_hex(checksum_char, checksum_hex)
                      
                       !CS%fileObj%var_name%checksum=convert_checksum_to_hex(checksum_char)
                       is_there_a_checksum = .true.
@@ -1272,8 +1269,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                   call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
                endif
 
-              ! if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
-               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_hex(1) /= checksum_data)) then
+               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
                   write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                                           " does not match value ", checksum_file(1), &
                                           " stored in "//trim(unit_path(n)//"." )
@@ -1623,32 +1619,37 @@ subroutine restart_error(CS)
   endif
 end subroutine restart_error
 !> Convert the restart variable checksum character array to a hexadecimal integer value
-function convert_checksum_to_hex(checksum_char) result(checksum_hex)
+subroutine convert_checksum_to_hex(checksum_char, checksum_hex)
   character(len=*), intent(in) :: checksum_char
+  integer(LONG_KIND), intent(out):: checksum_hex
+ 
   ! local
-  integer(kind=8), dimension(50) :: checksum_hex(:)
+  integer(LONG_KIND) :: checksumf
   integer :: num_checksumh, last, is, k
-
+  character(len=64) :: temp_str
   num_checksumh = 1
+  checksumf = 0
 
 ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
 ! has multiple time levels.
+
   last = len_trim(checksum_char)
   is = index (trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
-
+  temp_str(1:last)=checksum_char(1:last)  
   do while ((is > 0) .and. (is < (last-15)))
-     is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
+     is = is + scan(temp_str(is:last), "," ) ! move starting pointer after ","
      num_checksumh = num_checksumh + 1
   enddo
   
   is = 1
   
   do k = 1, num_checksumh
-     read (checksum_char(is:is+15),'(Z16)') checksum_hex(k) ! Z=transfer hexadecimal integers 
+     write (temp_str(is:is+15),'(Z16)') checksumf ! Z=transfer hexadecimal integer: Z16 is for 64-bit data typess
+     checksum_hex = checksumf 
      is = is + 17 ! Move index past the ',' in checksum_char
   enddo
 
-end function convert_checksum_to_hex
+end subroutine convert_checksum_to_hex
 
 !> Return bounds for computing checksums to store in restart files
 subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
