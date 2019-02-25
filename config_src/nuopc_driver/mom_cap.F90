@@ -366,7 +366,7 @@ module mom_cap_mod
   use fms_io_mod,               only: fms_io_exit
   use mpp_domains_mod,          only: domain2d, mpp_get_compute_domain, mpp_get_compute_domains
   use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
-  use mpp_domains_mod,          only: mpp_get_domain_npes, mpp_global_field
+  use mpp_domains_mod,          only: mpp_get_domain_npes
   use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR, MPP_APPEND, mpp_close, MPP_SINGLE
   use mpp_mod,                  only: input_nml_file, mpp_error, FATAL, NOTE, mpp_pe, mpp_npes, mpp_set_current_pelist
   use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
@@ -389,7 +389,7 @@ module mom_cap_mod
   use MOM_ocean_model,          only: ice_ocean_boundary_type
   use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
   use MOM_ocean_model,          only: ocean_model_restart, ocean_public_type, ocean_state_type
-  use MOM_ocean_model,          only: ocean_model_data_get, ocean_model_init_sfc
+  use MOM_ocean_model,          only: ocean_model_init_sfc
   use MOM_ocean_model,          only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
   use mom_cap_time,             only: AlarmInit
   use mom_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
@@ -1106,13 +1106,11 @@ contains
     integer, allocatable                       :: deLabelList(:)
     integer, allocatable                       :: indexList(:)
     integer                                    :: ioff, joff
-    integer                                    :: i, j, n, i1, j1, n1
+    integer                                    :: i, j, n, i1, j1, n1, jlast
     integer                                    :: lbnd1,ubnd1,lbnd2,ubnd2
     integer                                    :: lbnd3,ubnd3,lbnd4,ubnd4
     integer                                    :: nblocks_tot
     logical                                    :: found
-    real(ESMF_KIND_R8), allocatable            :: ofld(:,:), gfld(:,:)
-    real(ESMF_KIND_R8), pointer                :: t_surf1d(:,:)
     real(ESMF_KIND_R8), pointer                :: t_surf2d(:,:)
     integer(ESMF_KIND_I4), pointer             :: dataPtr_mask(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_area(:,:)
@@ -1220,14 +1218,15 @@ contains
     ! Create either a grid or a mesh
     !---------------------------------
 
+     !Get the ocean grid and sizes of global and computational domains
+     call get_ocean_grid(ocean_state, ocean_grid)
+
     if (geomtype == ESMF_GEOMTYPE_MESH) then
 
        !---------------------------------
        ! Create a MOM6 mesh
        !---------------------------------
 
-       ! Get the ocean grid and sizes of global and computational domains
-       call get_ocean_grid(ocean_state, ocean_grid)
        call get_global_grid_size(ocean_grid, ni, nj)
        lsize = ( ocean_grid%iec - ocean_grid%isc + 1 ) * ( ocean_grid%jec - ocean_grid%jsc + 1 )
 
@@ -1470,17 +1469,13 @@ contains
                return  ! bail out
        endif
 
-       ! TODO: This should be cleaned up now that the ocean_grid is available. 
-       ! Mask, area, center and corner positions are all available. The mask
-       ! area and center points can be placed in the grid using the same scheme
-       ! as all other ocean_grid variables are used. The corner points require
-       ! special treatment to reproduce the original ESMF grid (DLW)
-        
        ! load up area, mask, center and corner values
        ! area, mask, and centers should be same size in mom and esmf grid
        ! corner points may not be, need to offset corner points by 1 in i and j
-       !   for esmf and also need to "make up" j=1 values.  use wraparound in i
-
+       ! retrieve these values directly from ocean_grid, which contains halos
+       ! values for j=1 and wrap-around in i. on tripole seam, decomposition 
+       ! domains are 1 larger in j; to load corner values need to loop one extra row
+     
        call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
        lbnd1 = lbound(dataPtr_mask,1)
@@ -1509,123 +1504,31 @@ contains
           return
        endif
 
-       allocate(ofld(isc:iec,jsc:jec))
-       allocate(gfld(nxg,nyg))
+       do j = jsc, jec
+         j1 = j + lbnd2 - jsc
+         jg = j + ocean_grid%jsc - jsc
+         do i = isc, iec
+           i1 = i + lbnd1 - isc
+           ig = i + ocean_grid%isc - isc
+           dataPtr_mask(i1,j1)  = ocean_grid%mask2dT(ig,jg)
+           dataPtr_xcen(i1,j1)  = ocean_grid%geolonT(ig,jg)
+           dataPtr_ycen(i1,j1)  = ocean_grid%geolatT(ig,jg)
+         end do
+       end do
 
-       call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
-       write(tmpstr,*) subname//' ofld mask = ',minval(ofld),maxval(ofld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       call mpp_global_field(ocean_public%domain, ofld, gfld)
-       write(tmpstr,*) subname//' gfld mask = ',minval(gfld),maxval(gfld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       do j = lbnd2, ubnd2
-          do i = lbnd1, ubnd1
-             j1 = j - lbnd2 + jsc
-             i1 = i - lbnd1 + isc
-             dataPtr_mask(i,j) = nint(ofld(i1,j1))
-          enddo
-       enddo
+                       jlast = jec
+       if(jec .eq. nyg)jlast = jec+1
 
-       if(grid_attach_area) then
-          call ocean_model_data_get(ocean_state, ocean_public, 'area', ofld, isc, jsc)
-          write(tmpstr,*) subname//' ofld area = ',minval(ofld),maxval(ofld)
-          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-          call mpp_global_field(ocean_public%domain, ofld, gfld)
-          write(tmpstr,*) subname//' gfld area = ',minval(gfld),maxval(gfld)
-          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-          do j = lbnd2, ubnd2
-             do i = lbnd1, ubnd1
-                j1 = j - lbnd2 + jsc
-                i1 = i - lbnd1 + isc
-                dataPtr_area(i,j) = ofld(i1,j1)
-             enddo
-          enddo
-       endif
-
-       call ocean_model_data_get(ocean_state, ocean_public, 'tlon', ofld, isc, jsc)
-       write(tmpstr,*) subname//' ofld xt = ',minval(ofld),maxval(ofld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       call mpp_global_field(ocean_public%domain, ofld, gfld)
-       write(tmpstr,*) subname//' gfld xt = ',minval(gfld),maxval(gfld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       do j = lbnd2, ubnd2
-          do i = lbnd1, ubnd1
-             j1 = j - lbnd2 + jsc
-             i1 = i - lbnd1 + isc
-             dataPtr_xcen(i,j) = ofld(i1,j1)
-             dataPtr_xcen(i,j) = mod(dataPtr_xcen(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
-          enddo
-       enddo
-
-       call ocean_model_data_get(ocean_state, ocean_public, 'tlat', ofld, isc, jsc)
-       write(tmpstr,*) subname//' ofld yt = ',minval(ofld),maxval(ofld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       call mpp_global_field(ocean_public%domain, ofld, gfld)
-       write(tmpstr,*) subname//' gfld yt = ',minval(gfld),maxval(gfld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       do j = lbnd2, ubnd2
-          do i = lbnd1, ubnd1
-             j1 = j - lbnd2 + jsc
-             i1 = i - lbnd1 + isc
-             dataPtr_ycen(i,j) = ofld(i1,j1)
-          enddo
-       enddo
-
-       call ocean_model_data_get(ocean_state, ocean_public, 'geoLonBu', ofld, isc, jsc)
-       write(tmpstr,*) subname//' ofld xu = ',minval(ofld),maxval(ofld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       call mpp_global_field(ocean_public%domain, ofld, gfld)
-       write(tmpstr,*) subname//' gfld xu = ',minval(gfld),maxval(gfld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       do j = lbnd4, ubnd4
-          do i = lbnd3, ubnd3
-             j1 = j - lbnd4 + jsc - 1
-             i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
-             if (j1 == 0) then
-                dataPtr_xcor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
-                !        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) > 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) - 360.
-                !        if (dataPtr_xcor(i,j)-dataPtr_xcen(i,j) < 180.) dataPtr_xcor(i,j) = dataPtr_xcor(i,j) + 360.
-             elseif (j1 >= 1 .and. j1 <= nyg) then
-                dataPtr_xcor(i,j) = gfld(i1,j1)
-             else
-                rc=ESMF_FAILURE
-                call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-                     msg=SUBNAME//": error in xu j1.", &
-                     line=__LINE__, file=__FILE__, rcToReturn=rc)
-                return  ! bail out
-             endif
-             dataPtr_xcor(i,j) = mod(dataPtr_xcor(i,j)+720.0_ESMF_KIND_R8,360.0_ESMF_KIND_R8)
-             ! write(tmpstr,*) subname//' ijfld xu = ',i,i1,j,j1,dataPtr_xcor(i,j)
-             ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-          enddo
-       enddo
-
-       ! MOM6 runs on C-Grid.
-       call ocean_model_data_get(ocean_state, ocean_public, 'geoLatBu', ofld, isc, jsc)
-       write(tmpstr,*) subname//' ofld yu = ',minval(ofld),maxval(ofld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       call mpp_global_field(ocean_public%domain, ofld, gfld)
-       write(tmpstr,*) subname//' gfld yu = ',minval(gfld),maxval(gfld)
-       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-       do j = lbnd4, ubnd4
-          do i = lbnd3, ubnd3
-             j1 = j - lbnd4 + jsc - 1
-             i1 = mod(i - lbnd3 + isc - 2 + nxg, nxg) + 1
-             if (j1 == 0) then
-                dataPtr_ycor(i,j) = 2*gfld(i1,1) - gfld(i1,2)
-             elseif (j1 >= 1 .and. j1 <= nyg) then
-                dataPtr_ycor(i,j) = gfld(i1,j1)
-             else
-                rc=ESMF_FAILURE
-                call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-                     msg=SUBNAME//": error in yu j1.", &
-                     line=__LINE__, file=__FILE__, rcToReturn=rc)
-                return  ! bail out
-             endif
-             ! write(tmpstr,*) subname//' ijfld yu = ',i,i1,j,j1,dataPtr_ycor(i,j)
-             ! call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-          enddo
-       enddo
+       do j = jsc, jlast
+         j1 = j + lbnd4 - jsc
+         jg = j + ocean_grid%jsc - jsc - 1
+         do i = isc, iec
+           i1 = i + lbnd3 - isc
+           ig = i + ocean_grid%isc - isc - 1
+           dataPtr_xcor(i1,j1)  = ocean_grid%geolonBu(ig,jg)
+           dataPtr_ycor(i1,j1)  = ocean_grid%geolatBu(ig,jg)
+         end do
+       end do
 
        write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
@@ -1646,8 +1549,6 @@ contains
 
        write(tmpstr,*) subname//' ycor = ',minval(dataPtr_ycor),maxval(dataPtr_ycor)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
-
-       deallocate(gfld)
 
        gridOut = gridIn ! for now out same as in
 
@@ -1702,7 +1603,6 @@ contains
             return  ! bail out
 
        if (geomtype == ESMF_GEOMTYPE_GRID) then
-          call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
 
           call ESMF_FieldGet(field_t_surf, localDe=0, farrayPtr=t_surf2d, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1710,18 +1610,16 @@ contains
                file=__FILE__)) &
                return  ! bail out
 
-          lbnd1 = lbound(t_surf2d,1)
-          ubnd1 = ubound(t_surf2d,1)
-          lbnd2 = lbound(t_surf2d,2)
-          ubnd2 = ubound(t_surf2d,2)
+          do j = jsc, jec
+            j1 = j + lbnd2 - jsc
+            jg = j + ocean_grid%jsc - jsc
+            do i = isc, iec
+              i1 = i + lbnd1 - isc
+              ig = i + ocean_grid%isc - isc
+              if(ocean_grid%mask2dT(ig,jg) == 0.)t_surf2d(i1,j1) = 0.0
+            end do
+          end do
 
-          do j = lbnd2, ubnd2
-             do i = lbnd1, ubnd1
-                j1 = j - lbnd2 + jsc
-                i1 = i - lbnd1 + isc
-                if (ofld(i1,j1) == 0.) t_surf2d(i,j) = 0.0
-             enddo
-          enddo
        end if
     end if
 

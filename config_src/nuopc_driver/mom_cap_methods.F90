@@ -16,7 +16,6 @@ module mom_cap_methods
   use ESMF,                only: ESMF_RC_VAL_OUTOFRANGE, ESMF_INDEX_DELOCAL, ESMF_MESHLOC_ELEMENT
   use ESMF,                only: ESMF_TYPEKIND_R8
   use ESMF,                only: operator(/=), operator(==)
-  !DLW
   use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   use MOM_grid,            only: ocean_grid_type
@@ -402,7 +401,6 @@ contains
     ! ocean mask
     ! -------
 
-    !DLW: Retrieve omask from ocean_grid, as for other grid variables
     allocate(omask(isc:iec, jsc:jec))
     do j = jsc, jec
        jg = j + ocean_grid%jsc - jsc
