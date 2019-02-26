@@ -1030,7 +1030,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
   logical                          :: check_exist, is_there_a_checksum
-  integer(LONG_KIND),dimension(3)     :: checksum_file
+  integer(LONG_KIND),dimension(3)  :: checksum_file
   integer(kind=8)                  :: checksum_data
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
   type(MOM_restart_CS) :: fileObj   ! fms2 data structure
@@ -1039,7 +1039,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=200) :: file_path_1,file_path_2
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
-  integer(LONG_KIND) :: checksum_hex
+  integer(LONG_KIND) :: checksumh
+  integer :: num_checksumh, last, is, k
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1207,10 +1208,27 @@ subroutine restore_state(filename, directory, day, G, CS)
                   is_there_a_checksum = .false.
                   if ( check_exist ) then
                       !call mpp_get_atts(fields(i),checksum=checksum_file)
-                      call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char)
-                      call convert_checksum_to_hex(checksum_char, checksum_hex)
-                     
-                      !CS%fileObj%var_name%checksum=convert_checksum_to_hex(checksum_char)
+                      call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char,broadcast=.false.)
+
+                      last = len_trim(checksum_char)
+                      is = index(trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
+                      ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
+                      ! has multiple time levels.
+                      checksumh = 0
+                      num_checksumh = 1
+                      do while ((is > 0) .and. (is < (last-15)))
+                         is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
+                         num_checksumh = num_checksumh + 1
+                      enddo
+           
+                      is = 1
+  
+                      do k = 1, num_checksumh
+                         read(checksum_char(is:is+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
+                         checksum_file(k) = checksumh 
+                        is = is + 17 ! Move index past the ',' in checksum_char
+                      enddo
+
                       is_there_a_checksum = .true.
                   endif
                endif
@@ -1621,7 +1639,7 @@ end subroutine restart_error
 !> Convert the restart variable checksum character array to a hexadecimal integer value
 subroutine convert_checksum_to_hex(checksum_char, checksum_hex)
   character(len=*), intent(in) :: checksum_char
-  integer(LONG_KIND), intent(out):: checksum_hex
+  integer(LONG_KIND), dimension(:), intent(out):: checksum_hex
  
   ! local
   integer(LONG_KIND) :: checksumf
