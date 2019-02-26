@@ -308,12 +308,25 @@ contains
             file=__FILE__)) &
             return  ! bail out
 
-       ! TODO: salt flux (minus sign needed here -GMM) - this does not match either NEMS or MCT - so not put in below
-       do j = jsc,jec
-          do i = isc,iec
-             ice_ocean_boundary%salt_flux(i,j) = ice_ocean_boundary%salt_flux(i,j)
-          enddo
-       enddo
+       ! !----
+       ! ! snow&ice melt heat flux  (W/m^2)
+       ! !----
+       ! call state_getimport(importState, 'seaice_melt_heat',  &
+       !      isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_heat,rc=rc)
+       ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       !      line=__LINE__, &
+       !      file=__FILE__)) &
+       !      return  ! bail out
+
+       ! !----
+       ! ! snow&ice melt water flux  (W/m^2)
+       ! !----
+       ! call state_getimport(importState, 'seaice_melt_water',  &
+       !      isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_water,rc=rc)
+       ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       !      line=__LINE__, &
+       !      file=__FILE__)) &
+       !      return  ! bail out
 
        !----
        ! mass of overlying ice
