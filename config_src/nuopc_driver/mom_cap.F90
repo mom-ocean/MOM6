@@ -1513,11 +1513,14 @@ contains
            dataPtr_mask(i1,j1)  = ocean_grid%mask2dT(ig,jg)
            dataPtr_xcen(i1,j1)  = ocean_grid%geolonT(ig,jg)
            dataPtr_ycen(i1,j1)  = ocean_grid%geolatT(ig,jg)
+           if(grid_attach_area) then
+            dataPtr_area(i1,j1)  = ocean_grid%areaT(ig,jg)
+           end if
          end do
        end do
 
-                       jlast = jec
-       if(jec .eq. nyg)jlast = jec+1
+                     jlast = jec
+       if(jec == nyg)jlast = jec+1
 
        do j = jsc, jlast
          j1 = j + lbnd4 - jsc
