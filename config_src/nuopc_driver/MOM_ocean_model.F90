@@ -657,9 +657,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   call enable_averaging(dt_coupling, OS%Time, OS%diag)
   call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%diag, OS%forcing_CSp%handles)
-  !TODO: this came in for the merge and is not consistent with the MOA branch
-  !call mech_forcing_diags(OS%forces, OS%fluxes, dt_coupling, OS%grid, OS%diag, OS%forcing_CSp%handles)
-
   call disable_averaging(OS%diag)
 
   if (OS%fluxes%fluxes_used) then
