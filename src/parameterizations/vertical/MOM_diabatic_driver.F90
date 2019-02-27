@@ -422,6 +422,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   eaml => eatr ; ebml => ebtr
 
   ! inverse time step
+  if (dt == 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
+        "diabatic was called with a zero length timestep.")
+  if (dt < 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
+        "diabatic was called with a negative timestep.")
   Idt = 1.0 / dt
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
@@ -1301,6 +1305,10 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   eaml => eatr ; ebml => ebtr
 
   ! inverse time step
+  if (dt == 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
+        "legacy_diabatic was called with a zero length timestep.")
+  if (dt < 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
+        "legacy_diabatic was called with a negative timestep.")
   Idt = 1.0 / dt
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
@@ -2506,7 +2514,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Idt = 1/dt
+  Idt = 0.0 ; if (dt > 0.0) Idt = 1. / dt
   work_3d(:,:,:) = 0.0
   work_2d(:,:)   = 0.0
 
@@ -2596,7 +2604,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Idt = 1/dt
+  Idt = 0.0 ; if (dt > 0.0) Idt = 1. / dt
   work_3d(:,:,:) = 0.0
   work_2d(:,:)   = 0.0
 
@@ -2683,7 +2691,7 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS)
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Idt = 1/dt
+  Idt = 0.0 ; if (dt > 0.0) Idt = 1. / dt
 
   ! temperature tendency
   if (CS%id_frazil_temp_tend > 0) then
