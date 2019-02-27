@@ -734,8 +734,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
     !===========================================================================
     ! This is the second place where the diabatic processes and remapping could occur.
-    if (CS%t_dyn_rel_adv == 0.0 .and. do_thermo .and. .not.CS%diabatic_first) then
+    if ((CS%t_dyn_rel_adv==0.0) .and. do_thermo .and. (.not.CS%diabatic_first)) then
+
       dtdia = CS%t_dyn_rel_thermo
+      ! If the MOM6 dynamic and thermodynamic time stepping is being orchestrated
+      ! by the coupler, the value of diabatic_first does not matter.
+      if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) dtdia = dt
+
       if (CS%thermo_spans_coupling .and. (CS%dt_therm > 1.5*cycle_time) .and. &
           (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
         call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
@@ -750,7 +755,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
-      CS%t_dyn_rel_thermo = 0.0
+
+      if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) then
+        ! The diabatic processes are now ahead of the dynamics by dtdia.
+        CS%t_dyn_rel_thermo = -dtdia
+      else ! The diabatic processes and the dynamics are synchronized.
+        CS%t_dyn_rel_thermo = 0.0
+      endif
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
         CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
