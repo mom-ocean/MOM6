@@ -457,7 +457,7 @@ contains
     ! -------
 
     ! rotate ocn current from tripolar grid back to lat/lon grid x,y => latlon (CCW)
-    ! "ocean_grid%isc" has no halos and uses local indexing.
+    ! "ocean_grid" has halos and uses local indexing.
 
     allocate(ocz(isc:iec, jsc:jec))
     allocate(ocm(isc:iec, jsc:jec))
@@ -632,7 +632,7 @@ contains
     end do
 
     ! rotate slopes from tripolar grid back to lat/lon grid,  x,y => latlon (CCW)
-    ! "ocean_grid" uses has halos and uses global indexing.
+    ! "ocean_grid" uses has halos and uses local indexing.
 
     do j = jsc, jec
        jg = j + ocean_grid%jsc - jsc
@@ -833,7 +833,7 @@ contains
 
     ! Indexing notes:
     ! input array from "ocean_public" uses local indexing without halos
-    ! mask from "ocean_grid" uses global indexing with halos
+    ! mask from "ocean_grid" uses local indexing with halos
 
     call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
     if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then

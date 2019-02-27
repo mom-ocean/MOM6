@@ -1031,10 +1031,10 @@ contains
     call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_prec_rate"             , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fprec_rate"            , "will provide")
     call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide")
-   !call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"                  , "will provide") !-> liquid runoff
-   !call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
-   !call fld_list_add(fldsToOcn_num, fldsToOcn, "seaice_melt_water"          , "will provide")
-   !call fld_list_add(fldsToOcn_num, fldsToOcn, "seaice_melt_heat"           , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"                  , "will provide") !-> liquid runoff
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
+    !call fld_list_add(fldsToOcn_num, fldsToOcn, "seaice_melt_water"          , "will provide")
+    !call fld_list_add(fldsToOcn_num, fldsToOcn, "seaice_melt_heat"           , "will provide")
 
    !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide") 
    !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide")
@@ -1050,7 +1050,7 @@ contains
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_zonal"    , "will provide")
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_merid"    , "will provide")
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential" , "will provide")
-    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"                 , "will provide") 
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth"                 , "will provide") 
 
     do n = 1,fldsToOcn_num
       call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)%shortname, rc=rc)
@@ -1114,14 +1114,12 @@ contains
     integer                                    :: lbnd3,ubnd3,lbnd4,ubnd4
     integer                                    :: nblocks_tot
     logical                                    :: found
-    real(ESMF_KIND_R8), pointer                :: t_surf2d(:,:)
     integer(ESMF_KIND_I4), pointer             :: dataPtr_mask(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_area(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_xcen(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_ycen(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_xcor(:,:)
     real(ESMF_KIND_R8), pointer                :: dataPtr_ycor(:,:)
-    type(ESMF_Field)                           :: field_t_surf
     integer                                    :: mpicom
     integer                                    :: localPet
     integer                                    :: lsize
@@ -1475,8 +1473,8 @@ contains
        ! load up area, mask, center and corner values
        ! area, mask, and centers should be same size in mom and esmf grid
        ! corner points may not be, need to offset corner points by 1 in i and j
-       ! retrieve these values directly from ocean_grid, which contains halos
-       ! values for j=1 and wrap-around in i. on tripole seam, decomposition 
+       ! retrieve these values directly from ocean_grid, which contains halo
+       ! values for j=0 and wrap-around in i. on tripole seam, decomposition 
        ! domains are 1 larger in j; to load corner values need to loop one extra row
      
        call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
@@ -1591,43 +1589,6 @@ contains
             file=__FILE__)) &
             return  ! bail out
     endif
-
-    !---------------------------------
-    ! set surface temperature to 0 if ocean mask is 0
-    !---------------------------------
-
-    ! TODO (mvertens, 2018-12-30): is this really necessary? for now only do this for grid
-
-    ! Do sst initialization if it's part of export state
-    call ESMF_StateGet(exportState, 'sea_surface_temperature', itemFlag)
-    if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
-
-       call ESMF_StateGet(exportState, 'sea_surface_temperature', field=field_t_surf, rc=rc)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-
-       if (geomtype == ESMF_GEOMTYPE_GRID) then
-
-          call ESMF_FieldGet(field_t_surf, localDe=0, farrayPtr=t_surf2d, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-               line=__LINE__, &
-               file=__FILE__)) &
-               return  ! bail out
-
-          do j = jsc, jec
-            j1 = j + lbnd2 - jsc
-            jg = j + ocean_grid%jsc - jsc
-            do i = isc, iec
-              i1 = i + lbnd1 - isc
-              ig = i + ocean_grid%isc - isc
-              if(ocean_grid%mask2dT(ig,jg) == 0.)t_surf2d(i1,j1) = 0.0
-            end do
-          end do
-
-       end if
-    end if
 
     !---------------------------------
     ! Set module variable geomtype in mom_cap_methods
