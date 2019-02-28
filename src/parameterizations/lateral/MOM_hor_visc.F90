@@ -239,6 +239,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points (m4 s-1)
     beta_h,     & ! Gradient of planetary vorticity at h-points (m-1 s-1)
     grad_vort_mag_h, & ! Magnitude of vorticity gradient at h-points (m-1 s-1)
+    grad_vort_mag_h_2d, & ! Magnitude of 2d vorticity gradient at h-points (m-1 s-1)
     grad_div_mag_h     ! Magnitude of divergence gradient at h-points (m-1 s-1)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -254,6 +255,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Leith_Ah_q, & ! Leith bi-harmonic viscosity at q-points (m4 s-1)
     beta_q,     & ! Gradient of planetary vorticity at q-points (m-1 s-1)
     grad_vort_mag_q, & ! Magnitude of vorticity gradient at q-points (m-1 s-1)
+    grad_vort_mag_q_2d, & ! Magnitude of 2d vorticity gradient at q-points (m-1 s-1)
     grad_div_mag_q, &  ! Magnitude of divergence gradient at q-points (m-1 s-1)
     hq                 ! harmonic mean of the harmonic means of the u- & v-
                        ! point thicknesses, in H; This form guarantees that hq/hu < 4.
@@ -316,7 +318,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k, n
   real :: inv_PI3, inv_PI6
-
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
@@ -633,6 +634,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         enddo ; enddo
       endif
 
+      call pass_var(vort_xy, G%Domain, position=CORNER, complete=.true.)
+
       ! Vorticity gradient
       do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
@@ -708,8 +711,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif ! CS%use_beta_in_Leith
 
       if (CS%use_QG_Leith_visc) then
+
+        do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+          grad_vort_mag_h_2d(i,j) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + (0.5*(vort_xy_dy(I,j) +  &
+                               vort_xy_dy(I-1,j)))**2 )
+        enddo; enddo
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          grad_vort_mag_q_2d(I,J) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J)))**2 + (0.5*(vort_xy_dy(I,j) +  &
+                                 vort_xy_dy(I,j+1)))**2 )
+        enddo ; enddo
+
         call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, div_xx_dx, div_xx_dy, &
                                      vort_xy_dx, vort_xy_dy)
+
       endif
 
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -730,8 +744,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-        if (CS%use_beta_in_Leith) then
-          vert_vort_mag = MIN(grad_vort_mag_h(i,j) + grad_div_mag_h(i,j), beta_h(i,j)*3)
+        if (CS%use_QG_Leith_visc) then
+          !vert_vort_mag = MIN(grad_vort_mag_h(i,j) + grad_div_mag_h(i,j), beta_h(i,j)*3)
+          vert_vort_mag = MIN(grad_vort_mag_h(i,j) + grad_div_mag_h(i,j),3*grad_vort_mag_h_2d(i,j))
         else
           vert_vort_mag = grad_vort_mag_h(i,j) + grad_div_mag_h(i,j)
         endif
@@ -786,6 +801,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                       (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
                       (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
                      epsilon)
+        ! apply mask
+        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
 
         ! simple way to limit this coeff
         GME_coeff = MIN(GME_coeff,1.0E4)
@@ -894,8 +911,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-        if (CS%use_beta_in_Leith) then
-          vert_vort_mag = MIN(grad_vort_mag_q(I,J) + grad_div_mag_q(I,J), beta_q(I,J)*3)
+        if (CS%use_QG_Leith_visc) then
+          vert_vort_mag = MIN(grad_vort_mag_q(I,J) + grad_div_mag_q(I,J), 3*grad_vort_mag_q_2d(I,J))
+          !vert_vort_mag = MIN(grad_vort_mag_q(I,J) + grad_div_mag_q(I,J), beta_q(I,J)*3)
         else
           vert_vort_mag = grad_vort_mag_q(I,J) + grad_div_mag_q(I,J)
         endif
@@ -981,6 +999,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                         (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
                          epsilon)
+        ! apply mask
+        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
+
         ! simple way to limit this coeff
         GME_coeff = MIN(GME_coeff,1.0E4)
 
