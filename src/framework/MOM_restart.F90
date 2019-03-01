@@ -32,8 +32,8 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
                            fms2_get_num_variables => get_num_variables, &
-   
-                        FmsNetcdfDomainFile_t, unlimited
+                           fms2_variable_exists => variable_exists, &
+                           FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
 implicit none ; private
@@ -1041,6 +1041,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=64) :: checksum_char
   integer(LONG_KIND) :: checksumh
   integer :: num_checksumh, last, is, k
+  logical :: var_exists = .false.
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1164,6 +1165,12 @@ subroutine restore_state(filename, directory, day, G, CS)
          write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
          call MOM_error(FATAL,"MOM_restart: "//mesg)
       endif
+      ! register the horizontal axes
+      call fms2_register_axis(CS%fileObj,'latq','y')
+      call fms2_register_axis(CS%fileObj,'lath','y')
+      call fms2_register_axis(CS%fileObj,'lonq','x')
+      call fms2_register_axis(CS%fileObj,'lonh','x')
+
       ! get number of variables in the file
       nvar=fms2_get_num_variables(CS%fileObj)
       ! get the names of the variables in the file
@@ -1194,10 +1201,15 @@ subroutine restore_state(filename, directory, day, G, CS)
 
          call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
          do i=1, nvar
+            varname = " "
+            checksum_char = " "
+            var_exists = .false.
             !call get_file_atts(fields(i),name=varname)
             varname(1:len_trim(CS%restart_field(m)%var_name)) = trim(CS%restart_field(m)%var_name)
-     
-            if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
+            ! check if variable is in the restart file
+            var_exists = fms2_variable_exists(CS%fileObj, varname)
+
+            if (var_exists) then
                if (.NOT. CS%checksum_required) then
                    is_there_a_checksum = .false. ! Do not need to do data checksumming.
                else
@@ -1207,33 +1219,33 @@ subroutine restore_state(filename, directory, day, G, CS)
                   checksum_data = -1
                   is_there_a_checksum = .false.
                   if ( check_exist ) then
-                      !call mpp_get_atts(fields(i),checksum=checksum_file)
-                      call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char,broadcast=.false.)
+                     !call mpp_get_atts(fields(i),checksum=checksum_file)
+                     call fms2_get_variable_attribute(CS%fileObj,varname,"checksum",checksum_char)
 
-                      last = len_trim(checksum_char)
-                      is = index(trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
-                      ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
-                      ! has multiple time levels.
-                      checksumh = 0
-                      num_checksumh = 1
-                      do while ((is > 0) .and. (is < (last-15)))
-                         is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
-                         num_checksumh = num_checksumh + 1
-                      enddo
+                     last = len_trim(checksum_char)
+                     is = index(trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
+                     !Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
+                     ! has multiple time levels.
+                     checksumh = 0
+                     num_checksumh = 1
+                     do while ((is > 0) .and. (is < (last-15)))
+                        is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
+                        num_checksumh = num_checksumh + 1
+                     enddo
            
-                      is = 1
+                     is = 1
   
-                      do k = 1, num_checksumh
-                         read(checksum_char(is:is+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
-                         checksum_file(k) = checksumh 
+                     do k = 1, num_checksumh
+                        read(checksum_char(is:is+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
+                        checksum_file(k) = checksumh 
                         is = is + 17 ! Move index past the ',' in checksum_char
-                      enddo
+                     enddo
 
-                      is_there_a_checksum = .true.
+                     is_there_a_checksum = .true.
                   endif
                endif
                ! register restart variable
-                call fms2_register_restart_field(CS%fileObj,varname,'double')
+               call fms2_register_restart_field(CS%fileObj,varname,'real')
 
                if (associated(CS%var_ptr1d(m)%p))  then
                   ! Read a 1d array, which should be invariant to domain decomposition.
@@ -1281,17 +1293,16 @@ subroutine restore_state(filename, directory, day, G, CS)
                   if (is_there_a_checksum) then 
                       checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
 
-                  endif
-                  
+                  endif                 
                else
                   call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
                endif
 
                if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
                   write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
-                                          " does not match value ", checksum_file(1), &
+                        " does not match value ", checksum_file(1), &
                                           " stored in "//trim(unit_path(n)//"." )
-                  call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
+                   call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
                endif
 
                CS%restart_field(m)%initialized = .true.
