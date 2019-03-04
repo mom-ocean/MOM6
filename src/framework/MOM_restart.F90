@@ -143,7 +143,7 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
 
-  CS%novars = CS%novars+1
+  CS%novars = CS%novars+1! remove .res. from the file name since fms read automatically appends it to
   if (CS%novars > CS%max_fields) return ! This is an error that will be reported
                                      ! once the total number of fields is known.
 
@@ -300,25 +300,56 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-
+  ! local
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObj
-  logical :: file_is_open = .false.
-
+  logical :: file_open_success = .false.
+  character(len=200) :: fileName1, fileName2
+  integer :: str_split_index = 1
+  integer :: str_end_index = 1
+  character(len=100) :: dimnames(7)
+  
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
+
+  fileName1(1:len_trim(CS%restarfile)) = trim(CS%restarfile)
+  str_split_index = INDEX(fileName1,'.res')
+  str_end_index = INDEX(fileName1,'.nc') 
+  if (str_split_index > 1 .and. str_end_index > 1 )then ! remove .res. from the file name since fms read automatically appends it to the file name
+      fileName2 = trim(fileName1(1:str_split_index-1)// &
+                         fileName1(str_split_index+4:str_end_index-1))//'.nc'                         
+  else 
+      fileName2 = trim(fileName1)
+  endif
+
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
-!  id_restart = fms_register_restart_field(CS%fileObj, filename, name, f_ptr, &
-!G%Domain%mpp_domain, read_only=.true.) 
- 
- ! 
- ! call fms2_register_variable_attribute(CS%fileObj, variable_name or axis_name, attribute_name (t_grid), value (scalar or 1-d array)
+  if (present(hor_grid))
+     
 
- !call fms2_register_restart_field(CS%fileObj, name, f_ptr, (array of string axis names))
+  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+
+  ! open the restart file for domain-decomposed write
+  file_open_success=fms2_open_file(CS%fileObj, trim(fileName2),"write",  G%Domain%mpp_domain, is_restart = .true.)
+                                                
+  if (.not. file_open_success) then 
+     write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(fileName2)
+     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+  endif
+  ! register restart axes
+  for dim in
+  call fms2_register_axis(CS%fileObj,'latq','y')
+  call fms2_register_axis(CS%fileObj,'lath','y')
+  call fms2_register_axis(CS%fileObj,'lonq','x')
+  call fms2_register_axis(CS%fileObj,'lonh','x')
+  
+  ! register the restart field
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr)
+  ! register variable attributes
+  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%t_grid)
+  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%hor_grid)
 
 end subroutine register_restart_field_4d
 
@@ -336,7 +367,9 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-
+  ! local
+  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  type(MOM_restart_CS) :: fileObj ! fms2 data structure
   type(vardesc) :: vd
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -363,9 +396,11 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, '1' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-
+  ! local
   type(vardesc) :: vd
   character(len=8) :: Zgrid
+  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  type(MOM_restart_CS) :: fileObj ! fms2 data structure
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_2d: Module must be initialized before "//&
@@ -391,9 +426,11 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, '1' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-
+  ! local 
   type(vardesc) :: vd
   character(len=8) :: hgrid
+  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  type(MOM_restart_CS) :: fileObj ! fms2 data structure
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
@@ -417,7 +454,9 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-
+  ! local
+  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  type(MOM_restart_CS) :: fileObj ! fms2 data structure
   type(vardesc) :: vd
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_0d: Module must be initialized before "//&
@@ -1648,5 +1687,83 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
   endif
 
 end subroutine get_checksum_loop_ranges
+
+subroutine get_horizontal_grid_coordinates(hor_grid,use_lath,use_lonh,use_latq,use_lonq)
+  character(len=*), intent(in) :: hor_grid
+  logical, intent(out) ::  use_lath, use_lonh, use_latq, use_lonq
+  
+  use_lath = .false.
+  use_lonh = .false.
+  use_latq = .false.
+  use_lonh = .false.
+
+  select case (hor_grid)
+     case ('h') ; use_lath = .true. ; use_lonh = .true.
+     case ('q') ; use_latq = .true. ; use_lonq = .true.
+     case ('u') ; use_lath = .true. ; use_lonq = .true.
+     case ('v') ; use_latq = .true. ; use_lonh = .true.
+     case ('T')  ; use_lath = .true. ; use_lonh = .true.
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
+     case ('1') ! Do nothing.
+     case default
+        call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
+                        "Unrecognized hor_grid argument "//trim(hor_grid))
+  end select
+end subroutine get_horizontal_grid_coordinates
+
+subroutine get_vertical_grid_coordinates(z_grid,use_layer,use_int)
+  character(len=*), intent(in) :: z_grid
+  logical, intent(out) ::  use_layer, use_int
+  select case (z_grid)
+     case ('L') ; use_layer = .true.
+     case ('i') ; use_int = .true.
+     case ('1') ! Do nothing.
+     case default
+       call MOM_error(FATAL, "MOM_restart: get_vertical_grid_coordinates: "//&
+                        " has unrecognized z_grid argument"//trim(z_grid))
+  end select
+end subroutine get_vertical_grid_coordinates
+
+subroutine get_time_coordinates(t_grid,use_time,use_periodic)
+  character(len=*), intent(in) :: t_grid_in !< 's', 'a', 'm' for time,
+                                            !< 'p' for periodic, '1' for no time axis
+  logical, intent(out) :: use_time, use_periodic
+  
+  ! Local
+  character(len=8) :: t_grid=""
+  use_time = .false.
+  use_periodic = .false.
+  character(len=8) :: t_grid_read
+  integer :: var_period, num_periods=0
+
+  t_grid = adjustl(t_grid_in) 
+
+  select case (t_grid(1:1))
+     case ('s', 'a', 'm') ; use_time = .true.
+     case ('p') ; use_periodic = .true.
+        if (len_trim(t_grid(2:8)) <= 0) call MOM_error(FATAL, &
+           "MOM_restart:get_time_cooridinates: No periodic axis length was specified in "//&
+        trim(t_grid)
+        var_periods = -9999999
+        t_grid_read = adjustl(t_grid(2:8))
+        read(t_grid_read,*) var_periods
+        if (var_periods == -9999999) call MOM_error(FATAL, &
+          "MOM_restart: get_time_coordinates: Failed to read the number of periods from "//&
+          trim(t_grid)
+        if (var_periods < 1) call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
+           "variable uses a periodic time axis, and must have a positive "//&
+           "value for the number of periods in "//t_grid )
+        if ((num_periods > 0) .and. (var_periods /= num_periods)) &
+           call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
+               "Only one value of the number of periods can be used with t_grid "//t_grid )
+
+        num_periods = var_periods
+        case ('1') ! Do nothing.
+        case default
+           call MOM_error(WARNING, "MOM_restart: get_time_coordinates: Unrecognized t_grid "//trim(t_grid))
+    end select
+end subroutine get_time_coordinates
 
 end module MOM_restart
