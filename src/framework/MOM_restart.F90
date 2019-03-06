@@ -33,6 +33,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_dimension_size => get_dimension_size, &
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
+                           fms2_dimension_exists => dimension_exists, &
                            FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
@@ -305,20 +306,30 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
   character(len=200) :: fileName1, fileName2
-  integer :: str_split_index = 1
-  integer :: str_end_index = 1
+  integer :: str_split_index = 1, str_end_index = 1
   character(len=100) :: dimnames(7)
+  logical :: use_lath = .false., use_lonh = .false., &
+             use_latq = .false., use_lonq = .false., &
+             use_layer = .false., use_int = .false., &
+             use_time = .false., use_periodic = .false.
+  integer :: horgrid_position = 1
+             
   
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
-
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
   fileName1(1:len_trim(CS%restarfile)) = trim(CS%restarfile)
   str_split_index = INDEX(fileName1,'.res')
   str_end_index = INDEX(fileName1,'.nc') 
-  if (str_split_index > 1 .and. str_end_index > 1 )then ! remove .res. from the file name since fms read automatically appends it to the file name
-      fileName2 = trim(fileName1(1:str_split_index-1)// &
-                         fileName1(str_split_index+4:str_end_index-1))//'.nc'                         
+  if (str_split_index > 1)then 
+     if (str_end_index > 1 )
+        fileName2 = trim(fileName1(1:str_split_index-1)// &
+                         fileName1(str_split_index+4:str_end_index-1))//'.nc'
+     else
+        fileName2 = trim(fileName1(1:str_split_index-1)// & 
+                         fileName1(str_split_index+4:len_trim(fileName1))//'.nc'   
+     endif          
   else 
       fileName2 = trim(fileName1)
   endif
@@ -326,28 +337,42 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  if (present(hor_grid))
-     
-
-  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
-
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObj, trim(fileName2),"write",  G%Domain%mpp_domain, is_restart = .true.)
-                                                
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(fileName2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
   endif
-  ! register restart axes
-  for dim in
-  call fms2_register_axis(CS%fileObj,'latq','y')
-  call fms2_register_axis(CS%fileObj,'lath','y')
-  call fms2_register_axis(CS%fileObj,'lonq','x')
-  call fms2_register_axis(CS%fileObj,'lonh','x')
+                                          
+  ! check if global axis variables are registered in file, and register them if they are not
+  if (present(hor_grid)) then
+     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,position)
+     if (use_lath) call check_for_restart_axis(CS%fileObj,'lath')
+     if (use_lonh) call check_for_restart_axis(CS%fileObj,'lonh')
+     if (use_latq) call check_for_restart_axis(CS%fileObj,'latq')
+     if (use_lonq) call check_for_restart_axis(CS%fileObj,'lonq')
+  endif
+
+  if (present(z_grid)) then
+     call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+     if (use_layer) call check_for_restart_axis(CS%fileObj,'Layer')
+     if (use_int) call check_for_restart_axis(CS%fileObj,'Interface')
+  endif
   
+  if (present(t_grid)) then
+     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+     if (use_time) call check_for_restart_axis(CS%fileObj,'Time')
+     if (use_periodic) call check_for_restart_axis(CS%fileObj,'Periodic')
+  endif
+
   ! register the restart field
-  call fms2_register_restart_field(CS%fileObj, name, f_ptr)
+  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+    
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr,dimensions=/CS%,'','',''/,domain_position=horgrid_position)
   ! register variable attributes
+  if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
+  if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
+
   call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%t_grid)
   call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%hor_grid)
 
@@ -1688,25 +1713,39 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
 end subroutine get_checksum_loop_ranges
 
-subroutine get_horizontal_grid_coordinates(hor_grid,use_lath,use_lonh,use_latq,use_lonq)
-  character(len=*), intent(in) :: hor_grid
-  logical, intent(out) ::  use_lath, use_lonh, use_latq, use_lonq
-  
+subroutine get_horizontal_grid_coordinates(hor_grid,use_lath,use_lonh, &
+                                           use_latq,use_lonq, gridPosition)
+  character(len=*), intent(in) :: hor_grid !< name of the horizontal grid 
+  logical, intent(out) ::  use_lath, use_lonh, use_latq, use_lonq !< flags for lath, lonh,latq, lonq
+  integer, intent(out) :: gridPosition !< integer corresponding to the grid position
   use_lath = .false.
   use_lonh = .false.
   use_latq = .false.
   use_lonh = .false.
 
+select case (hor_grid)
+      case ('q') ; pos = CORNER
+      case ('h') ; pos = CENTER
+      case ('u') ; pos = EAST_FACE
+      case ('v') ; pos = NORTH_FACE
+      case ('Bu') ; pos = CORNER
+      case ('T')  ; pos = CENTER
+      case ('Cu') ; pos = EAST_FACE
+      case ('Cv') ; pos = NORTH_FACE
+      case ('1') ; pos = 0
+      case default ; pos = 0
+    end select
+
   select case (hor_grid)
-     case ('h') ; use_lath = .true. ; use_lonh = .true.
-     case ('q') ; use_latq = .true. ; use_lonq = .true.
-     case ('u') ; use_lath = .true. ; use_lonq = .true.
-     case ('v') ; use_latq = .true. ; use_lonh = .true.
-     case ('T')  ; use_lath = .true. ; use_lonh = .true.
-     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-     case ('1') ! Do nothing.
+     case ('h') ; use_lath = .true. ; use_lonh = .true.; gridPosition = CENTER
+     case ('q') ; use_latq = .true. ; use_lonq = .true.; gridPosition = CORNER
+     case ('u') ; use_lath = .true. ; use_lonq = .true.; gridPosition = EAST_FACE
+     case ('v') ; use_latq = .true. ; use_lonh = .true.; gridPosition = NORTH_FACE
+     case ('T')  ; use_lath = .true. ; use_lonh = .true.; gridPosition = CENTER
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true.; gridPosition = CORNER
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true.; gridPosition = EAST_FACE
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true.; gridPosition = NORTH_FACE
+     case ('1') ; gridPosition = 0 
      case default
         call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
                         "Unrecognized hor_grid argument "//trim(hor_grid))
@@ -1716,6 +1755,9 @@ end subroutine get_horizontal_grid_coordinates
 subroutine get_vertical_grid_coordinates(z_grid,use_layer,use_int)
   character(len=*), intent(in) :: z_grid
   logical, intent(out) ::  use_layer, use_int
+
+  use_layer=.false.
+  use_int=.false.
   select case (z_grid)
      case ('L') ; use_layer = .true.
      case ('i') ; use_int = .true.
@@ -1765,5 +1807,109 @@ subroutine get_time_coordinates(t_grid,use_time,use_periodic)
            call MOM_error(WARNING, "MOM_restart: get_time_coordinates: Unrecognized t_grid "//trim(t_grid))
     end select
 end subroutine get_time_coordinates
+
+subroutine check_for_restart_axis(fileObject,axisName)
+   type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
+   character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
+   ! local  
+   logical axisExists = .false.
+ 
+   axisExists = fms2_dimension_exists(fileObject,axisName)
+   if (.not. (axisExists)) then
+      select case trim(axisName)
+         case ('latq'); call fms2_register_axis(fileObject,'latq','y'); 
+            call fms2_write_restart_axis(fileObject,'latq', domain,gridLatT(jsg:jeg)) 
+
+mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
+                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
+
+         case ('lath'); call fms2_register_axis(fileObject,'lath','y') 
+         case ('lonq'); call fms2_register_axis(fileObject,'lonq','x') 
+         case ('lonh'); call fms2_register_axis(fileObject,'lath','x')
+         case ('Layer'); call fms2_register_axis(fileObject,'Layer')
+         case ('Interface'); call fms2_register_axis(fileObject,'Interface')
+         case ('Time'); call fms2_register_axis(fileObject,'Time')
+         case ('Period'); call fms2_register_axis(fileObject,'Period')
+      end select
+   endif
+end subroutine check_for_restart_axis
+
+subroutine register_variable_attribute(fileObject,axisID)
+   type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
+   character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
+   ! local  
+   logical axisExists = .false.
+ 
+   axisExists = fms2_dimension_exists(fileObject,axisName)
+   if (.not. (axisExists)) then
+      select case trim(axisName)
+         case ('latq') call fms2_register_variable_attribute(fileObject,VariableName,AttributeName,AttributeValue) 
+         case ('lath') call fms2_register_axis(fileObject,'lath','y') 
+         case ('lonq') call fms2_register_axis(fileObject,'lonq','x') 
+         case ('lonh') call fms2_register_axis(fileObject,'lath','x')
+         case ('Layer') call fms2_register_axis(fileObject,'Layer')
+         case ('Interface') call fms2_register_axis(fileObject,'Interface')
+         case ('Time') call fms2_register_axis(fileObject,'Time')
+         case ('Period') call fms2_register_axis(fileObject,'Period')
+      end select
+   endif
+end subroutine register_variable_attribute
+
+subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
+   character(len=*), intent(in) :: var_name !< name of the variable
+   type(axistype), intent(out)  :: axes(4) 
+   character(len=*), intent(in), optional :: hor_grid
+   character(len=*), intent(in), optional :: z_grid
+   character(len=*), intent(in), optional :: t_grid
+   ! local
+   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
+   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
+   integer :: numaxes = 0
+   if (present(hor_grid) then
+      select case (hor_grid)
+         case ('h')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+         case ('q')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+         case ('u')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+         case ('v')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+         case ('T')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+         case ('Bu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+         case ('Cu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+         case ('Cv') ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+         case ('1') ! Do nothing.
+         case default
+            call MOM_error(WARNING, "MOM_restart:get_variable_axes: "//trim(var_name)//&
+                        " has unrecognized hor_grid "//trim(hor_grid))
+      end select
+   endif
+   if (present(z_grid))
+     select case (z_grid)
+      case ('L') ; numaxes = numaxes+1 ; axes(numaxes) = axis_layer
+      case ('i') ; numaxes = numaxes+1 ; axes(numaxes) = axis_int
+      case ('1') ! Do nothing.
+      case default
+        call MOM_error(FATAL, "MOM_restart:get_variable_axes: "//trim(var_name)//&
+                        " has unrecognized z_grid "//trim(z_grid))
+    end select
+    t_grid = adjustl(vars(k)%t_grid)
+    select case (t_grid(1:1))
+      case ('s', 'a', 'm') ; numaxes = numaxes+1 ; axes(numaxes) = axis_time
+      case ('p')           ; numaxes = numaxes+1 ; axes(numaxes) = axis_periodic
+      case ('1') ! Do nothing.
+      case default
+        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
+                        " has unrecognized t_grid "//trim(vars(k)%t_grid))
+    end select
+    pack = 1
+
+    if (present(checksums)) then
+       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+           vars(k)%longname, pack = pack, checksum=checksums(k,:))
+    else
+       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+           vars(k)%longname, pack = pack)
+    endif
+enddo
+end subroutine write_variable_axes
+
 
 end module MOM_restart
