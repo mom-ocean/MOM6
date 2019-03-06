@@ -3,7 +3,7 @@ module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains, only : pe_here, num_PEs
+use MOM_domains, only : pe_here, num_PEs, MOM_domain_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
@@ -18,7 +18,9 @@ use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum,mpp_pe
+use mpp_domains_mod, only : domain1d, domain2d
 use mpp_io_mod,      only: mpp_attribute_exist, mpp_get_atts
+use mpp_io_mod,      only: axistype
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_axis => register_axis, &
                            fms2_register_field => register_field, &
@@ -1818,11 +1820,6 @@ subroutine check_for_restart_axis(fileObject,axisName)
    if (.not. (axisExists)) then
       select case trim(axisName)
          case ('latq'); call fms2_register_axis(fileObject,'latq','y'); 
-            call fms2_write_restart_axis(fileObject,'latq', domain,gridLatT(jsg:jeg)) 
-
-mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
-
          case ('lath'); call fms2_register_axis(fileObject,'lath','y') 
          case ('lonq'); call fms2_register_axis(fileObject,'lonq','x') 
          case ('lonh'); call fms2_register_axis(fileObject,'lath','x')
@@ -1843,10 +1840,10 @@ subroutine register_variable_attribute(fileObject,axisID)
    axisExists = fms2_dimension_exists(fileObject,axisName)
    if (.not. (axisExists)) then
       select case trim(axisName)
-         case ('latq') call fms2_register_variable_attribute(fileObject,VariableName,AttributeName,AttributeValue) 
+         case ('latq') call fms2_register_axis(fileObject,'latq','y') 
          case ('lath') call fms2_register_axis(fileObject,'lath','y') 
          case ('lonq') call fms2_register_axis(fileObject,'lonq','x') 
-         case ('lonh') call fms2_register_axis(fileObject,'lath','x')
+         case ('lonh') call fms2_register_axis(fileObject,'lonh','x')
          case ('Layer') call fms2_register_axis(fileObject,'Layer')
          case ('Interface') call fms2_register_axis(fileObject,'Interface')
          case ('Time') call fms2_register_axis(fileObject,'Time')
@@ -1854,6 +1851,102 @@ subroutine register_variable_attribute(fileObject,axisID)
       end select
    endif
 end subroutine register_variable_attribute
+
+!type, public :: axistype
+!      sequence
+!      character(len=128) :: name
+!      character(len=128) :: units
+!      character(len=256) :: longname
+!      character(len=8) :: cartesian
+!      integer :: len
+!      integer :: sense           !+/-1, depth or height?
+!      type(domain1D), pointer :: domain
+!      real, dimension(:), pointer :: data
+!      integer :: id, did
+!      integer :: type  ! external NetCDF type format for axis data
+!      integer :: natt
+!      type(atttype), pointer :: Att(:) ! axis attributes
+!   end type axistype
+subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
+  type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
+  character(len=*), intent(in) :: axisName
+  character(len=*), intent(in) :: axisUnits
+  type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                    !! is required if the new file uses any
+                                                    !! horizontal grid axes.
+  type(dyn_horgrid_type), optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                      !! is required if the new file uses any
+  real, optional, intent(in) :: timeunit !< length of the units for time [s]. The
+                                          !! default value is 86400.0, for 1 day.
+  ! local
+  type(MOM_domain_type), pointer :: Domain => NULL()
+  type(domain1d) :: x_domain, y_domain
+  logical :: domain_set = .false.
+  real, pointer, dimension(:) :: &
+     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+     gridLatB => NULL(), & ! the purpose of labeling the output axes.
+     gridLonT => NULL(), & 
+     gridLonB => NULL()
+  
+  integer :: numaxes, pack
+  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  character(len=40) :: time_units, x_axis_units, y_axis_units
+
+  if (present(G)) then
+    domain_set = .true. ; Domain => G%Domain
+    gridLatT => G%gridLatT ; gridLatB => G%gridLatB
+    gridLonT => G%gridLonT ; gridLonB => G%gridLonB
+    x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
+    isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
+    IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+  elseif (present(dG)) then
+    domain_set = .true. ; Domain => dG%Domain
+    gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
+    gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
+    x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
+    isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
+    IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+   endif
+
+   select case trim(axisName)
+      case ('latq'); call fms2_write_data(fileObject,axisName,gridLatB(JsgB:JegB))
+      case ('lath'); call fms2_write_data(fileObject,axisName,gridLatT(jsg:jeg))
+      case ('lonq'); call fms2_write_data(fileObject,axisName,gridLonB(IsgB:IegB))
+      case ('lonh'); call fms2_write_data(fileObject,axisName,gridLonT(isg:ieg))
+      case ('Layer'); call fms2_write_data(fileObject,axisName,GV%sLayer(1:GV%ke))
+      case ('Interface'); call fms2_write_data(fileObject,axisName,GV%sInterface(1:GV%ke+1))
+      case ('Time'); 
+         if (present(timeunit)) then
+         ! Set appropriate units, depending on the value.
+            if (timeunit < 0.0) then
+               time_units = "days" ! The default value.
+            elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+               time_units = "seconds"
+            elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+               time_units = "hours"
+            elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+               time_units = "days"
+            elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+               time_units = "years"
+            else
+                write(time_units,'(es8.2," s")') timeunit
+            endif
+            call fms2_write_data(fileObject,axisName,timeunit)
+         else
+            time_units = "days"
+            call fms2_write_data(fileObject,axisName,'1.0')
+         endif
+      case ('Period'); call fms2_write_data(fileObject,axisName,
+   end select
+!! horizontal grid axes.
+
+
+ 
+
+mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
+                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
+
+end subroutine write_axis_data
 
 subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
    character(len=*), intent(in) :: var_name !< name of the variable
