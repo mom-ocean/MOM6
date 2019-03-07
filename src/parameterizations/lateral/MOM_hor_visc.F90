@@ -193,7 +193,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(in)  :: v      !< The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                 intent(in)  :: h      !< Layer thicknesses, in H
+                                 intent(inout)  :: h      !< Layer thicknesses, in H
                                                        !! (usually m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
@@ -647,6 +647,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
+      call pass_vector(vort_xy_dy, vort_xy_dx, G%Domain)
+
       if (CS%modified_Leith) then
         ! Divergence
         do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -657,6 +659,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                         (h(i,j,k) + GV%H_subroundoff)
         enddo ; enddo
 
+        call pass_var(div_xx, G%Domain, complete=.true.)
+
         ! Divergence gradient
         do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
           div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
@@ -664,6 +668,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
           div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
         enddo ; enddo
+
+        call pass_vector(div_xx_dx, div_xx_dy, G%Domain)
 
         ! Magnitude of divergence gradient
         do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
