@@ -47,7 +47,7 @@
 !! by NUOPC.  These subroutines are called by the NUOPC infrastructure according
 !! to a predefined calling sequence.  Some subroutines are called during
 !! initialization of the coupled system, some during the run of the coupled
-!! system, and some during finalization of the coupled system.  
+!! system, and some during finalization of the coupled system.
 !!
 !! The initialization sequence is the most complex and is governed by the NUOPC technical rules.
 !! Details about the initialization sequence can be found in the [NUOPC Reference Manual]
@@ -64,7 +64,7 @@
 !!                                                                               |  (IPD) version to use
 !! Init     | [InitializeAdvertise] (@ref mom_cap_mod::initializeadvertise)      | Advertises standard names of import
 !!                                                                               |  and export fields
-!! Init     | [InitializeRealize] (@ref mom_cap_mod::initializerealize)          | Creates an ESMF_Grid or ESMF_Mesh 
+!! Init     | [InitializeRealize] (@ref mom_cap_mod::initializerealize)          | Creates an ESMF_Grid or ESMF_Mesh
 !!                                                                               |  as well as ESMF_Fields for import
 !!                                                                               |  and export fields
 !! Run      | [ModelAdvance] (@ref mom_cap_mod::modeladvance)                    | Advances the model by a timestep
@@ -75,7 +75,7 @@
 !!
 !! @subsection DomainCreation Domain Creation
 !!
-!! The cap can accomodate a MOM tripolar grid which is represented either as a 2D `ESMF_Grid` or  
+!! The cap can accomodate a MOM tripolar grid which is represented either as a 2D `ESMF_Grid` or
 !! as a 1D `ESMF_Mesh`. Other MOM grids (e.g. a bipolar grid) can be represented as a 1d `ESMF_Mesh` only.
 !! Coupling fields are placed on either the `ESMF_Grid` or `ESMF_Mesh`.
 !! Note that for either the `ESMF_Grid` or `ESMF_Mesh` representation, the fields are translated into
@@ -206,7 +206,7 @@
 !! mass_of_overlying_sea_ice | kg         | mi              | mass of overlying sea ice          | |
 !! mean_calving_heat_flx     | W m-2      | calving_hflx    | heat flux, relative to 0C, of frozen land water into ocean
 !! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff         | |
-!! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux             | 
+!! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux             |
 !! mean_fprec_rate           | kg m-2 s-1 | fprec           | mass flux of frozen precip         | |
 !! mean_merid_moment_flx     | Pa         | v_flux          | j-directed wind stress into ocean
 !!                                        | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
@@ -219,7 +219,7 @@
 !! mean_runoff_heat_flx      | W m-2      | runoff_hflx     | heat flux, relative to 0C, of liquid land water into ocean
 !! mean_runoff_rate          | kg m-2 s-1 | runoff          | mass flux of liquid runoff         | |
 !! mean_salt_rate            | kg m-2 s-1 | salt_flux       | salt flux                          | |
-!! mean_sensi_heat_flx       | W m-2      | t_flux          | sensible heat flux into ocean      | 
+!! mean_sensi_heat_flx       | W m-2      | t_flux          | sensible heat flux into ocean      |
 !! mean_zonal_moment_flx     | Pa         | u_flux          | i-directed wind stress into ocean
 !!                                        | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
 !!
@@ -231,17 +231,19 @@
 !!
 !! Standard Name              | Units | Model Variable | Description                               | Notes
 !! ---------------------------|-------|----------------|-------------------------------------------|--------------------
-!! freezing_melting_potential | W m-2 | combination of frazil and melt_potential 
+!! freezing_melting_potential | W m-2 | combination of frazil and melt_potential
 !!                                                     | cap converts model units (J m-2) to (W m-2) for export
 !! ocean_mask                 |       |                | ocean mask                                | |
 !! ocn_current_merid          | m s-1 | v_surf         | j-directed surface velocity on u-cell
-!!                                                     | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
+!!                                                     | [vector rotation] (@ref VectorRotations) applied
+!!                                                     |   - tripolar to lat-lon
 !! ocn_current_zonal          | m s-1 | u_surf         | i-directed surface velocity on u-cell
-!!                                                     | [vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon
+!!                                                     | [vector rotation] (@ref VectorRotations) applied
+!!                                                     |  - tripolar to lat-lon
 !! s_surf                     | psu   | s_surf         | sea surface salinity on t-cell            | |
 !! sea_surface_temperature    | K     | t_surf         | sea surface temperature on t-cell         | |
-!! sea_surface_slope_zonal    ! unitless | created from ssh | sea surface zonal slope  
-!! sea_surface_slope_merid    ! unitless | created from ssh | sea surface meridional slope  
+!! sea_surface_slope_zonal    ! unitless | created from ssh | sea surface zonal slope
+!! sea_surface_slope_merid    ! unitless | created from ssh | sea surface meridional slope
 !! so_bldepth                 ! m        ! obld | ocean surface boundary layer depth
 !!
 !! @subsection MemoryManagement Memory Management
@@ -878,7 +880,7 @@ contains
                file=__FILE__)) &
                return
        else
-          call ESMF_LogWrite('mom_cap: restart requested but no RestartFileToRead attribute provided - will use input.nml', &
+          call ESMF_LogWrite('mom_cap: restart requested, no RestartFileToRead attribute provided-will use input.nml',&
                ESMF_LOGMSG_WARNING, rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
                line=__LINE__, &
@@ -2337,8 +2339,9 @@ contains
            file=__FILE__)) &
            return  ! bail out
 
+      ! num of scalar values
       field = ESMF_FieldCreate(name=trim(scalar_field_name), grid=grid, typekind=ESMF_TYPEKIND_R8, &
-           ungriddedLBound=(/1/), ungriddedUBound=(/scalar_field_count/), gridToFieldMap=(/2/), rc=rc) ! num of scalar values
+           ungriddedLBound=(/1/), ungriddedUBound=(/scalar_field_count/), gridToFieldMap=(/2/), rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
            line=__LINE__, &
            file=__FILE__)) &
