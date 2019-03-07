@@ -8,7 +8,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
 use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type, pass_var
+use MOM_domains,       only : group_pass_type, pass_var, pass_vector
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
 use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
@@ -736,7 +736,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
 !  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
 !  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg m-2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)  :: h !< Layer thickness (m or kg m-2)
   integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
   real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
@@ -778,6 +778,9 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
+
+  ! update halos
+  call pass_var(h, G%Domain)
 
   if (k > 1) then
 
@@ -824,6 +827,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
     enddo ; enddo
   endif ! k > 1
+
+  call pass_vector(vort_xy_dy,vort_xy_dx,G%Domain)
 
     if (CS%use_QG_Leith_GM) then
       if (CS%use_beta_in_QG_Leith) then
