@@ -4,6 +4,7 @@ module MOM_restart
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domains, only : pe_here, num_PEs, MOM_domain_type
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
@@ -33,7 +34,6 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_variable_names => get_variable_names, &
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
-                           fms2_get_dimension_id => get_dimension_id, &
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
@@ -291,7 +291,7 @@ end subroutine register_restart_field_ptr0d
 ! The following provide alternate interfaces to register restarts.
 
 !> Register a 4-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units, &
+subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, longname, units, &
                                      hor_grid, z_grid, t_grid)
   real, dimension(:,:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -299,6 +299,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
@@ -308,102 +309,98 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
-  character(len=200) :: fileName1, fileName2
+  character(len=200) :: file_Name_1, file_Name_2
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(4)
+  character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
              use_layer = .false., use_int = .false., &
              use_time = .false., use_periodic = .false.
   integer :: horgrid_position = 1
-  integer :: num_axes=0,latID,lonID, levID, timeID, axes(4)
+  integer :: num_axes=0
              
   
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
-  fileName1(1:len_trim(CS%restarfile)) = trim(CS%restarfile)
-  str_split_index = INDEX(fileName1,'.res')
-  str_end_index = INDEX(fileName1,'.nc') 
-  if (str_split_index > 1)then 
-     if (str_end_index > 1 )
-        fileName2 = trim(fileName1(1:str_split_index-1)// &
-                         fileName1(str_split_index+4:str_end_index-1))//'.nc'
+  file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
+  str_split_index = INDEX(file_Name_1,'.res')
+  str_end_index = INDEX(file_Name_1,'.nc') 
+  if (str_split_index > 1) then 
+     if (str_end_index > 1 ) then
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        fileName2 = trim(fileName1(1:str_split_index-1)// & 
-                         fileName1(str_split_index+4:len_trim(fileName1))//'.nc'   
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-      fileName2 = trim(fileName1)
+      file_Name_2 = trim(file_Name_1)
   endif
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(fileName2),"write",  G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(fileName2)
+     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
   endif
                                           
   ! check if global axis variables are registered in file, and register them if they are not
   ! 4d variables are lon x lat x vertical level x time
   if (present(hor_grid)) then
-     numaxes = 2
-     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,position)
+     num_axes = 2
+     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
      if (use_lonh) then
         call check_for_restart_axis(CS%fileObj,'lonh')
-        lonID=fms2_get_dimension_id(CS%fileObj,'lonh')
+        write(dimNames(1),"(a)") 'lonh'
      endif
      if (use_lonq) then
         call check_for_restart_axis(CS%fileObj,'lonq')
-        lonID=fms2_get_dimension_id(CS%fileObj,'lonq')
+        write(dimNames(1),"(a)") 'lonq'
      endif
      
      if (use_lath) then
         call check_for_restart_axis(CS%fileObj,'lath')
-        latID = fms2_get_dimension_id(CS%fileObj,'lath')
-        
+        write(dimNames(2),"(a)") 'lath'
      endif        
      if (use_latq) then
         call check_for_restart_axis(CS%fileObj,'latq')
-        latID = fms2_get_dimension_id(CS%fileObj,'latq')
+        write(dimNames(2),"(a)") 'latq'
      endif
-     axes(1) = lonID
-     axes(2) = latID   
   endif
 
   if (present(z_grid)) then
      call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+     num_axes = num_axes+1
      if (use_layer) then
         call check_for_restart_axis(CS%fileObj,'Layer')
-        numaxes = numaxes+1
-        levID = fms2_get_dimension_id(CS%fileObj,'Layer')
+   
+        write(dimNames(num_axes),"(a)") 'Layer'
      endif
      if (use_int) then
         call check_for_restart_axis(CS%fileObj,'Interface')
-        levID = fms2_get_dimension_id(CS%fileObj,'Interface')
-     endif
-     axes(3) = levID
+        write(dimNames(num_axes),"(a)") 'Interface'
+     endif  
   endif
   
   if (present(t_grid)) then
      call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+     num_axes = num_axes+1
      if (use_time) then
         call check_for_restart_axis(CS%fileObj,'Time')
-        timeID=fms2_get_dimension_id(CS%fileObj,'Time')
-        dimNames(4) = 'Time'
+        write(dimNames(num_axes),'(a)') 'Time'
      endif
      if (use_periodic) then
         call check_for_restart_axis(CS%fileObj,'Period')
-        timeId=fms2_get_dimension_id(CS%fileObj,'Period')
-        dimNames(4) = 'Period'
+        write(dimNames(num_axes),"(a)") 'Period'
      endif
-     axes(4) = timeID
   endif
-  !dimids =  (/ y_dimid, x_dimid /)
+ 
   ! register the restart field
   call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
   ! Need to get the dimension names to register the domain-decomposed variables
@@ -412,13 +409,13 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   ! 2. axes for a given variable are determined
   ! 3. axes metadata are associated with variable by referencing the axis structure
     
-  call fms2_register_restart_field(CS%fileObj, name, f_ptr,dimensions=/CS%,'','',''/,domain_position=horgrid_position)
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr,dimensions=dimNames,domain_position=horgrid_position)
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
   if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
 
-  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%t_grid)
-  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%hor_grid)
+!  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%t_grid)
+!  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%hor_grid)
 
 end subroutine register_restart_field_4d
 
@@ -1767,19 +1764,6 @@ subroutine get_horizontal_grid_coordinates(hor_grid,use_lath,use_lonh, &
   use_latq = .false.
   use_lonh = .false.
 
-select case (hor_grid)
-      case ('q') ; pos = CORNER
-      case ('h') ; pos = CENTER
-      case ('u') ; pos = EAST_FACE
-      case ('v') ; pos = NORTH_FACE
-      case ('Bu') ; pos = CORNER
-      case ('T')  ; pos = CENTER
-      case ('Cu') ; pos = EAST_FACE
-      case ('Cv') ; pos = NORTH_FACE
-      case ('1') ; pos = 0
-      case default ; pos = 0
-    end select
-
   select case (hor_grid)
      case ('h') ; use_lath = .true. ; use_lonh = .true.; gridPosition = CENTER
      case ('q') ; use_latq = .true. ; use_lonq = .true.; gridPosition = CORNER
@@ -1812,39 +1796,45 @@ subroutine get_vertical_grid_coordinates(z_grid,use_layer,use_int)
   end select
 end subroutine get_vertical_grid_coordinates
 
-subroutine get_time_coordinates(t_grid,use_time,use_periodic)
+subroutine get_time_coordinates(t_grid_in, use_time, use_periodic)
   character(len=*), intent(in) :: t_grid_in !< 's', 'a', 'm' for time,
                                             !< 'p' for periodic, '1' for no time axis
   logical, intent(out) :: use_time, use_periodic
   
   ! Local
-  character(len=8) :: t_grid=""
+  character(len=8) :: t_grid, t_grid_read
+  integer :: var_periods
+  integer :: num_periods=0
+
   use_time = .false.
   use_periodic = .false.
-  character(len=8) :: t_grid_read
-  integer :: var_period, num_periods=0
 
   t_grid = adjustl(t_grid_in) 
 
   select case (t_grid(1:1))
      case ('s', 'a', 'm') ; use_time = .true.
-     case ('p') ; use_periodic = .true.
-        if (len_trim(t_grid(2:8)) <= 0) call MOM_error(FATAL, &
-           "MOM_restart:get_time_cooridinates: No periodic axis length was specified in "//&
-        trim(t_grid)
+     case ('p')
+        use_periodic = .true.
+        if (len_trim(t_grid(2:8)) <= 0) then
+            call MOM_error(FATAL,"MOM_restart:get_time_coordinates: No periodic axis length was specified in "//trim(t_grid))
+        endif
         var_periods = -9999999
         t_grid_read = adjustl(t_grid(2:8))
         read(t_grid_read,*) var_periods
-        if (var_periods == -9999999) call MOM_error(FATAL, &
-          "MOM_restart: get_time_coordinates: Failed to read the number of periods from "//&
-          trim(t_grid)
-        if (var_periods < 1) call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
-           "variable uses a periodic time axis, and must have a positive "//&
-           "value for the number of periods in "//t_grid )
-        if ((num_periods > 0) .and. (var_periods /= num_periods)) &
+        if (var_periods == -9999999) then
+           call MOM_error(FATAL, &
+             "MOM_restart: get_time_coordinates: Failed to read the number of periods from "//&
+              trim(t_grid))
+        endif
+        if (var_periods < 1) then
            call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
-               "Only one value of the number of periods can be used with t_grid "//t_grid )
-
+           "variable uses a periodic time axis, and must have a positive "//&
+           "value for the number of periods in "//trim(t_grid))
+        endif
+        if ((num_periods > 0) .and. (var_periods /= num_periods)) then
+           call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
+               "Only one value of the number of periods can be used with t_grid "//trim(t_grid) )
+        endif
         num_periods = var_periods
         case ('1') ! Do nothing.
         case default
@@ -1853,15 +1843,15 @@ subroutine get_time_coordinates(t_grid,use_time,use_periodic)
 end subroutine get_time_coordinates
 
 subroutine check_for_restart_axis(fileObject,axisName)
-   type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObject !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
    ! local  
-   logical axisExists = .false.
+   logical :: axisExists = .false.
  
    axisExists = fms2_dimension_exists(fileObject,axisName)
    if (.not. (axisExists)) then
-      select case trim(axisName)
-         case ('latq'); call fms2_register_axis(fileObject,'latq','y'); 
+      select case (trim(axisName))
+         case ('latq'); call fms2_register_axis(fileObject,'latq','y')
          case ('lath'); call fms2_register_axis(fileObject,'lath','y') 
          case ('lonq'); call fms2_register_axis(fileObject,'lonq','x') 
          case ('lonh'); call fms2_register_axis(fileObject,'lath','x')
@@ -1874,26 +1864,6 @@ subroutine check_for_restart_axis(fileObject,axisName)
   
 end subroutine check_for_restart_axis
 
-subroutine register_variable_attribute(fileObject,axisName)
-   type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
-   character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
-   ! local  
-   logical axisExists = .false.
- 
-   axisExists = fms2_dimension_exists(fileObject,axisName)
-   if (.not. (axisExists)) then
-      select case trim(axisName)
-         case ('latq') call fms2_register_axis(fileObject,'latq','y') 
-         case ('lath') call fms2_register_axis(fileObject,'lath','y') 
-         case ('lonq') call fms2_register_axis(fileObject,'lonq','x') 
-         case ('lonh') call fms2_register_axis(fileObject,'lonh','x')
-         case ('Layer') call fms2_register_axis(fileObject,'Layer')
-         case ('Interface') call fms2_register_axis(fileObject,'Interface')
-         case ('Time') call fms2_register_axis(fileObject,'Time')
-         case ('Period') call fms2_register_axis(fileObject,'Period')
-      end select
-   endif
-end subroutine register_variable_attribute
 
 !type, public :: axistype
 !      sequence
@@ -1910,8 +1880,8 @@ end subroutine register_variable_attribute
 !      integer :: natt
 !      type(atttype), pointer :: Att(:) ! axis attributes
 !   end type axistype
-subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
-  type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
+subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_grid_in)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObject !< file object returned by prior call to fms2_open_file
   character(len=*), intent(in) :: axisName
   character(len=*), intent(in) :: axisUnits
   type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
@@ -1919,8 +1889,12 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
                                                     !! horizontal grid axes.
   type(dyn_horgrid_type), optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
                                                       !! is required if the new file uses any
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
   real, optional, intent(in) :: timeunit !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
+  character(len=*), optional, intent(in) :: t_grid_in
   ! local
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(domain1d) :: x_domain, y_domain
@@ -1931,9 +1905,11 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
      gridLonT => NULL(), & 
      gridLonB => NULL()
   
-  integer :: num_axes, num_periods, k
+  integer :: num_axes, num_periods=0, var_periods, k
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   character(len=40) :: time_units, x_axis_units, y_axis_units
+  real, dimension(:), allocatable :: period_val
+  character(len=8) :: t_grid, t_grid_read
 
   if (present(G)) then
     domain_set = .true. ; Domain => G%Domain
@@ -1951,7 +1927,7 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
    endif
 
-   select case trim(axisName)
+   select case (trim(axisName))
       case ('latq'); call fms2_write_data(fileObject,axisName,gridLatB(JsgB:JegB))
       case ('lath'); call fms2_write_data(fileObject,axisName,gridLatT(jsg:jeg))
       case ('lonq'); call fms2_write_data(fileObject,axisName,gridLonB(IsgB:IegB))
@@ -1981,24 +1957,30 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
          endif
       case ('Period');
          t_grid = adjustl(t_grid_in)
-         if (len_trim(t_grid(2:8)) <= 0) call MOM_error(FATAL, &
-          "MOM_restart:: : No periodic axis length was specified in "//&
-          trim(t_grid) // " in the periodic axes"
+         if (len_trim(t_grid(2:8)) <= 0) then
+            call MOM_error(FATAL,"MOM_restart:: No periodic axis length was specified in "//&
+                           trim(t_grid) // " in the periodic axes")
+         endif
          var_periods = -9999999
          t_grid_read = adjustl(t_grid(2:8))
          read(t_grid_read,*) var_periods
-         if (var_periods == -9999999) call MOM_error(FATAL, &
-          "MOM_restart:: Failed to read the number of periods from "//&
-          trim(t_grid) // " in the periodic axes."
-         if (var_periods < 1) call MOM_error(FATAL, "MOM_restart :: The number of periods"//&
-            trim(t_grid)//" must be positive." )
-         if ((num_periods > 0) .and. (var_periods /= num_periods)) &
+         if (var_periods == -9999999) then
+             call MOM_error(FATAL, "MOM_restart:: Failed to read the number of periods from "//&
+                            trim(t_grid)// " in the periodic axes.")
+         endif
+         if (var_periods < 1) then
+             call MOM_error(FATAL, "MOM_restart :: The number of periods"//&
+                 trim(t_grid)//" must be positive.")
+         endif
+         if ((num_periods > 0) .and. (var_periods /= num_periods)) then
             call MOM_error(FATAL, "MOM_restart:: "//&
             "Only one value of the number of periods can be used for "//trim(t_grid))
+         endif
 
          num_periods = var_periods
-         if (num_periods <= 1) call MOM_error(FATAL, "MOM_restart::write_axis_data: "//&
-             "num_periods must be at least 1.")
+         if (num_periods <= 1) then
+             call MOM_error(FATAL, "MOM_restart::write_axis_data: num_periods must be at least 1.")
+         endif
          ! Define a periodic axis with unit labels.
          allocate(period_val(num_periods))
          do k=1,num_periods
@@ -2014,61 +1996,61 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
 
 end subroutine write_axis_data
 
-subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
-   character(len=*), intent(in) :: var_name !< name of the variable
-   type(axistype), intent(out)  :: axes(4) 
-   character(len=*), intent(in), optional :: hor_grid
-   character(len=*), intent(in), optional :: z_grid
-   character(len=*), intent(in), optional :: t_grid
+!subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
+!   character(len=*), intent(in) :: var_name !< name of the variable
+!   type(axistype), intent(out)  :: axes(4) 
+!   character(len=*), intent(in), optional :: hor_grid
+!   character(len=*), intent(in), optional :: z_grid
+!   character(len=*), intent(in), optional :: t_grid
    ! local
-   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
-   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
-   integer :: numaxes = 0
-   if (present(hor_grid) then
-      select case (hor_grid)
-         case ('h')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-         case ('q')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-         case ('u')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-         case ('v')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-         case ('T')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-         case ('Bu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-         case ('Cu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-         case ('Cv') ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-         case ('1') ! Do nothing.
-         case default
-            call MOM_error(WARNING, "MOM_restart:get_variable_axes: "//trim(var_name)//&
-                        " has unrecognized hor_grid "//trim(hor_grid))
-      end select
-   endif
-   if (present(z_grid))
-     select case (z_grid)
-      case ('L') ; num_axes = num_axes+1 ; axes(num_axes) = axis_layer
-      case ('i') ; num_axes = num_axes+1 ; axes(num_axes) = axis_int
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(FATAL, "MOM_restart:get_variable_axes: "//trim(var_name)//&
-                        " has unrecognized z_grid "//trim(z_grid))
-    end select
-    t_grid = adjustl(vars(k)%t_grid)
-    select case (t_grid(1:1))
-      case ('s', 'a', 'm') ; num_axes = num_axes+1 ; axes(num_axes) = axis_time
-      case ('p')           ; num_axes = num_axes+1 ; axes(num_axes) = axis_periodic
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized t_grid "//trim(vars(k)%t_grid))
-    end select
-    pack = 1
+!   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
+!   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
+!   integer :: numaxes = 0
+!   if (present(hor_grid) then
+!      select case (hor_grid)
+!         case ('h')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+!         case ('q')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+!         case ('u')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+!         case ('v')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+!         case ('T')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+!         case ('Bu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+!         case ('Cu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+!!         case ('Cv') ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+!         case ('1') ! Do nothing.
+!         case default
+!            call MOM_error(WARNING, "MOM_restart:get_variable_axes: "//trim(var_name)//&
+!                        " has unrecognized hor_grid "//trim(hor_grid))
+!      end select
+!   endif
+!   if (present(z_grid))
+!     select case (z_grid)
+!      case ('L') ; num_axes = num_axes+1 ; axes(num_axes) = axis_layer
+!      case ('i') ; num_axes = num_axes+1 ; axes(num_axes) = axis_int
+!      case ('1') ! Do nothing.
+!      case default
+!        call MOM_error(FATAL, "MOM_restart:get_variable_axes: "//trim(var_name)//&
+!                        " has unrecognized z_grid "//trim(z_grid))
+!    end select
+!    t_grid = adjustl(vars(k)%t_grid)
+!    select case (t_grid(1:1))
+!      case ('s', 'a', 'm') ; num_axes = num_axes+1 ; axes(num_axes) = axis_time
+!      case ('p')           ; num_axes = num_axes+1 ; axes(num_axes) = axis_periodic
+!      case ('1') ! Do nothing.
+!      case default
+!        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
+!                        " has unrecognized t_grid "//trim(vars(k)%t_grid))
+!    end select
+!!    pack = 1
 
-    if (present(checksums)) then
-       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-           vars(k)%longname, pack = pack, checksum=checksums(k,:))
-    else
-       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-           vars(k)%longname, pack = pack)
-    endif
-enddo
-end subroutine write_variable_axes
+!    if (present(checksums)) then
+!       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+!           vars(k)%longname, pack = pack, checksum=checksums(k,:))
+!    else
+!       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+!           vars(k)%longname, pack = pack)
+!    endif
+!enddo
+!end subroutine write_variable_axes
 
 
 end module MOM_restart
