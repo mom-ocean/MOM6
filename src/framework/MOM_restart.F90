@@ -33,6 +33,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_variable_names => get_variable_names, &
                            fms2_register_variable_attribute => register_variable_attribute, &
                            fms2_get_dimension_size => get_dimension_size, &
+                           fms2_get_dimension_id => get_dimension_id, &
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
@@ -309,12 +310,13 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   logical :: file_open_success = .false.
   character(len=200) :: fileName1, fileName2
   integer :: str_split_index = 1, str_end_index = 1
-  character(len=100) :: dimnames(7)
+  character(len=50) :: dimNames(4)
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
              use_layer = .false., use_int = .false., &
              use_time = .false., use_periodic = .false.
   integer :: horgrid_position = 1
+  integer :: num_axes=0,latID,lonID, levID, timeID, axes(4)
              
   
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -347,28 +349,68 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   endif
                                           
   ! check if global axis variables are registered in file, and register them if they are not
+  ! 4d variables are lon x lat x vertical level x time
   if (present(hor_grid)) then
+     numaxes = 2
      call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,position)
-     if (use_lath) call check_for_restart_axis(CS%fileObj,'lath')
-     if (use_lonh) call check_for_restart_axis(CS%fileObj,'lonh')
-     if (use_latq) call check_for_restart_axis(CS%fileObj,'latq')
-     if (use_lonq) call check_for_restart_axis(CS%fileObj,'lonq')
+     if (use_lonh) then
+        call check_for_restart_axis(CS%fileObj,'lonh')
+        lonID=fms2_get_dimension_id(CS%fileObj,'lonh')
+     endif
+     if (use_lonq) then
+        call check_for_restart_axis(CS%fileObj,'lonq')
+        lonID=fms2_get_dimension_id(CS%fileObj,'lonq')
+     endif
+     
+     if (use_lath) then
+        call check_for_restart_axis(CS%fileObj,'lath')
+        latID = fms2_get_dimension_id(CS%fileObj,'lath')
+        
+     endif        
+     if (use_latq) then
+        call check_for_restart_axis(CS%fileObj,'latq')
+        latID = fms2_get_dimension_id(CS%fileObj,'latq')
+     endif
+     axes(1) = lonID
+     axes(2) = latID   
   endif
 
   if (present(z_grid)) then
      call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
-     if (use_layer) call check_for_restart_axis(CS%fileObj,'Layer')
-     if (use_int) call check_for_restart_axis(CS%fileObj,'Interface')
+     if (use_layer) then
+        call check_for_restart_axis(CS%fileObj,'Layer')
+        numaxes = numaxes+1
+        levID = fms2_get_dimension_id(CS%fileObj,'Layer')
+     endif
+     if (use_int) then
+        call check_for_restart_axis(CS%fileObj,'Interface')
+        levID = fms2_get_dimension_id(CS%fileObj,'Interface')
+     endif
+     axes(3) = levID
   endif
   
   if (present(t_grid)) then
      call get_time_coordinates(vd%t_grid,use_time,use_periodic)
-     if (use_time) call check_for_restart_axis(CS%fileObj,'Time')
-     if (use_periodic) call check_for_restart_axis(CS%fileObj,'Periodic')
+     if (use_time) then
+        call check_for_restart_axis(CS%fileObj,'Time')
+        timeID=fms2_get_dimension_id(CS%fileObj,'Time')
+        dimNames(4) = 'Time'
+     endif
+     if (use_periodic) then
+        call check_for_restart_axis(CS%fileObj,'Period')
+        timeId=fms2_get_dimension_id(CS%fileObj,'Period')
+        dimNames(4) = 'Period'
+     endif
+     axes(4) = timeID
   endif
-
+  !dimids =  (/ y_dimid, x_dimid /)
   ! register the restart field
   call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+  ! Need to get the dimension names to register the domain-decomposed variables
+  ! The NUMBER of dimensions is defined in MOM_io::create_file
+  ! 1. axis metadata are written to file, returns a an axis structure with the metadaa
+  ! 2. axes for a given variable are determined
+  ! 3. axes metadata are associated with variable by referencing the axis structure
     
   call fms2_register_restart_field(CS%fileObj, name, f_ptr,dimensions=/CS%,'','',''/,domain_position=horgrid_position)
   ! register variable attributes
@@ -1829,9 +1871,10 @@ subroutine check_for_restart_axis(fileObject,axisName)
          case ('Period'); call fms2_register_axis(fileObject,'Period')
       end select
    endif
+  
 end subroutine check_for_restart_axis
 
-subroutine register_variable_attribute(fileObject,axisID)
+subroutine register_variable_attribute(fileObject,axisName)
    type(MOM_restart_CS), intent(in) :: fileObject !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
    ! local  
@@ -1888,7 +1931,7 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
      gridLonT => NULL(), & 
      gridLonB => NULL()
   
-  integer :: numaxes, pack
+  integer :: num_axes, num_periods, k
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   character(len=40) :: time_units, x_axis_units, y_axis_units
 
@@ -1936,15 +1979,38 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG)
             time_units = "days"
             call fms2_write_data(fileObject,axisName,'1.0')
          endif
-      case ('Period'); call fms2_write_data(fileObject,axisName,
+      case ('Period');
+         t_grid = adjustl(t_grid_in)
+         if (len_trim(t_grid(2:8)) <= 0) call MOM_error(FATAL, &
+          "MOM_restart:: : No periodic axis length was specified in "//&
+          trim(t_grid) // " in the periodic axes"
+         var_periods = -9999999
+         t_grid_read = adjustl(t_grid(2:8))
+         read(t_grid_read,*) var_periods
+         if (var_periods == -9999999) call MOM_error(FATAL, &
+          "MOM_restart:: Failed to read the number of periods from "//&
+          trim(t_grid) // " in the periodic axes."
+         if (var_periods < 1) call MOM_error(FATAL, "MOM_restart :: The number of periods"//&
+            trim(t_grid)//" must be positive." )
+         if ((num_periods > 0) .and. (var_periods /= num_periods)) &
+            call MOM_error(FATAL, "MOM_restart:: "//&
+            "Only one value of the number of periods can be used for "//trim(t_grid))
+
+         num_periods = var_periods
+         if (num_periods <= 1) call MOM_error(FATAL, "MOM_restart::write_axis_data: "//&
+             "num_periods must be at least 1.")
+         ! Define a periodic axis with unit labels.
+         allocate(period_val(num_periods))
+         do k=1,num_periods
+            period_val(k) = real(k)
+         enddo
+          ! call mpp_write_meta(unit, axis_periodic, name="Period", units="nondimensional", &
+          !longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
+         call fms2_write_data(fileObject,axisName,period_val)
+         deallocate(period_val)
    end select
-!! horizontal grid axes.
-
-
- 
-
-mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
+!mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
+!                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
 
 end subroutine write_axis_data
 
@@ -1960,14 +2026,14 @@ subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
    integer :: numaxes = 0
    if (present(hor_grid) then
       select case (hor_grid)
-         case ('h')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-         case ('q')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-         case ('u')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-         case ('v')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-         case ('T')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-         case ('Bu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-         case ('Cu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-         case ('Cv') ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+         case ('h')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+         case ('q')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+         case ('u')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+         case ('v')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
+         case ('T')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
+         case ('Bu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
+         case ('Cu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
+         case ('Cv') ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
          case ('1') ! Do nothing.
          case default
             call MOM_error(WARNING, "MOM_restart:get_variable_axes: "//trim(var_name)//&
@@ -1976,8 +2042,8 @@ subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
    endif
    if (present(z_grid))
      select case (z_grid)
-      case ('L') ; numaxes = numaxes+1 ; axes(numaxes) = axis_layer
-      case ('i') ; numaxes = numaxes+1 ; axes(numaxes) = axis_int
+      case ('L') ; num_axes = num_axes+1 ; axes(num_axes) = axis_layer
+      case ('i') ; num_axes = num_axes+1 ; axes(num_axes) = axis_int
       case ('1') ! Do nothing.
       case default
         call MOM_error(FATAL, "MOM_restart:get_variable_axes: "//trim(var_name)//&
@@ -1985,8 +2051,8 @@ subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
     end select
     t_grid = adjustl(vars(k)%t_grid)
     select case (t_grid(1:1))
-      case ('s', 'a', 'm') ; numaxes = numaxes+1 ; axes(numaxes) = axis_time
-      case ('p')           ; numaxes = numaxes+1 ; axes(numaxes) = axis_periodic
+      case ('s', 'a', 'm') ; num_axes = num_axes+1 ; axes(num_axes) = axis_time
+      case ('p')           ; num_axes = num_axes+1 ; axes(num_axes) = axis_periodic
       case ('1') ! Do nothing.
       case default
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
