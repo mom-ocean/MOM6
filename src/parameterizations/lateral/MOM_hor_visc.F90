@@ -311,6 +311,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: epsilon
   real :: GME_coeff ! The GME (negative) viscosity coefficient (m2 s-1)
   real :: DY_dxBu, DX_dyBu
+  real :: H0
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
@@ -370,6 +371,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
 
   if (CS%use_GME) then
+    ! GME tapers off above this depth
+    H0 = 1000.0
+
     ! initialize diag. array with zeros
     GME_coeff_h(:,:,:) = 0.0
     GME_coeff_q(:,:,:) = 0.0
@@ -798,7 +802,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif ! Laplacian
 
       if (CS%use_GME) then
-        GME_coeff = 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I-1,j,k) + &
+        GME_coeff = MIN(G%bathyT(i,j)/H0,1.0)*0.25*(KH_u_GME(I,j,k) + KH_u_GME(I-1,j,k) + &
                      KH_v_GME(i,J,k) + KH_v_GME(i,J-1,k)) * &
                     0.5*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)),0.0) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I-1,j,k)) )**2 + &
@@ -995,7 +999,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif ! Laplacian
 
       if (CS%use_GME) then
-        GME_coeff =  0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
+        GME_coeff =  MIN(G%bathyT(i,j)/H0,1.0)*0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
                             KH_v_GME(i,J,k) + KH_v_GME(i+1,J,k)) * &
                       0.25*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
                             VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)),0.0) * &

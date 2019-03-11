@@ -771,18 +771,19 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
 !  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
 !  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
   real :: h_at_slope_above, h_at_slope_below, Ih, f
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
   real :: inv_PI3
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  nz = G%ke
 
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
 
   ! update halos
   call pass_var(h, G%Domain)
 
-  if (k > 1) then
+  if ((k > 1) .and. (k < nz)) then
 
   ! Add in stretching term for the QG Leith vsicosity
 !  if (CS%use_QG_Leith) then
