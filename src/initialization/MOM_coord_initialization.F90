@@ -25,6 +25,11 @@ implicit none ; private
 
 public MOM_initialize_coord
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 character(len=40) :: mdl = "MOM_coord_initialization" !< This module's name.
 
 contains
@@ -39,7 +44,7 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
   logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
   character(len=*),        intent(in)    :: output_dir !< The directory into which to write files.
   type(thermo_var_ptrs),   intent(inout) :: tv         !< The thermodynamic variable structure.
-  real,                    intent(in)    :: max_depth  !< The ocean's maximum depth, in Z.
+  real,                    intent(in)    :: max_depth  !< The ocean's maximum depth [Z ~> m].
   ! Local
   character(len=200) :: config
   logical :: debug
@@ -119,15 +124,15 @@ end subroutine MOM_initialize_coord
 !> Sets the layer densities (Rlay) and the interface reduced gravities (g).
 subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
-                                                     !! (potential density).
+                                                     !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! in m2 Z-1 s-2.
+                                                     !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_int   ! Reduced gravities across the internal interfaces, in m s-2.
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_int   ! Reduced gravities across the internal interfaces [m s-2].
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   character(len=40)  :: mdl = "set_coord_from_gprime" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -153,16 +158,16 @@ end subroutine set_coord_from_gprime
 !> Sets the layer densities (Rlay) and the interface reduced gravities (g).
 subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
-                                                     !! (potential density).
+                                                     !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! in m2 Z-1 s-2.
+                                                     !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
-  real :: Rlay_Ref! The surface layer's target density, in kg m-3.
-  real :: RLay_range ! The range of densities, in kg m-3.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
+  real :: Rlay_Ref! The surface layer's target density [kg m-3].
+  real :: RLay_range ! The range of densities [kg m-3].
   character(len=40)  :: mdl = "set_coord_from_layer_density" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -196,21 +201,20 @@ end subroutine set_coord_from_layer_density
 subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state, &
                                  P_Ref)
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
-                                                       !! (potential density).
+                                                       !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
-                                                       !! in m2 Z-1 s-2.
+                                                       !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer selecting the equation of state.
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! in Pa.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa].
   ! Local variables
   real :: T_ref   ! Reference temperature
   real :: S_ref   ! Reference salinity
-  real :: g_int   ! Reduced gravities across the internal interfaces, in m s-2.
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_int   ! Reduced gravities across the internal interfaces [m s-2].
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   character(len=40)  :: mdl = "set_coord_from_TS_ref" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -248,19 +252,18 @@ end subroutine set_coord_from_TS_ref
 subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
                                      eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
-                                                       !! (potential density).
+                                                       !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
-                                                       !! in m2 Z-1 s-2.
+                                                       !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects equation of state.
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! in Pa.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa].
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_TS_profile" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
@@ -297,24 +300,25 @@ end subroutine set_coord_from_TS_profile
 subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
                                      eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
-                                                       !! (potential density).
+                                                       !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
-                                                       !! in m2 Z-1 s-2.
+                                                       !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters
   type(EOS_type),          pointer     :: eqn_of_state !< integer that selects equation of state
-  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
-                                                       !! in Pa.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure [Pa]
+
+  ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
-  real :: S_Ref, S_Light, S_Dense ! Salinity range parameters in PSU.
-  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters in dec C.
+  real :: S_Ref, S_Light, S_Dense ! Salinity range parameters [ppt].
+  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters [decC].
   real :: res_rat ! The ratio of density space resolution in the denser part
                   ! of the range to that in the lighter part of the range.
                   ! Setting this greater than 1 increases the resolution for
                   ! the denser water.
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   real :: a1, frac_dense, k_frac
   integer :: k, nz, k_light
   character(len=40)  :: mdl = "set_coord_from_TS_range" ! This subroutine's name.
@@ -379,14 +383,14 @@ end subroutine set_coord_from_TS_range
 ! Sets the layer densities (Rlay) and the interface reduced gravities (g) from data in file.
 subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
-                                                     !! (potential density).
+                                                     !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! in m2 Z-1 s-2.
+                                                     !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
@@ -430,9 +434,9 @@ end subroutine set_coord_from_file
 !! (defaulting to 2.0 if not defined)
 subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
-                                                     !! (potential density).
+                                                     !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! in m2 Z-1 s-2.
+                                                     !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -474,14 +478,14 @@ end subroutine set_coord_linear
 !! might be used.
 subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
-                                                     !! (potential density).
+                                                     !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces,
-                                                     !! in m s-2.
+                                                     !! [m2 Z-1 s-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
-  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  real :: g_fs    ! Reduced gravity across the free surface [m s-2].
   character(len=40)  :: mdl = "set_coord_to_none" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke

@@ -102,14 +102,14 @@ implicit none ; private
 !> MOM_dynamics_unsplit_RK2 module control structure
 type, public :: MOM_dyn_unsplit_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    !< CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    !< PFu = -dM/dx, in m s-2.
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) [m s-2].
+    PFu, &    !< PFu = -dM/dx [m s-2].
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    !< CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    !< PFv = -dM/dy, in m s-2.
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) [m s-2].
+    PFv, &    !< PFv = -dM/dy [m s-2].
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean to the seafloor (Pa)
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean to the seafloor (Pa)
@@ -189,11 +189,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US      !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_in !< The input and output zonal
-                                                              !! velocity, in m s-1.
+                                                              !! velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_in !< The input and output meridional
-                                                              !! velocity, in m s-1.
+                                                              !! velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_in !< The input and output layer thicknesses,
-                                                              !! in m or kg m-2, depending on whether
+                                                              !! [H ~> m or kg m-2], depending on whether
                                                               !! the Boussinesq approximation is made.
   type(thermo_var_ptrs),             intent(in)    :: tv      !< A structure pointing to various
                                                               !! thermodynamic variables.
@@ -202,27 +202,26 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! viscosities, and related fields.
   type(time_type),                   intent(in)    :: Time_local   !< The model time at the end of
                                                               !! the time step.
-  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step,
-                                                              !! in s.
+  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step [s].
   type(mech_forcing),                intent(in)    :: forces  !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the beginning
-                                                              !! of this dynamic step, in Pa.
+                                                              !! of this dynamic step [Pa].
   real, dimension(:,:),              pointer       :: p_surf_end   !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the end of
-                                                              !! this dynamic step, in Pa.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport,
-                                                              !! in m3 s-1 or kg s-1.
+                                                              !! this dynamic step [Pa].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
+                                                              !! [H m2 s-1 ~> m3 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh  !< The meridional volume or mass
-                                                              !! transport, in m3 s-1 or kg s-1.
+                                                              !! transport [H m2 s-1 ~> m3 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or
                                                               !! mass transport since the last
-                                                              !! tracer advection, in m3 or kg.
+                                                              !! tracer advection [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume
                                                               !! or mass transport since the last
-                                                              !! tracer advection, in m3 or kg.
+                                                              !! tracer advection [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av  !< The time-mean free surface height
-                                                              !! or column mass, in H (m or kg m-2).
+                                                              !! or column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_RK2_CS),      pointer       :: CS      !< The control structure set up by
                                                               !! initialize_dyn_unsplit_RK2.
   type(VarMix_CS),                   pointer       :: VarMix  !< A pointer to a structure with
@@ -511,11 +510,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity,
-                                                                   !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity [m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity [m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(time_type),                   target, intent(in)    :: Time !< The current model time.
   type(param_file_type),                     intent(in)    :: param_file !< A structure to parse
                                                                          !! for run-time parameters.
@@ -528,7 +525,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   type(accel_diag_ptrs),             target, intent(inout) :: Accel_diag !< A set of pointers to the
                                       !! various accelerations in the momentum equations, which can
                                       !! be used for later derived diagnostics, like energy budgets.
-  type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag  !<A structure with pointers
+  type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag  !< A structure with pointers
                                                                          !! to various terms in the
                                                                          !! continuity equations.
   type(ocean_internal_state),                intent(inout) :: MIS  !< The "MOM6 Internal State"
