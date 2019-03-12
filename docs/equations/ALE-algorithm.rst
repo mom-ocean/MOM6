@@ -8,8 +8,8 @@ motion in general-coordinate :math:`r` are
   D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdot \boldsymbol{\underline{\tau}} ,\\
   \rho \delta_k \Phi + \delta_k p &= 0 ,\\
   \partial_t h + \nabla_r \cdot ( h \boldsymbol{u} ) + \delta_k ( z_r \dot{r} ) &= 0 ,\\
-  \partial_t h \theta + \nabla_r \cdot ( h \boldsymbol{u} \theta ) + \delta_k ( z_r \dot{r} \theta ) &= \boldsymbol{\nabla} \cdot \boldsymbol{Q}_\theta ,\\
-  \partial_t h S + \nabla_r \cdot ( h \boldsymbol{u} S ) + \delta_k ( z_r \dot{r} S ) &= \boldsymbol{\nabla} \cdot \boldsymbol{Q}_S ,\\
+  \partial_t (h \theta) + \nabla_r \cdot ( h \boldsymbol{u} \theta ) + \delta_k ( z_r \dot{r} \theta ) &= \boldsymbol{\nabla} \cdot \boldsymbol{Q}_\theta ,\\
+  \partial_t (h S) + \nabla_r \cdot ( h \boldsymbol{u} S ) + \delta_k ( z_r \dot{r} S ) &= \boldsymbol{\nabla} \cdot \boldsymbol{Q}_S ,\\
   \rho &= \rho(S, \theta, z) .
 
 The Arbitrary-Lagrangian-Eulerian algorithm we use is quasi-Lagrangian in
