@@ -73,7 +73,6 @@ type, public :: neutral_diffusion_CS ; private
   real,    allocatable, dimension(:,:,:,:) :: P_i    !< Interface pressure (Pa)
   real,    allocatable, dimension(:,:,:,:) :: dRdT_i !< dRho/dT (kg/m3/degC) at top edge
   real,    allocatable, dimension(:,:,:,:) :: dRdS_i !< dRho/dS (kg/m3/ppt) at top edge
-  real,    allocatable, dimension(:,:,:,:) :: dRdP_i !< dRho/dp (kg/m3/pascal) at top edge
   integer, allocatable, dimension(:,:)     :: ns     !< Number of interfacs in a column
   logical, allocatable, dimension(:,:,:) :: stable_cell !< True if the cell is stably stratified wrt to the next cell
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -160,10 +159,8 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                    "1. Delta_rho varies linearly, find 0 crossing            \n"// &
                    "2. Alpha and beta vary linearly from top to bottom,      \n"// &
                    "   Newton's method for neutral position                  \n"// &
-                   "3. Keep recalculating alpha and beta (no pressure        \n"// &
-                   "   dependence) Newton's method for neutral position      \n"// &
-                   "4. Full nonlinear equation of state, Brent's method      \n"// &
-                   "   for neutral position", default=2)
+                   "3. Full nonlinear equation of state, use regula falsi    \n"// &
+                   "   for neutral position", default=3)
     if (CS%neutral_pos_method > 4 .or. CS%neutral_pos_method < 0) then
       call MOM_error(FATAL,"Invalid option for NEUTRAL_POS_METHOD")
     endif
@@ -209,7 +206,6 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
     allocate(CS%P_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%P_i(:,:,:,:) = 0.
     allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdT_i(:,:,:,:) = 0.
     allocate(CS%dRdS_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdS_i(:,:,:,:) = 0.
-    allocate(CS%dRdP_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdP_i(:,:,:,:) = 0.
     allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.
     allocate(CS%ppoly_coeffs_S(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1)) ; CS%ppoly_coeffs_S(:,:,:,:) = 0.
     allocate(CS%ns(SZI_(G),SZJ_(G)))    ; CS%ns(:,:) = 0.
@@ -335,16 +331,12 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
         ! Calculate derivatives for the top interface
         call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
                                       CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
-        call calculate_compress(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, rho_tmp(:), &
-                                CS%dRdP_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
         if (CS%ref_pres<0) then
           ref_pres(:) = CS%Pint(:,j,k+1)
         endif
         ! Calcualte derivatives at the bottom interface
         call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
                                       CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
-        call calculate_compress(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, rho_tmp(:), &
-                                CS%dRdP_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
       enddo
     endif
   enddo
@@ -523,6 +515,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
         do k = 1, GV%ke
           tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
                           ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
+!          if (tracer%t(i,j,k) < 0.) then
+!            do ks = 1,CS%nsurf-1
+!                print *, uFlx(I,j,ks), uFlx(I-1,j,ks), vFlx(i,J,ks), vFlx(i,J-1,ks)
+!            enddo
+!          endif
         enddo
 
         if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
@@ -1091,10 +1088,10 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
   logical :: search_layer
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   real    :: z0, pos
-  real    :: dRdT_from_top, dRdS_from_top, dRdP_from_top   ! Density derivatives at the searched from interface
-  real    :: dRdT_from_bot, dRdS_from_bot, dRdP_from_bot   ! Density derivatives at the searched from interface
-  real    :: dRdT_to_top, dRdS_to_top,     dRdP_to_top     ! Density derivatives at the interfaces being searched
-  real    :: dRdT_to_bot, dRdS_to_bot,     dRdP_to_bot     ! Density derivatives at the interfaces being searched
+  real    :: dRdT_from_top, dRdS_from_top   ! Density derivatives at the searched from interface
+  real    :: dRdT_from_bot, dRdS_from_bot   ! Density derivatives at the searched from interface
+  real    :: dRdT_to_top, dRdS_to_top       ! Density derivatives at the interfaces being searched
+  real    :: dRdT_to_bot, dRdS_to_bot       ! Density derivatives at the interfaces being searched
   real    :: T_ref, S_ref, P_ref, P_top, P_bot
   real    :: lastP_left, lastP_right
 
@@ -1212,11 +1209,11 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
         KoR(k_surface) = kl_right
 
         if (CS%debug) then
-          write(*,'(A,I2)') "Searching left layer ", kl_left
-          write(*,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
-          write(*,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
-          write(*,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
-          write(*,*) "Temp/Salt Bot L: ", Tl(kl_left,2), Sl(kl_left,2)
+          write(*,'(A,I2)') "Searching right layer ", kl_right
+          write(*,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
+          write(*,*) "Temp/Salt Reference: ", Tl(kl_left,ki_left), Sl(kl_left,ki_left)
+          write(*,*) "Temp/Salt Top L: ", Tr(kl_right,1), Sr(kl_right,1)
+          write(*,*) "Temp/Salt Bot L: ", Tr(kl_right,2), Sr(kl_right,2)
         endif
         call increment_interface(nk, kl_left, ki_left, reached_bottom, searching_left_column, searching_right_column)
         lastP_right = PoR(k_surface)
@@ -1233,10 +1230,18 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
       if ( KoL(k_surface) == KoL(k_surface-1) .and. KoR(k_surface) == KoR(k_surface-1) ) then
         hL = (PoL(k_surface) - PoL(k_surface-1))*hcol_l(KoL(k_surface))
         hR = (PoR(k_surface) - PoR(k_surface-1))*hcol_r(KoR(k_surface))
-        if ( hL + hR == 0. ) then
+        if (hL < 0. .or. hR < 0.) then
+          call MOM_error(FATAL,"Negative thicknesses in neutral diffusion")
+        elseif ( hL + hR == 0. ) then
            hEff(k_surface-1) = 0.
         else
            hEff(k_surface-1) = 2. * ( (hL * hR) / ( hL + hR ) )! Harmonic mean
+           if ( KoL(k_surface) /= KoL(k_surface-1) ) then
+             call MOM_error(FATAL,"Neutral sublayer spans multiple layers")
+           endif
+           if ( KoR(k_surface) /= KoR(k_surface-1) ) then
+             call MOM_error(FATAL,"Neutral sublayer spans multiple layers")
+           endif
         endif
       else
         hEff(k_surface-1) = 0.
@@ -1258,7 +1263,8 @@ subroutine mark_unstable_cells(CS, nk, T, S, P, stable_cell)
   real :: delta_rho
 
   do k = 1,nk
-    call calc_delta_rho_and_derivs( CS, T(k,2), S(k,2), P(k,2), T(k,1), S(k,1), P(k,1), delta_rho )
+    call calc_delta_rho_and_derivs( CS, T(k,2), S(k,2), max(P(k,2),CS%ref_pres), &
+        T(k,1), S(k,1), max(P(k,1),CS%ref_pres), delta_rho )
     stable_cell(k) = delta_rho > 0.
   enddo
 end subroutine mark_unstable_cells
@@ -1283,8 +1289,8 @@ real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T
   real, dimension(:),         intent(in   ) :: S_poly   !< Salinity    polynomial reconstruction coefficients
   ! Local variables
   real :: dRhotop, dRhobot
-  real :: dRdT_top,  dRdS_top, dRdP_top, dRdT_bot, dRdS_bot, dRdP_bot
-  real :: dRdT_from, dRdS_from, dRdP_from
+  real :: dRdT_top,  dRdS_top, dRdT_bot, dRdS_bot
+  real :: dRdT_from, dRdS_from 
   real :: P_mid
 
   ! Calculate the differencei in density at the tops or the bottom
@@ -1293,26 +1299,33 @@ real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T
     call calc_delta_rho_and_derivs(CS, T_bot, S_bot, P_bot, T_from, S_from, P_from, dRhoBot)
   elseif (CS%neutral_pos_method == 2) then
     call calc_delta_rho_and_derivs(CS, T_top, S_top, P_top, T_from, S_from, P_from, dRhoTop,             &
-                                   dRdT_top, dRdS_top, dRdP_top, dRdT_from, dRdS_from, dRdP_from)
+                                   dRdT_top, dRdS_top, dRdT_from, dRdS_from)
     call calc_delta_rho_and_derivs(CS, T_bot, S_bot, P_bot, T_from, S_from, P_from, dRhoBot,             &
-                                   dRdT_bot, dRdS_bot, dRdP_bot, dRdT_from, dRdS_from, dRdP_from)
+                                   dRdT_bot, dRdS_bot, dRdT_from, dRdS_from)
   endif
 
   ! Handle all the special cases EXCEPT if it connects within the layer
   if ( (dRhoTop > 0.) .or. (ksurf == 1) ) then      ! First interface or lighter than anything in layer
-    pos = 0.
+    pos = pos_last
+    if (CS%debug) print *, "Lighter"
   elseif ( dRhoTop > dRhoBot ) then                 ! Unstably stratified
     pos = 1.
+    if (CS%debug) print *, "Unstable"
   elseif ( dRhoTop < 0. .and. dRhoBot < 0.) then    ! Denser than anything in layer
     pos = 1.
+    if (CS%debug) print *, "Denser"
   elseif ( dRhoTop == 0. .and. dRhoBot == 0. ) then ! Perfectly unstratified
     pos = 1.
+    if (CS%debug) print *, "Unstratified"
   elseif ( dRhoBot == 0. ) then                     ! Matches perfectly at the Top
     pos = 1.
+    if (CS%debug) print *, "Bottom"
   elseif ( dRhoTop == 0. ) then                     ! Matches perfectly at the Bottom
-    pos = 0.
+    pos = pos_last
+    if (CS%debug) print *, "Top"
   else                                              ! Neutral surface within layer
     pos = -1
+    if (CS%debug) print *, "Interpolate"
   endif
 
   ! Can safely return if position is >= 0 otherwise will need to find the position within the layer
@@ -1323,9 +1336,9 @@ real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T
   ! For the 'Linear' case of finding the neutral position, the fromerence pressure to use is the average
   ! of the midpoint of the layer being searched and the interface being searched from
   elseif (CS%neutral_pos_method == 2) then
-    pos = find_neutral_pos_linear( CS, pos_last, T_from, S_from, P_from, dRdT_from, dRdS_from, dRdP_from, &
-                                   P_top, dRdT_top, dRdS_top, dRdP_top,                                   &
-                                   P_bot, dRdT_bot, dRdS_bot, dRdP_bot, T_poly, S_poly )
+    pos = find_neutral_pos_linear( CS, pos_last, T_from, S_from, P_from, dRdT_from, dRdS_from, &
+                                   P_top, dRdT_top, dRdS_top,                                   &
+                                   P_bot, dRdT_bot, dRdS_bot, T_poly, S_poly )
   elseif (CS%neutral_pos_method == 3) then
     pos = find_neutral_pos_full( CS, pos_last, T_from, S_from, P_from, P_top, P_bot, T_poly, S_poly)
   endif
@@ -1367,9 +1380,9 @@ end subroutine increment_interface
 !! interval [0,1], a bisection step would be taken instead. Also this linearization of alpha, beta means that second
 !! derivatives of the EOS are not needed. Note that delta in variable names below refers to horizontal differences and
 !! 'd' refers to vertical differences
-function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_ref, dRdP_ref, &
-                                  P_top, dRdT_top, dRdS_top, dRdP_top,                       &
-                                  P_bot, dRdT_bot, dRdS_bot, dRdP_bot, ppoly_T, ppoly_S )    result( z )
+function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_ref, &
+                                  P_top, dRdT_top, dRdS_top,                        &
+                                  P_bot, dRdT_bot, dRdS_bot, ppoly_T, ppoly_S )    result( z )
   type(neutral_diffusion_CS),intent(in) :: CS        !< Control structure with parameters for this module
   real,                      intent(in) :: z0        !< Lower bound of position, also serves as the initial guess
   real,                      intent(in) :: T_ref     !< Temperature at the searched from interface
@@ -1377,24 +1390,21 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
   real,                      intent(in) :: P_ref     !< Pressure at the searched from interface
   real,                      intent(in) :: dRdT_ref  !< dRho/dT at the searched from interface
   real,                      intent(in) :: dRdS_ref  !< dRho/dS at the searched from interface
-  real,                      intent(in) :: dRdP_ref  !< dRho/dP at the searched from interface
   real,                      intent(in) :: P_top     !< Pressure at top of layer being searched
   real,                      intent(in) :: dRdT_top  !< dRho/dT at top of layer being searched
   real,                      intent(in) :: dRdS_top  !< dRho/dS at top of layer being searched
-  real,                      intent(in) :: dRdP_top  !< dRho/dP at top of layer being searched
   real,                      intent(in) :: P_bot     !< Pressure at bottom of layer being searched
   real,                      intent(in) :: dRdT_bot  !< dRho/dT at bottom of layer being searched
   real,                      intent(in) :: dRdS_bot  !< dRho/dS at bottom of layer being searched
-  real,                      intent(in) :: dRdP_bot  !< dRho/dP at bottom of layer being searched
   real, dimension(:),        intent(in) :: ppoly_T   !< Coefficients of the polynomial reconstruction of T within
                                                      !! the layer to be searched.
   real, dimension(:),        intent(in) :: ppoly_S   !< Coefficients of the polynomial reconstruction of T within
                                                      !! the layer to be searched.
   real                                  :: z         !< Position where drho = 0
   ! Local variables
-  real :: dRdT_diff, dRdS_diff, dRdP_diff, dRdP_z
+  real :: dRdT_diff, dRdS_diff
   real :: drho, drho_dz, dRdT_z, dRdS_z, T_z, S_z, deltaT, deltaS, deltaP, dT_dz, dS_dz
-  real :: drho_min, drho_max, ztest, zmin, zmax, dRdT_sum, dRdS_sum, dRdP_sum, dz, P_z, dP_dz
+  real :: drho_min, drho_max, ztest, zmin, zmax, dRdT_sum, dRdS_sum, dz, P_z, dP_dz
   real :: a1, a2
   integer :: iter
   integer :: nterm
@@ -1405,7 +1415,6 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
   ! Position independent quantities
   dRdT_diff = dRdT_bot - dRdT_top
   dRdS_diff = dRdS_bot - dRdS_top
-  dRdP_diff = dRdP_bot - dRdP_top
   ! Assume a linear increase in pressure from top and bottom of the cell
   dP_dz = P_bot - P_top
   ! Initial starting drho (used for bisection)
@@ -1417,15 +1426,14 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
   S_z = evaluation_polynomial( ppoly_S, nterm, zmin )
   dRdT_z = a1*dRdT_top + a2*dRdT_bot
   dRdS_z = a1*dRdS_top + a2*dRdS_bot
-  dRdP_z = a1*dRdP_top + a2*dRdP_bot
   P_z = a1*P_top + a2*P_bot
-  drho_min = delta_rho_from_derivs(T_z, S_z, P_z, dRdT_z, dRdS_z, dRdP_z,           &
-                                   T_ref, S_ref, P_ref, dRdT_ref, dRdS_ref, dRdP_ref)
+  drho_min = delta_rho_from_derivs(T_z, S_z, P_z, dRdT_z, dRdS_z,         &
+                                   T_ref, S_ref, P_ref, dRdT_ref, dRdS_ref)
 
   T_z = evaluation_polynomial( ppoly_T, nterm, 1. )
   S_z = evaluation_polynomial( ppoly_S, nterm, 1. )
-  drho_max = delta_rho_from_derivs(T_z, S_z, P_bot, dRdT_bot, dRdS_bot, dRdP_bot,           &
-                                   T_ref, S_ref, P_ref, dRdT_ref, dRdS_ref, dRdP_ref)
+  drho_max = delta_rho_from_derivs(T_z, S_z, P_bot, dRdT_bot, dRdS_bot,            &
+                                   T_ref, S_ref, P_ref, dRdT_ref, dRdS_ref)
 
   if (drho_min >= 0.) then
     z = z0
@@ -1435,6 +1443,7 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
     return
   endif
   if ( SIGN(1.,drho_min) == SIGN(1.,drho_max) ) then
+    print *, drho_min, drho_max
     call MOM_error(FATAL, "drho_min is the same sign as dhro_max")
   endif
 
@@ -1446,7 +1455,6 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
     a2 = z
     dRdT_z    = a1*dRdT_top + a2*dRdT_bot
     dRdS_z    = a1*dRdS_top + a2*dRdS_bot
-    dRdP_z    = a1*dRdP_top + a2*dRdP_bot
     T_z       = evaluation_polynomial( ppoly_T, nterm, z )
     S_z       = evaluation_polynomial( ppoly_S, nterm, z )
     P_z       = a1*P_top + a2*P_bot
@@ -1455,9 +1463,8 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
     deltaP    = P_z - P_ref
     dRdT_sum  = dRdT_ref + dRdT_z
     dRdS_sum  = dRdS_ref + dRdS_z
-    dRdP_sum  = dRdP_ref + dRdP_z
-    drho = delta_rho_from_derivs(T_z, S_z, P_z, dRdT_z, dRdS_z, dRdP_z,           &
-                                 T_ref, S_ref, P_ref, dRdT_ref, dRdS_ref, dRdP_ref)
+    drho = delta_rho_from_derivs(T_z, S_z, P_z, dRdT_z, dRdS_z,           &
+                                 T_ref, S_ref, P_ref, dRdT_ref, dRdS_ref)
 
     ! Check for convergence
     if (ABS(drho) <= CS%drho_tol) exit
@@ -1473,10 +1480,9 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, P_ref,  dRdT_ref, dRdS_r
     ! Calculate a Newton step
     dT_dz = first_derivative_polynomial( ppoly_T, nterm, z )
     dS_dz = first_derivative_polynomial( ppoly_S, nterm, z )
-    drho_dz = 0.5*( (dRdT_diff*deltaT + dRdT_sum*dT_dz) + (dRdS_diff*deltaS + dRdS_sum*dS_dz) + &
-                    (dRdP_diff*deltaP + dRdP_sum*dP_dz) )
-    ztest = z - drho/drho_dz
+    drho_dz = 0.5*( (dRdT_diff*deltaT + dRdT_sum*dT_dz) + (dRdS_diff*deltaS + dRdS_sum*dS_dz) )
 
+    ztest = z - drho/drho_dz
     ! Take a bisection if z falls out of [zmin,zmax]
     if (ztest < zmin .or. ztest > zmax) then
       if ( drho < 0. ) then
@@ -1542,7 +1548,10 @@ function find_neutral_pos_full( CS, z0, T_ref, S_ref, P_ref, P_top, P_bot, ppoly
     return
   endif
   if ( SIGN(1.,drho_b) == SIGN(1.,drho_c) ) then
-    call MOM_error(FATAL, "drho_min is the same sign as dhro_max")
+    print *, drho_b, drho_c
+    call MOM_error(WARNING, "drho_b is the same sign as dhro_c")
+    z = z0
+    return
   endif
 
   do iter = 1, CS%max_iter
@@ -1585,7 +1594,7 @@ end function find_neutral_pos_full
 
 !> Calculate the difference in density between two points in a variety of ways
 subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho,                          &
-                                     drdt1_out, drds1_out, drdp1_out, drdt2_out, drds2_out, drdp2_out )
+                                     drdt1_out, drds1_out, drdt2_out, drds2_out )
   type(neutral_diffusion_CS)    :: CS        !< Neutral diffusion control structure
   real,           intent(in   ) :: T1        !< Temperature at point 1
   real,           intent(in   ) :: S1        !< Salinity at point 1
@@ -1596,10 +1605,8 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho,    
   real,           intent(  out) :: drho      !< Difference in density between the two points
   real, optional, intent(  out) :: dRdT1_out !< drho_dt at point 1
   real, optional, intent(  out) :: dRdS1_out !< drho_ds at point 1
-  real, optional, intent(  out) :: dRdP1_out !< drho_dp at point 1
   real, optional, intent(  out) :: dRdT2_out !< drho_dt at point 2
   real, optional, intent(  out) :: dRdS2_out !< drho_ds at point 2
-  real, optional, intent(  out) :: dRdP2_out !< drho_ds at point 2
   ! Local variables
   real :: rho1, rho2, p1, p2, pmid
   real :: drdt1, drdt2, drds1, drds2, drdp1, drdp2, rho_dummy
@@ -1618,8 +1625,6 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho,    
     pmid = 0.5 * (p1 + p2)
     call calculate_density( T1, S1, pmid, rho1, CS%EOS )
     call calculate_density( T2, S2, pmid, rho2, CS%EOS )
-    call calculate_compress(T1, S1, pmid, rho_dummy, drdp1, CS%EOS)
-    call calculate_compress(T2, S2, pmid, rho_dummy, drdp2, CS%EOS)
     drho = rho1 - rho2
   ! Use the density derivatives at the average of pressures and the differentces int temperature
   elseif (TRIM(CS%delta_rho_form) == 'mid_pressure') then
@@ -1627,28 +1632,19 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho,    
     if (CS%ref_pres>=0) pmid = CS%ref_pres
     call calculate_density_derivs(T1, S1, pmid, drdt1, drds1, CS%EOS)
     call calculate_density_derivs(T2, S2, pmid, drdt2, drds2, CS%EOS)
-    call calculate_compress(T1, S1, pmid, rho_dummy, drdp1, CS%EOS)
-    call calculate_compress(T2, S2, pmid, rho_dummy, drdp2, CS%EOS)
-    drdp1 = drdp1*1.e-3 ; drdp2 = drdp2*1.e-3
-    ! No pressure term since all derivatives have been calculated relative to midpoint pressure
-    drho = delta_rho_from_derivs( T1, S1, P1, drdt1, drds1, drdp1, T2, S2, P2, drdt2, drds2, drdp2 )
+    drho = delta_rho_from_derivs( T1, S1, P1, drdt1, drds1, T2, S2, P2, drdt2, drds2)
   elseif (TRIM(CS%delta_rho_form) == 'local_pressure') then
     call calculate_density_derivs(T1, S1, p1, drdt1, drds1, CS%EOS)
     call calculate_density_derivs(T2, S2, p2, drdt2, drds2, CS%EOS)
-    call calculate_compress(T1, S1, p1, rho_dummy, drdp1, CS%EOS)
-    call calculate_compress(T2, S2, p2, rho_dummy, drdp2, CS%EOS)
-    drdp1 = drdp1*1.e-3 ; drdp2 = drdp2*1.e-3
-    drho = delta_rho_from_derivs( T1, S1, P1, drdt1, drds1, drdp1, T2, S2, P2, drdt2, drds2, drdp2 )
+    drho = delta_rho_from_derivs( T1, S1, P1, drdt1, drds1, T2, S2, P2, drdt2, drds2)
   else
     call MOM_error(FATAL, "delta_rho_form is not recognized")
   endif
 
   if (PRESENT(drdt1_out)) drdt1_out = drdt1
   if (PRESENT(drds1_out)) drds1_out = drds1
-  if (PRESENT(drdp1_out)) drdp1_out = drdp1
   if (PRESENT(drdt2_out)) drdt2_out = drdt2
   if (PRESENT(drds2_out)) drds2_out = drds2
-  if (PRESENT(drdp2_out)) drdp2_out = drdp2
 
 end subroutine calc_delta_rho_and_derivs
 
@@ -1656,24 +1652,22 @@ end subroutine calc_delta_rho_and_derivs
 !! $\Delta \rho$ = \frac{1}{2}\left[ (\alpha_1 + \alpha_2)*(T_1-T_2) +
 !!                                   (\beta_1 + \beta_2)*(S_1-S_2) +
 !!                                   (\gamma^{-1}_1 + \gamma%{-1}_2)*(P_1-P_2) \right]
-function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, dRdP1, &
-                                T2, S2, P2, dRdT2, dRdS2, dRdP2  ) result (drho)
+function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, &
+                                T2, S2, P2, dRdT2, dRdS2  ) result (drho)
   real :: T1    !< Temperature at point 1
   real :: S1    !< Salinity at point 1
   real :: P1    !< Pressure at point 1
   real :: dRdT1 !< Pressure at point 1
   real :: dRdS1 !< Pressure at point 1
-  real :: dRdP1 !< Pressure at point 1
   real :: T2    !< Temperature at point 2
   real :: S2    !< Salinity at point 2
   real :: P2    !< Pressure at point 2
   real :: dRdT2 !< Pressure at point 2
   real :: dRdS2 !< Pressure at point 2
-  real :: dRdP2 !< Pressure at point 2
   ! Local variables
   real :: drho
 
-  drho = 0.5 * ( (dRdT1+dRdT2)*(T1-T2) + (dRdS1+dRdS2)*(S1-S2) + (dRdP1+dRdP2)*(P1-P2) )
+  drho = 0.5 * ( (dRdT1+dRdT2)*(T1-T2) + (dRdS1+dRdS2)*(S1-S2  ))
 
 end function delta_rho_from_derivs
 !> Converts non-dimensional position within a layer to absolute position (for debugging)
@@ -2419,28 +2413,28 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ! EOS linear in T, uniform alpha
   CS%max_iter = 10
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,        &
-             find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0., 0.,                     &
-                                     0., -0.2, 0., 0., 10., -0.2, 0., 0.,                    &
+             find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0.,                      &
+                                     0., -0.2, 0., 10., -0.2, 0.,                     &
                                      (/12.,-4./), (/34.,0./)), "Temp Uniform Linearized Alpha/Beta"))
   ! EOS linear in S, uniform beta
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
-             find_neutral_pos_linear(CS, 0., 10., 35., 0., 0., 0.8, 0.,               &
-                                    0., 0., 0.8, 0., 10., 0., 0.8, 0.,                &
+             find_neutral_pos_linear(CS, 0., 10., 35., 0., 0., 0.8,               &
+                                    0., 0., 0.8, 10., 0., 0.8,                &
                                     (/12.,0./), (/34.,2./)), "Salt Uniform Linearized Alpha/Beta"))
   ! EOS linear in T/S, uniform alpha/beta
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,   &
-             find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.5, 0.5, 0.,               &
-                                     0., -0.5, 0.5, 0., 10., -0.5, 0.5, 0., &
+             find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.5, 0.5,                &
+                                     0., -0.5, 0.5, 10., -0.5, 0.5,  &
                                      (/12.,-4./), (/34.,2./)), "Temp/salt Uniform Linearized Alpha/Beta"))
   ! EOS linear in T, insensitive to So
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
-             find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0., 0.,&
-                                     0.,  -0.4, 0., 0.,  10., -0.6, 0., 0., &
+             find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0., &
+                                     0.,  -0.4, 0., 10., -0.6, 0.,  &
                                      (/12.,-4./), (/34.,0./)), "Temp stratified Linearized Alpha/Beta"))
 !  ! EOS linear in S, insensitive to T
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5, &
-             find_neutral_pos_linear(CS, 0., 10., 35., 0.,  0., 0.8, 0., &
-                                     0., 0., 1.0, 0., 10., 0., 0.5, 0., &
+             find_neutral_pos_linear(CS, 0., 10., 35., 0.,  0., 0.8,  &
+                                     0., 0., 1.0,  10., 0., 0.5,  &
                                      (/12.,0./), (/34.,2./)), "Salt stratified Linearized Alpha/Beta"))
   if (.not. ndiff_unit_tests_discontinuous) write(*,*) 'Pass'
 
