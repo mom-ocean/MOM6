@@ -3,9 +3,9 @@
 Vector Invariant Equations
 ==========================
 
-MOM6 solve the momentum equations written in vector-invariant form.
+MOM6 solves the momentum equations written in vector-invariant form.
 
-An identity allows the total derivative of velocity to be written in the vector-invariant form:
+A vector identity allows the total derivative of velocity to be written in the vector-invariant form:
 
 .. math::
   D_t \boldsymbol{u} &= \partial_t \boldsymbol{u} + \boldsymbol{v} \cdotp \boldsymbol{\nabla} \boldsymbol{u} \\
