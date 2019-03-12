@@ -1923,26 +1923,12 @@ subroutine check_for_restart_axis(fileObject,axisName)
   
 end subroutine check_for_restart_axis
 
-
-!type, public :: axistype
-!      sequence
-!      character(len=128) :: name
-!      character(len=128) :: units
-!      character(len=256) :: longname
-!      character(len=8) :: cartesian
-!      integer :: len
-!      integer :: sense           !+/-1, depth or height?
-!      type(domain1D), pointer :: domain
-!      real, dimension(:), pointer :: data
-!      integer :: id, did
-!      integer :: type  ! external NetCDF type format for axis data
-!      integer :: natt
-!      type(atttype), pointer :: Att(:) ! axis attributes
-!   end type axistype
+!> Define the axis variable attributes, and write the axis data
+!! to the restart file
 subroutine write_axis_data(fileObject, axisName, G, dG, GV, timeunit, & 
                            restart_time_in_days, t_grid_in)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObject !< file object returned by prior call to fms2_open_file
-  character(len=*), intent(in) :: axisName
+  character(len=*), intent(in) :: axisName !< Name of the axis
   type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                     !! is required if the new file uses any
                                                     !! horizontal grid axes.
@@ -2012,10 +1998,16 @@ subroutine write_axis_data(fileObject, axisName, G, dG, GV, timeunit, &
         long_name = 'Longitude'
         axis_units = x_axis_units
      case ('Layer')
+        if (.not. present(GV)) then
+           call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
+        endif             " which is required to write the Layer axis data.")
         call fms2_write_data(fileObject,axisName,GV%sLayer(1:GV%ke))
         long_name = 'Layer'
         axis_units = trim(GV%zAxisUnits)
      case ('Interface')
+        if (.not. present(GV)) then
+           call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
+        endif             " which is required to write the Interface axis data.")
         call fms2_write_data(fileObject,axisName,GV%sInterface(1:GV%ke+1))
         longname="Interface "//trim(GV%zAxisLongName)
         axis_units = trim(GV%zAxisUnits)
@@ -2035,9 +2027,9 @@ subroutine write_axis_data(fileObject, axisName, G, dG, GV, timeunit, &
            else
               write(time_units,'(es8.2," s")') timeunit
            endif
-           units = time_units
+           axis_units = time_units
         else
-           units = "days"
+           axis_units = "days"
         endif
         if (present(restart_time)) then
            call fms2_write_data(fileObject,axisName,restart_time)
@@ -2081,7 +2073,7 @@ subroutine write_axis_data(fileObject, axisName, G, dG, GV, timeunit, &
         !longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
         call fms2_write_data(fileObject,axisName,period_val)
         deallocate(period_val)
-        units = "nondimensional"
+        axis_units = "nondimensional"
         long_name="Periods for cyclical varaiables"
    end select
    ! write attributes
