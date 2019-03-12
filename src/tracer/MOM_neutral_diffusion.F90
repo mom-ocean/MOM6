@@ -1290,7 +1290,7 @@ real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T
   ! Local variables
   real :: dRhotop, dRhobot
   real :: dRdT_top,  dRdS_top, dRdT_bot, dRdS_bot
-  real :: dRdT_from, dRdS_from 
+  real :: dRdT_from, dRdS_from
   real :: P_mid
 
   ! Calculate the differencei in density at the tops or the bottom
