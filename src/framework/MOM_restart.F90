@@ -416,6 +416,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, longname, un
 
 !  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%t_grid)
 !  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%hor_grid)
+  call fms2_close_file(CS%fileObj)
 
 end subroutine register_restart_field_4d
 
@@ -1803,43 +1804,25 @@ subroutine get_time_coordinates(t_grid_in, use_time, use_periodic)
   
   ! Local
   character(len=8) :: t_grid, t_grid_read
-  integer :: var_periods
-  integer :: num_periods=0
 
   use_time = .false.
   use_periodic = .false.
 
-  t_grid = adjustl(t_grid_in) 
+  t_grid = adjustl(t_grid_in)
 
   select case (t_grid(1:1))
      case ('s', 'a', 'm') ; use_time = .true.
      case ('p')
-        use_periodic = .true.
         if (len_trim(t_grid(2:8)) <= 0) then
-            call MOM_error(FATAL,"MOM_restart:get_time_coordinates: No periodic axis length was specified in "//trim(t_grid))
+            call MOM_error(FATAL,"MOM_restart:get_time_coordinates: "//&
+                           "No periodic axis length was specified in "//trim(t_grid))
         endif
-        var_periods = -9999999
-        t_grid_read = adjustl(t_grid(2:8))
-        read(t_grid_read,*) var_periods
-        if (var_periods == -9999999) then
-           call MOM_error(FATAL, &
-             "MOM_restart: get_time_coordinates: Failed to read the number of periods from "//&
-              trim(t_grid))
-        endif
-        if (var_periods < 1) then
-           call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
-           "variable uses a periodic time axis, and must have a positive "//&
-           "value for the number of periods in "//trim(t_grid))
-        endif
-        if ((num_periods > 0) .and. (var_periods /= num_periods)) then
-           call MOM_error(FATAL, "MOM_restart: get_time_coordinates: "//&
-               "Only one value of the number of periods can be used with t_grid "//trim(t_grid) )
-        endif
-        num_periods = var_periods
-        case ('1') ! Do nothing.
-        case default
-           call MOM_error(WARNING, "MOM_restart: get_time_coordinates: Unrecognized t_grid "//trim(t_grid))
-    end select
+        use_periodic = .true.
+     case ('1') ! Do nothing.
+     case default
+        call MOM_error(WARNING, "MOM_restart: get_time_coordinates: "//&
+                       "Unrecognized t_grid "//trim(t_grid))
+  end select
 end subroutine get_time_coordinates
 
 subroutine check_for_restart_axis(fileObject,axisName)
@@ -1905,91 +1888,97 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_gr
      gridLonT => NULL(), & 
      gridLonB => NULL()
   
-  integer :: num_axes, num_periods=0, var_periods, k
+  integer :: num_axes, num_periods, var_periods, k
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   character(len=40) :: time_units, x_axis_units, y_axis_units
   real, dimension(:), allocatable :: period_val
   character(len=8) :: t_grid, t_grid_read
 
+  if ((trim(axisName) == "Period") .and. .not.(present(t_grid_in))) then 
+      call MOM_error(FATAL,"MOM_restart::write_axis_data: NO argument passed for 't_grid_in', "//&
+                     " which is required to determine the periodic time axis.")
+  endif
+
   if (present(G)) then
-    domain_set = .true. ; Domain => G%Domain
-    gridLatT => G%gridLatT ; gridLatB => G%gridLatB
-    gridLonT => G%gridLonT ; gridLonB => G%gridLonB
-    x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
-    isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
-    IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+     domain_set = .true. ; Domain => G%Domain
+     gridLatT => G%gridLatT ; gridLatB => G%gridLatB
+     gridLonT => G%gridLonT ; gridLonB => G%gridLonB
+     x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
+     isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
+     IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
   elseif (present(dG)) then
-    domain_set = .true. ; Domain => dG%Domain
-    gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
-    gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
-    x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
-    isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
-    IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
-   endif
+     domain_set = .true. ; Domain => dG%Domain
+     gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
+     gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
+     x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
+     isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
+     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+  endif
+  
+  select case (trim(axisName))
+     case ('latq'); call fms2_write_data(fileObject,axisName,gridLatB(JsgB:JegB))
+     case ('lath'); call fms2_write_data(fileObject,axisName,gridLatT(jsg:jeg))
+     case ('lonq'); call fms2_write_data(fileObject,axisName,gridLonB(IsgB:IegB))
+     case ('lonh'); call fms2_write_data(fileObject,axisName,gridLonT(isg:ieg))
+     case ('Layer'); call fms2_write_data(fileObject,axisName,GV%sLayer(1:GV%ke))
+     case ('Interface'); call fms2_write_data(fileObject,axisName,GV%sInterface(1:GV%ke+1))
+     case ('Time') 
+        if (present(timeunit)) then
+        ! Set appropriate units, depending on the value.
+           if (timeunit < 0.0) then
+              time_units = "days" ! The default value.
+           elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+              time_units = "seconds"
+           elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+              time_units = "hours"
+           elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+              time_units = "days"
+           elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+              time_units = "years"
+           else
+              write(time_units,'(es8.2," s")') timeunit
+           endif
+           call fms2_write_data(fileObject,axisName,timeunit)
+        else
+           time_units = "days"
+           call fms2_write_data(fileObject,axisName,'1.0')
+        endif
+     case ('Period')
+        t_grid = adjustl(t_grid_in)
+        if (len_trim(t_grid(2:8)) <= 0) then
+           call MOM_error(FATAL,"MOM_restart::write_axis_data: No periodic axis"//&
+                          "length was specified in "//trim(t_grid)//".")
+        endif
+        num_periods = 0
+        var_periods = -9999999
+        t_grid_read = adjustl(t_grid(2:8))
+        read(t_grid_read,*) var_periods
+        if (var_periods == -9999999) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: Failed to "//&
+                          "read the number of periods from "//trim(t_grid)// ".")
+        endif
+        if (var_periods < 1) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: The number of periods "//&
+                          trim(t_grid)//" must be positive.")
+        endif
+        if ((num_periods > 0) .and. (var_periods /= num_periods)) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: Only one value"//&
+                          " of the number of periods can be used for "//trim(t_grid)//".")
+        endif
 
-   select case (trim(axisName))
-      case ('latq'); call fms2_write_data(fileObject,axisName,gridLatB(JsgB:JegB))
-      case ('lath'); call fms2_write_data(fileObject,axisName,gridLatT(jsg:jeg))
-      case ('lonq'); call fms2_write_data(fileObject,axisName,gridLonB(IsgB:IegB))
-      case ('lonh'); call fms2_write_data(fileObject,axisName,gridLonT(isg:ieg))
-      case ('Layer'); call fms2_write_data(fileObject,axisName,GV%sLayer(1:GV%ke))
-      case ('Interface'); call fms2_write_data(fileObject,axisName,GV%sInterface(1:GV%ke+1))
-      case ('Time'); 
-         if (present(timeunit)) then
-         ! Set appropriate units, depending on the value.
-            if (timeunit < 0.0) then
-               time_units = "days" ! The default value.
-            elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
-               time_units = "seconds"
-            elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
-               time_units = "hours"
-            elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
-               time_units = "days"
-            elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
-               time_units = "years"
-            else
-                write(time_units,'(es8.2," s")') timeunit
-            endif
-            call fms2_write_data(fileObject,axisName,timeunit)
-         else
-            time_units = "days"
-            call fms2_write_data(fileObject,axisName,'1.0')
-         endif
-      case ('Period');
-         t_grid = adjustl(t_grid_in)
-         if (len_trim(t_grid(2:8)) <= 0) then
-            call MOM_error(FATAL,"MOM_restart:: No periodic axis length was specified in "//&
-                           trim(t_grid) // " in the periodic axes")
-         endif
-         var_periods = -9999999
-         t_grid_read = adjustl(t_grid(2:8))
-         read(t_grid_read,*) var_periods
-         if (var_periods == -9999999) then
-             call MOM_error(FATAL, "MOM_restart:: Failed to read the number of periods from "//&
-                            trim(t_grid)// " in the periodic axes.")
-         endif
-         if (var_periods < 1) then
-             call MOM_error(FATAL, "MOM_restart :: The number of periods"//&
-                 trim(t_grid)//" must be positive.")
-         endif
-         if ((num_periods > 0) .and. (var_periods /= num_periods)) then
-            call MOM_error(FATAL, "MOM_restart:: "//&
-            "Only one value of the number of periods can be used for "//trim(t_grid))
-         endif
-
-         num_periods = var_periods
-         if (num_periods <= 1) then
-             call MOM_error(FATAL, "MOM_restart::write_axis_data: num_periods must be at least 1.")
-         endif
-         ! Define a periodic axis with unit labels.
-         allocate(period_val(num_periods))
-         do k=1,num_periods
-            period_val(k) = real(k)
-         enddo
-          ! call mpp_write_meta(unit, axis_periodic, name="Period", units="nondimensional", &
-          !longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
-         call fms2_write_data(fileObject,axisName,period_val)
-         deallocate(period_val)
+        num_periods = var_periods
+        if (num_periods <= 1) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: num_periods must be at least 1.")
+        endif
+        ! Define a periodic axis with unit labels.
+        allocate(period_val(num_periods))
+        do k=1,num_periods
+           period_val(k) = real(k)
+        enddo
+        ! call mpp_write_meta(unit, axis_periodic, name="Period", units="nondimensional", &
+        !longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
+        call fms2_write_data(fileObject,axisName,period_val)
+        deallocate(period_val)
    end select
 !mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
 !                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
