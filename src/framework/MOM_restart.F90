@@ -320,7 +320,6 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, longname, un
   integer :: horgrid_position = 1
   integer :: num_axes=0
              
-  
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
@@ -927,7 +926,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
-  integer :: str_split_index = 1
+  integer :: str_split_index, ext_index
+  type(MOM_restart_CS) :: fileObj
+  logical :: file_open_success
+  logical :: use_latq, use_lonq, use_lath,use_lonh, &
+             use_layer, use_int, use_time, use_period
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -943,14 +946,46 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   nz = 1 ; if (present(GV)) nz = GV%ke
 
   restart_time = time_type_to_real(time) / 86400.0
- 
-  if (present(filename)) restartname = trim(filename)
-  ! remove .res. from name because fms2 adds it
-  str_split_index = SCAN(restartname,'.res.')
-  if (str_split_index > 1) then 
-     restartname = trim(CS%restartfile(1:str_split_index-1))
+
+  use_lath = .false.
+  use_lonh = .false.
+  use_latq = .false.
+  use_lonq = .false.
+  use_layer = .false.
+  use_int = .false.
+  use_time = .false.
+  use_period = .false.
+  pos = 1
+  restartname = " "
+  restartpath = " "
+  str_split_index = 1
+  ext_index = 1
+
+  if (present(filename)) then 
+     ! remove .res. from name because fms2 adds it
+     str_split_index = INDEX(filename,'.res.')
+     ext_index = INDEX(filename,'.nc')
+     if ((str_split_index > 1) .and. (ext_index >1)) then 
+        restartname = trim(filename(1:str_split_index-1))&
+        //trim(filename(ext_index:ext_index+2))
+     elseif ((str_split_index > 1 .and. (ext_index <= 1))
+        restartname = trim(filename(1:str_split_index-1))
+     else
+        restartname = trim(filename)
+     endif
+     if (ext_index > 1) then
+     
   else
-     restartname = trim(CS%restartfile)
+     str_split_index = INDEX(filename,'.res.')
+     ext_index = INDEX(filename,'.nc')
+     if ((str_split_index > 1) .and. (ext_index >1)) then 
+        restartname=trim(CS%restartfile(1:str_split_index-1))&
+        //trim(filename(ext_index:ext_index+2))
+     elseif ((str_split_index > 1 .and. (ext_index <= 1))
+        restartname=trim(CS%restartfile(1:str_split_index-1))
+     else
+        restartname=trim(CS%restartfile)
+     endif
   endif
 
   if (PRESENT(time_stamped)) then ; if (time_stamped) then
@@ -969,132 +1004,173 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     endif
     restartname = trim(CS%restartfile)//trim(restartname)
   endif ; endif
-
+ 
   next_var = 1
   do while (next_var <= CS%novars )
-    start_var = next_var
-    size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
-
-    do m=start_var,CS%novars
-      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                         z_grid=z_grid, t_grid=t_grid, caller="save_restart")
-      if (hor_grid == '1') then
-        var_sz = 8
-      else
-        var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
-      endif
-      select case (z_grid)
-        case ('L') ; var_sz = var_sz * nz
-        case ('i') ; var_sz = var_sz * (nz+1)
-      end select
-      t_grid = adjustl(t_grid)
-      if (t_grid(1:1) == 'p') then
-        if (len_trim(t_grid(2:8)) > 0) then
-          var_periods = -1
-          t_grid_read = adjustl(t_grid(2:8))
-          read(t_grid_read,*) var_periods
-          if (var_periods > 1) var_sz = var_sz * var_periods
+     start_var = next_var
+     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+     
+     do m=start_var,CS%novars
+        call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                           z_grid=z_grid, t_grid=t_grid, caller="save_restart")
+        if (hor_grid == '1') then
+           var_sz = 8
+        else
+           var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
         endif
-      endif
+        select case (z_grid)
+           case ('L') ; var_sz = var_sz * nz
+           case ('i') ; var_sz = var_sz * (nz+1)
+        end select
+        t_grid = adjustl(t_grid)
+        if (t_grid(1:1) == 'p') then
+           if (len_trim(t_grid(2:8)) > 0) then
+              var_periods = -1
+              t_grid_read = adjustl(t_grid(2:8))
+              read(t_grid_read,*) var_periods
+              if (var_periods > 1) var_sz = var_sz * var_periods
+           endif
+        endif
 
-      if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
-        size_in_file = size_in_file + var_sz
-      else ; exit
-      endif
+        if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
+           size_in_file = size_in_file + var_sz
+        else ; exit
+        endif
 
-    enddo
-    next_var = m
+     enddo
+     next_var = m
 
-    !query fms_io if there is a filename_appendix (for ensemble runs)
-    !call get_filename_appendix(filename_appendix)
-    !if (len_trim(filename_appendix) > 0) then
-    !  length = len_trim(restartname)
-    !  if (restartname(length-2:length) == '.nc') then
-    !    restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-    !  else
-    !    restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-    !  endif
-    !endif
+     !query fms_io if there is a filename_appendix (for ensemble runs)
+     call get_filename_appendix(filename_appendix)
+     if (len_trim(filename_appendix) > 0) then
+        length = len_trim(restartname)
+        if (restartname(length-2:length) == '.nc') then
+           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+        else
+           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+        endif
+     endif
 
-    restartpath = trim(directory)// trim(restartname)
+     restartpath = trim(directory)//trim(restartname)
 
-    if (num_files < 10) then
-      write(suffix,'("_",I1)') num_files
-    else
-      write(suffix,'("_",I2)') num_files
-    endif
+     if (num_files < 10) then
+        write(suffix,'("_",I1)') num_files
+     else
+        write(suffix,'("_",I2)') num_files
+     endif
 
-    if (num_files > 0) restartpath = trim(restartpath) // trim(suffix)
+     if (num_files > 0) restartpath = trim(restartpath) // trim(suffix)
 
-    do m=start_var,next_var-1
-      vars(m-start_var+1) = CS%restart_field(m)%vars
-    enddo
-    call query_vardesc(vars(1), t_grid=t_grid, hor_grid=hor_grid, caller="save_restart")
-    t_grid = adjustl(t_grid)
-    if (t_grid(1:1) /= 'p') &
-      call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
-    select case (hor_grid)
-      case ('q') ; pos = CORNER
-      case ('h') ; pos = CENTER
-      case ('u') ; pos = EAST_FACE
-      case ('v') ; pos = NORTH_FACE
-      case ('Bu') ; pos = CORNER
-      case ('T')  ; pos = CENTER
-      case ('Cu') ; pos = EAST_FACE
-      case ('Cv') ; pos = NORTH_FACE
-      case ('1') ; pos = 0
-      case default ; pos = 0
-    end select
+     do m=start_var,next_var-1
+        vars(m-start_var+1) = CS%restart_field(m)%vars
+        call query_vardesc(vars(m-start_var+1), t_grid=t_grid, hor_grid=hor_grid,z_grid=z_grid, &
+                           caller="save_restart")
+        call get_horizontal_grid_coordinates(hor_grid,use_lath,use_lonh,use_latq,use_lonq,pos)
+        call get_vertical_grid_coordinates(z_grid,use_layer,use_int)
+        call get_time_coordinates(t_grid,use_time,use_period)
+     enddo
+     !call query_vardesc(vars(1), t_grid=t_grid, hor_grid=hor_grid, caller="save_restart")
+     !t_grid = adjustl(t_grid)
+     !if (t_grid(1:1) /= 'p') &
+     !   call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
+     !select case (hor_grid)
+     !   case ('q') ; pos = CORNER
+     !   case ('h') ; pos = CENTER
+     !   case ('u') ; pos = EAST_FACE
+     !   case ('v') ; pos = NORTH_FACE
+     !   case ('Bu') ; pos = CORNER
+     !   case ('T')  ; pos = CENTER
+      !  case ('Cu') ; pos = EAST_FACE
+     !   case ('Cv') ; pos = NORTH_FACE
+     !   case ('1') ; pos = 0
+      !  case default ; pos = 0
+     !end select
+     ! write the axis (dimension) data to the restart file
+     if (use_lath) then
+        call write_axis_data(CS%fileObj,'lath',G=G)
+     endif
+     if (use_lonh) then
+        call write_axis_data(CS%fileObj,'lonh',G=G)
+     endif
+     if (use_latq) then
+        call write_axis_data(CS%fileObj,'latq',G=G)
+     endif
+     if (use_lonq) then
+        call write_axis_data(CS%fileObj,'lonq',G=G)
+     endif
+     if (use_layer) then
+        call write_axis_data(CS%fileObj,'Layer',GV=GV)
+     endif
+     if (use_int) then
+        call write_axis_data(CS%fileObj,'Interface',GV=GV)
+     endif
+     if (use_time) then
+        call write_axis_data(CS%fileObj,'Time',restart_time_in_days=restart_time)
+     endif
+     if (use_period) then
+        call write_axis_data(CS%fileObj,'Period',t_grid_in=t_grid)
+     endif
+     !Prepare the checksum of the restart fields to be written to restart files
+     call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+     do m=start_var,next_var-1
+        if (associated(CS%var_ptr3d(m)%p)) then
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+        elseif (associated(CS%var_ptr2d(m)%p)) then
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+        elseif (associated(CS%var_ptr4d(m)%p)) then
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+        elseif (associated(CS%var_ptr1d(m)%p)) then
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+        elseif (associated(CS%var_ptr0d(m)%p)) then
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+        endif
+     enddo
 
-    !Prepare the checksum of the restart fields to be written to restart files
-    call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
-    do m=start_var,next_var-1
-      if (associated(CS%var_ptr3d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-      elseif (associated(CS%var_ptr2d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-      elseif (associated(CS%var_ptr4d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-      elseif (associated(CS%var_ptr1d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
-      elseif (associated(CS%var_ptr0d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
-      endif
-    enddo
+     !if (CS%parallel_restartfiles) then
+     !   call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
+     !                    fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
+     !else
+     !   call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
+     !                    fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
+     !endif
+     file_open_success = .false.
+     file_open_success = fms2_open_file(CS%fileObj, restartpath,"write", &
+                                        G%Domain%mpp_domain,is_restart=.true.)
+     if (.not. file_open_success) then
+        call MOM_error(FATAL,"MOM_restart::save_restart: Failed to open file "//restartpath)
+     endif
+     
+     do m=start_var,next_var-1     
+        if (associated(CS%var_ptr3d(m)%p)) then
+           !call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+           !                 CS%var_ptr3d(m)%p, restart_time)
+           call fms2_write_data(CS%fileObj,vars(m)%name, CS%var_ptr3d(m)%p)
+        elseif (associated(CS%var_ptr2d(m)%p)) then
+           !call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+           !                 CS%var_ptr2d(m)%p, restart_time)
+           call fms2_write_data(CS%fileObj,vars(m)%name, CS%var_ptr2d(m)%p)
+        elseif (associated(CS%var_ptr4d(m)%p)) then
+           !call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
+           !                 CS%var_ptr4d(m)%p, restart_time)
+           call fms2_write_data(CS%fileObj,vars(m)%name, CS%var_ptr4d(m)%p)
+        elseif (associated(CS%var_ptr1d(m)%p)) then
+           !call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
+           !                 restart_time)
+           call fms2_write_data(CS%fileObj,vars(m)%name, CS%var_ptr1d(m)%p)
+        elseif (associated(CS%var_ptr0d(m)%p)) then
+           !call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
+           !                 restart_time)
+           call fms2_write_data(CS%fileObj,vars(m)%name, CS%var_ptr0d(m)%p)
+        endif
+        ! write the checksum
+        call fms2_register_variable_attribute(CS%fileObj,vars(m)%name,'checksum',check_val(m))      
+     enddo
 
-    if (CS%parallel_restartfiles) then
-      call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-                       fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
-    else
-      call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-                       fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
-    endif
-
-    do m=start_var,next_var-1
-
-      if (associated(CS%var_ptr3d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr3d(m)%p, restart_time)
-      elseif (associated(CS%var_ptr2d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr2d(m)%p, restart_time)
-      elseif (associated(CS%var_ptr4d(m)%p)) then
-        call write_field(unit,fields(m-start_var+1), G%Domain%mpp_domain, &
-                         CS%var_ptr4d(m)%p, restart_time)
-      elseif (associated(CS%var_ptr1d(m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
-                         restart_time)
-      elseif (associated(CS%var_ptr0d(m)%p)) then
-        call write_field(unit, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
-                         restart_time)
-      endif
-    enddo
-
-    call close_file(unit)
-
-    num_files = num_files+1
-
+     !call close_file(unit)
+     call fms2_close_file(CS%fileObj)
+     num_files = num_files+1
   enddo
+
 end subroutine save_restart
 
 !> restore_state reads the model state from previously generated files.  All
@@ -1863,10 +1939,10 @@ end subroutine check_for_restart_axis
 !      integer :: natt
 !      type(atttype), pointer :: Att(:) ! axis attributes
 !   end type axistype
-subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_grid_in)
+subroutine write_axis_data(fileObject, axisName, G, dG, GV, timeunit, & 
+                           restart_time_in_days, t_grid_in)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObject !< file object returned by prior call to fms2_open_file
   character(len=*), intent(in) :: axisName
-  character(len=*), intent(in) :: axisUnits
   type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                     !! is required if the new file uses any
                                                     !! horizontal grid axes.
@@ -1877,6 +1953,8 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_gr
                                                      !! vertical grid axes.
   real, optional, intent(in) :: timeunit !< length of the units for time [s]. The
                                           !! default value is 86400.0, for 1 day.
+  real, optional, intent(in) :: restart_time_in_days !< restart time in days
+
   character(len=*), optional, intent(in) :: t_grid_in
   ! local
   type(MOM_domain_type), pointer :: Domain => NULL()
@@ -1890,9 +1968,10 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_gr
   
   integer :: num_axes, num_periods, var_periods, k
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
-  character(len=40) :: time_units, x_axis_units, y_axis_units
+  character(len=40) :: axis_units,x_axis_units, y_axis_units, time_units
   real, dimension(:), allocatable :: period_val
   character(len=8) :: t_grid, t_grid_read
+  charater(len=50) :: long_name
 
   if ((trim(axisName) == "Period") .and. .not.(present(t_grid_in))) then 
       call MOM_error(FATAL,"MOM_restart::write_axis_data: NO argument passed for 't_grid_in', "//&
@@ -1916,12 +1995,30 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_gr
   endif
   
   select case (trim(axisName))
-     case ('latq'); call fms2_write_data(fileObject,axisName,gridLatB(JsgB:JegB))
-     case ('lath'); call fms2_write_data(fileObject,axisName,gridLatT(jsg:jeg))
-     case ('lonq'); call fms2_write_data(fileObject,axisName,gridLonB(IsgB:IegB))
-     case ('lonh'); call fms2_write_data(fileObject,axisName,gridLonT(isg:ieg))
-     case ('Layer'); call fms2_write_data(fileObject,axisName,GV%sLayer(1:GV%ke))
-     case ('Interface'); call fms2_write_data(fileObject,axisName,GV%sInterface(1:GV%ke+1))
+     case ('latq')
+        call fms2_write_data(fileObject,axisName,gridLatB(JsgB:JegB))
+        long_name = 'Latitude'
+        axis_units = y_axis_units
+     case ('lath')
+        call fms2_write_data(fileObject,axisName,gridLatT(jsg:jeg))
+        long_name = 'Latitude'
+        axis_units = y_axis_units
+     case ('lonq')
+        call fms2_write_data(fileObject,axisName,gridLonB(IsgB:IegB))
+        long_name = 'Longitude'
+        axis_units = x_axis_units
+     case ('lonh')
+        call fms2_write_data(fileObject,axisName,gridLonT(isg:ieg))
+        long_name = 'Longitude'
+        axis_units = x_axis_units
+     case ('Layer')
+        call fms2_write_data(fileObject,axisName,GV%sLayer(1:GV%ke))
+        long_name = 'Layer'
+        axis_units = trim(GV%zAxisUnits)
+     case ('Interface')
+        call fms2_write_data(fileObject,axisName,GV%sInterface(1:GV%ke+1))
+        longname="Interface "//trim(GV%zAxisLongName)
+        axis_units = trim(GV%zAxisUnits)
      case ('Time') 
         if (present(timeunit)) then
         ! Set appropriate units, depending on the value.
@@ -1938,11 +2035,16 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_gr
            else
               write(time_units,'(es8.2," s")') timeunit
            endif
-           call fms2_write_data(fileObject,axisName,timeunit)
+           units = time_units
         else
-           time_units = "days"
+           units = "days"
+        endif
+        if (present(restart_time)) then
+           call fms2_write_data(fileObject,axisName,restart_time)
+        else
            call fms2_write_data(fileObject,axisName,'1.0')
         endif
+        long_name = "Time"
      case ('Period')
         t_grid = adjustl(t_grid_in)
         if (len_trim(t_grid(2:8)) <= 0) then
@@ -1979,9 +2081,12 @@ subroutine write_axis_data(fileObject,axisName,axisUnits,G,dG,GV, timeunit, t_gr
         !longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
         call fms2_write_data(fileObject,axisName,period_val)
         deallocate(period_val)
+        units = "nondimensional"
+        long_name="Periods for cyclical varaiables"
    end select
-!mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
-!                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
+   ! write attributes
+   call fms2_register_variable_att(fileObject,axisName,"units",axis_units)
+   call fms2_register_variable_att(fileObject,axisName,"longname",long_name)
 
 end subroutine write_axis_data
 
