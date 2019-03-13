@@ -669,7 +669,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-  !$OMP parallel do default(private) shared(G,GV,CS,visc,Isq,Ieq,nz,u,h,forces,hML_u, &
+  !$OMP parallel do default(private) shared(G,GV,US,CS,visc,Isq,Ieq,nz,u,h,forces,hML_u, &
   !$OMP                                     OBC,h_neglect,dt,I_valBL,Kv_u) &
   !$OMP                     firstprivate(i_hbbl)
   do j=G%Jsc,G%Jec
@@ -836,7 +836,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
 
   ! Now work on v-points.
-  !$OMP parallel do default(private) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
+  !$OMP parallel do default(private) shared(G,GV,CS,US,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
   !$OMP                                  OBC,h_neglect,dt,I_valBL,Kv_v) &
   !$OMP                     firstprivate(i_hbbl)
   do J=Jsq,Jeq
