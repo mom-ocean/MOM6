@@ -815,7 +815,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
 
         ! simple way to limit this coeff
-        GME_coeff = MIN(GME_coeff,1.0E4)
+        GME_coeff = MIN(GME_coeff,1.0E5)
 
         if (CS%id_GME_coeff_h>0) GME_coeff_h(i,j,k) = GME_coeff
 
@@ -1013,7 +1013,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
 
         ! simple way to limit this coeff
-        GME_coeff = MIN(GME_coeff,1.0E4)
+        GME_coeff = MIN(GME_coeff,1.0E5)
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
         str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
@@ -1946,7 +1946,7 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
   integer :: i, j, k, s
 
   !do s=1,CS%n_smooth
-  do s=1,1
+  do s=1,5
 
     ! Update halos
     if (present(GME_flux_h)) then
