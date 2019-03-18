@@ -1709,7 +1709,7 @@ end subroutine hor_visc_end
 !!
 !! In general, the horizontal stress tensor can be written as
 !! \f[
-!! \boldsymbol{\sigma} =
+!! {\bf \sigma} =
 !! \begin{pmatrix}
 !! \frac{1}{2} \left( \sigma_D + \sigma_T \right) & \frac{1}{2} \sigma_S \\\\
 !! \frac{1}{2} \sigma_S & \frac{1}{2} \left( \sigma_D - \sigma_T \right)
@@ -1738,7 +1738,7 @@ end subroutine hor_visc_end
 !! calculations of the strain tensor in the code. Therefore the horizontal stress
 !! tensor can be considered to be
 !! \f[
-!! \boldsymbol{\sigma} =
+!! {\bf \sigma} =
 !! \begin{pmatrix}
 !! \frac{1}{2} \sigma_T & \frac{1}{2} \sigma_S \\\\
 !! \frac{1}{2} \sigma_S & - \frac{1}{2} \sigma_T
@@ -1758,7 +1758,7 @@ end subroutine hor_visc_end
 !!
 !! The accelerations resulting form the divergence of the stress tensor are
 !! \f{eqnarray*}{
-!! \widehat{\boldsymbol x} \cdotp \left( \boldsymbol{\nabla}\cdotp \boldsymbol{\sigma} \right)
+!! \hat{\bf x} \cdot \left( \nabla \cdot {\bf \sigma} \right)
 !! & = &
 !! \partial_x \left( \frac{1}{2} \sigma_T \right)
 !! + \partial_y \left( \frac{1}{2} \sigma_S \right)
@@ -1767,7 +1767,7 @@ end subroutine hor_visc_end
 !! \partial_x \left( \kappa_h \dot{e}_T \right)
 !! + \partial_y \left( \kappa_h \dot{e}_S \right)
 !! \\\\
-!! \widehat{\boldsymbol y} \cdotp \left( \boldsymbol{\nabla}\cdotp \boldsymbol{\sigma} \right)
+!! \hat{\bf y} \cdot \left( \nabla \cdot {\bf \sigma} \right)
 !! & = &
 !! \partial_x \left( \frac{1}{2} \sigma_S \right)
 !! + \partial_y \left( \frac{1}{2} \sigma_T \right)
@@ -1780,12 +1780,12 @@ end subroutine hor_visc_end
 !!
 !! The form of the Laplacian viscosity in general coordinates is:
 !! \f{eqnarray*}{
-!! \widehat{\boldsymbol x} \cdotp \left( \boldsymbol{\nabla}\cdotp \sigma \right)
+!! \hat{\bf x} \cdot \left( \nabla \cdot \sigma \right)
 !! & = &
 !! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_T \right)
 !! + \partial_y \left( \kappa_h h \dot{e}_S \right) \right]
 !! \\\\
-!! \widehat{\boldsymbol y} \cdotp \left( \boldsymbol{\nabla}\cdotp \sigma \right)
+!! \hat{\bf y} \cdot \left( \nabla \cdot \sigma \right)
 !! & = &
 !! \frac{1}{h} \left[ \partial_x \left( \kappa_h h \dot{e}_S \right)
 !! - \partial_y \left( \kappa_h h \dot{e}_T \right) \right]
@@ -1805,7 +1805,7 @@ end subroutine hor_visc_end
 !! latitude, \f$\kappa_{\phi}(x,y) = \kappa_{\pi/2} |\sin(\phi)|^n\f$.
 !!   - A dynamic Smagorinsky viscosity, \f$\kappa_{Sm}(x,y,t) = C_{Sm} \Delta^2 \sqrt{\dot{e}_T^2 + \dot{e}_S^2}\f$.
 !!   - A dynamic Leith viscosity, \f$\kappa_{Lth}(x,y,t) =
-!!                                    C_{Lth} \Delta^3 \sqrt{|\boldsymbol{\nabla}\zeta|^2 + |\boldsymbol{\nabla}\dot{e}_D|^2}\f$.
+!!                                    C_{Lth} \Delta^3 \sqrt{|\nabla \zeta|^2 + |\nabla \dot{e}_D|^2}\f$.
 !!
 !! A maximum stable viscosity, \f$\kappa_{max}(x,y)\f$ is calculated based on the
 !! grid-spacing and time-step and used to clip calculated viscosities.
@@ -1887,7 +1887,7 @@ end subroutine hor_visc_end
 !! \f$n_2 = 0\f$ and the cross terms vanish. The accelerations in this aligned limit
 !! with constant coefficients become
 !! \f{eqnarray*}{
-!! \widehat{\boldsymbol x} \cdotp \boldsymbol{\nabla}\cdotp \boldsymbol{\sigma}
+!! \hat{\bf x} \cdot \nabla \cdot {\bf \sigma}
 !! & = &
 !! \partial_x \left( \left( \kappa_h + \frac{1}{2} \kappa_a \right) \dot{e}_T \right)
 !! + \partial_y \left( \kappa_h \dot{e}_S \right)
@@ -1897,7 +1897,7 @@ end subroutine hor_visc_end
 !! + \kappa_h \partial_{yy} u
 !! - \frac{1}{2} \kappa_a \partial_x \left( \partial_x u + \partial_y v \right)
 !! \\\\
-!! \widehat{\boldsymbol y} \cdotp \boldsymbol{\nabla}\cdotp \boldsymbol{\sigma}
+!! \hat{\bf y} \cdot \nabla \cdot {\bf \sigma}
 !! & = &
 !! \partial_x \left( \kappa_h \dot{e}_S \right)
 !! - \partial_y \left( \left( \kappa_h + \frac{1}{2} \kappa_a \right) \dot{e}_T \right)
@@ -1947,7 +1947,7 @@ end subroutine hor_visc_end
 !! The tendency for the x-component of the divergence of stress is stored in
 !! variable <code>diffu</code> and discretized as
 !! \f[
-!! \widehat{\boldsymbol x} \cdotp \left( \boldsymbol{\nabla}\cdotp \boldsymbol{\sigma} \right) =
+!! \hat{\bf x} \cdot \left( \nabla \cdot {\bf \sigma} \right) =
 !! \frac{1}{A \overline{h}^i} \left(
 !! \frac{1}{\Delta y} \delta_i \left( h \Delta y^2 \kappa_h \dot{e}_T \right) +
 !! \frac{1}{\Delta x} \delta_j \left( \tilde{h}^{ij} \Delta x^2 \kappa_h \dot{e}_S \right)
@@ -1958,7 +1958,7 @@ end subroutine hor_visc_end
 !! The tendency for the y-component of the divergence of stress is stored in
 !! variable <code>diffv</code> and discretized as
 !! \f[
-!! \widehat{\boldsymbol y} \cdotp \left( \boldsymbol{\nabla}\cdotp \boldsymbol{\sigma} \right) =
+!! \hat{\bf y} \cdot \left( \nabla \cdot {\bf \sigma} \right) =
 !! \frac{1}{A \overline{h}^j} \left(
 !! \frac{1}{\Delta y} \delta_i \left( \tilde{h}^{ij} \Delta y^2 A_M \dot{e}_S \right)
 !! - \frac{1}{\Delta x} \delta_j \left( h \Delta x^2 A_M \dot{e}_T \right)
