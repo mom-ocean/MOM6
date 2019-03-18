@@ -33,7 +33,7 @@ The non-divergence of flow allows a total derivative to be re-written in flux fo
 The above equations of motion can thus be written as:
 
 .. math::
-  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdotp \boldsymbol{\underline{\tau}} ,\\
+  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \frac{\rho}{\rho_o}\boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdotp \boldsymbol{\underline{\tau}} ,\\
   \rho \partial_z \Phi + \partial_z p &= 0 ,\\
   \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \partial_z w &= 0 ,\\
   \partial_t \theta + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \partial_z ( w \theta ) &= \boldsymbol{\nabla} \cdotp \boldsymbol{Q}_\theta ,\\

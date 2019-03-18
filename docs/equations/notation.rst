@@ -35,7 +35,7 @@ component of velocity normal to the vertical.
 The gradient operator without a suffix is three dimensional:
 
 .. math::
-  \boldsymbol{\nabla} = ( \boldsymbol{\nabla}_z, \boldsymbol{\nabla}_z  ) .
+  \boldsymbol{\nabla} = ( \boldsymbol{\nabla}_z, \partial_z  ) .
 
 but a suffix indicates a lateral gradient along a surface of constant property indicated by the suffix:
 

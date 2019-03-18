@@ -5,7 +5,7 @@ The semi-discrete, vertically integrated, Boussinesq hydrostatic equations of
 motion in general-coordinate :math:`r` are
 
 .. math::
-  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdot \boldsymbol{\underline{\tau}} ,\\
+  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \frac{\rho}{\rho_o}\boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdot \boldsymbol{\underline{\tau}} ,\\
   \rho \delta_k \Phi + \delta_k p &= 0 ,\\
   \partial_t h + \nabla_r \cdot ( h \boldsymbol{u} ) + \delta_k ( z_r \dot{r} ) &= 0 ,\\
   \partial_t (h \theta) + \nabla_r \cdot ( h \boldsymbol{u} \theta ) + \delta_k ( z_r \dot{r} \theta ) &= \boldsymbol{\nabla} \cdot \boldsymbol{Q}_\theta ,\\
@@ -17,7 +17,7 @@ that in the first (Lagrangian) phase, regardless of the current mesh (or coordin
 :math:`r`) we integrate the equations forward with :math:`\dot{r}=0`, i.e.:
 
 .. math::
-  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdot \boldsymbol{\underline{\tau}} ,\\
+  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \wedge \boldsymbol{u} + \frac{\rho}{\rho_o}\boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\nabla} \cdot \boldsymbol{\underline{\tau}} ,\\
   \rho \delta_k \Phi + \delta_k p &= 0 ,\\
   \partial_t h + \nabla_r \cdot ( h \boldsymbol{u} ) &= 0 ,\\
   \partial_t (h \theta) + \nabla_r \cdot ( h \boldsymbol{u} \theta ) &= \boldsymbol{\nabla} \cdot \boldsymbol{Q}_\theta ,\\
