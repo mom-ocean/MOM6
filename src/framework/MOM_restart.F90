@@ -436,7 +436,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   ! 2. axes for a given variable are determined
   ! 3. axes metadata are associated with variable by referencing the axis structure
     
-  call fms2_register_restart_field(CS%fileObj, name, f_ptr,dimensions=dimNames,domain_position=horgrid_position)
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
   if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
@@ -465,17 +465,134 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
   ! local
-  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
-  type(MOM_restart_CS) :: fileObj ! fms2 data structure
   type(vardesc) :: vd
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_3d: Module must be initialized before "//&
+  type(MOM_restart_CS) :: fileObj
+  logical :: file_open_success = .false.
+  character(len=200) :: file_Name_1, file_Name_2
+  integer :: str_split_index = 1, str_end_index = 1
+  character(len=50) :: dimNames(4)
+  character(len=200) :: mesg
+  logical :: use_lath = .false., use_lonh = .false., &
+             use_latq = .false., use_lonq = .false., &
+             use_layer = .false., use_int = .false., &
+             use_time = .false., use_periodic = .false.
+  integer :: horgrid_position = 1
+  integer :: num_axes=0
+  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: &
+    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+    gridLatB => NULL(), & ! the purpose of labeling the output axes.
+    gridLonT => NULL(), gridLonB => NULL()
+  integer :: axis_length
+          
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
+      "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
+
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
+  axis_length = 1
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
+  str_split_index = INDEX(file_Name_1,'.res')
+  str_end_index = INDEX(file_Name_1,'.nc') 
+  if (str_split_index > 1) then 
+     if (str_end_index > 1 ) then
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
+     else
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
+     endif          
+  else 
+      file_Name_2 = trim(file_Name_1)
+  endif
+
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS)
+  ! open the restart file for domain-decomposed write
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  if (.not. file_open_success) then 
+     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
+     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+  endif
+                                          
+  ! check if global axis variables are registered in file, and register them if they are not
+  ! 4d variables are lon x lat x vertical level x time
+  if (present(hor_grid)) then
+     num_axes = 2
+     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
+     if (use_lonh) then
+        axis_length = size(gridLonT(isg:ieg))
+        call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
+        write(dimNames(1),"(a)") 'lonh'
+     endif
+     if (use_lonq) then
+        axis_length = size(gridLonB(IsgB:IegB))
+        call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
+        write(dimNames(1),"(a)") 'lonq'
+     endif
+     
+     if (use_lath) then
+        axis_length = size(gridLatT(jsg:jeg))
+        call check_for_restart_axis(CS%fileObj,'lath', axis_length)
+        write(dimNames(2),"(a)") 'lath'
+     endif        
+     if (use_latq) then
+        axis_length = size(gridLatB(JsgB:JegB))
+        call check_for_restart_axis(CS%fileObj,'latq', axis_length)
+        write(dimNames(2),"(a)") 'latq'
+     endif
+  endif
+
+  if (present(z_grid)) then
+     call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+     num_axes = num_axes+1
+     if (use_layer) then
+        axis_length = size(GV%sLayer(1:GV%ke))
+        call check_for_restart_axis(CS%fileObj,'Layer', axis_length)
+   
+        write(dimNames(num_axes),"(a)") 'Layer'
+     endif
+     if (use_int) then
+        axis_length = size(GV%sInterface(1:GV%ke+1))
+        call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
+        write(dimNames(num_axes),"(a)") 'Interface'
+     endif  
+  endif
+  
+  if (present(t_grid)) then
+     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+     num_axes = num_axes+1
+     if (use_time) then
+        call check_for_restart_axis(CS%fileObj,'Time',1)
+        write(dimNames(num_axes),'(a)') 'Time'
+     endif
+     if (use_periodic) then
+        call check_for_restart_axis(CS%fileObj,'Period',1)
+        write(dimNames(num_axes),"(a)") 'Period'
+     endif
+  endif
+ 
+  ! register the restart field
+  call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS) 
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
+  ! register variable attributes
+  if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
+  if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
+
+  call fms2_close_file(CS%fileObj)
 
 end subroutine register_restart_field_3d
 
@@ -498,18 +615,133 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
   ! local
   type(vardesc) :: vd
-  character(len=8) :: Zgrid
-  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
-  type(MOM_restart_CS) :: fileObj ! fms2 data structure
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_2d: Module must be initialized before "//&
+  type(MOM_restart_CS) :: fileObj
+  logical :: file_open_success = .false.
+  character(len=200) :: file_Name_1, file_Name_2
+  integer :: str_split_index = 1, str_end_index = 1
+  character(len=50) :: dimNames(4)
+  character(len=200) :: mesg
+  logical :: use_lath = .false., use_lonh = .false., &
+             use_latq = .false., use_lonq = .false., &
+             use_layer = .false., use_int = .false., &
+             use_time = .false., use_periodic = .false.
+  integer :: horgrid_position = 1
+  integer :: num_axes=0
+  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: &
+    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+    gridLatB => NULL(), & ! the purpose of labeling the output axes.
+    gridLonT => NULL(), gridLonB => NULL()
+  integer :: axis_length
+          
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
+      "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
-  zgrid = '1' ; if (present(z_grid)) zgrid = z_grid
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
-                z_grid=zgrid, t_grid=t_grid)
 
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
+  axis_length = 1
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
+  str_split_index = INDEX(file_Name_1,'.res')
+  str_end_index = INDEX(file_Name_1,'.nc') 
+  if (str_split_index > 1) then 
+     if (str_end_index > 1 ) then
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
+     else
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
+     endif          
+  else 
+      file_Name_2 = trim(file_Name_1)
+  endif
+
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  ! open the restart file for domain-decomposed write
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  if (.not. file_open_success) then 
+     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
+     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+  endif
+                                          
+  ! check if global axis variables are registered in file, and register them if they are not
+  ! 4d variables are lon x lat x vertical level x time
+  if (present(hor_grid)) then
+     num_axes = 2
+     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
+     if (use_lonh) then
+        axis_length = size(gridLonT(isg:ieg))
+        call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
+        write(dimNames(1),"(a)") 'lonh'
+     endif
+     if (use_lonq) then
+        axis_length = size(gridLonB(IsgB:IegB))
+        call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
+        write(dimNames(1),"(a)") 'lonq'
+     endif
+     
+     if (use_lath) then
+        axis_length = size(gridLatT(jsg:jeg))
+        call check_for_restart_axis(CS%fileObj,'lath', axis_length)
+        write(dimNames(2),"(a)") 'lath'
+     endif        
+     if (use_latq) then
+        axis_length = size(gridLatB(JsgB:JegB))
+        call check_for_restart_axis(CS%fileObj,'latq', axis_length)
+        write(dimNames(2),"(a)") 'latq'
+     endif
+  endif
+
+  if (present(z_grid)) then
+     call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+     num_axes = num_axes+1
+     if (use_layer) then
+        axis_length = size(GV%sLayer(1:GV%ke))
+        call check_for_restart_axis(CS%fileObj,'Layer', axis_length)
+   
+        write(dimNames(num_axes),"(a)") 'Layer'
+     endif
+     if (use_int) then
+        axis_length = size(GV%sInterface(1:GV%ke+1))
+        call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
+        write(dimNames(num_axes),"(a)") 'Interface'
+     endif  
+  endif
+  
+  if (present(t_grid)) then
+     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+     num_axes = num_axes+1
+     if (use_time) then
+        call check_for_restart_axis(CS%fileObj,'Time',1)
+        write(dimNames(num_axes),'(a)') 'Time'
+     endif
+     if (use_periodic) then
+        call check_for_restart_axis(CS%fileObj,'Period',1)
+        write(dimNames(num_axes),"(a)") 'Period'
+     endif
+  endif
+ 
+  ! register the restart field
   call register_restart_field_ptr2d(f_ptr, vd, mandatory, CS)
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
+  ! register variable attributes
+  if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
+  if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
+
+  call fms2_close_file(CS%fileObj)
 
 end subroutine register_restart_field_2d
 
@@ -531,18 +763,134 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
   ! local 
   type(vardesc) :: vd
+  type(MOM_restart_CS) :: fileObj
   character(len=8) :: hgrid
-  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
-  type(MOM_restart_CS) :: fileObj ! fms2 data structure
+  logical :: file_open_success = .false.
+  character(len=200) :: file_Name_1, file_Name_2
+  integer :: str_split_index = 1, str_end_index = 1
+  character(len=200) :: mesg
+  logical :: use_lath = .false., use_lonh = .false., &
+             use_latq = .false., use_lonq = .false., &
+             use_layer = .false., use_int = .false., &
+             use_time = .false., use_periodic = .false.
+  integer :: horgrid_position = 1
+  integer :: num_axes=0
+  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: &
+    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+    gridLatB => NULL(), & ! the purpose of labeling the output axes.
+    gridLonT => NULL(), gridLonB => NULL()
+  integer :: axis_length
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
       "it is used to register "//trim(name))
+
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
+  axis_length = 1
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
+  str_split_index = INDEX(file_Name_1,'.res')
+  str_end_index = INDEX(file_Name_1,'.nc') 
+  if (str_split_index > 1) then 
+     if (str_end_index > 1 ) then
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
+     else
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
+     endif          
+  else 
+      file_Name_2 = trim(file_Name_1)
+  endif
+
   hgrid = '1' ; if (present(hor_grid)) hgrid = hor_grid
   vd = var_desc(name, units=units, longname=longname, hor_grid=hgrid, &
                 z_grid=z_grid, t_grid=t_grid)
 
+  ! open the restart file for domain-decomposed write
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  if (.not. file_open_success) then 
+     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
+     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+  endif
+                                          
+  ! check if global axis variables are registered in file, and register them if they are not
+  ! 4d variables are lon x lat x vertical level x time
+  if (present(hor_grid)) then
+     num_axes = 2
+     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
+     if (use_lonh) then
+        axis_length = size(gridLonT(isg:ieg))
+        call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
+        write(dimNames(1),"(a)") 'lonh'
+     endif
+     if (use_lonq) then
+        axis_length = size(gridLonB(IsgB:IegB))
+        call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
+        write(dimNames(1),"(a)") 'lonq'
+     endif
+     
+     if (use_lath) then
+        axis_length = size(gridLatT(jsg:jeg))
+        call check_for_restart_axis(CS%fileObj,'lath', axis_length)
+        write(dimNames(2),"(a)") 'lath'
+     endif        
+     if (use_latq) then
+        axis_length = size(gridLatB(JsgB:JegB))
+        call check_for_restart_axis(CS%fileObj,'latq', axis_length)
+        write(dimNames(2),"(a)") 'latq'
+     endif
+  endif
+
+  if (present(z_grid)) then
+     call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+     num_axes = num_axes+1
+     if (use_layer) then
+        axis_length = size(GV%sLayer(1:GV%ke))
+        call check_for_restart_axis(CS%fileObj,'Layer', axis_length)
+   
+        write(dimNames(num_axes),"(a)") 'Layer'
+     endif
+     if (use_int) then
+        axis_length = size(GV%sInterface(1:GV%ke+1))
+        call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
+        write(dimNames(num_axes),"(a)") 'Interface'
+     endif  
+  endif
+  
+  if (present(t_grid)) then
+     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+     num_axes = num_axes+1
+     if (use_time) then
+        call check_for_restart_axis(CS%fileObj,'Time',1)
+        write(dimNames(num_axes),'(a)') 'Time'
+     endif
+     if (use_periodic) then
+        call check_for_restart_axis(CS%fileObj,'Period',1)
+        write(dimNames(num_axes),"(a)") 'Period'
+     endif
+  endif
+ 
+  ! register the restart field
   call register_restart_field_ptr1d(f_ptr, vd, mandatory, CS)
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
+  ! register variable attributes
+  if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
+  if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
+
+  call fms2_close_file(CS%fileObj)
 
 end subroutine register_restart_field_1d
 
@@ -564,16 +912,131 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
   type(MOM_restart_CS) :: fileObj ! fms2 data structure
   type(vardesc) :: vd
+  logical :: file_open_success = .false.
+  character(len=200) :: file_Name_1, file_Name_2
+  integer :: str_split_index = 1, str_end_index = 1
+  character(len=200) :: mesg
+  logical :: use_lath = .false., use_lonh = .false., &
+             use_latq = .false., use_lonq = .false., &
+             use_layer = .false., use_int = .false., &
+             use_time = .false., use_periodic = .false.
+  integer :: horgrid_position = 1
+  integer :: num_axes=0
+  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: &
+    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+    gridLatB => NULL(), & ! the purpose of labeling the output axes.
+    gridLonT => NULL(), gridLonB => NULL()
+  integer :: axis_length
+          
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_0d: Module must be initialized before "//&
       "it is used to register "//trim(name))
+
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
+  axis_length = 1
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
+  str_split_index = INDEX(file_Name_1,'.res')
+  str_end_index = INDEX(file_Name_1,'.nc') 
+  if (str_split_index > 1) then 
+     if (str_end_index > 1 ) then
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
+     else
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
+     endif          
+  else 
+      file_Name_2 = trim(file_Name_1)
+  endif
+
   vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
                 z_grid='1', t_grid=t_grid)
 
   call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
 
-end subroutine register_restart_field_0d
+  ! open the restart file for domain-decomposed write
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  if (.not. file_open_success) then 
+     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
+     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+  endif
+                                          
+  ! check if global axis variables are registered in file, and register them if they are not
+  num_axes=1
+  call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
+  if (use_lonh) then
+      axis_length = size(gridLonT(isg:ieg))
+      call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
+      write(dimNames(1),"(a)") 'lonh'
+  endif
+  if (use_lonq) then
+     axis_length = size(gridLonB(IsgB:IegB))
+     call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
+     write(dimNames(1),"(a)") 'lonq'
+  endif
+     
+  if (use_lath) then
+        axis_length = size(gridLatT(jsg:jeg))
+        call check_for_restart_axis(CS%fileObj,'lath', axis_length)
+        write(dimNames(2),"(a)") 'lath'
+  endif        
+     if (use_latq) then
+        axis_length = size(gridLatB(JsgB:JegB))
+        call check_for_restart_axis(CS%fileObj,'latq', axis_length)
+        write(dimNames(2),"(a)") 'latq'
+     endif
 
+  call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+    
+     if (use_layer) then
+        axis_length = size(GV%sLayer(1:GV%ke))
+        call check_for_restart_axis(CS%fileObj,'Layer', axis_length)
+   
+        write(dimNames(num_axes),"(a)") 'Layer'
+     endif
+     if (use_int) then
+        axis_length = size(GV%sInterface(1:GV%ke+1))
+        call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
+        write(dimNames(num_axes),"(a)") 'Interface'
+     endif  
+  endif
+  
+  if (present(t_grid)) then
+     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+     if (use_time) then
+        call check_for_restart_axis(CS%fileObj,'Time',1)
+        write(dimNames(num_axes),'(a)') 'Time'
+     endif
+     if (use_periodic) then
+        call check_for_restart_axis(CS%fileObj,'Period',1)
+        write(dimNames(num_axes),"(a)") 'Period'
+     endif
+  endif
+ 
+  ! register the restart field
+  call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
+  call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
+  ! register variable attributes
+  if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
+  if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
+
+  call fms2_close_file(CS%fileObj)
+
+
+end subroutine register_restart_field_0d
 
 !> query_initialized_name determines whether a named field has been successfully
 !! read from a restart file yet.
