@@ -142,9 +142,10 @@ end subroutine call_tracer_flux_init
 !> The following 5 subroutines and associated definitions provide the
 !! machinery to register and call the subroutines that initialize
 !! tracers and apply vertical column processes to tracers.
-subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
+subroutine call_tracer_register(HI, GV, G, US, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),         intent(in) :: HI         !< A horizontal index type structure.
   type(verticalGrid_type),      intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(ocean_grid_type),        intent(in) :: G          !< The ocean's grid structure
   type(unit_scale_type),        intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time
                                                          !! parameters.
@@ -227,42 +228,42 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
 !  tracer package registration call returns a logical false if it cannot be run
 !  for some reason.  This then overrides the run-time selection from above.
   if (CS%use_USER_tracer_example) CS%use_USER_tracer_example = &
-    USER_register_tracer_example(HI, GV, param_file, CS%USER_tracer_example_CSp, &
+    USER_register_tracer_example(HI, GV, G, param_file, CS%USER_tracer_example_CSp, &
                                  tr_Reg, restart_CS)
   if (CS%use_DOME_tracer) CS%use_DOME_tracer = &
-    register_DOME_tracer(HI, GV, param_file, CS%DOME_tracer_CSp, &
+    register_DOME_tracer(HI, GV, G, param_file, CS%DOME_tracer_CSp, &
                          tr_Reg, restart_CS)
   if (CS%use_ISOMIP_tracer) CS%use_ISOMIP_tracer = &
-    register_ISOMIP_tracer(HI, GV, param_file, CS%ISOMIP_tracer_CSp, &
+    register_ISOMIP_tracer(HI, GV, G, param_file, CS%ISOMIP_tracer_CSp, &
                            tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
-    register_ideal_age_tracer(HI, GV, param_file,  CS%ideal_age_tracer_CSp, &
+    register_ideal_age_tracer(HI, GV, G, param_file,  CS%ideal_age_tracer_CSp, &
                               tr_Reg, restart_CS)
   if (CS%use_regional_dyes) CS%use_regional_dyes = &
-    register_dye_tracer(HI, GV, US, param_file,  CS%dye_tracer_CSp, &
+    register_dye_tracer(HI, GV, G, US, param_file,  CS%dye_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_oil) CS%use_oil = &
-    register_oil_tracer(HI, GV, param_file,  CS%oil_tracer_CSp, &
+    register_oil_tracer(HI, GV, G, param_file,  CS%oil_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_advection_test_tracer) CS%use_advection_test_tracer = &
-    register_advection_test_tracer(HI, GV, param_file, CS%advection_test_tracer_CSp, &
+    register_advection_test_tracer(HI, GV, G, param_file, CS%advection_test_tracer_CSp, &
                                    tr_Reg, restart_CS)
   if (CS%use_OCMIP2_CFC) CS%use_OCMIP2_CFC = &
-    register_OCMIP2_CFC(HI, GV, param_file,  CS%OCMIP2_CFC_CSp, &
+    register_OCMIP2_CFC(HI, GV, G, param_file,  CS%OCMIP2_CFC_CSp, &
                         tr_Reg, restart_CS)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) CS%use_MOM_generic_tracer = &
-    register_MOM_generic_tracer(HI, GV, param_file,  CS%MOM_generic_tracer_CSp, &
+    register_MOM_generic_tracer(HI, GV, G, param_file,  CS%MOM_generic_tracer_CSp, &
                                 tr_Reg, restart_CS)
 #endif
   if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &
-    register_pseudo_salt_tracer(HI, GV, param_file,  CS%pseudo_salt_tracer_CSp, &
+    register_pseudo_salt_tracer(HI, GV, G, param_file,  CS%pseudo_salt_tracer_CSp, &
                                 tr_Reg, restart_CS)
   if (CS%use_boundary_impulse_tracer) CS%use_boundary_impulse_tracer = &
-    register_boundary_impulse_tracer(HI, GV, param_file,  CS%boundary_impulse_tracer_CSp, &
+    register_boundary_impulse_tracer(HI, GV, G, param_file,  CS%boundary_impulse_tracer_CSp, &
                                      tr_Reg, restart_CS)
   if (CS%use_dyed_obc_tracer) CS%use_dyed_obc_tracer = &
-    register_dyed_obc_tracer(HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
+    register_dyed_obc_tracer(HI, GV, G, param_file, CS%dyed_obc_tracer_CSp, &
                              tr_Reg, restart_CS)
 
 

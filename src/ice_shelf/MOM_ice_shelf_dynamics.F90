@@ -243,7 +243,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, G, &
                                 longname="ice sheet/shelf u-velocity", units="m s-1", hor_grid='Bu')
     call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, G, &
-                                longname="ice sheet/shelf v-velocity", "m s-1", hor_grid='Bu')
+                                longname="ice sheet/shelf v-velocity", units="m s-1", hor_grid='Bu')
     call register_restart_field(CS%t_shelf, "t_shelf", .true., restart_CS, G, &
                                 longname="ice sheet/shelf vertically averaged temperature", units="deg C")
     call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, G, &
