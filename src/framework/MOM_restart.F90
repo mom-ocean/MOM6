@@ -747,13 +747,14 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
 end subroutine register_restart_field_2d
 
 !> Register a 1-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, GV, longname, units, &
+subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname, units, &
                                      hor_grid, z_grid, t_grid)
   real, dimension(:), target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure which is
                                                       !! required if the new file uses any vertical grid axes.
   character(len=*), optional, intent(in) :: longname  !< variable long name
@@ -850,13 +851,14 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, GV, longname, u
 end subroutine register_restart_field_1d
 
 !> Register a 0-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, GV, longname, units, &
+subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname, units, &
                                      t_grid)
   real,               target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure which is
                                                       !! required if the new file uses any vertical grid axes.
   character(len=*), optional, intent(in) :: longname  !< variable long name
