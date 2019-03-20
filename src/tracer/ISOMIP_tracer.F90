@@ -65,9 +65,10 @@ contains
 
 
 !> This subroutine is used to register tracer fields
-function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_ISOMIP_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),      intent(in) :: HI    !<A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
                                                        !! to parse for model parameter values.
   type(ISOMIP_tracer_CS),     pointer    :: CS !<A pointer that is set to point to the control
@@ -126,7 +127,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for horizontal advection, diffusion, and restarts.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+    call register_tracer(tr_ptr, tr_Reg, param_file, G, HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
                          registry_diags=.true., flux_units=flux_units, &
                          restart_CS=restart_CS)

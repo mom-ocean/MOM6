@@ -75,9 +75,10 @@ end type oil_tracer_CS
 contains
 
 !> Register oil tracer fields and subroutines to be used with MOM.
-function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_oil_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(oil_tracer_CS),        pointer    :: CS !< A pointer that is set to point to the control
                                                !! structure for this module
@@ -182,7 +183,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_oil_tracer")
     ! Register the tracer for horizontal advection, diffusion, and restarts.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=CS%tr_desc(m), &
+    call register_tracer(tr_ptr, tr_Reg, param_file, G, HI, GV, tr_desc=CS%tr_desc(m), &
                          registry_diags=.true., flux_units=flux_units, restart_CS=restart_CS, &
                          mandatory=.not.CS%oil_may_reinit)
 
