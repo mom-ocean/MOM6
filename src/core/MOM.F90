@@ -2111,7 +2111,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call restart_init(param_file, restart_CSp)
   call set_restart_fields(GV, US, param_file, CS, restart_CSp)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
+    call register_restarts_dyn_split_RK2(dG%HI, GV, G, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
