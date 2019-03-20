@@ -37,7 +37,6 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
-                           fms2_add_dimension => netcdf_add_dimension, &
                            FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
@@ -1943,10 +1942,10 @@ subroutine check_for_restart_axis(fileObject,axisName,axisLength)
          case ('lath'); call fms2_register_axis(fileObject,'lath','y') 
          case ('lonq'); call fms2_register_axis(fileObject,'lonq','x') 
          case ('lonh'); call fms2_register_axis(fileObject,'lath','x')
-         case ('Layer'); call fms2_add_dimension(fileObject,'Layer')
-         case ('Interface'); call fms2_add_dimension(fileObject,'Interface')
-         case ('Time'); call fms2_add_dimensionfileObject,'Time')
-         case ('Period'); call fms2_add_dimension(fileObject,'Period')
+         case ('Layer'); call fms2_register_axis(fileObject,'Layer',axisLength)
+         case ('Interface'); call fms2_register_axis(fileObject,'Interface',axisLength)
+         case ('Time'); call fms2_register_axis(fileObject,'Time',axisLength)
+         case ('Period'); call fms2_register_axis(fileObject,'Period',axisLength)
       end select
    endif
   
@@ -2108,8 +2107,8 @@ subroutine write_axis_data(fileObject, axisName, G, dG, GV, timeunit, &
         long_name="Periods for cyclical varaiables"
    end select
    ! write attributes
-   call fms2_register_variable_att(fileObject,axisName,"units",axis_units)
-   call fms2_register_variable_att(fileObject,axisName,"longname",long_name)
+   call fms2_register_variable_attribute(fileObject,axisName,"units",axis_units)
+   call fms2_register_variable_attribute(fileObject,axisName,"longname",long_name)
 
 end subroutine write_axis_data
 
