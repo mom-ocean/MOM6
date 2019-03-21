@@ -442,8 +442,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   real,    optional, intent(in)    :: cycle_length !< The duration of a coupled time stepping cycle [s].
 
   ! Local variables
-  type(time_type) :: Time_seg_start ! Stores the ocean model time at the start of this call to allow
-                            ! step_MOM to temporarily change the time as seen by internal modules.
+  type(time_type) :: Time_seg_start ! Stores the dynamic or thermodynamic ocean model time at the
+                            ! start of this call to allow step_MOM to temporarily change the time
+                            ! as seen by internal modules.
+  type(time_type) :: Time_thermo_start ! Stores the ocean model thermodynamics time at the start of
+                            ! this call to allow step_MOM to temporarily change the time as seen by
+                            ! internal modules.
   type(time_type) :: Time1  ! The value of the ocean model's time at the start of a call to step_MOM.
   integer :: index_bnds(4)  ! The computational domain index bounds in the ice-ocean boundary type.
   real :: weight            ! Flux accumulation weight of the current fluxes.
@@ -563,6 +567,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
 
+  Time_thermo_start = OS%Time
   Time_seg_start = OS%Time ; if (do_dyn) Time_seg_start = OS%Time_dyn
   Time1 = Time_seg_start
 
@@ -576,7 +581,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
                   reset_therm=Ocn_fluxes_used)
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
-  else
+  else  ! Step both the dynamics and thermodynamics with separate calls.
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)
     thermo_does_span_coupling = (OS%thermo_spans_coupling .and. (OS%dt_therm > 1.5*dt_coupling))
@@ -636,7 +641,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
   if (do_dyn) OS%Time_dyn = Time_seg_start + Ocean_coupling_time_step
   if (do_dyn) OS%nstep = OS%nstep + 1
-  OS%Time = Time_seg_start  ! Reset the clock to compensate for shared pointers.
+  OS%Time = Time_thermo_start  ! Reset the clock to compensate for shared pointers.
   if (do_thermo) OS%Time = OS%Time + Ocean_coupling_time_step
   if (do_thermo) OS%nstep_thermo = OS%nstep_thermo + 1
 
