@@ -2109,7 +2109,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
   call restart_init(param_file, restart_CSp)
-  call set_restart_fields(GV, US, param_file, CS, restart_CSp)
+  call set_restart_fields(GV, G, US, param_file, CS, restart_CSp)
   if (CS%split) then
     call register_restarts_dyn_split_RK2(dG%HI, GV, G, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
@@ -2123,7 +2123,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
-  call call_tracer_register(dG%HI, GV, US, param_file, CS%tracer_flow_CSp, &
+  call call_tracer_register(dG%HI, GV, G, US, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, restart_CSp)
 
   call MEKE_alloc_register_restart(dG%HI, G, param_file, CS%MEKE, restart_CSp)
@@ -2593,8 +2593,9 @@ end subroutine MOM_timing_init
 !! This routine should be altered if there are any changes to the
 !! time stepping scheme.  The CHECK_RESTART facility may be used to
 !! confirm that all needed restart fields have been included.
-subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
+subroutine set_restart_fields(GV, G, US, param_file, CS, restart_CSp)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
+  type(ocean_grid_type),    intent(in)    :: G          !< The ocean's grid structure
   type(unit_scale_type),    intent(inout) :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM

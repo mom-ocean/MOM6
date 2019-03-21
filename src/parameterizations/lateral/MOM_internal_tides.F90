@@ -2097,7 +2097,7 @@ end subroutine PPM_limit_pos
 !   vd = vardesc("En_restart", &
 !     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
 !     'h','1','1',"J m-2")
-!   call register_restart_field(CS%En_restart, vd, .false., restart_CS)
+!   call register_restart_field(CS%En_restart, vd%name, .false., restart_CS)
 
 ! end subroutine register_int_tide_restarts
 
