@@ -37,6 +37,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
+                           fms2_file_exists => file_exists, &
                            FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
@@ -311,9 +312,11 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
+  logical :: file_exists = .false.
   character(len=200) :: file_Name_1, file_Name_2
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(4)
+  character(len=8) :: ncAction 
   character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
@@ -344,6 +347,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   IegB = G%IegB
   JsgB = G%JsgB
   JegB = G%JegB
+
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
@@ -360,12 +364,21 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   else 
       file_Name_2 = trim(file_Name_1)
   endif
+  ! check whether restart file exists
+  ! note: file_exists function does not automatically insert .res., so use full file name
+  ncAction = ' '
+  file_exists = fms2_file_exists(file_Name_1)
+  if (file_exists) then
+     ncAction = "append"
+  else
+     ncAction = "write"      
+  endif
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
@@ -469,9 +482,11 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
+  logical :: file_exists = .false.
   character(len=200) :: file_Name_1, file_Name_2
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(3)
+  character(len=8) :: ncAction 
   character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
@@ -502,6 +517,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   IegB = G%IegB
   JsgB = G%JsgB
   JegB = G%JegB
+
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
@@ -518,12 +534,21 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   else 
       file_Name_2 = trim(file_Name_1)
   endif
+  ! check whether restart file exists
+  ! note: file_exists function does not automatically insert .res., so use full file name
+  ncAction = ' '
+  file_exists = fms2_file_exists(file_Name_1)
+  if (file_exists) then
+     ncAction = "append"
+  else
+     ncAction = "write"      
+  endif
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
@@ -618,9 +643,11 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
+  logical :: file_exists = .false.
   character(len=200) :: file_Name_1, file_Name_2
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(2)
+  character(len=8) ::  ncAction
   character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
@@ -667,12 +694,22 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   else 
       file_Name_2 = trim(file_Name_1)
   endif
+  ! check whether restart file exists
+  ! note: file_exists function does not automatically insert .res., so use full file name
+  ncAction = ' '
+  file_exists = fms2_file_exists(file_Name_1)
+  if (file_exists) then
+     ncAction = "append"
+  else
+     ncAction = "write"      
+  endif
+
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_2d: "//mesg)
@@ -767,8 +804,10 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObj
   character(len=8) :: hgrid
   logical :: file_open_success = .false.
+  logical :: file_open_success = .false.
   character(len=50) :: dimNames(1)
   character(len=200) :: file_Name_1, file_Name_2
+  character(len=8) :: ncAction
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
   logical :: use_layer = .false., use_int = .false., &
@@ -796,13 +835,22 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   else 
       file_Name_2 = trim(file_Name_1)
   endif
+  ! check whether restart file exists
+  ! note: file_exists function does not automatically insert .res., so use full file name
+  ncAction = ' '
+  file_exists = fms2_file_exists(file_Name_1)
+  if (file_exists) then
+     ncAction = "append"
+  else
+     ncAction = "write"      
+  endif
 
   hgrid = '1' ; if (present(hor_grid)) hgrid = hor_grid
   vd = var_desc(name, units=units, longname=longname, hor_grid=hgrid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
@@ -866,9 +914,11 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
   ! local
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  logical :: file_exists = .false.
   type(MOM_restart_CS) :: fileObj ! fms2 data structure
   type(vardesc) :: vd
   character(len=50) :: dimNames(1)
+  character(len=8) :: ncAction
   character(len=200) :: file_Name_1, file_Name_2
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
@@ -896,12 +946,21 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   else 
       file_Name_2 = trim(file_Name_1)
   endif
+  ! check whether restart file exists
+  ! note: file_exists function does not automatically insert .res., so use full file name
+  ncAction = ' '
+  file_exists = fms2_file_exists(file_Name_1)
+  if (file_exists) then
+     ncAction = "append"
+  else
+     ncAction = "write"      
+  endif
 
   vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
                 z_grid='1', t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
