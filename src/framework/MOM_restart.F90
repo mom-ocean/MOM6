@@ -804,7 +804,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObj
   character(len=8) :: hgrid
   logical :: file_open_success = .false.
-  logical :: file_open_success = .false.
+  logical :: file_exists = .false.
   character(len=50) :: dimNames(1)
   character(len=200) :: file_Name_1, file_Name_2
   character(len=8) :: ncAction
