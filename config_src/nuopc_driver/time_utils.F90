@@ -1,3 +1,4 @@
+!> Set of subroutines that convert date/time between FMS and ESMF formats.
 module time_utils_mod
 
 use fms_mod,                  only: uppercase
@@ -9,11 +10,13 @@ use ESMF
 
 implicit none; private
 
-!-------------------- interface blocks ---------------------
+!> Converts calendar from FMS to ESMF format
 interface fms2esmf_cal
   module procedure fms2esmf_cal_c
   module procedure fms2esmf_cal_i
 end interface fms2esmf_cal
+
+!> Converts time from FMS to ESMF format
 interface esmf2fms_time
   module procedure esmf2fms_time_t
   module procedure esmf2fms_timestep
@@ -26,13 +29,10 @@ public string_to_date
 
 contains
 
-!-------------------- module code ---------------------
-
+!> Sets fms2esmf_cal_c to the corresponding ESMF calendar type
 function fms2esmf_cal_c(calendar)
-!    ! Return Value:
-  type(ESMF_CALKIND_FLAG)            :: fms2esmf_cal_c
-!    ! Arguments:
-  character(len=*), intent(in)       :: calendar
+  type(ESMF_CALKIND_FLAG)            :: fms2esmf_cal_c !< ESMF calendar type
+  character(len=*), intent(in)       :: calendar       !< Type of calendar
 
   select case( uppercase(trim(calendar)) )
   case( 'GREGORIAN' )
@@ -51,11 +51,10 @@ function fms2esmf_cal_c(calendar)
   end select
 end function fms2esmf_cal_c
 
+!> Sets fms2esmf_cal_i to the corresponding ESMF calendar type
 function fms2esmf_cal_i(calendar)
-!    ! Return Value:
-  type(ESMF_CALKIND_FLAG)            :: fms2esmf_cal_i
-!    ! Arguments:
-  integer, intent(in)                :: calendar
+  type(ESMF_CALKIND_FLAG)            :: fms2esmf_cal_i !< ESMF calendar structure
+  integer, intent(in)                :: calendar       !< Type of calendar
 
   select case(calendar)
     case(THIRTY_DAY_MONTHS)
@@ -71,11 +70,11 @@ function fms2esmf_cal_i(calendar)
   end select
 end function fms2esmf_cal_i
 
+!> Converts date from ESMF format to FMS format.
 function esmf2fms_time_t(time)
-  ! Return Value
-  type(Time_type)                    :: esmf2fms_time_t
-  ! Input Arguments
-  type(ESMF_Time), intent(in)        :: time
+  type(Time_type)                    :: esmf2fms_time_t !< FMS time structure
+  type(ESMF_Time), intent(in)        :: time            !< ESMF time structure
+
   ! Local Variables
   integer                            :: yy, mm, dd, h, m, s
   type(ESMF_CALKIND_FLAG)            :: calkind
@@ -89,15 +88,15 @@ function esmf2fms_time_t(time)
     file=__FILE__)) &
     return  ! bail out
 
-  esmf2fms_time_t = Set_date(yy, mm, dd, h, m, s)
+  esmf2fms_time_t = set_date(yy, mm, dd, h, m, s)
 
 end function esmf2fms_time_t
 
+!> Converts time-interval from ESMF format to FMS format.
 function esmf2fms_timestep(timestep)
-  ! Return Value
-  type(Time_type)                    :: esmf2fms_timestep
-  ! Input Arguments
-  type(ESMF_TimeInterval), intent(in):: timestep
+  type(Time_type)                    :: esmf2fms_timestep !< FMS time structure
+  type(ESMF_TimeInterval), intent(in):: timestep          !< time-interval following
+                                                          !! ESMF format [s]
   ! Local Variables
   integer                            :: s
   type(ESMF_CALKIND_FLAG)            :: calkind
@@ -114,12 +113,12 @@ function esmf2fms_timestep(timestep)
 
 end function esmf2fms_timestep
 
+!> Converts date from FMS format to ESMF format.
 function fms2esmf_time(time, calkind)
-  ! Return Value
-  type(ESMF_Time)                    :: fms2esmf_time
-  ! Input Arguments
-  type(Time_type), intent(in)        :: time
-  type(ESMF_CALKIND_FLAG), intent(in), optional :: calkind
+  type(ESMF_Time)                    :: fms2esmf_time !< ESMF time structure
+  type(time_type), intent(in)        :: time          !< FMS time structure
+  type(ESMF_CALKIND_FLAG), intent(in), optional :: calkind !< ESMF calendar structure
+
   ! Local Variables
   integer                            :: yy, mm, d, h, m, s
   type(ESMF_CALKIND_FLAG)            :: l_calkind
@@ -143,11 +142,14 @@ function fms2esmf_time(time, calkind)
 
 end function fms2esmf_time
 
+!> Converts a string (I4.4,I2.2,I2.2,".",I2.2,I2.2,I2.2) that represents
+!! yr, mon, day, hr, min, sec to a FMS data format.
 function string_to_date(string, rc)
-  character(len=15), intent(in)           :: string
-  integer, intent(out), optional          :: rc
-  type(time_type)                         :: string_to_date
+  character(len=15), intent(in)           :: string        !< String representing a date
+  integer, intent(out), optional          :: rc            !< ESMF error handler
+  type(time_type)                         :: string_to_date!< FMS time structure
 
+  ! Local variables
   integer                                 :: yr,mon,day,hr,min,sec
 
   if(present(rc)) rc = ESMF_SUCCESS
