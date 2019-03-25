@@ -384,11 +384,6 @@ use NUOPC_Model, &
   model_label_SetRunClock    => label_SetRunClock, &
   model_label_Finalize       => label_Finalize
 
-! TODO GMM, where are these coming from? thye do not have an explicit fortran interface
-! ESMF_GridCompGetInternalState
-!
-! And these?
-! ESMF_LOGERR_PASSTHRU
 implicit none; private
 
 public SetServices
