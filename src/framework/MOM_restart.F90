@@ -313,7 +313,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=200) :: file_Name_1, file_Name_2
+  character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(4)
   character(len=8) :: ncAction 
@@ -329,7 +329,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
     gridLatB => NULL(), & ! the purpose of labeling the output axes.
     gridLonT => NULL(), gridLonB => NULL()
-  integer :: axis_length
+  integer :: axis_length, name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
@@ -350,20 +350,27 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
 
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1 = ''
+  file_Name_2 = ''
+  file_name_join = ''
+  name_length = 0
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
   str_split_index = INDEX(file_Name_1,'.res')
   str_end_index = INDEX(file_Name_1,'.nc') 
   if (str_split_index > 1) then 
      if (str_end_index > 1 ) then
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//&
                          file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//& 
                          file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-      file_Name_2 = trim(file_Name_1)
+      file_name_join = trim(file_Name_1)
   endif
+
+  name_length = len_trim(file_name_join)
+  file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -378,7 +385,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),ncAction, G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
@@ -483,7 +490,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=200) :: file_Name_1, file_Name_2
+  character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(3)
   character(len=8) :: ncAction 
@@ -499,7 +506,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
     gridLatB => NULL(), & ! the purpose of labeling the output axes.
     gridLonT => NULL(), gridLonB => NULL()
-  integer :: axis_length
+  integer :: axis_length, name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_3d: Module must be initialized before "//&
@@ -520,20 +527,38 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
 
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1 = ''
+  file_Name_2 = ''
+  file_name_join = ''
+  name_length = 0
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
   str_split_index = INDEX(file_Name_1,'.res')
   str_end_index = INDEX(file_Name_1,'.nc') 
   if (str_split_index > 1) then 
      if (str_end_index > 1 ) then
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//&
                          file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//& 
                          file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-      file_Name_2 = trim(file_Name_1)
+      file_name_join = trim(file_Name_1)
   endif
+
+  name_length = len_trim(file_name_join)
+  file_Name_2(1:name_length) = trim(file_name_join)
+  ! Debug problems with string parsing
+  WRITE(mpp_pe()+2000,*) "register_restart_field_3d"
+  call flush(mpp_pe()+2000)
+  WRITE(mpp_pe()+2000,*) "string split index is: ",str_split_index
+  call flush(mpp_pe()+2000)
+  WRITE(mpp_pe()+2000,*) "file_Name_1: ",file_Name_1
+  call flush(mpp_pe()+2000)
+  WRITE(mpp_pe()+2000,*) "file_name_join: ",file_name_join
+  call flush(mpp_pe()+2000)
+  WRITE(mpp_pe()+2000,*) "file_Name_2: ",file_Name_2
+  call flush(mpp_pe()+2000)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -548,7 +573,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
@@ -644,7 +669,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=200) :: file_Name_1, file_Name_2
+  character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(2)
   character(len=8) ::  ncAction
@@ -660,7 +685,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
     gridLatB => NULL(), & ! the purpose of labeling the output axes.
     gridLonT => NULL(), gridLonB => NULL()
-  integer :: axis_length
+  integer :: axis_length, name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_2d: Module must be initialized before "//&
@@ -680,20 +705,27 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   JegB = G%JegB
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1 = ''
+  file_Name_2 = ''
+  file_name_join = ''
+  name_length = 0
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
   str_split_index = INDEX(file_Name_1,'.res')
   str_end_index = INDEX(file_Name_1,'.nc') 
   if (str_split_index > 1) then 
      if (str_end_index > 1 ) then
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//&
                          file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//& 
                          file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-      file_Name_2 = trim(file_Name_1)
+      file_name_join = trim(file_Name_1)
   endif
+
+  name_length = len_trim(file_name_join)
+  file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -703,7 +735,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   else
      ncAction = "write"      
   endif
-
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
@@ -806,7 +837,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
   character(len=50) :: dimNames(1)
-  character(len=200) :: file_Name_1, file_Name_2
+  character(len=200) :: file_Name_1, file_Name_2, file_name_join
   character(len=8) :: ncAction
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
@@ -814,27 +845,34 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
              use_time = .false., use_periodic = .false.
   integer :: horgrid_position = 1
   integer :: num_axes
-  integer :: axis_length
+  integer :: axis_length, name_length
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
       "it is used to register "//trim(name))
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1 = ''
+  file_Name_2 = ''
+  file_name_join = ''
+  name_length = 0
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
   str_split_index = INDEX(file_Name_1,'.res')
   str_end_index = INDEX(file_Name_1,'.nc') 
   if (str_split_index > 1) then 
      if (str_end_index > 1 ) then
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//&
                          file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//& 
                          file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-      file_Name_2 = trim(file_Name_1)
+      file_name_join = trim(file_Name_1)
   endif
+
+  name_length = len_trim(file_name_join)
+  file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -850,7 +888,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
@@ -919,33 +957,41 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   type(vardesc) :: vd
   character(len=50) :: dimNames(1)
   character(len=8) :: ncAction
-  character(len=200) :: file_Name_1, file_Name_2
+  character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
   logical :: use_time = .false., use_periodic = .false.
   integer :: horgrid_position = 1
   integer :: num_axes
-  integer :: axis_length
+  integer :: axis_length, name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_0d: Module must be initialized before "//&
       "it is used to register "//trim(name))
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
+  file_Name_1 = ''
+  file_Name_2 = ''
+  file_name_join = ''
+  name_length = 0
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
   str_split_index = INDEX(file_Name_1,'.res')
   str_end_index = INDEX(file_Name_1,'.nc') 
   if (str_split_index > 1) then 
      if (str_end_index > 1 ) then
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//&
                          file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+        file_name_join = trim(file_Name_1(1:str_split_index-1)//& 
                          file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-      file_Name_2 = trim(file_Name_1)
+      file_name_join = trim(file_Name_1)
   endif
+
+  name_length = len_trim(file_name_join)
+  file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -960,7 +1006,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
                 z_grid='1', t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
