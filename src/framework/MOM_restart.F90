@@ -37,6 +37,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
+                           fms2_file_exists => file_exists, &
                            FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
@@ -74,7 +75,6 @@ end type p0d
 !> A structure with information about a single restart field
 type field_restart
   type(vardesc) :: vars         !< Description of a field that is to be read from or written
-                                !! to the restart file.
                                 !! to the restart file.
   logical :: mand_var           !< If .true. the run will abort if this field is not successfully
                                 !! read from the restart file.
@@ -483,7 +483,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObj
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=200) :: file_Name_1, file_Name_2, file_name_join
+  character(len=200) :: file_Name_1, file_Name_2
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(3)
   character(len=8) :: ncAction 
@@ -500,7 +500,6 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
     gridLatB => NULL(), & ! the purpose of labeling the output axes.
     gridLonT => NULL(), gridLonB => NULL()
   integer :: axis_length
-  integer :: name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_3d: Module must be initialized before "//&
@@ -520,33 +519,21 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   JegB = G%JegB
 
   axis_length = 1
-  ! remove '.res.' from the file name if present since fms read automatically appends it to the file nam
-  file_Name_1 = ' '
-  file_Name_2 = ' '
-  file_name_join = ' '
+  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
   str_split_index = INDEX(file_Name_1,'.res')
-  str_end_index = INDEX(file_Name_1,'.nc')
-  name_length = 0 
+  str_end_index = INDEX(file_Name_1,'.nc') 
   if (str_split_index > 1) then 
      if (str_end_index > 1 ) then
-        file_name_join = file_Name_1(1:str_split_index-1)//&
-                         file_Name_1(str_split_index+4:str_end_index-1)//'.nc'
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//&
+                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
      else
-        file_name_join = trim(file_Name_1(1:str_split_index-1)//'.nc')   
+        file_Name_2 = trim(file_Name_1(1:str_split_index-1)//& 
+                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
      endif          
   else 
-     file_name_join = file_Name_1
+      file_Name_2 = trim(file_Name_1)
   endif
-  name_length = len_trim(file_name_join)
-  file_Name_2(1:name_length) = trim(file_name_join)
-  
-  WRITE(mpp_pe()+2000,*) "register_restart_field_3d"
-  call flush(mpp_pe()+2000)
-  WRITE(mpp_pe()+2000,*) "string split index is: ",str_split_index
-  call flush(mpp_pe()+2000)
-  WRITE(mpp_pe()+2000,*) file_Name_1,file_Name_2
-  call flush(mpp_pe()+2000)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -561,7 +548,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
                 z_grid=z_grid, t_grid=t_grid)
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
@@ -707,12 +694,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
   else 
       file_Name_2 = trim(file_Name_1)
   endif
-
-  WRITE(mpp_pe()+2000,*) "register_restart_field_2d"
-  call flush(mpp_pe()+2000)
-
-  WRITE(mpp_pe()+2000,*) file_Name_1,file_name_2
-  call flush(mpp_pe()+2000)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -942,16 +923,13 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
   logical :: use_time = .false., use_periodic = .false.
-  gridLonT => G%gridLonT
-  gridLonB => G%gridLonB
-  isg = G%isg
-  ieg = G%ieg 
-  jsg = G%jsg
-  jeg = G%jeg
-  IsgB = G%IsgB
-  IegB = G%IegB
-  JsgB = G%JsgB
-  JegB = G%JegB
+  integer :: horgrid_position = 1
+  integer :: num_axes
+  integer :: axis_length
+          
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_0d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
   axis_length = 1
   ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
   file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
@@ -968,56 +946,28 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   else 
       file_Name_2 = trim(file_Name_1)
   endif
+  ! check whether restart file exists
+  ! note: file_exists function does not automatically insert .res., so use full file name
+  ncAction = ' '
+  file_exists = fms2_file_exists(file_Name_1)
+  if (file_exists) then
+     ncAction = "append"
+  else
+     ncAction = "write"      
+  endif
 
   vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
                 z_grid='1', t_grid=t_grid)
 
-  call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
-
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2),"write", G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObj, trim(file_Name_2), ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+     call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
   endif
                                           
   ! check if global axis variables are registered in file, and register them if they are not
   num_axes=1
-  call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
-  if (use_lonh) then
-      axis_length = size(gridLonT(isg:ieg))
-      call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
-      write(dimNames(1),"(a)") 'lonh'
-  endif
-  if (use_lonq) then
-     axis_length = size(gridLonB(IsgB:IegB))
-     call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
-     write(dimNames(1),"(a)") 'lonq'
-  endif
-     
-  if (use_lath) then
-        axis_length = size(gridLatT(jsg:jeg))
-        call check_for_restart_axis(CS%fileObj,'lath', axis_length)
-        write(dimNames(2),"(a)") 'lath'
-  endif        
-     if (use_latq) then
-        axis_length = size(gridLatB(JsgB:JegB))
-        call check_for_restart_axis(CS%fileObj,'latq', axis_length
-
-  call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
-    
-     if (use_layer) then
-        axis_length = size(GV%sLayer(1:GV%ke))
-        call check_for_restart_axis(CS%fileObj,'Layer', axis_length)
-   
-        write(dimNames(num_axes),"(a)") 'Layer'
-     endif
-     if (use_int) then
-        axis_length = size(GV%sInterface(1:GV%ke+1))
-        call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
-        write(dimNames(num_axes),"(a)") 'Interface'
-     endif  
-  endif
   
   if (present(t_grid)) then
      call get_time_coordinates(vd%t_grid,use_time,use_periodic)
@@ -1036,6 +986,39 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObj,name,'units',vd%units)
+  if (present(longname)) call fms2_register_variable_attribute(CS%fileObj,name,'long_name',vd%longname)
+
+  call fms2_close_file(CS%fileObj)
+
+end subroutine register_restart_field_0d
+
+!> query_initialized_name determines whether a named field has been successfully
+!! read from a restart file yet.
+function query_initialized_name(name, CS) result(query_initialized)
+  character(len=*),     intent(in) :: name !< The name of the field that is being queried
+  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  logical :: query_initialized
+!   This subroutine returns .true. if the field referred to by name has
+! initialized from a restart file, and .false. otherwise.
+
+  integer :: m,n
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+
+  query_initialized = .false.
+  n = CS%novars+1
+  do m=1,CS%novars
+    if (trim(name) == CS%restart_field(m)%var_name) then
+      if (CS%restart_field(m)%initialized) query_initialized = .true.
+      n = m ; exit
+    endif
+  enddo
+! Assume that you are going to initialize it now, so set flag to initialized if
+! queried again.
+  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
+  if ((n==CS%novars+1) .and. (is_root_pe())) &
+    call MOM_error(NOTE,"MOM_restart: Unknown restart variable "//name// &
                         " queried for initialization.")
 
   if ((is_root_pe()) .and. query_initialized) &
@@ -1460,12 +1443,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      endif
   endif
 
-  WRITE(mpp_pe()+2000,*) "Save restart"
-  call flush(mpp_pe()+2000)
-
-  WRITE(mpp_pe()+2000,*) restartname
-  call flush(mpp_pe()+2000)
-
   if (PRESENT(time_stamped)) then ; if (time_stamped) then
     call get_date(time,year,month,days,hour,minute,seconds)
     ! Compute the year-day, because I don't like months. - RWH
@@ -1529,13 +1506,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         endif
      endif
 
-     WRITE(mpp_pe()+2000,*) restartname
-     call flush(mpp_pe()+2000)
-
      restartpath = trim(directory)//trim(restartname)
-
-     WRITE(mpp_pe()+2000,*) restartpath
-     call flush(mpp_pe()+2000)
 
      if (num_files < 10) then
         write(suffix,'("_",I1)') num_files
@@ -2627,25 +2598,3 @@ end subroutine write_axis_data
 
 
 end module MOM_restart
-!> The MOM6 facility for reading and writing restart files, and querying what has been read.
-module MOM_restart
-
-! This file is part of MOM6. See LICENSE.md for the license.
-
-use MOM_domains, only : pe_here, num_PEs, MOM_domain_type
-use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
-use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
-use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
-use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
-use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
-use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
-use MOM_time_manager, only : days_in_month, get_date, set_date
-use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum,mpp_pe
-use mpp_domains_mod, only : domain1d, domain2d
