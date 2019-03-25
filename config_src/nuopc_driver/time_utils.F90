@@ -1,12 +1,19 @@
 !> Set of subroutines that convert date/time between FMS and ESMF formats.
 module time_utils_mod
 
-use fms_mod,                  only: uppercase
-use mpp_mod,                  only: mpp_error, FATAL
-use time_manager_mod,         only: time_type, set_time, set_date, get_date
-use time_manager_mod,         only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
-use time_manager_mod,         only: fms_get_calendar_type => get_calendar_type
-use ESMF
+! FMS
+use fms_mod,            only: uppercase
+use mpp_mod,            only: mpp_error, FATAL
+use time_manager_mod,   only: time_type, set_time, set_date, get_date
+use time_manager_mod,   only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
+use time_manager_mod,   only: fms_get_calendar_type => get_calendar_type
+! ESMF
+use ESMF,               only: ESMF_CALKIND_FLAG, ESMF_CALKIND_GREGORIAN
+use ESMF,               only: ESMF_CALKIND_JULIAN, ESMF_CALKIND_NOLEAP
+use ESMF,               only: ESMF_CALKIND_360DAY, ESMF_CALKIND_NOCALENDAR
+use ESMF,               only: ESMF_Time, ESMF_TimeGet, ESMF_LogFoundError
+use ESMF,               only: ESMF_LOGERR_PASSTHRU,ESMF_TimeInterval
+use ESMF,               only: ESMF_TimeIntervalGet, ESMF_TimeSet, ESMF_SUCCESS
 
 implicit none; private
 
