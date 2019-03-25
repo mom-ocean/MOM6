@@ -400,23 +400,23 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
      if (use_lonh) then
         axis_length = size(gridLonT(isg:ieg))
         call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
-        write(dimNames(1),"(a)") 'lonh'
+        dimNames(1)(1:4) = 'lonh'
      endif
      if (use_lonq) then
         axis_length = size(gridLonB(IsgB:IegB))
         call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
-        write(dimNames(1),"(a)") 'lonq'
+        dimNames(1)(1:4) = 'lonq'
      endif
      
      if (use_lath) then
         axis_length = size(gridLatT(jsg:jeg))
         call check_for_restart_axis(CS%fileObj,'lath', axis_length)
-        write(dimNames(2),"(a)") 'lath'
+        dimNames(2)(1:4) = 'lath'
      endif        
      if (use_latq) then
         axis_length = size(gridLatB(JsgB:JegB))
         call check_for_restart_axis(CS%fileObj,'latq', axis_length)
-        write(dimNames(2),"(a)") 'latq'
+        dimNames(2)(1:4) = 'latq'
      endif
   endif
 
@@ -492,7 +492,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_exists = .false.
   character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
-  character(len=50) :: dimNames(3)
+  character(len=50) :: dimNames(3), dimArrVal
   character(len=8) :: ncAction 
   character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
@@ -549,16 +549,16 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   name_length = len_trim(file_name_join)
   file_Name_2(1:name_length) = trim(file_name_join)
   ! Debug problems with string parsing
-  WRITE(mpp_pe()+2000,*) "register_restart_field_3d"
-  call flush(mpp_pe()+2000)
-  WRITE(mpp_pe()+2000,*) "string split index is: ",str_split_index
-  call flush(mpp_pe()+2000)
-  WRITE(mpp_pe()+2000,*) "file_Name_1: ",file_Name_1
-  call flush(mpp_pe()+2000)
-  WRITE(mpp_pe()+2000,*) "file_name_join: ",file_name_join
-  call flush(mpp_pe()+2000)
-  WRITE(mpp_pe()+2000,*) "file_Name_2: ",file_Name_2
-  call flush(mpp_pe()+2000)
+  !WRITE(mpp_pe()+2000,*) "register_restart_field_3d"
+  !call flush(mpp_pe()+2000)
+  !WRITE(mpp_pe()+2000,*) "string split index is: ",str_split_index
+  !call flush(mpp_pe()+2000)
+  !WRITE(mpp_pe()+2000,*) "file_Name_1: ",file_Name_1
+  !call flush(mpp_pe()+2000)
+  !WRITE(mpp_pe()+2000,*) "file_name_join: ",file_name_join
+  !call flush(mpp_pe()+2000)
+  !WRITE(mpp_pe()+2000,*) "file_Name_2: ",file_Name_2
+  !call flush(mpp_pe()+2000)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
   ncAction = ' '
@@ -579,63 +579,84 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
      call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
   endif
 
-  num_axes = 0                                       
+  num_axes = 0
+  dimArrVal = ''                                      
   ! check if global axis variables are registered in file, and register them if they are not
-  if (present(hor_grid)) then
+  call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
+  if (use_lonh) then
      num_axes = 2
-     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
-     if (use_lonh) then
-        axis_length = size(gridLonT(isg:ieg))
-        call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
-        write(dimNames(1),"(a)") 'lonh'
-     endif
-     if (use_lonq) then
-        axis_length = size(gridLonB(IsgB:IegB))
-        call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
-        write(dimNames(1),"(a)") 'lonq'
-     endif
-     
-     if (use_lath) then
-        axis_length = size(gridLatT(jsg:jeg))
-        call check_for_restart_axis(CS%fileObj,'lath', axis_length)
-        write(dimNames(2),"(a)") 'lath'
-     endif        
-     if (use_latq) then
-        axis_length = size(gridLatB(JsgB:JegB))
-        call check_for_restart_axis(CS%fileObj,'latq', axis_length)
-        write(dimNames(2),"(a)") 'latq'
-     endif
+     axis_length = size(gridLonT(isg:ieg))
+     call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
+     dimArrVal = 'lonh'
+  endif
+  if (use_lonq) then
+     num_axes = 2
+     axis_length = size(gridLonB(IsgB:IegB))
+     call check_for_restart_axis(CS%fileObj,'lonq', axis_length)
+     dimArrVal = 'lonq'
+  endif
+  name_length = len_trim(dimArrVal)
+  dimNames(1)(1:name_length) = trim(dimArrVal)
+
+  WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dimArrVal, dimNames 1 ", trim(dimArrVal),dimNames(1)
+  call flush(mpp_pe()+2000)
+
+  if (use_lath) then
+     num_axes = 2
+     axis_length = size(gridLatT(jsg:jeg))
+     call check_for_restart_axis(CS%fileObj,'lath', axis_length)
+     dimArrVal = 'lath'
+  endif        
+  if (use_latq) then
+     num_axes = 2
+     axis_length = size(gridLatB(JsgB:JegB))
+     call check_for_restart_axis(CS%fileObj,'latq', axis_length)
+     dimArrVal ='latq'
   endif
 
-  if (present(z_grid)) then
-     call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+  name_length = len_trim(dimArrVal)
+  dimNames(2)(1:name_length) = trim(dimArrVal)
+  WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dimArrVal, dimNames 2 ", trim(dimArrVal), dimNames(2)
+  call flush(mpp_pe()+2000)
+
+  ! Check for Z-grid
+  call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+  if (use_int .or. use_layer) then
      num_axes = num_axes+1
      if (use_layer) then
         axis_length = size(GV%sLayer(1:GV%ke))
         call check_for_restart_axis(CS%fileObj,'Layer', axis_length)
-   
-        write(dimNames(num_axes),"(a)") 'Layer'
+        dimArrVal = 'Layer'
      endif
      if (use_int) then
         axis_length = size(GV%sInterface(1:GV%ke+1))
         call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
-        write(dimNames(num_axes),"(a)") 'Interface'
-     endif  
+        dimArrVal = 'Interface'
+     endif
+     name_length = len_trim(dimArrVal)
+     dimNames(num_axes)(1:name_length) = trim(dimArrVal)  
+     WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dimArrVal, dimNames 3 ", trim(dimArrVal), dimNames(3)
+     call flush(mpp_pe()+2000) 
   endif
-  
-  if (present(t_grid)) then
-     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+
+  ! Check for time grid   
+  call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+  if (use_time .or. use_periodic) then
      num_axes = num_axes+1
      if (use_time) then
         call check_for_restart_axis(CS%fileObj,'Time',1)
-        write(dimNames(num_axes),'(a)') 'Time'
+        dimArrVal = 'Time'
      endif
      if (use_periodic) then
         call check_for_restart_axis(CS%fileObj,'Period',1)
-        write(dimNames(num_axes),"(a)") 'Period'
+        dimArrVal = 'Period'
      endif
+     name_length = len_trim(dimArrVal)
+     dimNames(num_axes)(1:name_length) = trim(dimArrVal)  
+     WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dimArrVal, dimNames 3 ", trim(dimArrVal), dimNames(3)
+     call flush(mpp_pe()+2000) 
   endif
- 
+
   ! register the restart field
   call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS) 
   call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
@@ -748,9 +769,9 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
                                           
   ! check if global axis variables are registered in file, and register them if they are not
   ! 3d variables are lon x lat x vertical level/time
-  if (present(hor_grid)) then
-     num_axes = 2
-     call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
+ 
+   num_axes = 2
+   call get_horizontal_grid_coordinates(vd%hor_grid,use_lath,use_lonh,use_latq,use_lonq,horgrid_position)
      if (use_lonh) then
         axis_length = size(gridLonT(isg:ieg))
         call check_for_restart_axis(CS%fileObj,'lonh', axis_length)
@@ -772,10 +793,9 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
         call check_for_restart_axis(CS%fileObj,'latq', axis_length)
         write(dimNames(2),"(a)") 'latq'
      endif
-  endif
 
-  if (present(z_grid)) then
-     call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+  call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+  if (use_layer .or. use_int) then
      num_axes = num_axes+1
      if (use_layer) then
         axis_length = size(GV%sLayer(1:GV%ke))
@@ -787,19 +807,21 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
         axis_length = size(GV%sInterface(1:GV%ke+1))
         call check_for_restart_axis(CS%fileObj,'Interface', axis_length)
         write(dimNames(num_axes),"(a)") 'Interface'
-     endif  
+     endif
   endif
+   
+
   
-  if (present(t_grid)) then
-     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+  call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+  if (use_time .or. use_layer) then
      num_axes = num_axes+1
      if (use_time) then
         call check_for_restart_axis(CS%fileObj,'Time',1)
-        write(dimNames(num_axes),'(a)') 'Time'
+        dimNames(num_axes)='Time'
      endif
      if (use_periodic) then
         call check_for_restart_axis(CS%fileObj,'Period',1)
-        write(dimNames(num_axes),"(a)") 'Period'
+        dimNames(num_axes) = 'Period'
      endif
   endif
  
@@ -1015,18 +1037,15 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   ! check if global axis variables are registered in file, and register them if they are not
   num_axes=1
   
-  if (present(t_grid)) then
-     call get_time_coordinates(vd%t_grid,use_time,use_periodic)
-     if (use_time) then
-        call check_for_restart_axis(CS%fileObj,'Time',1)
-        write(dimNames(num_axes),'(a)') 'Time'
-     endif
-     if (use_periodic) then
-        call check_for_restart_axis(CS%fileObj,'Period',1)
-        write(dimNames(num_axes),"(a)") 'Period'
-     endif
+  call get_time_coordinates(vd%t_grid,use_time,use_periodic)
+  if (use_time) then
+     call check_for_restart_axis(CS%fileObj,'Time',1)
+     write(dimNames(num_axes),'(a)') 'Time'
   endif
- 
+  if (use_periodic) then
+     call check_for_restart_axis(CS%fileObj,'Period',1)
+     write(dimNames(num_axes),"(a)") 'Period'
+   endif
   ! register the restart field
   call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
   call fms2_register_restart_field(CS%fileObj, name, f_ptr, dimensions=dimNames, domain_position=horgrid_position)
