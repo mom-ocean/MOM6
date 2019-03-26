@@ -65,7 +65,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   type(ESMF_State)              , intent(inout) :: importState        !< incoming data from mediator
   type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
   character(len=*), optional    , intent(in)    :: runtype            !< For cesm only, type of run
-  integer                       , intent(inout) :: rc                 !< Error handler
+  integer                       , intent(inout) :: rc                 !< Return code
 
   ! Local Variables
   integer                         :: i, j, ig, jg, n
@@ -350,7 +350,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   type(ocean_state_type)  , pointer       :: ocean_state  !< Ocean state
   type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
   type(ESMF_Clock)        , intent(in)    :: clock        !< ESMF clock
-  integer                 , intent(inout) :: rc           !< Error handler
+  integer                 , intent(inout) :: rc           !< Return code
 
   ! Local variables
   integer                         :: i, j, ig, jg         ! indices
@@ -658,7 +658,7 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
   type(ESMF_State)            , intent(in)  :: State    !< ESMF state
   character(len=*)            , intent(in)  :: fldname  !< Field name
   real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:)!< Pointer to the 1D field
-  integer, optional           , intent(out) :: rc       !< Error handler
+  integer, optional           , intent(out) :: rc       !< Return code
 
   ! local variables
   type(ESMF_Field) :: lfield
@@ -685,7 +685,7 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   type(ESMF_State)            , intent(in)  :: State      !< ESMF state
   character(len=*)            , intent(in)  :: fldname    !< Field name
   real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)!< Pointer to the 2D field
-  integer, optional           , intent(out) :: rc         !< Error handler
+  integer, optional           , intent(out) :: rc         !< Return code
 
   ! local variables
   type(ESMF_Field) :: lfield
@@ -721,7 +721,7 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
                                                  !! the computational domain
   real (ESMF_KIND_R8) , intent(inout) :: output(isc:iec,jsc:jec)!< Output 2D array
   logical, optional   , intent(in)    :: do_sum  !< If true, sums the data
-  integer             , intent(out)   :: rc      !< Error handler
+  integer             , intent(out)   :: rc      !< Return code
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
@@ -802,7 +802,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
                                                    !! the computational domain
   real (ESMF_KIND_R8)   , intent(in)    :: input(isc:iec,jsc:jec)!< Input 2D array
   type(ocean_grid_type) , intent(in)    :: ocean_grid !< Ocean horizontal grid
-  integer               , intent(out)   :: rc         !< Error handler
+  integer               , intent(out)   :: rc         !< Return code
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
