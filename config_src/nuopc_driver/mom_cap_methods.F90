@@ -1,6 +1,5 @@
+!> Contains import/export methods for both NEMS and CMEPS.
 module mom_cap_methods
-
-! Cap import/export methods for both NEMS and CMEPS
 
 use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
 use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
@@ -33,33 +32,31 @@ public :: mom_export
 private :: State_getImport
 private :: State_setExport
 
+!> Get field pointer
 interface State_GetFldPtr
    module procedure State_GetFldPtr_1d
    module procedure State_GetFldPtr_2d
 end interface
 
-integer                  :: import_cnt = 0
-type(ESMF_GeomType_Flag) :: geomtype
+integer                  :: import_cnt = 0!< used to skip using the import state
+                                          !! at the first count for cesm
+type(ESMF_GeomType_Flag) :: geomtype      !< SMF type describing type of
+                                          !! geometry (mesh or grid)
 
-!===============================================================================
 contains
-!===============================================================================
 
+!> Sets module variable geometry type
 subroutine mom_set_geomtype(geomtype_in)
-  ! Set module variable geomtype
-
-  type(ESMF_GeomType_Flag), intent(in)    :: geomtype_in     !< mesh or grid
+  type(ESMF_GeomType_Flag), intent(in)    :: geomtype_in !< ESMF type describing type of
+                                                         !! geometry (mesh or grid)
 
   geomtype = geomtype_in
 
 end subroutine mom_set_geomtype
 
-!===============================================================================
-
 !> This function has a few purposes:
 !! (1) it imports surface fluxes using data from the mediator; and
 !! (2) it can apply restoring in SST and SSS.
-
 subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype, rc)
 
   ! Input/output variables
@@ -68,7 +65,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   type(ESMF_State)              , intent(inout) :: importState        !< incoming data from mediator
   type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
   character(len=*), optional    , intent(in)    :: runtype            !< For cesm only, type of run
-  integer                       , intent(inout) :: rc
+  integer                       , intent(inout) :: rc                 !< Error handler
 
   ! Local Variables
   integer                         :: i, j, ig, jg, n
@@ -79,8 +76,6 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   real(ESMF_KIND_R8), allocatable :: tauy(:,:)
   character(len=*)  , parameter   :: subname = '(mom_import)'
 
-  !-----------------------------------------------------------------------
-
   rc = ESMF_SUCCESS
 
   ! -------
@@ -90,9 +85,9 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   if (present(runtype)) then
      import_cnt = import_cnt + 1
      if ((trim(runtype) == 'initial' .and. import_cnt <= 2)) then
-	do_import = .false. ! This will skip the first time import information is given
+        do_import = .false. ! This will skip the first time import information is given
      else
-	do_import = .true.
+        do_import = .true.
      end if
   else
      do_import = .true.
@@ -106,61 +101,61 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
      ! surface height pressure
      !----
      call state_getimport(importState, 'inst_pres_height_surface', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%p, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%p, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
      !----
      ! near-IR, direct shortwave  (W/m2)
      !----
      call state_getimport(importState, 'mean_net_sw_ir_dir_flx', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dir, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dir, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
      !----
      ! near-IR, diffuse shortwave  (W/m2)
      !----
      call state_getimport(importState, 'mean_net_sw_ir_dif_flx', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_nir_dif, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
      !----
      ! visible, direct shortwave  (W/m2)
      !----
      call state_getimport(importState, 'mean_net_sw_vis_dir_flx', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dir, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! visible, diffuse shortwave (W/m2)
      !----
      call state_getimport(importState, 'mean_net_sw_vis_dif_flx', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%sw_flux_vis_dif, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
      ! -------
      ! Net longwave radiation (W/m2)
      ! -------
      call state_getimport(importState, 'mean_net_lw_flx',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%lw_flux, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
      !----
      ! zonal and meridional surface stress
@@ -170,14 +165,15 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
      call state_getimport(importState, 'mean_zonal_moment_flx', isc, iec, jsc, jec, taux, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
      call state_getimport(importState, 'mean_merid_moment_flx', isc, iec, jsc, jec, tauy, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
+
 
      ! rotate taux and tauy from true zonal/meridional to local coordinates
      do j = jsc, jec
@@ -335,17 +331,15 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
      ice_ocean_boundary%mi(:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'mass_of_overlying_ice',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%mi, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%mi, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
 
   end if
 
 end subroutine mom_import
-
-!===============================================================================
 
 !> Maps outgoing ocean data to ESMF State
 subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc)
@@ -353,10 +347,10 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   ! Input/output variables
   type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
   type(ocean_grid_type)   , intent(in)    :: ocean_grid   !< Ocean model grid
-  type(ocean_state_type)  , pointer       :: ocean_state
+  type(ocean_state_type)  , pointer       :: ocean_state  !< Ocean state
   type(ESMF_State)        , intent(inout) :: exportState  !< outgoing data
-  type(ESMF_Clock)        , intent(in)    :: clock
-  integer                 , intent(inout) :: rc
+  type(ESMF_Clock)        , intent(in)    :: clock        !< ESMF clock
+  integer                 , intent(inout) :: rc           !< Error handler
 
   ! Local variables
   integer                         :: i, j, ig, jg         ! indices
@@ -380,7 +374,6 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   real(ESMF_KIND_R8), allocatable :: dhdx(:,:), dhdy(:,:)
   real(ESMF_KIND_R8), allocatable :: dhdx_rot(:,:), dhdy_rot(:,:)
   character(len=*)  , parameter   :: subname = '(mom_export)'
-  !-----------------------------------------------------------------------
 
   rc = ESMF_SUCCESS
 
@@ -660,13 +653,12 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
 end subroutine mom_export
 
-!===============================================================================
-
+!> Get field pointer 1D
 subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
-  type(ESMF_State)            , intent(in)  :: State
-  character(len=*)            , intent(in)  :: fldname
-  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:)
-  integer, optional           , intent(out) :: rc
+  type(ESMF_State)            , intent(in)  :: State    !< ESMF state
+  character(len=*)            , intent(in)  :: fldname  !< Field name
+  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:)!< Pointer to the 1D field
+  integer, optional           , intent(out) :: rc       !< Error handler
 
   ! local variables
   type(ESMF_Field) :: lfield
@@ -688,13 +680,12 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
 
 end subroutine State_GetFldPtr_1d
 
-!===============================================================================
-
+!> Get field pointer 2D
 subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
-  type(ESMF_State)            , intent(in)  :: State
-  character(len=*)            , intent(in)  :: fldname
-  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)
-  integer, optional           , intent(out) :: rc
+  type(ESMF_State)            , intent(in)  :: State      !< ESMF state
+  character(len=*)            , intent(in)  :: fldname    !< Field name
+  real(ESMF_KIND_R8), pointer , intent(in)  :: fldptr(:,:)!< Pointer to the 2D field
+  integer, optional           , intent(out) :: rc         !< Error handler
 
   ! local variables
   type(ESMF_Field) :: lfield
@@ -716,24 +707,21 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
 
 end subroutine State_GetFldPtr_2d
 
-!===============================================================================
-
+!> Map import state field to output array
 subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, rc)
-
-  ! ----------------------------------------------
-  ! Map import state field to output array
-  ! ----------------------------------------------
-
-  ! input/output variables
-  type(ESMF_State)    , intent(in)    :: state
-  character(len=*)    , intent(in)    :: fldname
-  integer             , intent(in)    :: isc
-  integer             , intent(in)    :: iec
-  integer             , intent(in)    :: jsc
-  integer             , intent(in)    :: jec
-  real (ESMF_KIND_R8) , intent(inout) :: output(isc:iec,jsc:jec)
-  logical, optional   , intent(in)    :: do_sum
-  integer             , intent(out)   :: rc
+  type(ESMF_State)    , intent(in)    :: state   !< ESMF state
+  character(len=*)    , intent(in)    :: fldname !< Field name
+  integer             , intent(in)    :: isc     !< The start i-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: iec     !< The end i-index of cell centers within the
+                                                 !! computational domain
+  integer             , intent(in)    :: jsc     !< The start j-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: jec     !< The end j-index of cell centers within
+                                                 !! the computational domain
+  real (ESMF_KIND_R8) , intent(inout) :: output(isc:iec,jsc:jec)!< Output 2D array
+  logical, optional   , intent(in)    :: do_sum  !< If true, sums the data
+  integer             , intent(out)   :: rc      !< Error handler
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
@@ -800,24 +788,21 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
 
 end subroutine State_GetImport
 
-!===============================================================================
-
+!> Map input array to export state
 subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid, rc)
-
-  ! ----------------------------------------------
-  ! Map input array to export state
-  ! ----------------------------------------------
-
-  ! input/output variables
-  type(ESMF_State)      , intent(inout) :: state
-  character(len=*)      , intent(in)    :: fldname
-  integer               , intent(in)    :: isc
-  integer               , intent(in)    :: iec
-  integer               , intent(in)    :: jsc
-  integer               , intent(in)    :: jec
-  real (ESMF_KIND_R8)   , intent(in)    :: input(isc:iec,jsc:jec)
-  type(ocean_grid_type) , intent(in)    :: ocean_grid
-  integer               , intent(out)   :: rc
+  type(ESMF_State)      , intent(inout) :: state   !< ESMF state
+  character(len=*)      , intent(in)    :: fldname !< Field name
+  integer             , intent(in)      :: isc     !< The start i-index of cell centers within
+                                                   !! the computational domain
+  integer             , intent(in)      :: iec     !< The end i-index of cell centers within the
+                                                   !! computational domain
+  integer             , intent(in)      :: jsc     !< The start j-index of cell centers within
+                                                   !! the computational domain
+  integer             , intent(in)      :: jec     !< The end j-index of cell centers within
+                                                   !! the computational domain
+  real (ESMF_KIND_R8)   , intent(in)    :: input(isc:iec,jsc:jec)!< Input 2D array
+  type(ocean_grid_type) , intent(in)    :: ocean_grid !< Ocean horizontal grid
+  integer               , intent(out)   :: rc         !< Error handler
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
