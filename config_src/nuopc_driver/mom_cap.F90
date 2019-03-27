@@ -378,8 +378,9 @@ use ESMF,  only: ESMF_COORDSYS_SPH_DEG, ESMF_GridCreate, ESMF_INDEX_DELOCAL
 use ESMF,  only: ESMF_MESHLOC_ELEMENT, ESMF_RC_VAL_OUTOFRANGE, ESMF_StateGet
 use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet
 
-!TODO, where this is comming from?
-! 1) ESMF_GridCompGetInternalState
+! TODO ESMF_GridCompGetInternalState does not have an explicit Fortran interface.
+!! Model does not compile with "use ESMF,  only: ESMF_GridCompGetInternalState"
+!! Is this okay?
 
 use NUOPC,       only: NUOPC_CompDerive, NUOPC_CompSetEntryPoint, NUOPC_CompSpecialize
 use NUOPC,       only: NUOPC_CompFilterPhaseMap, NUOPC_CompAttributeGet, NUOPC_CompAttributeAdd
@@ -2242,16 +2243,17 @@ subroutine State_SetScalar(value, scalar_id, State, mytask, scalar_name, scalar_
 
 end subroutine State_SetScalar
 
-!> TODO
+!> Realize the import and export fields using either a grid or a mesh.
 subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
-
-  type(ESMF_State)    , intent(inout)        :: state
-  integer             , intent(in)           :: nfields
-  type(fld_list_type) , intent(inout)        :: field_defs(:)
-  character(len=*)    , intent(in)           :: tag
-  type(ESMF_Grid)     , intent(in), optional :: grid
-  type(ESMF_Mesh)     , intent(in), optional :: mesh
-  integer             , intent(inout)        :: rc
+  type(ESMF_State)    , intent(inout)        :: state !< ESMF_State object for
+                                                      !! import/export fields.
+  integer             , intent(in)           :: nfields !< Number of fields.
+  type(fld_list_type) , intent(inout)        :: field_defs(:) !< Structure with field's
+                                                              !! information.
+  character(len=*)    , intent(in)           :: tag !< Import or export.
+  type(ESMF_Grid)     , intent(in), optional :: grid!< ESMF grid.
+  type(ESMF_Mesh)     , intent(in), optional :: mesh!< ESMF mesh.
+  integer             , intent(inout)        :: rc  !< Return code.
 
   ! local variables
   integer                     :: i
