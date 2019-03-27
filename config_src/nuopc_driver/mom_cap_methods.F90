@@ -58,8 +58,6 @@ end subroutine mom_set_geomtype
 !! (1) it imports surface fluxes using data from the mediator; and
 !! (2) it can apply restoring in SST and SSS.
 subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype, rc)
-
-  ! Input/output variables
   type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
   type(ocean_grid_type)         , intent(in)    :: ocean_grid         !< Ocean model grid
   type(ESMF_State)              , intent(inout) :: importState        !< incoming data from mediator
@@ -343,8 +341,6 @@ end subroutine mom_import
 
 !> Maps outgoing ocean data to ESMF State
 subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc)
-
-  ! Input/output variables
   type(ocean_public_type) , intent(in)    :: ocean_public !< Ocean surface state
   type(ocean_grid_type)   , intent(in)    :: ocean_grid   !< Ocean model grid
   type(ocean_state_type)  , pointer       :: ocean_state  !< Ocean state
