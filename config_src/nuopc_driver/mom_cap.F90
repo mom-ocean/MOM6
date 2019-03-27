@@ -352,7 +352,6 @@ use time_utils_mod,           only: esmf2fms_time
 
 use, intrinsic :: iso_fortran_env, only: output_unit
 
-! TODO add only below.
 use ESMF,  only: ESMF_ClockAdvance, ESMF_ClockGet, ESMF_ClockPrint
 use ESMF,  only: ESMF_ClockGetAlarm, ESMF_ClockGetNextTime, ESMF_ClockAdvance
 use ESMF,  only: ESMF_ClockSet, ESMF_Clock, ESMF_GeomType_Flag, ESMF_LOGMSG_INFO
@@ -360,7 +359,7 @@ use ESMF,  only: ESMF_Grid, ESMF_GridCreate, ESMF_GridAddCoord
 use ESMF,  only: ESMF_GridGetCoord, ESMF_GridAddItem, ESMF_GridGetItem
 use ESMF,  only: ESMF_GridComp, ESMF_GridCompSetEntryPoint, ESMF_GridCompGet
 use ESMF,  only: ESMF_LogFoundError, ESMF_LogWrite, ESMF_LogSetError
-use ESMF,  only: ESMF_LOGERR_PASSTHRU, ESMF_GridCompGetInternalState
+use ESMF,  only: ESMF_LOGERR_PASSTHRU, ESMF_KIND_R8, ESMF_RC_VAL_WRONG
 use ESMF,  only: ESMF_GEOMTYPE_MESH, ESMF_GEOMTYPE_GRID, ESMF_SUCCESS
 use ESMF,  only: ESMF_METHOD_INITIALIZE, ESMF_MethodRemove, ESMF_State
 use ESMF,  only: ESMF_LOGMSG_INFO, ESMF_RC_ARG_BAD, ESMF_VM, ESMF_Time
@@ -371,12 +370,22 @@ use ESMF,  only: ESMF_DistGridConnection, ESMF_StateItem_Flag, ESMF_KIND_I4
 use ESMF,  only: ESMF_KIND_I8, ESMF_FAILURE, ESMF_DistGridCreate, ESMF_MeshCreate
 use ESMF,  only: ESMF_FILEFORMAT_ESMFMESH, ESMF_DELayoutCreate, ESMF_DistGridConnectionSet
 use ESMF,  only: ESMF_DistGridGet, ESMF_STAGGERLOC_CORNER, ESMF_GRIDITEM_MASK
-use ESMF,  only: ESMF_TYPEKIND_I4, ESMF_TYPEKIND_R8, ESMF_STAGGERLOC_CENTER,
+use ESMF,  only: ESMF_TYPEKIND_I4, ESMF_TYPEKIND_R8, ESMF_STAGGERLOC_CENTER
 use ESMF,  only: ESMF_GRIDITEM_AREA, ESMF_Field, ESMF_ALARM, ESMF_VMLogMemInfo
 use ESMF,  only: ESMF_AlarmIsRinging, ESMF_AlarmRingerOff, ESMF_StateRemove
-use ESMF,  only: ESMF_FieldCreate
+use ESMF,  only: ESMF_FieldCreate, ESMF_LOGMSG_ERROR, ESMF_LOGMSG_WARNING
+use ESMF,  only: ESMF_COORDSYS_SPH_DEG, ESMF_GridCreate, ESMF_INDEX_DELOCAL
+use ESMF,  only: ESMF_MESHLOC_ELEMENT, ESMF_RC_VAL_OUTOFRANGE, ESMF_StateGet
+use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet
 
-use NUOPC
+!TODO, where this is comming from?
+! 1) ESMF_GridCompGetInternalState
+
+use NUOPC,       only: NUOPC_CompDerive, NUOPC_CompSetEntryPoint, NUOPC_CompSpecialize
+use NUOPC,       only: NUOPC_CompFilterPhaseMap, NUOPC_CompAttributeGet, NUOPC_CompAttributeAdd
+use NUOPC,       only: NUOPC_Advertise, NUOPC_SetAttribute, NUOPC_IsUpdated, NUOPC_Write
+use NUOPC,       only: NUOPC_IsConnected, NUOPC_Realize, NUOPC_CompAttributeSet
+use NUOPC_Model, only: NUOPC_ModelGet
 use NUOPC_Model, &
   model_routine_SS           => SetServices, &
   model_label_Advance        => label_Advance, &
