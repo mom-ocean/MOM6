@@ -1,4 +1,4 @@
-!> Set of subroutines that convert date/time between FMS and ESMF formats.
+!> Set of time utilities for converting between FMS and ESMF time type.
 module time_utils_mod
 
 ! FMS
