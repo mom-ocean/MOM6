@@ -114,14 +114,14 @@ subroutine AlarmInit( clock, alarm, option, &
 	     line=__LINE__, &
 	     file=__FILE__, rcToReturn=rc)
 	return
-     end if
+     endif
      if (opt_n <= 0) then
 	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
 	     msg=subname//trim(option)//' invalid opt_n', &
 	     line=__LINE__, &
 	     file=__FILE__, rcToReturn=rc)
 	return
-     end if
+     endif
   endif
 
   call ESMF_ClockGet(clock, CurrTime=CurrTime, rc=rc)
@@ -179,14 +179,14 @@ subroutine AlarmInit( clock, alarm, option, &
 	     line=__LINE__, &
 	     file=__FILE__, rcToReturn=rc)
 	return
-     end if
+     endif
      if (lymd < 0 .or. ltod < 0) then
 	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
 	     msg=subname//trim(option)//'opt_ymd, opt_tod invalid', &
 	     line=__LINE__, &
 	     file=__FILE__, rcToReturn=rc)
 	return
-     end if
+     endif
      call ESMF_TimeIntervalSet(AlarmInterval, yy=9999, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
 	  line=__LINE__, &
@@ -206,7 +206,7 @@ subroutine AlarmInit( clock, alarm, option, &
 	     line=__LINE__, &
 	     file=__FILE__, rcToReturn=rc)
 	return
-     end if
+     endif
      call ESMF_TimeIntervalSet(AlarmInterval, mm=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
 	  line=__LINE__, &
@@ -367,13 +367,13 @@ subroutine TimeInit( Time, ymd, cal, tod, desc, logunit, rc)
      if (present(logunit)) then
 	write(logunit,*) subname//': ERROR yymmdd is a negative number or '// &
 	     'time-of-day out of bounds', ymd, ltod
-     end if
+     endif
      call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
 	  msg=subname//' yymmdd is negative or time-of-day out of bounds ', &
 	  line=__LINE__, &
 	  file=__FILE__, rcToReturn=rc)
      return
-  end if
+  endif
 
   call date2ymd (ymd,yr,mon,day)
 
@@ -399,7 +399,7 @@ subroutine date2ymd (date, year, month, day)
   year = int(tdate/10000)
   if (date < 0) then
      year = -year
-  end if
+  endif
   month = int( mod(tdate,10000)/  100)
   day = mod(tdate,  100)
 

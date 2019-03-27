@@ -86,10 +86,10 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
         do_import = .false. ! This will skip the first time import information is given
      else
         do_import = .true.
-     end if
+     endif
   else
      do_import = .true.
-  end if
+  endif
 
   if (do_import) then
      ! The following are global indices without halos
@@ -182,8 +182,8 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 					  - ocean_grid%sin_rot(ig,jg)*tauy(i,j)
 	   ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg)*tauy(i,j) &
 					  + ocean_grid%sin_rot(ig,jg)*taux(i,j)
-	end do
-     end do
+	enddo
+     enddo
 
      deallocate(taux, tauy)
 
@@ -335,7 +335,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
          file=__FILE__)) &
          return  ! bail out
 
-  end if
+  endif
 
 end subroutine mom_import
 
@@ -390,7 +390,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
      inv_dt_int = 1.0 / real(dt_int)
   else
      inv_dt_int = 0.0
-  end if
+  endif
 
   !----------------
   ! Copy from ocean_public to exportstate.
@@ -460,8 +460,8 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	ocm(i,j) = ocean_public%v_surf(i,j)
 	ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) + ocean_grid%sin_rot(ig,jg)*ocm(i,j)
 	ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) - ocean_grid%sin_rot(ig,jg)*ocz(i,j)
-     end do
-  end do
+     enddo
+  enddo
 
   call State_SetExport(exportState, 'ocn_current_zonal', &
        isc, iec, jsc, jec, ocz_rot, ocean_grid, rc=rc)
@@ -490,7 +490,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	  line=__LINE__, &
 	  file=__FILE__)) &
 	  return  ! bail out
-  end if
+  endif
 
   ! -------
   ! Freezing melting potential
@@ -507,9 +507,9 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	else
 	   melt_potential(i,j) = -ocean_public%melt_potential(i,j) * inv_dt_int
 	   if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
-	end if
-     end do
-  end do
+	endif
+     enddo
+  enddo
 
   call State_SetExport(exportState, 'freezing_melting_potential', &
        isc, iec, jsc, jec, melt_potential, ocean_grid, rc=rc)
@@ -531,7 +531,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	  line=__LINE__, &
 	  file=__FILE__)) &
 	  return  ! bail out
-  end if
+  endif
 
   !----------------
   ! Sea-surface zonal and meridional slopes
@@ -553,8 +553,8 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
      do i = ocean_grid%isc,ocean_grid%iec
 	iloc = i + ocean_grid%idg_offset
 	ssh(i,j) = ocean_public%sea_lev(iloc,jloc)
-     end do
-  end do
+     enddo
+  enddo
 
   ! Update halo of ssh so we can calculate gradients (local indexing)
   call pass_var(ssh, ocean_grid%domain)
@@ -583,11 +583,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	! Extrema in the mean values require a PCM reconstruction avoid generating
 	! larger extreme values.
 	slope = 0.0
-      end if
+      endif
       dhdx(iglob,jglob) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
       if (ocean_grid%mask2dT(i,j)==0.) dhdx(iglob,jglob) = 0.0
-    end do
-  end do
+    enddo
+  enddo
 
   ! d/dy ssh
   ! This is a simple second-order difference
@@ -613,11 +613,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	! Extrema in the mean values require a PCM reconstruction avoid generating
 	! larger extreme values.
 	slope = 0.0
-      end if
+      endif
       dhdy(iglob,jglob) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
       if (ocean_grid%mask2dT(i,j)==0.) dhdy(iglob,jglob) = 0.0
-    end do
-  end do
+    enddo
+  enddo
 
   ! rotate slopes from tripolar grid back to lat/lon grid,  x,y => latlon (CCW)
   ! "ocean_grid" uses has halos and uses local indexing.
@@ -628,8 +628,8 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 	ig = i + ocean_grid%isc - isc
 	dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) + ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
 	dhdy_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
-     end do
-  end do
+     enddo
+  enddo
 
   call State_SetExport(exportState, 'sea_surface_slope_zonal', &
        isc, iec, jsc, jec, dhdx_rot, ocean_grid, rc=rc)
@@ -751,9 +751,9 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
 		 output(i,j)  = output(i,j) + dataPtr1d(n)
 	      else
 		 output(i,j)  = dataPtr1d(n)
-	      end if
-	   end do
-	end do
+	      endif
+	   enddo
+	enddo
 
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
@@ -774,13 +774,13 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
 		 output(i,j) = output(i,j) + dataPtr2d(i1,j1)
 	      else
 		 output(i,j) = dataPtr2d(i1,j1)
-	      end if
-	   end do
-	end do
+	      endif
+	   enddo
+	enddo
 
-     end if
+     endif
 
-  end if
+  endif
 
 end subroutine State_GetImport
 
@@ -833,8 +833,8 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 	      ig = i + ocean_grid%isc - isc
 	      n = n+1
 	      dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
-	   end do
-	end do
+	   enddo
+	enddo
 
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
@@ -854,12 +854,12 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 	      i1 = i + lbnd1 - isc
 	      ig = i + ocean_grid%isc - isc
 	      dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
-	   end do
-	end do
+	   enddo
+	enddo
 
-     end if
+     endif
 
-  end if
+  endif
 
 end subroutine State_SetExport
 

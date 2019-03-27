@@ -925,7 +925,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
             return
      endif
 
-  end if
+  endif
 
   ocean_public%is_ocean_pe = .true.
   if (len_trim(restartfile) > 0) then
@@ -1002,7 +1002,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   else
     !call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice" , "will provide")
     !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                   , "will provide")
-  end if
+  endif
 
   !--------- import fields -------------
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide") ! from ice
@@ -1199,7 +1199,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
             file=__FILE__)) &
             return
      enddo
-  end if
+  endif
 
   !---------------------------------
   ! Create either a grid or a mesh
@@ -1250,7 +1250,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
      if (localPet == 0) then
         write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
-     end if
+     endif
 
      ! recreate the mesh using the above distGrid
      EMesh = ESMF_MeshCreate(EMeshTemp, elementDistgrid=Distgrid, rc=rc)
@@ -1515,9 +1515,9 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          dataPtr_ycen(i1,j1)  = ocean_grid%geolatT(ig,jg)
          if(grid_attach_area) then
            dataPtr_area(i1,j1)  = ocean_grid%areaT(ig,jg)
-         end if
-       end do
-     end do
+         endif
+       enddo
+     enddo
 
      jlast = jec
      if(jec == nyg)jlast = jec+1
@@ -1530,8 +1530,8 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          ig = i + ocean_grid%isc - isc - 1
          dataPtr_xcor(i1,j1)  = ocean_grid%geolonBu(ig,jg)
          dataPtr_ycor(i1,j1)  = ocean_grid%geolatBu(ig,jg)
-       end do
-     end do
+       enddo
+     enddo
 
      write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
      call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=rc)
@@ -1567,7 +1567,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          file=__FILE__)) &
          return
 
-  end if
+  endif
 
   !---------------------------------
   ! set scalar data in export state
@@ -1655,7 +1655,7 @@ subroutine DataInitialize(gcomp, rc)
           line=__LINE__, &
           file=__FILE__)) &
           return  ! bail out
-  end if
+  endif
 
   call ESMF_StateGet(exportState, itemCount=fieldCount, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1682,7 +1682,7 @@ subroutine DataInitialize(gcomp, rc)
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-  end do
+  enddo
   deallocate(fieldNameList)
 
   ! check whether all Fields in the exportState are "Updated"
@@ -1694,7 +1694,7 @@ subroutine DataInitialize(gcomp, rc)
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-  end if
+  endif
 
   if(write_diagnostics) then
     call NUOPC_Write(exportState, fileNamePrefix='field_init_ocn_export_', &
@@ -1833,7 +1833,7 @@ subroutine ModelAdvance(gcomp, rc)
      call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype=runtype, rc=rc)
   else
      call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
-  end if
+  endif
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
        file=__FILE__)) &
@@ -1962,7 +1962,7 @@ subroutine ModelAdvance(gcomp, rc)
 
      if (is_root_pe()) then
 	write(logunit,*) subname//' writing restart file ',trim(restartname)
-     end if
+     endif
   endif
 
   !---------------
@@ -2124,7 +2124,7 @@ subroutine ModelSetRunClock(gcomp, rc)
 	  file=__FILE__)) &
 	  return  ! bail out
 
-  end if
+  endif
 
   !--------------------------------
   ! Advance model clock to trigger alarms then reset model clock back to currtime
@@ -2195,7 +2195,7 @@ subroutine ocean_model_finalize(gcomp, rc)
      call ocean_model_end(ocean_public, ocean_State, Time, write_restart=.false.)
   else
      call ocean_model_end(ocean_public, ocean_State, Time, write_restart=.true.)
-  end if
+  endif
   call field_manager_end()
 
   call fms_io_exit()
@@ -2325,7 +2325,7 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
 		return  ! bail out
 	   fldptr1d(:) = 0.0
 
-	end if
+	endif
 
       endif
 
