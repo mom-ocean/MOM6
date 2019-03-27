@@ -1,4 +1,4 @@
-!> Set of subroutines to deal with forcing fields that may be used to drive MOM.
+!> Converts the input ESMF data (import data) to a MOM-specific data type (surface_forcing_CS).
 module MOM_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
