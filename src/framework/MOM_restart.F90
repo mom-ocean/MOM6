@@ -445,7 +445,8 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
   if (use_layer .or. use_int .and. .not.(present(GV))) then
       call MOM_error(FATAL, "MOM_restart:: register_restart_field_4d: "//&
-                     " Vertical (z) grid is defined, but GV is missing from arguments.")
+                     " Vertical (z) grid is defined for the variable "// trim(name) //& 
+                     " but GV is missing from arguments.")
   endif
      
   if (use_layer) then
@@ -664,7 +665,8 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
   if (use_layer .or. use_int .and. .not.(present(GV))) then
       call MOM_error(FATAL, "MOM_restart:: register_restart_field_3d: "//&
-                     " Vertical (z) grid is defined, but GV is missing from arguments.")
+                     " Vertical (z) grid is defined for the variable "// trim(name) //& 
+                     " but GV is missing from arguments.")
   endif
         
   if (use_layer) then
