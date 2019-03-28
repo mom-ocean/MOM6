@@ -443,6 +443,10 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! Vertical (z) grid 
   call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+  if (use_layer .or. use_int .and. .not.(present(GV))) then
+      call MOM_error(FATAL, "MOM_restart:: register_restart_field_4d: "//&
+                     " Vertical (z) grid is defined, but GV is missing from arguments.")
+  endif
      
   if (use_layer) then
      num_axes = num_axes+1
@@ -658,7 +662,11 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! Vertical (z) grid 
   call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
-     
+  if (use_layer .or. use_int .and. .not.(present(GV))) then
+      call MOM_error(FATAL, "MOM_restart:: register_restart_field_3d: "//&
+                     " Vertical (z) grid is defined, but GV is missing from arguments.")
+  endif
+        
   if (use_layer) then
      num_axes = num_axes+1
      axis_length = size(GV%sLayer(1:GV%ke))
@@ -702,7 +710,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
 end subroutine register_restart_field_3d
 
 !> Register a 2-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname, units, &
+subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname, units, &
                                      hor_grid, z_grid, t_grid)
   real, dimension(:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -847,7 +855,12 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV,longname,
 
   ! Vertical (z) grid 
   call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
-     
+
+  if (use_layer .or. use_int .and. .not.(present(GV))) then
+      call MOM_error(FATAL, "MOM_restart:: register_restart_field_2d: "//&
+                     " Vertical (z) grid is defined, but GV is missing from arguments.")
+  endif
+
   if (use_layer) then
      num_axes = num_axes+1
      axis_length = size(GV%sLayer(1:GV%ke))
@@ -975,6 +988,11 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   num_axes = 0
   dimNameStr = '' 
   call get_vertical_grid_coordinates(vd%z_grid,use_layer,use_int)
+
+  if (use_layer .or. use_int .and. .not.(present(GV))) then
+      call MOM_error(FATAL, "MOM_restart:: register_restart_field_1d: "//&
+                     " Vertical (z) grid is defined, but GV is missing from arguments.")
+  endif
      
   if (use_layer) then
      num_axes = num_axes+1
