@@ -23,6 +23,7 @@ use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
 use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_checksums, only : hchksum, qchksum
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -199,12 +200,13 @@ end function quad_area
 
 !> This subroutine is used to register any fields related to the ice shelf
 !! dynamics that should be written to or read from the restart file.
-subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
+subroutine register_ice_shelf_dyn_restarts(G, GV, param_file, CS, restart_CS)
   type(ocean_grid_type),  intent(inout) :: G    !< The grid type describing the ice shelf grid.
+  type(verticalGrid_type),intent(in)    :: GV !< ocean vertical grid structure
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ice_shelf_dyn_CS), pointer       :: CS !< A pointer to the ice shelf dynamics control structure
   type(MOM_restart_CS),   pointer       :: restart_CS !< A pointer to the restart control structure.
-
+  
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -240,19 +242,19 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     allocate( CS%float_frac(isd:ied,jsd:jed) )  ; CS%float_frac(:,:) = 0.0
 
     ! additional restarts for ice shelf state
-    call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, G, &
+    call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, G, GV=GV, &
                                 longname="ice sheet/shelf u-velocity", units="m s-1", hor_grid='Bu')
-    call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, G, &
+    call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, G, GV=GV, &
                                 longname="ice sheet/shelf v-velocity", units="m s-1", hor_grid='Bu')
-    call register_restart_field(CS%t_shelf, "t_shelf", .true., restart_CS, G, &
+    call register_restart_field(CS%t_shelf, "t_shelf", .true., restart_CS, G, GV=GV, &
                                 longname="ice sheet/shelf vertically averaged temperature", units="deg C")
-    call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, G, &
+    call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, G, GV=GV, &
                                 longname="Average open ocean depth in a cell",units="m")
-    call register_restart_field(CS%float_frac, "float_frac", .true., restart_CS, G, &
+    call register_restart_field(CS%float_frac, "float_frac", .true., restart_CS, G, GV=GV, &
                                 longname="fractional degree of grounding", units="nondim")
-    call register_restart_field(CS%ice_visc, "viscosity", .true., restart_CS, G, &
+    call register_restart_field(CS%ice_visc, "viscosity", .true., restart_CS, G, GV=GV, &
                                 longname="Glens law ice viscosity", units="m (seems wrong)")
-    call register_restart_field(CS%taub_beta_eff, "tau_b_beta", .true., restart_CS, G, &
+    call register_restart_field(CS%taub_beta_eff, "tau_b_beta", .true., restart_CS, G, GV=GV, &
                                 longname="Coefficient of basal traction", units="m (seems wrong)")
   endif
 

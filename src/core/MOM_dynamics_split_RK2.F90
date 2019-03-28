@@ -922,43 +922,43 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, G, param_file, CS, restart_CS
   else
     vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
   endif
-  call register_restart_field(CS%eta, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%eta, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
-  call register_restart_field(CS%u_av, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%u_av, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
-  call register_restart_field(CS%v_av, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%v_av, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
-  call register_restart_field(CS%h_av, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%h_av, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
-  call register_restart_field(uh, vd%name, .false., restart_CS, G, &
+  call register_restart_field(uh, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
-  call register_restart_field(vh, vd%name, .false., restart_CS, G, &
+  call register_restart_field(vh, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
-  call register_restart_field(CS%diffu, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%diffu, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
 
   vd = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
-  call register_restart_field(CS%diffv, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%diffv, vd%name, .false., restart_CS, G, GV=GV, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 

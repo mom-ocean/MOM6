@@ -2137,13 +2137,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call call_tracer_register(dG%HI, GV, G, US, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, restart_CSp)
 
-  call MEKE_alloc_register_restart(dG%HI, G, param_file, CS%MEKE, restart_CSp)
+  call MEKE_alloc_register_restart(dG%HI, G, GV, param_file, CS%MEKE, restart_CSp)
   call set_visc_register_restarts(dG%HI, G, GV, param_file, CS%visc, restart_CSp)
-  call mixedlayer_restrat_register_restarts(dG%HI, G,  param_file, &
+  call mixedlayer_restrat_register_restarts(dG%HI, G, GV, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (associated(CS%OBC)) &
-    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, restart_CSp)
+    call open_boundary_register_restarts(dg%HI, G, GV, CS%OBC, restart_CSp)
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
@@ -2621,45 +2621,45 @@ subroutine set_restart_fields(GV, G, US, param_file, CS, restart_CSp)
   flux_units = get_flux_units(GV)
 
   if (associated(CS%tv%T)) &
-    call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, G, &
+    call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, G, GV=GV, &
                                 longname="Potential Temperature", units="degC")
   if (associated(CS%tv%S)) &
-    call register_restart_field(CS%tv%S, "Salt", .true., restart_CSp, G, &
+    call register_restart_field(CS%tv%S, "Salt", .true., restart_CSp, G, GV=GV, &
                                 longname="Salinity", units="PPT")
 
-  call register_restart_field(CS%h, "h", .true., restart_CSp, G, &
+  call register_restart_field(CS%h, "h", .true., restart_CSp, G, GV=GV, &
                               longname="Layer Thickness", units=thickness_units)
 
-  call register_restart_field(CS%u, "u", .true., restart_CSp, G, &
+  call register_restart_field(CS%u, "u", .true., restart_CSp, G, GV=GV, &
                               longname="Zonal velocity", units="m s-1", hor_grid='Cu')
 
-  call register_restart_field(CS%v, "v", .true., restart_CSp, G, &
+  call register_restart_field(CS%v, "v", .true., restart_CSp, G, GV=GV, &
                               longname="Meridional velocity", units="m s-1", hor_grid='Cv')
 
   if (associated(CS%tv%frazil)) &
-    call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, G, &
+    call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, G, GV=GV, &
                                 longname="Frazil heat flux into ocean", units="J m-2")
 
   if (CS%interp_p_surf) then
-    call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, G, &
+    call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, G, GV=GV, &
                                 longname="Previous ocean surface pressure", units="Pa")
   endif
 
-  call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, G, &
+  call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, G,GV=GV, &
                               longname="Time average sea surface height", units="meter")
 
   ! hML is needed when using the ice shelf module
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
-    call register_restart_field(CS%Hml, "hML", .false., restart_CSp, G, &
+    call register_restart_field(CS%Hml, "hML", .false., restart_CSp, G, GV=GV, &
                                 longname="Mixed layer thickness", units="meter")
   endif
 
   ! Register scalar unit conversion factors.
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, G, &
+  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, G, GV=GV, &
                               longname="Height unit conversion factor", units="Z meter-1")
-  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, G, &
+  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, G, GV=GV, &
                               longname="Thickness unit conversion factor", units="Z meter-1")
 
 end subroutine set_restart_fields

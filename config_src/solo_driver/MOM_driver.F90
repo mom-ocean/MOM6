@@ -331,7 +331,7 @@ program MOM_main
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, GV, &
                               diag, forces, fluxes)
   endif
 

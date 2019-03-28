@@ -1041,10 +1041,11 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 end function MEKE_init
 
 !> Allocates memory and register restart fields for the MOM_MEKE module.
-subroutine MEKE_alloc_register_restart(HI, G, param_file, MEKE, restart_CS)
+subroutine MEKE_alloc_register_restart(HI, G, GV, param_file, MEKE, restart_CS)
 ! Arguments
   type(hor_index_type),  intent(in)    :: HI         !< Horizontal index structure
   type(ocean_grid_type), intent(in)    :: G          !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in) :: GV         !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file parser structure.
   type(MEKE_type),       pointer       :: MEKE       !< A structure with MEKE-related fields.
   type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
@@ -1078,7 +1079,7 @@ subroutine MEKE_alloc_register_restart(HI, G, param_file, MEKE, restart_CS)
   allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
   vd = var_desc("MEKE", "m2 s-2", hor_grid='h', z_grid='1', &
            longname="Mesoscale Eddy Kinetic Energy")
-  call register_restart_field(MEKE%MEKE, vd%name, .false., restart_CS, G, &
+  call register_restart_field(MEKE%MEKE, vd%name, .false., restart_CS, G, GV=GV, &
                               longname=vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   if (MEKE_GMcoeff>=0.) then
@@ -1091,7 +1092,7 @@ subroutine MEKE_alloc_register_restart(HI, G, param_file, MEKE, restart_CS)
     allocate(MEKE%Kh(isd:ied,jsd:jed)) ; MEKE%Kh(:,:) = 0.0
     vd = var_desc("MEKE_Kh", "m2 s-1",hor_grid='h',z_grid='1', &
              longname="Lateral diffusivity from Mesoscale Eddy Kinetic Energy")
-    call register_restart_field(MEKE%Kh, vd%name, .false., restart_CS, G, &
+    call register_restart_field(MEKE%Kh, vd%name, .false., restart_CS, G, GV=GV, &
                                 longname=vd%longname, units=vd%units, &
                                 hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif
@@ -1100,7 +1101,7 @@ subroutine MEKE_alloc_register_restart(HI, G, param_file, MEKE, restart_CS)
     allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
     vd = var_desc("MEKE_Ah", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
-    call register_restart_field(MEKE%Ku, vd%name, .false., restart_CS, G, & 
+    call register_restart_field(MEKE%Ku, vd%name, .false., restart_CS, G, GV=GV, & 
                                 longname=vd%longname, units=vd%units, &
                                 hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif
