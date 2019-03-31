@@ -1196,7 +1196,7 @@ end subroutine MEKE_end
 !! \f$ \gamma_\eta \in [0,1] \f$.
 !!
 !! The "frictional" source term
-!! \f[ \dot{E}_{v} = \left<  u \cdot \tau_h \right> \f]
+!! \f[ \dot{E}_{v} = \left<  \partial_i u_j \tau_{ij} \right> \f]
 !! equals the mean kinetic energy removed by lateral viscous fluxes, and
 !! is excluded/included in the MEKE budget by the efficiency parameter
 !! \f$ \gamma_v \in [0,1] \f$.
