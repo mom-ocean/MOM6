@@ -44,6 +44,7 @@ type, public :: MEKE_CS ; private
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
                         !! first baroclinic deformation radius.
   logical :: use_old_lscale !< Use the old formula for mixing length scale.
+  logical :: use_min_lscale !< Use simple minimum for mixing length scale.
   real :: cdrag         !< The bottom drag coefficient for MEKE (non-dim).
   real :: MEKE_BGsrc    !< Background energy source for MEKE in W/kg (= m2 s-3).
   real :: MEKE_dtScale  !< Scale factor to accelerate time-stepping (non-dim.)
@@ -257,7 +258,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     ! Calculates bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
+    call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
       call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI)
       call hchksum(mass, 'MEKE mass',G%HI,haloshift=1)
@@ -581,12 +582,16 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
 
     FatH = 0.25*((G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) + &
            (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1))) !< Coriolis parameter at h points
-    beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH &
-           /max(G%bathyT(i,j),G%bathyT(i+1,j),G%bathyT(i-1,j),1.e-30) &
-           *(G%bathyT(i+1,j) - G%bathyT(i-1,j))/2./G%dxT(i,j) )**2. &
-           + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH   &
-           /max(G%bathyT(i,j),G%bathyT(i,j+1),G%bathyT(i,j-1),1.e-30) &
-           *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
+    beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH*0.5*( &
+           (G%bathyT(i+1,j) - G%bathyT(i,j))*G%IdxCu(I,j)  &
+           /max(G%bathyT(i,j),G%bathyT(i+1,j),GV%H_subroundoff) + &
+           (G%bathyT(i,j) - G%bathyT(i-1,j))*G%IdxCu(I-1,j) &
+           /max(G%bathyT(i,j),G%bathyT(i-1,j),GV%H_subroundoff)))**2. &
+           + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH *0.5*( &
+           (G%bathyT(i,j+1) - G%bathyT(i,j))*G%IdyCv(i,J)  &
+           /max(G%bathyT(i,j),G%bathyT(i,j+1),GV%H_subroundoff) + &
+           (G%bathyT(i,j) - G%bathyT(i,j-1))*G%IdxCu(i,J-1) &
+           /max(G%bathyT(i,j),G%bathyT(i,j-1),GV%H_subroundoff)))**2.)
 
     I_H = GV%Rho0 * I_mass(i,j)
 
@@ -678,11 +683,12 @@ end subroutine MEKE_equilibrium
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
-subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
+subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
             EKE, bottomFac2, barotrFac2, LmixScale)
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points (s-1).
@@ -707,12 +713,16 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
       endif
       FatH = 0.25*( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
              ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  ! Coriolis parameter at h points
-      beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH &
-             /max(G%bathyT(i,j),G%bathyT(i+1,j),G%bathyT(i-1,j),1.e-30) &
-             *(G%bathyT(i+1,j) - G%bathyT(i-1,j)) /2./G%dxT(i,j) )**2. &
-             + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH &
-             /max(G%bathyT(i,j),G%bathyT(i,j-1),G%bathyT(i,j+1),1.e-30) &
-             *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
+      beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH*0.5*( &
+             (G%bathyT(i+1,j) - G%bathyT(i,j))*G%IdxCu(I,j)  &
+             /max(G%bathyT(i,j),G%bathyT(i+1,j),GV%H_subroundoff) + &
+             (G%bathyT(i,j) - G%bathyT(i-1,j))*G%IdxCu(I-1,j) &
+             /max(G%bathyT(i,j),G%bathyT(i-1,j),GV%H_subroundoff)))**2. &
+             + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH *0.5*( &
+             (G%bathyT(i,j+1) - G%bathyT(i,j))*G%IdyCv(i,J)  &
+             /max(G%bathyT(i,j),G%bathyT(i,j+1),GV%H_subroundoff) + &
+             (G%bathyT(i,j) - G%bathyT(i,j-1))*G%IdxCu(i,J-1) &
+             /max(G%bathyT(i,j),G%bathyT(i,j-1),GV%H_subroundoff)))**2.)
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),  &
@@ -775,21 +785,24 @@ subroutine MEKE_lengthScales_0d(CS, area, beta, depth, Rd_dx, SN, EKE, Z_to_L, &
     else
       Leady = 0.
     endif
-    !LmixScale = 0.
-    !if (CS%aDeform*Ldeform > 0.) LmixScale = LmixScale + 1./(CS%aDeform*Ldeform)
-    !if (CS%aFrict *Lfrict  > 0.) LmixScale = LmixScale + 1./(CS%aFrict *Lfrict)
-    !if (CS%aRhines*Lrhines > 0.) LmixScale = LmixScale + 1./(CS%aRhines*Lrhines)
-    !if (CS%aEady  *Leady   > 0.) LmixScale = LmixScale + 1./(CS%aEady  *Leady)
-    !if (CS%aGrid  *Lgrid   > 0.) LmixScale = LmixScale + 1./(CS%aGrid  *Lgrid)
-    !if (CS%Lfixed          > 0.) LmixScale = LmixScale + 1./CS%Lfixed
-    !if (LmixScale > 0.) LmixScale = 1. / LmixScale
-    LmixScale = 1.e7
-    if (CS%aDeform*Ldeform > 0.) LmixScale = min(LmixScale,CS%aDeform*Ldeform)
-    if (CS%aFrict *Lfrict  > 0.) LmixScale = min(LmixScale,CS%aFrict *Lfrict)
-    if (CS%aRhines*Lrhines > 0.) LmixScale = min(LmixScale,CS%aRhines*Lrhines)
-    if (CS%aEady  *Leady   > 0.) LmixScale = min(LmixScale,CS%aEady  *Leady)
-    if (CS%aGrid  *Lgrid   > 0.) LmixScale = min(LmixScale,CS%aGrid  *Lgrid)
-    if (CS%Lfixed          > 0.) LmixScale = min(LmixScale,CS%Lfixed)
+    if (CS%use_min_lscale) then
+      LmixScale = 1.e7
+      if (CS%aDeform*Ldeform > 0.) LmixScale = min(LmixScale,CS%aDeform*Ldeform)
+      if (CS%aFrict *Lfrict  > 0.) LmixScale = min(LmixScale,CS%aFrict *Lfrict)
+      if (CS%aRhines*Lrhines > 0.) LmixScale = min(LmixScale,CS%aRhines*Lrhines)
+      if (CS%aEady  *Leady   > 0.) LmixScale = min(LmixScale,CS%aEady  *Leady)
+      if (CS%aGrid  *Lgrid   > 0.) LmixScale = min(LmixScale,CS%aGrid  *Lgrid)
+      if (CS%Lfixed          > 0.) LmixScale = min(LmixScale,CS%Lfixed)
+    else 
+      LmixScale = 0.
+      if (CS%aDeform*Ldeform > 0.) LmixScale = LmixScale + 1./(CS%aDeform*Ldeform)
+      if (CS%aFrict *Lfrict  > 0.) LmixScale = LmixScale + 1./(CS%aFrict *Lfrict)
+      if (CS%aRhines*Lrhines > 0.) LmixScale = LmixScale + 1./(CS%aRhines*Lrhines)
+      if (CS%aEady  *Leady   > 0.) LmixScale = LmixScale + 1./(CS%aEady  *Leady)
+      if (CS%aGrid  *Lgrid   > 0.) LmixScale = LmixScale + 1./(CS%aGrid  *Lgrid)
+      if (CS%Lfixed          > 0.) LmixScale = LmixScale + 1./CS%Lfixed
+      if (LmixScale > 0.) LmixScale = 1. / LmixScale
+    endif
   endif
 
 end subroutine MEKE_lengthScales_0d
@@ -904,6 +917,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_OLD_LSCALE", CS%use_old_lscale, &
                  "If true, use the old formula for length scale which is\n"//&
                  "a function of grid spacing and deformation radius.",  &
+                 default=.false.)
+  call get_param(param_file, mdl, "MEKE_MIN_LSCALE", CS%use_min_lscale, &
+                 "If true, use a strict minimum of provided length scales\n"//&
+                 "rather than harmonic mean.",  &
                  default=.false.)
   call get_param(param_file, mdl, "MEKE_RD_MAX_SCALE", CS%Rd_as_max_scale, &
                  "If true, the length scale used by MEKE is the minimum of\n"//&
