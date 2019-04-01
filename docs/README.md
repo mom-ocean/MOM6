@@ -38,11 +38,11 @@ If you are building the full generated sphinx documentation you will need the fo
 
 (.e.g `apt-get install libxml2-dev libxslt-dev`)
 
-Before running sphinc (`make html`) you will need to issue:
+Before running sphinx (`make html`) you will need to issue:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Credits
 
-The sphinx documentation of MOM6 is made possible by modifications by Angus Gibson to two packages, [sphinx-fortran](https://github.com/angus-g/sphinx-fortran) and [autodoc_doxygen](https://github.com/angus-g/sphinxcontrib-autodoc_doxygen).
+The sphinx documentation of MOM6 is made possible by modifications by [Angus Gibson](https://github.com/angus-g) to two packages, [sphinx-fortran](https://github.com/angus-g/sphinx-fortran) and [autodoc_doxygen](https://github.com/angus-g/sphinxcontrib-autodoc_doxygen).
