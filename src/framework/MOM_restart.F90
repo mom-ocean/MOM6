@@ -317,7 +317,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(4), dimNameStr
-  character(len=8) :: ncAction 
+  character(len=16) :: ncAction = ''
   character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
@@ -378,17 +378,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   name_length = len_trim(file_name_join)
   file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
-  ! note: file_exists function does not automatically insert .res., so use full file name
-  ncAction = ' '
-  file_exists = fms2_file_exists(file_Name_1)
-  if (file_exists) then
-     ncAction = "append"
-  else
-     ncAction = "write"      
-  endif
-
-  WRITE(mpp_pe()+2000,*) "register_restart_field_4d: ncAction ", trim(ncAction)
-  call flush(mpp_pe()+2000)
+  ncAction = "append"      
 
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
@@ -537,7 +527,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=50) :: dimNames(4), dimNameStr
-  character(len=8) :: ncAction 
+  character(len=16) :: ncAction = ''
   character(len=200) :: mesg
   logical :: use_lath = .false., use_lonh = .false., &
              use_latq = .false., use_lonq = .false., &
@@ -599,13 +589,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
-  ncAction = ' '
-  file_exists = fms2_file_exists(file_Name_1)
-  if (file_exists) then
-     ncAction = "append"
-  else
-     ncAction = "write"      
-  endif
+  ncAction = "append"      
 
   WRITE(mpp_pe()+2000,*) "register_restart_field_3d: ncAction ", trim(ncAction)
   call flush(mpp_pe()+2000)
@@ -813,13 +797,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
   file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
-  ncAction = ' '
-  file_exists = fms2_file_exists(file_Name_1)
-  if (file_exists) then
-     ncAction = "append"
-  else
-     ncAction = "write"      
-  endif
+  ncAction = "append"
 
   WRITE(mpp_pe()+2000,*) "register_restart_field_2d: ncAction ", trim(ncAction)
   call flush(mpp_pe()+2000)
@@ -942,7 +920,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_exists = .false.
   character(len=50) :: dimNames(4), dimNameStr
   character(len=200) :: file_Name_1, file_Name_2, file_name_join
-  character(len=8) :: ncAction
+  character(len=16) :: ncAction = ''
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
   logical :: use_layer = .false., use_int = .false., &
@@ -991,16 +969,8 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
-  ncAction = ' '
-  file_exists = fms2_file_exists(file_Name_1)
-  if (file_exists) then
-     ncAction = "append"
-  else
-     ncAction = "write"      
-  endif
+  ncAction = "append"
 
-  WRITE(mpp_pe()+2000,*) "register_restart_field_1d: ncAction ", trim(ncAction)
-  call flush(mpp_pe()+2000)
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
@@ -1084,7 +1054,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObjWrite ! fms2 data structure
   type(vardesc) :: vd
   character(len=50) :: dimNames(1), dimNameStr
-  character(len=8) :: ncAction
+  character(len=16) :: ncAction = ''
   character(len=200) :: file_Name_1, file_Name_2, file_name_join
   integer :: str_split_index = 1, str_end_index = 1
   character(len=200) :: mesg
@@ -1127,16 +1097,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
   ! note: file_exists function does not automatically insert .res., so use full file name
-  ncAction = ' '
-  file_exists = fms2_file_exists(file_Name_1)
-  if (file_exists) then
-     ncAction = "append"
-  else
-     ncAction = "write"      
-  endif
-
-  WRITE(mpp_pe()+2000,*) "register_restart_field_0d: ncAction ", trim(ncAction)
-  call flush(mpp_pe()+2000)
+  ncAction = "append"
  
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
@@ -1568,7 +1529,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   character(len=8) :: t_grid_read
-  character(len=8) :: ncAction = ''
+  character(len=16) :: ncAction = ''
   character(len=64) :: var_name         ! A variable's name.
   real :: restart_time
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
