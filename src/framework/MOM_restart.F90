@@ -314,24 +314,19 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=200) :: file_Name_1, file_Name_2, file_name_join
+  character(len=200) :: restart_file_paths(CS%max_fields) ! Restart file nams including full paths        
+  character(len=200) :: base_file_name = ''
   integer :: str_split_index = 1, str_end_index = 1
-  character(len=50) :: dimNames(4), dimNameStr
-  character(len=16) :: ncAction = ''
+  character(len=50) :: dim_names(4), dim_name_str
+  character(len=16) :: nc_action = ''
   character(len=200) :: mesg
-  logical :: use_lath = .false., use_lonh = .false., &
-             use_latq = .false., use_lonq = .false., &
-             use_layer = .false., use_int = .false., &
-             use_time = .false., use_periodic = .false.
+ 
+  integer :: name_length = 0
+  integer :: axis_length = 0
+  integer :: num_axes = 0
+  integer :: num_file = 1
   integer :: horgrid_position = 1
-  integer :: num_axes
-  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
-  real, pointer, dimension(:) :: &
-    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
-    gridLatB => NULL(), & ! the purpose of labeling the output axes.
-    gridLonT => NULL(), gridLonB => NULL()
-  integer :: axis_length, name_length
-          
+ 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
@@ -339,49 +334,19 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   WRITE(mpp_pe()+2000,*) "register_restart_field_2d: registering restart variable ", trim(name)
   call flush(mpp_pe()+2000)
 
-  gridLatT => G%gridLatT
-  gridLatB => G%gridLatB
-  gridLonT => G%gridLonT
-  gridLonB => G%gridLonB
-  isg = G%isg
-  ieg = G%ieg 
-  jsg = G%jsg
-  jeg = G%jeg
-  IsgB = G%IsgB
-  IegB = G%IegB
-  JsgB = G%JsgB
-  JegB = G%JegB
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  ! remove '.res.' from the file name if present since fms read automatically appends it to the file name
-  file_Name_1 = ''
-  file_Name_2 = ''
-  file_name_join = ''
-  name_length = 0
-  file_Name_1(1:len_trim(CS%restartfile)) = trim(CS%restartfile)
-  str_split_index = INDEX(file_Name_1,'.res')
-  str_end_index = INDEX(file_Name_1,'.nc') 
-  if (str_split_index > 1) then 
-     if (str_end_index > 1 ) then
-        file_name_join = trim(file_Name_1(1:str_split_index-1)//&
-                         file_Name_1(str_split_index+4:str_end_index-1))//'.nc'
-     else
-        file_name_join = trim(file_Name_1(1:str_split_index-1)//& 
-                         file_Name_1(str_split_index+4:len_trim(file_Name_1)))//'.nc'   
-     endif          
-  else 
-      file_name_join = trim(file_Name_1)
-  endif
+  ! Get number of restart files and full paths to files
+  name_length = len_trim(CS%restartfile)
+  base_file_name(1:name_length) = trim(CS%restartfile)
 
-  name_length = len_trim(file_name_join)
-  file_Name_2(1:name_length) = trim(file_name_join)
   ! check whether restart file exists
-  ncAction = "append"      
+  nc_action = "append"      
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, file_Name_2, ncAction, G%Domain%mpp_domain, is_restart = .true.)
+  file_open_success=fms2_open_file(CS%fileObjWrite, file_Name_2, nc_action, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(file_Name_2)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
@@ -415,18 +380,6 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   call flush(mpp_pe()+2000)
   ! latitude
   
-  if (use_lath) then
-     num_axes = 2
-     axis_length = size(gridLatT(jsg:jeg))
-     call check_for_restart_axis(CS%fileObjWrite,'lath', axis_length)
-     dimNameStr = 'lath'
-  elseif (use_latq) then
-     num_axes = 2
-     axis_length = size(gridLatB(JsgB:JegB))
-     call check_for_restart_axis(CS%fileObjWrite,'latq', axis_length)
-     dimNameStr = 'latq'
-  endif
-
   dimNames(num_axes) = ''
   name_length = len_trim(dimNameStr)
   dimNames(num_axes)(1:name_length) = trim(dimNameStr)
@@ -751,18 +704,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
   WRITE(mpp_pe()+2000,*) "register_restart_field_2d: registering restart variable ", trim(Name)
   call flush(mpp_pe()+2000)
 
-  gridLatT => G%gridLatT
-  gridLatB => G%gridLatB
-  gridLonT => G%gridLonT
-  gridLonB => G%gridLonB
-  isg = G%isg
-  ieg = G%ieg 
-  jsg = G%jsg
-  jeg = G%jeg
-  IsgB = G%IsgB
-  IegB = G%IegB
-  JsgB = G%JsgB
-  JegB = G%JegB
   
   if (present(z_grid)) then 
      Zgrid = z_grid
@@ -2442,30 +2383,90 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
 end subroutine get_checksum_loop_ranges
 
-subroutine get_horizontal_grid_coordinates(hor_grid,use_lath,use_lonh, &
-                                           use_latq,use_lonq, gridPosition)
-  character(len=*), intent(in) :: hor_grid !< name of the horizontal grid 
-  logical, intent(out) ::  use_lath, use_lonh, use_latq, use_lonq !< flags for lath, lonh,latq, lonq
-  integer, intent(out) :: gridPosition !< integer corresponding to the grid position
-  use_lath = .false.
-  use_lonh = .false.
-  use_latq = .false.
-  use_lonh = .false.
-
+subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, G, hor_grid, grid_position)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
+  integer, intent(inout) ::  num_axes !< number of axes in restart file
+  type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
+  character(len=*), intent(out) :: hor_grid !< name of the horizontal grid
+  integer, intent(out) :: grid_position !< integer corresponding to the grid position
+  ! local
+  logical :: use_lath = .false.
+  logical :: use_lonh = .false.
+  logical :: use_latq = .false.
+  logical :: use_lonq = .false.
+  integer :: axis_length = 0
+  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: &
+     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+     gridLatB => NULL(), & ! the purpose of labeling the output axes.
+     gridLonT => NULL(), &
+     gridLonB => NULL()
+  character(len=100) :: dim_name_str = ''
+  
+  ! set the ocean grid coordinates
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
+  
   select case (hor_grid)
-     case ('h') ; use_lath = .true. ; use_lonh = .true.; gridPosition = CENTER
-     case ('q') ; use_latq = .true. ; use_lonq = .true.; gridPosition = CORNER
-     case ('u') ; use_lath = .true. ; use_lonq = .true.; gridPosition = EAST_FACE
-     case ('v') ; use_latq = .true. ; use_lonh = .true.; gridPosition = NORTH_FACE
-     case ('T')  ; use_lath = .true. ; use_lonh = .true.; gridPosition = CENTER
-     case ('Bu') ; use_latq = .true. ; use_lonq = .true.; gridPosition = CORNER
-     case ('Cu') ; use_lath = .true. ; use_lonq = .true.; gridPosition = EAST_FACE
-     case ('Cv') ; use_latq = .true. ; use_lonh = .true.; gridPosition = NORTH_FACE
+     case ('h') ; use_lath = .true. ; use_lonh = .true.; grid_position = CENTER
+     case ('q') ; use_latq = .true. ; use_lonq = .true.; grid_position = CORNER
+     case ('u') ; use_lath = .true. ; use_lonq = .true.; grid_position = EAST_FACE
+     case ('v') ; use_latq = .true. ; use_lonh = .true.; grid_position = NORTH_FACE
+     case ('T')  ; use_lath = .true. ; use_lonh = .true.; grid_position = CENTER
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true.; grid_position = CORNER
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true.; grid_position = EAST_FACE
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true.; grid_position = NORTH_FACE
      case ('1') ; gridPosition = 0 
      case default
         call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
                         "Unrecognized hor_grid argument "//trim(hor_grid))
   end select
+  ! add longitude name to dimension name array
+
+  if (use_lonh) then
+     dim_name_str = 'lonh'
+     num_axes = num_axes+1 
+     axis_length = size(gridLonT(isg:ieg))
+  elseif (use_lonq) then
+     dim_name_str ='lonq'
+     num_axes = num_axes+1
+     axis_length = size(gridLonB(IsgB:IegB)) 
+  endif
+ 
+  ! register the restart axis if it is not
+  if (num_axes > 0) then
+     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
+  ! add latitude name to dimension name array
+
+  if (use_lath) then
+     dim_name_str = 'lath'
+     num_axes = num_axes+1
+     axis_length = size(gridLatT(jsg:jeg))
+  elseif (use_latq) then
+     dim_name_str = 'latq'
+     num_axes = num_axes+1
+     axis_length = size(gridLatB(JsgB:JegB))
+  endif
+  
+  ! register the restart axis if it is not
+  if (num_axes > 0) then
+     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
+
 end subroutine get_horizontal_grid_coordinates
 
 subroutine get_vertical_grid_coordinates(z_grid,use_layer,use_int)
@@ -2753,6 +2754,40 @@ end subroutine write_axis_data
 !    endif
 !enddo
 !end subroutine write_variable_axes
+
+!> remove a substring from a string, and return the resulting string
+function remove_substring(string_in, substring) result string_out
+   character(len=*), intent(in) :: string_in !< input string
+   character(len=*), intent(in) :: substring !< string to remove from string_in
+   ! local
+   character(len=1024) :: string_out
+   character(len=1024) :: string_holder 
+   integer :: string_in_length
+   integer :: substring_length
+   integer :: string_split_index
+
+   string_out = ''
+   string_in_length = 0
+   substring_length = 0
+   string_split_index = 0
+   
+   ! find the position of the first substring character in string_in
+   string_in_length = len_trim(string_in)
+   str_split_index = INDEX(string_in, trim(substring))
+   substring_length = len_trim(substring)
+
+   if (str_split_index > 0) then     
+       string_holder = trim(string_in(1:str_split_index-1)//&
+                            string_in(substring_length+1:string_in_length))
+
+       string_out(1:len_trim(string_holder)) = trim(string_holder)
+   else
+      call MOM_error(WARNING, "MOM_restart::remove_substring "//trim(substring)//&
+                     " not found in the string "//trim(string_in))
+   endif
+
+end function remove_subtstring
+
 
 
 end module MOM_restart
