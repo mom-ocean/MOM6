@@ -99,6 +99,9 @@ type, public :: MOM_restart_CS ; private
                                     !! made from a run with a different mask_table than the current run,
                                     !! in which case the checksums will not match and cause crash.
   character(len=240) :: restartfile !< The name or name root for MOM restart files.
+  logical :: file_created = .false. !< If true, one or more restart files with the restartfile name root have
+                                    !! were created (nc mode = 'write') during a previous call 
+                                    !! to register_restart_field
 
   !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
@@ -317,6 +320,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   character(len=200) :: restart_file_paths(CS%max_fields) ! Restart file nams including full paths        
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(4)
+  character(len=500), dimension(:), allocatable :: restart_file_list
   character(len=16) :: nc_action = ''
   character(len=200) :: mesg
   integer :: name_length = 0
@@ -331,6 +335,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   WRITE(mpp_pe()+2000,*) "register_restart_field_2d: registering restart variable ", trim(name)
   call flush(mpp_pe()+2000)
 
+
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
@@ -343,8 +348,11 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
      base_file_name(1:name_length) = trim(CS%restartfile)
   endif
 
-  ! check whether restart file exists
-  nc_action = "write"      
+  if (CS%file_created) then
+     nc_action = "append"
+  else
+     nc_action = "write" 
+  endif     
 
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = .true.)
@@ -353,6 +361,8 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
   endif
+
+  CS%file_created = .true.
                                           
   ! 4d variables are lon x lat x vertical level x time
   ! horizontal grid (hor_grid)
@@ -365,8 +375,6 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! time (t) grid  
   call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
-
-  call fms2_close_file(CS%fileObjWrite)
   
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_4d: dim name ", trim(dim_names(i))
@@ -380,14 +388,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   ! 1. axis metadata are written to file, returns a an axis structure with the metadaa
   ! 2. axes for a given variable are determined
   ! 3. axes metadata are associated with variable by referencing the axis structure
-  nc_action = "append"
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-  endif  
-
+  
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, &
                                    dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
   ! register variable attributes
@@ -397,6 +398,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
 !  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%t_grid)
 !  call fms2_register_variable_attribute(CS%fileObj, name, t_grid, vd%hor_grid)
   call fms2_close_file(CS%fileObjWrite)
+  deallocate(restart_file_list)
 
 end subroutine register_restart_field_4d
 
@@ -450,14 +452,20 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
      base_file_name(1:name_length) = trim(CS%restartfile)
   endif
 
-  nc_action = "write"      
-
+  if (CS%file_created) then
+     nc_action = "append"
+  else
+     nc_action = "write" 
+  endif     
+   
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
   endif
+
+  CS%file_created = .true.
  
   ! horizontal grid (hor_grid)
   num_axes = 0
@@ -470,23 +478,13 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   ! time (t) grid  
   call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
 
-  call fms2_close_file(CS%fileObjWrite)
-
-   do i=1,num_axes
+  do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dim name ", trim(dim_names(i))
      call flush(mpp_pe()+2000)
   enddo
  
   ! register the restart field
   call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS)
-
-  nc_action = "append"
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-  endif 
 
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
        dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
@@ -523,7 +521,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
   character(len=200) :: base_file_name = ''
-  character(len=200) :: dim_names(4)
+  character(len=200) :: dim_names(3)
   character(len=16) ::  nc_action = ''
   character(len=200) :: mesg
   integer :: horgrid_position = 1
@@ -557,7 +555,12 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
      base_file_name(1:name_length) = trim(CS%restartfile)
   endif
 
-  nc_action = "write"
+  file_exists = fms2_file_exists(base_file_name)
+  if (CS%file_created) then
+     nc_action = "append"
+  else
+     nc_action = "write" 
+  endif     
   
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = .true.)
@@ -565,6 +568,8 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_2d: "//mesg)
   endif
+
+  CS%file_created = .true.
                                           
   ! check if axis variables are registered in file, and register them if they are not
   ! horizontal grid (hor_grid)
@@ -572,13 +577,13 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
 
   call get_horizontal_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%hor_grid, &
                                        G, horgrid_position)
-  ! Vertical (z) grid 
-  call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
+  if (num_axes < 2) then
+     ! Vertical (z) grid 
+     call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
+  endif
 
   ! time (t) grid   
   call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
-
-  call fms2_close_file(CS%fileObjWrite)
 
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_2d: dim name ", trim(dim_names(i))
@@ -587,14 +592,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! register the restart field
   call register_restart_field_ptr2d(f_ptr, vd, mandatory, CS)
-
-  nc_action = "append"
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_2d: "//mesg)
-  endif
 
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
                                    dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
@@ -628,7 +625,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=200) :: dim_names(4)
+  character(len=200) :: dim_names(2)
   character(len=200) :: base_file_name = ''
   character(len=16) :: nc_action = ''
   character(len=200) :: mesg
@@ -662,7 +659,11 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
      base_file_name(1:name_length) = trim(CS%restartfile)
   endif
 
-  nc_action = "append"
+  if (CS%file_created) then
+     nc_action = "append"
+  else
+     nc_action = "write" 
+  endif     
 
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = .true.)
@@ -670,6 +671,8 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_1d: "//mesg)
   endif
+
+  CS%file_created = .true.
                                           
   ! Vertical (z) grid
   num_axes = 0
@@ -677,8 +680,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! time (t) grid  
   call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
-  call fms2_close_file(CS%fileObjWrite)
-
+  
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_1d: dim name ", trim(dim_names(i))
      call flush(mpp_pe()+2000)
@@ -686,14 +688,6 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! register the restart field
   call register_restart_field_ptr1d(f_ptr, vd, mandatory, CS)
-
-  nc_action = "append"
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_1d: "//mesg)
-  endif
 
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, &
                                    dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
@@ -752,7 +746,11 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
      base_file_name(1:name_length) = trim(CS%restartfile)
   endif
  
-  nc_action = "write"
+  if (CS%file_created) then
+     nc_action = "append"
+  else
+     nc_action = "write" 
+  endif     
  
   ! open the restart file for domain-decomposed write
   file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = .true.)
@@ -760,6 +758,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
   endif
+  CS%file_created = .true.
                                           
   ! check if global axis variables are registered in file, and register them if they are not
   ! Vertical (z) grid
@@ -769,8 +768,6 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   ! time (t) grid  
   call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
 
-  call fms2_close_file(CS%fileObjWrite)
-
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_0d: dim name ", trim(dim_names(i))
      call flush(mpp_pe()+2000)
@@ -778,14 +775,6 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
 
   ! register the restart field
   call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
-
-  nc_action = "append"
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
-  endif
        
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, &
                                    dimensions=dim_names, domain_position=horgrid_position)
@@ -2411,6 +2400,87 @@ subroutine write_axis_data(fileObjWrite, axisName, G, dG, GV, timeunit, &
 
 end subroutine write_axis_data
 
+!> get list of restart files in the root directory
+!subroutine get_restart_file_list(base_name)
+!  character(len=*), intent(in) :: base_name
+! local
+!  character(len=500), dimension(:), allocatable :: file_list
+!  character(len=10) :: num_string
+!  character(len=500) :: file_name
+!  character(len=8) :: iformat ! format descriptor
+!  logical :: file_exist = .false.
+!  integer :: i
+!
+!  iformat = '(I4.4)' ! an integer of width 4 with zeros at the left
+!  
+!  do i=0,200
+!    
+!     write(num_string,iformat) i
+!     file_name = append_substring(base_name,num_string)
+!     file_exist = fms2_file_exists(file_name)
+!
+!     if (file_exist) then
+!        call add_to_list_string(file_list,file_name)
+!     else
+!        exit
+!     endif
+!  end do
+
+!end subroutine get_restart_file_list
+
+!subroutine add_to_list_string(list, element)
+!  character(len=*), intent(in) :: element
+!  character(len=*), dimension(:), allocatable, intent(inout) :: list
+!  !local
+!  character(len=*), dimension(:), allocatable :: clist
+!  integer :: i, isize
+!  if (allocated(list)) then
+!     isize = size(list)
+!     allocate(clist(isize+1))
+!     do i=1,isize          
+!        clist(i) = list(i)
+!     end do
+!     clist(isize+1) = element
+!
+!     deallocate(list)
+!     call move_alloc(clist, list)
+!
+!   else
+!      allocate(list(1))
+!      list(1) = element
+!   end if
+!
+!end subroutine add_to_list_string
+
+!> append a string (substring) to another string (string_in) and return the result (string_out)
+function append_substring(string_in, substring) result(string_out)
+   character(len=*), intent(in) :: string_in !< input string
+   character(len=*), intent(in) :: substring !< string to append string_in
+   ! local
+   character(len=1024) :: string_out
+   character(len=1024) :: string_holder 
+   integer :: string_in_length
+   integer :: substring_length
+   
+   string_out = ''
+   string_in_length = 0
+   substring_length = 0
+  
+   string_in_length = len_trim(string_in)
+   
+   substring_length = len_trim(substring)
+
+   if ((string_in_length > 0) .and. (substring_length > 0)) then     
+       string_holder = trim(string_in//substring)
+
+       string_out(1:len_trim(string_holder)) = trim(string_holder)
+   else
+      call MOM_error(WARNING, "MOM_restart::append_substring: "//&
+                     "the input string or substring has zero length")
+   endif
+
+end function append_substring
+
 !> remove a substring from a string, and return the resulting string
 function remove_substring(string_in, substring) result(string_out)
    character(len=*), intent(in) :: string_in !< input string
@@ -2443,33 +2513,5 @@ function remove_substring(string_in, substring) result(string_out)
    endif
 
 end function remove_substring
-!> append a string (substring) to another string (string_in) and return the result (string_out)
-function append_substring(string_in, substring) result(string_out)
-   character(len=*), intent(in) :: string_in !< input string
-   character(len=*), intent(in) :: substring !< string to append string_in
-   ! local
-   character(len=1024) :: string_out
-   character(len=1024) :: string_holder 
-   integer :: string_in_length
-   integer :: substring_length
-   
-   string_out = ''
-   string_in_length = 0
-   substring_length = 0
-  
-   string_in_length = len_trim(string_in)
-   
-   substring_length = len_trim(substring)
-
-   if ((string_in_length > 0) .and. (substring_length > 0)) then     
-       string_holder = trim(string_in//substring)
-
-       string_out(1:len_trim(string_holder)) = trim(string_holder)
-   else
-      call MOM_error(WARNING, "MOM_restart::append_substring: "//&
-                     "the input string or substring has zero length")
-   endif
-
-end function append_substring
 
 end module MOM_restart
