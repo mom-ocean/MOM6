@@ -2216,7 +2216,7 @@ subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
 
   ! register the restart axis if it is not registered
   if (num_axes > 0) then
-     axis_length = 1 ! 1 time value
+     axis_length = unlimited ! time is the unlimited dimension
      call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
      dim_names(num_axes) = ''
      dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
