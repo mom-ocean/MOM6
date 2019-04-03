@@ -316,11 +316,12 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_exists = .false.
   character(len=200) :: restart_file_paths(CS%max_fields) ! Restart file nams including full paths        
   character(len=200) :: base_file_name = ''
-  character(len=50) :: dim_names(4)
+  character(len=200) :: dim_names(4)
   character(len=16) :: nc_action = ''
   character(len=200) :: mesg
   integer :: name_length = 0
   integer :: num_axes, i
+  integer :: substring_index = 0
   integer :: horgrid_position = 1
  
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
@@ -333,9 +334,14 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, longname
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  ! Get number of restart files and full paths to files
-  name_length = len_trim(CS%restartfile)
-  base_file_name(1:name_length) = trim(CS%restartfile)
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(CS%restartfile))
+  if (substring_index <= 0) then
+     base_file_name = append_substring(trim(CS%restartfile),'.nc')
+  else
+     name_length = len_trim(CS%restartfile)
+     base_file_name(1:name_length) = trim(CS%restartfile)
+  endif
 
   ! check whether restart file exists
   nc_action = "write"      
@@ -417,11 +423,12 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
   character(len=200) :: base_file_name = ''
-  character(len=50) :: dim_names(4)
+  character(len=200) :: dim_names(4)
   character(len=16) :: nc_action = ''
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes, i
+  integer :: substring_index = 0
   integer :: name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
@@ -434,9 +441,14 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, longname
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
   
-  ! check whether restart file exists
-  name_length = len_trim(CS%restartfile)
-  base_file_name(1:name_length) = trim(CS%restartfile)
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(CS%restartfile))
+  if (substring_index <= 0) then
+     base_file_name = append_substring(trim(CS%restartfile),'.nc')
+  else
+     name_length = len_trim(CS%restartfile)
+     base_file_name(1:name_length) = trim(CS%restartfile)
+  endif
 
   nc_action = "write"      
 
@@ -511,11 +523,12 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
   character(len=200) :: base_file_name = ''
-  character(len=50) :: dim_names(4)
+  character(len=200) :: dim_names(4)
   character(len=16) ::  nc_action = ''
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes, i
+  integer :: substring_index = 0
   integer :: name_length=0
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
@@ -535,9 +548,15 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, longname
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=Zgrid, t_grid=t_grid)
 
-  ! check whether restart file exists
-  name_length = len_trim(CS%restartfile)
-  base_file_name = trim(CS%restartfile)
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(CS%restartfile))
+  if (substring_index <= 0) then
+     base_file_name = append_substring(trim(CS%restartfile),'.nc')
+  else
+     name_length = len_trim(CS%restartfile)
+     base_file_name(1:name_length) = trim(CS%restartfile)
+  endif
+
   nc_action = "write"
   
   ! open the restart file for domain-decomposed write
@@ -609,12 +628,13 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: file_exists = .false.
-  character(len=50) :: dim_names(4)
+  character(len=200) :: dim_names(4)
   character(len=200) :: base_file_name = ''
   character(len=16) :: nc_action = ''
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes, i
+  integer :: substring_index = 0
   integer :: name_length = 0
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -633,10 +653,15 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, longname
   vd = var_desc(name, units=units, longname=longname, hor_grid=hgrid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  name_length = len_trim(CS%restartfile)
-  base_file_name(1:name_length) = trim(CS%restartfile)
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(CS%restartfile))
+  if (substring_index <= 0) then
+     base_file_name = append_substring(trim(CS%restartfile),'.nc')
+  else
+     name_length = len_trim(CS%restartfile)
+     base_file_name(1:name_length) = trim(CS%restartfile)
+  endif
 
-  ! check whether restart file exists
   nc_action = "append"
 
   ! open the restart file for domain-decomposed write
@@ -699,12 +724,13 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   logical :: file_exists = .false.
   type(MOM_restart_CS) :: fileObjWrite ! fms2 data structure
   type(vardesc) :: vd
-  character(len=50) :: dim_names(1)
+  character(len=200) :: dim_names(1)
   character(len=16) :: nc_action = ''
   character(len=200) :: base_file_name = ''
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes, i
+  integer :: substring_index = 0
   integer :: name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -717,9 +743,14 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
                 z_grid='1', t_grid=t_grid)
 
-  name_length = len_trim(CS%restartfile)
-  base_file_name(1:name_length) = trim(CS%restartfile)
-  ! check whether restart file exists
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(CS%restartfile))
+  if (substring_index <= 0) then
+     base_file_name = append_substring(trim(CS%restartfile),'.nc')
+  else
+     name_length = len_trim(CS%restartfile)
+     base_file_name(1:name_length) = trim(CS%restartfile)
+  endif
  
   nc_action = "write"
  
@@ -2029,7 +2060,7 @@ subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, ho
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
      gridLonT => NULL(), &
      gridLonB => NULL()
-  character(len=200) :: dim_name_str = ''
+  character(len=200) :: dim_name_str
   
   ! set the ocean grid coordinates
   gridLatT => G%gridLatT
@@ -2060,7 +2091,7 @@ subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, ho
                         "Unrecognized hor_grid argument "//trim(hor_grid))
   end select
   ! add longitude name to dimension name array
-
+  dim_name_str = ''
   if (use_lonh) then
      dim_name_str = 'lonh'
      num_axes = num_axes+1 
@@ -2372,62 +2403,6 @@ subroutine write_axis_data(fileObjWrite, axisName, G, dG, GV, timeunit, &
 
 end subroutine write_axis_data
 
-!subroutine write_variable_axes(var_name, axes, hor_grid,z_grid,t_grid)
-!   character(len=*), intent(in) :: var_name !< name of the variable
-!   type(axistype), intent(out)  :: axes(4) 
-!   character(len=*), intent(in), optional :: hor_grid
-!   character(len=*), intent(in), optional :: z_grid
-!   character(len=*), intent(in), optional :: t_grid
-   ! local
-!   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
-!   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
-!   integer :: numaxes = 0
-!   if (present(hor_grid) then
-!      select case (hor_grid)
-!         case ('h')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-!         case ('q')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-!         case ('u')  ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-!         case ('v')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-!         case ('T')  ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-!         case ('Bu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-!         case ('Cu') ; num_axes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-!!         case ('Cv') ; num_axes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-!         case ('1') ! Do nothing.
-!         case default
-!            call MOM_error(WARNING, "MOM_restart:get_variable_axes: "//trim(var_name)//&
-!                        " has unrecognized hor_grid "//trim(hor_grid))
-!      end select
-!   endif
-!   if (present(z_grid))
-!     select case (z_grid)
-!      case ('L') ; num_axes = num_axes+1 ; axes(num_axes) = axis_layer
-!      case ('i') ; num_axes = num_axes+1 ; axes(num_axes) = axis_int
-!      case ('1') ! Do nothing.
-!      case default
-!        call MOM_error(FATAL, "MOM_restart:get_variable_axes: "//trim(var_name)//&
-!                        " has unrecognized z_grid "//trim(z_grid))
-!    end select
-!    t_grid = adjustl(vars(k)%t_grid)
-!    select case (t_grid(1:1))
-!      case ('s', 'a', 'm') ; num_axes = num_axes+1 ; axes(num_axes) = axis_time
-!      case ('p')           ; num_axes = num_axes+1 ; axes(num_axes) = axis_periodic
-!      case ('1') ! Do nothing.
-!      case default
-!        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-!                        " has unrecognized t_grid "//trim(vars(k)%t_grid))
-!    end select
-!!    pack = 1
-
-!    if (present(checksums)) then
-!       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-!           vars(k)%longname, pack = pack, checksum=checksums(k,:))
-!    else
-!       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-!           vars(k)%longname, pack = pack)
-!    endif
-!enddo
-!end subroutine write_variable_axes
-
 !> remove a substring from a string, and return the resulting string
 function remove_substring(string_in, substring) result(string_out)
    character(len=*), intent(in) :: string_in !< input string
@@ -2460,5 +2435,33 @@ function remove_substring(string_in, substring) result(string_out)
    endif
 
 end function remove_substring
+!> append a string (substring) to another string (string_in) and return the result (string_out)
+function append_substring(string_in, substring) result(string_out)
+   character(len=*), intent(in) :: string_in !< input string
+   character(len=*), intent(in) :: substring !< string to append string_in
+   ! local
+   character(len=1024) :: string_out
+   character(len=1024) :: string_holder 
+   integer :: string_in_length
+   integer :: substring_length
+   
+   string_out = ''
+   string_in_length = 0
+   substring_length = 0
+  
+   string_in_length = len_trim(string_in)
+   
+   substring_length = len_trim(substring)
+
+   if ((string_in_length > 0) .and. (substring_length > 0)) then     
+       string_holder = trim(string_in//substring)
+
+       string_out(1:len_trim(string_holder)) = trim(string_holder)
+   else
+      call MOM_error(WARNING, "MOM_restart::append_substring: "//&
+                     "the input string or substring has zero length")
+   endif
+
+end function append_substring
 
 end module MOM_restart
