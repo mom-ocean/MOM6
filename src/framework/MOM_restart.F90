@@ -768,6 +768,8 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, longname
   ! time (t) grid  
   call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
 
+  call fms2_close_file(CS%fileObjWrite)
+
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_0d: dim name ", trim(dim_names(i))
      call flush(mpp_pe()+2000)
@@ -1157,6 +1159,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   type(fieldtype) :: fields(CS%max_fields) !
   character(len=512) :: restartpath     ! The restart file path (dir/file).
   character(len=256) :: restartname     ! The restart file name (no dir).
+  character(len=256) :: base_file_name  ! Temporary location for restart file name (no dir)
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
                                         ! to the name of files after the first.
   integer(kind=8) :: var_sz, size_in_file ! The size in bytes of each variable
@@ -1178,6 +1181,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
+  integer :: substring_index = 0
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1198,13 +1202,22 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   restart_time = time_type_to_real(time) / 86400.0
 
   pos = 1
-  restartname = " "
-  restartpath = " "
+  restartname = ''
+  restartpath = ''
+  base_file_name = ''
 
   if (present(filename)) then 
-     restartname = trim(filename) 
+     base_file_name = trim(filename) 
   else
-     restartname=trim(CS%restartfile)
+     base_file_name=trim(CS%restartfile)
+  endif
+
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(base_file_name))
+  if (substring_index <= 0) then
+     restartname = append_substring(base_file_name,'.nc')
+  else
+     restartname(1:len_trim(base_file_name)) = trim(base_file_name)
   endif
 
   if (PRESENT(time_stamped)) then ; if (time_stamped) then
@@ -1295,18 +1308,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
         endif
      enddo
-
-     !if (CS%parallel_restartfiles) then
-     !   call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-     !                    fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
-     !else
-     !   call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-     !                    fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
-     !endif
      
      file_open_success = .false.
      file_open_success = fms2_open_file(CS%fileObjWrite, restartpath,"append", &
-                                        G%Domain%mpp_domain,is_restart=.true.)
+                                        G%Domain%mpp_domain, is_restart=.true.)
      if (.not. (file_open_success)) then
         call MOM_error(FATAL,"MOM_restart::save_restart: Failed to open file "//restartpath)
      endif
