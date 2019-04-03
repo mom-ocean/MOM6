@@ -2105,10 +2105,11 @@ subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, ho
   ! register the restart axis if it is not
   if (num_axes > 0) then
      call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
      dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
   endif
   ! add latitude name to dimension name array
-
+  dim_name_str = ''
   if (use_lath) then
      dim_name_str = 'lath'
      num_axes = num_axes+1
@@ -2122,6 +2123,7 @@ subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, ho
   ! register the restart axis if it is not
   if (num_axes > 0) then
      call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
      dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
   endif
 
@@ -2138,7 +2140,7 @@ subroutine get_vertical_grid_coordinates(fileObjWrite, dim_names, num_axes, GV, 
   ! local
   logical :: use_layer = .false.
   logical :: use_int = .false.
-  character(len=200) :: dim_name_str = '' 
+  character(len=200) :: dim_name_str
   integer :: axis_length = 0
 
   select case (trim(z_grid))
@@ -2150,6 +2152,8 @@ subroutine get_vertical_grid_coordinates(fileObjWrite, dim_names, num_axes, GV, 
                         " has unrecognized z_grid argument"//trim(z_grid))
   end select
   
+  dim_name_str = ''
+
   if (use_layer) then
      dim_name_str = 'Layer'
      num_axes = num_axes+1
@@ -2163,6 +2167,7 @@ subroutine get_vertical_grid_coordinates(fileObjWrite, dim_names, num_axes, GV, 
   ! register the restart axis if it is not registered
   if (num_axes > 0) then
      call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
      dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
   endif
 
@@ -2180,7 +2185,7 @@ subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
   logical :: use_time = .false.
   logical :: use_periodic = .false.
   character(len=8) :: t_grid, t_grid_read
-  character(len=200) :: dim_name_str = '' 
+  character(len=200) :: dim_name_str
   integer :: axis_length = 0
 
   t_grid = adjustl(t_grid_in)
@@ -2198,6 +2203,8 @@ subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
         call MOM_error(WARNING, "MOM_restart: get_time_coordinates: "//&
                        "Unrecognized t_grid "//trim(t_grid))
   end select
+
+  dim_name_str = ''
       
   if (use_time) then
      num_axes = num_axes+1
@@ -2211,6 +2218,7 @@ subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
   if (num_axes > 0) then
      axis_length = 1 ! 1 time value
      call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
      dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
   endif
 end subroutine get_time_coordinates
