@@ -1316,48 +1316,43 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      if (.not. (file_open_success)) then
         call MOM_error(FATAL,"MOM_restart::save_restart: Failed to open file "//restartpath)
      endif
+
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                           z_grid=z_grid, t_grid=t_grid, caller="save_restart")
      ! write the axis (dimension) data to the restart file
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lath')
      variable_exists = fms2_variable_exists(CS%fileobjWrite, 'lath')
 
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lath', &
-                                                        hor_grid, G=G)
+     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lath', G=G)
      
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lonh')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'lonh')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lonh', &
-                                                        hor_grid, G=G)
+     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lonh', G=G)
 
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'latq')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'latq')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'latq', &
-                                                        hor_grid, G=G)
+     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'latq', G=G)
 
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lonq')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'lonq')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lonq', &
-                                                        hor_grid, G=G)
+     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lonq',G=G)
 
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Layer')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Layer')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'Layer', &
-                                                                        hor_grid, GV=GV)
+     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'Layer', GV=GV)
 
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Interface')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Interface')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'Interface', &
-                                                                        hor_grid, GV=GV)
+     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'Interface', GV=GV)
    
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Time')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Time')
      if (axis_exists .and. .not.(variable_exists)) then
-        call write_axis_data(CS%fileObjWrite,'Time',hor_grid, &
-                             restart_time_in_days=restart_time)
+        call write_axis_data(CS%fileObjWrite,'Time', restart_time_in_days=restart_time)
      else
         axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Period')
         variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Period')
-        if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite, &
-                                                                           'Period',t_grid_in=t_grid)
+        if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite, 'Period',t_grid_in=t_grid)
      endif
      
      do m=start_var,next_var-1     
@@ -2267,11 +2262,10 @@ end subroutine check_for_restart_axis
 
 !> Define the axis variable attributes, and write the axis data
 !! to the restart file
-subroutine write_axis_data(fileObjWrite, axisName, horgrid_string, G, dG, GV, timeunit, & 
-                           restart_time_in_days, t_grid_in, horgrid_position)
+subroutine write_axis_data(fileObjWrite, axisName, G, dG, GV, timeunit, & 
+                           restart_time_in_days, t_grid_in)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
   character(len=*), intent(in) :: axisName !< Name of the axis
-  character(len=*), intent(in) :: horgrid_string !< horizonal grid string
   type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                     !! is required if the new file uses any
                                                     !! horizontal grid axes.
@@ -2324,31 +2318,29 @@ subroutine write_axis_data(fileObjWrite, axisName, horgrid_string, G, dG, GV, ti
      isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
      IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
-  ! get the horizonal grid position for the domain_position argument
-  horgrid_position = get_horizontal_grid_position(horgrid_string)
-
+  ! Register and write the axis data
   select case (trim(axisName))
      case ('latq')        
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, gridLatB(JsgB:JegB), & 
-                                   dimensions='latq', domain_position=horgrid_position)
+        call fms2_register_restart_field(fileObjWrite, axisName, gridLatB(JsgB:JegB), &  
+                                         dimensions=(/'latq'/), domain_position=CORNER)
         call fms2_write_data(fileObjWrite,axisName,gridLatB(JsgB:JegB))
         long_name = 'Latitude'
         axis_units = y_axis_units
      case ('lath')
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, gridLatT(jsg:jeg), & 
-                                   dimensions='lath', domain_position=horgrid_position)
+        call fms2_register_restart_field(fileObjWrite, axisName, gridLatT(jsg:jeg), &
+                                         dimensions=(/'lath'/), domain_position=CENTER)
         call fms2_write_data(fileObjWrite,axisName,gridLatT(jsg:jeg))
         long_name = 'Latitude'
         axis_units = y_axis_units
      case ('lonq')
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, gridLonB(IsgB:IegB), & 
-                                   dimensions='lonq', domain_position=horgrid_position)
+        call fms2_register_restart_field(fileObjWrite, axisName, gridLonB(IsgB:IegB), & 
+                                         dimensions=(/'lonq'/), domain_position=CORNER)
         call fms2_write_data(fileObjWrite,axisName,gridLonB(IsgB:IegB))
         long_name = 'Longitude'
         axis_units = x_axis_units
      case ('lonh')
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, gridLonT(isg:ieg), & 
-                                   dimensions='lonh', domain_position=horgrid_position)
+        call fms2_register_restart_field(fileObjWrite, axisName, gridLonT(isg:ieg), &
+                                         dimensions=(/'lonh'/), domain_position=CENTER)
         call fms2_write_data(fileObjWrite,axisName,gridLonT(isg:ieg))
         long_name = 'Longitude'
         axis_units = x_axis_units
@@ -2357,8 +2349,8 @@ subroutine write_axis_data(fileObjWrite, axisName, horgrid_string, G, dG, GV, ti
            call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
                           " which is required to write the Layer axis data.")
         endif
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, GV%sLayer(1:GV%ke)), & 
-                                   dimensions='Layer', domain_position=horgrid_position)
+        call fms2_register_restart_field(fileObjWrite, axisName, GV%sLayer(1:GV%ke), & 
+                                   dimensions=(/'Layer'/))
         call fms2_write_data(fileObjWrite,axisName,GV%sLayer(1:GV%ke))
         long_name = 'Layer'
         axis_units = trim(GV%zAxisUnits)
@@ -2367,8 +2359,8 @@ subroutine write_axis_data(fileObjWrite, axisName, horgrid_string, G, dG, GV, ti
            call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
                           " which is required to write the Interface axis data.")
         endif
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, GV%sInterface(1:GV%ke+1), & 
-                                   dimensions='Interface', domain_position=horgrid_position)
+        call fms2_register_restart_field(fileObjWrite, axisName, GV%sInterface(1:GV%ke+1), & 
+                                   dimensions=(/'Interface'/))
         call fms2_write_data(fileObjWrite,axisName,GV%sInterface(1:GV%ke+1))
         long_name="Interface "//trim(GV%zAxisLongName)
         axis_units = trim(GV%zAxisUnits)
@@ -2393,12 +2385,11 @@ subroutine write_axis_data(fileObjWrite, axisName, horgrid_string, G, dG, GV, ti
            axis_units = "days"
         endif
         if (present(restart_time_in_days)) then
-           call fms2_register_restart_field(CS%fileObjWrite, axisName, restart_time_in_days, & 
-                                   dimensions='Time', domain_position=horgrid_position)
+           call fms2_register_restart_field(fileObjWrite, axisName, restart_time_in_days, dimensions=(/'Time'/))
            call fms2_write_data(fileObjWrite,axisName,restart_time_in_days)
         else
-           call fms2_register_restart_field(CS%fileObjWrite, axisName, 1.0, & 
-                                   dimensions='Time', domain_position=horgrid_position)
+           call fms2_register_restart_field(fileObjWrite, axisName, 1.0, & 
+                                   dimensions=(/'Time'/))
            call fms2_write_data(fileObjWrite,axisName,1.0)
         endif
         long_name = "Time"
@@ -2434,9 +2425,9 @@ subroutine write_axis_data(fileObjWrite, axisName, horgrid_string, G, dG, GV, ti
         do k=1,num_periods
            period_val(k) = real(k)
         enddo
-        call fms2_register_restart_field(CS%fileObjWrite, axisName, period_val, & 
-                                   dimensions='Time', domain_position=horgrid_position)
-        call fms2_write_data(fileObjWrite,axisName,period_val)
+        call fms2_register_restart_field(fileObjWrite, axisName, period_val, & 
+                                   dimensions=(/'Period'/))
+        call fms2_write_data(fileObjWrite, axisName, period_val)
         deallocate(period_val)
         axis_units = "nondimensional"
         long_name="Periods for cyclical varaiables"
@@ -2464,7 +2455,7 @@ function get_horizontal_grid_position(grid_string_id) result(grid_position)
      case ('1') ; grid_position = 0 
      case default
         call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_position "//&
-                        "Unrecognized grid_string_id argument "//trim(hor_grid))
+                        "Unrecognized grid_string_id argument "//trim(grid_string_id))
   end select
 
 end function get_horizontal_grid_position
