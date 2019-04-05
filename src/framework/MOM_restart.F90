@@ -1408,7 +1408,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, file
       write(restartname,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
     endif
     restartname = trim(base_file_name)//trim(restartname)
-  endif ; endif
+  endif ; 
+ else
+    restartname = trim(base_file_name)
+ endif
  
   next_var = 1
   do while (next_var <= CS%novars )
