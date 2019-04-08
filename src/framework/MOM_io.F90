@@ -433,6 +433,246 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 
 end subroutine reopen_file
 
+!> get the horizonatl grid coordinate values, and register the grid axes to the 
+!! restart file if they are not registered
+subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, hor_grid, G, grid_position)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
+  integer, intent(inout) ::  num_axes !< number of axes in restart file
+  character(len=*), intent(in) :: hor_grid !< name of the horizontal grid
+  type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
+  integer, intent(out) :: grid_position !< integer corresponding to the grid position
+   
+  ! local
+  logical :: use_lath = .false.
+  logical :: use_lonh = .false.
+  logical :: use_latq = .false.
+  logical :: use_lonq = .false.
+  integer :: axis_length = 0
+  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+     gridLatB => NULL(), & ! the purpose of labeling the output axes.
+     gridLonT => NULL(), &
+     gridLonB => NULL()
+  character(len=200) :: dim_name_str
+  
+  ! set the ocean grid coordinates
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
+  
+  select case (trim(hor_grid))
+     case ('h') ; use_lath = .true. ; use_lonh = .true.
+     case ('q') ; use_latq = .true. ; use_lonq = .true.
+     case ('u') ; use_lath = .true. ; use_lonq = .true.
+     case ('v') ; use_latq = .true. ; use_lonh = .true.
+     case ('T')  ; use_lath = .true. ; use_lonh = .true.
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
+     case ('1') ; grid_position = 0 
+     case default
+        call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
+                        "Unrecognized hor_grid argument "//trim(hor_grid))
+  end select
+
+  grid_position = get_horizontal_grid_position(hor_grid)
+
+  ! add longitude name to dimension name array
+  dim_name_str = ''
+  if (use_lonh) then
+     dim_name_str = 'lonh'
+     num_axes = num_axes+1 
+     axis_length = size(gridLonT(isg:ieg))
+  elseif (use_lonq) then
+     dim_name_str ='lonq'
+     num_axes = num_axes+1
+     axis_length = size(gridLonB(IsgB:IegB)) 
+  endif
+ 
+  ! register the restart axis if it is not
+  if (num_axes > 0) then
+     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
+  ! add latitude name to dimension name array
+  dim_name_str = ''
+  if (use_lath) then
+     dim_name_str = 'lath'
+     num_axes = num_axes+1
+     axis_length = size(gridLatT(jsg:jeg))
+  elseif (use_latq) then
+     dim_name_str = 'latq'
+     num_axes = num_axes+1
+     axis_length = size(gridLatB(JsgB:JegB))
+  endif
+  
+  ! register the restart axis if it is not
+  if (num_axes > 0) then
+     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
+
+end subroutine get_horizontal_grid_coordinates
+
+!> get the vertical grid coordinate values, and register the vertical grid axis to the 
+!! restart file if it is not registered
+subroutine get_vertical_grid_coordinates(fileObjWrite, dim_names, num_axes, GV, z_grid)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
+  integer, intent(inout) ::  num_axes !< number of axes in restart file
+  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
+  character(len=*), intent(in) :: z_grid !< vertical grid
+  ! local
+  logical :: use_layer = .false.
+  logical :: use_int = .false.
+  character(len=200) :: dim_name_str
+  integer :: axis_length = 0
+
+  select case (trim(z_grid))
+     case ('L') ; use_layer = .true.
+     case ('i') ; use_int = .true.
+     case ('1') ! Do nothing.
+     case default
+       call MOM_error(FATAL, "MOM_restart: get_vertical_grid_coordinates: "//&
+                        " has unrecognized z_grid argument"//trim(z_grid))
+  end select
+  
+  dim_name_str = ''
+
+  if (use_layer) then
+     dim_name_str = 'Layer'
+     num_axes = num_axes+1
+     axis_length = size(GV%sLayer(1:GV%ke))  
+  elseif (use_int) then
+     dim_name_str = 'Interface'
+     num_axes = num_axes+1
+     axis_length = size(GV%sInterface(1:GV%ke+1))
+  endif
+
+  ! register the restart axis if it is not registered
+  if (num_axes > 0) then
+     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
+
+end subroutine get_vertical_grid_coordinates
+
+!> get the time coordinate values, and register the time axis to the 
+!! restart file if it is not registered
+subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
+  integer, intent(inout) ::  num_axes !< number of axes in restart file
+  character(len=*), intent(in) :: t_grid_in !< 's', 'a', 'm' for time,
+                                            !< 'p' for periodic, '1' for no time axis
+  ! local
+  logical :: use_time = .false.
+  logical :: use_periodic = .false.
+  character(len=8) :: t_grid, t_grid_read
+  character(len=200) :: dim_name_str
+  integer :: axis_length = 0
+
+  t_grid = adjustl(t_grid_in)
+
+  select case (t_grid(1:1))
+     case ('s', 'a', 'm') ; use_time = .true.
+     case ('p')
+        if (len_trim(t_grid(2:8)) <= 0) then
+            call MOM_error(FATAL,"MOM_restart:get_time_coordinates: "//&
+                           "No periodic axis length was specified in "//trim(t_grid))
+        endif
+        use_periodic = .true.
+     case ('1') ! Do nothing.
+     case default
+        call MOM_error(WARNING, "MOM_restart: get_time_coordinates: "//&
+                       "Unrecognized t_grid "//trim(t_grid))
+  end select
+
+  dim_name_str = ''
+      
+  if (use_time) then
+     num_axes = num_axes+1
+     dim_name_str = 'Time'
+  elseif (use_periodic) then
+     num_axes = num_axes+1
+     dim_name_str = 'Period'
+  endif
+
+  ! register the restart axis if it is not registered
+  if (num_axes > 0) then
+     axis_length = unlimited ! time is the unlimited dimension
+     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
+end subroutine get_time_coordinates
+
+!> get the position parameter value from the horizontal grid (hor_grid) string id
+function get_horizontal_grid_position(grid_string_id) result(grid_position)
+  character(len=*), intent(in) :: grid_string_id !< horizontal grid string
+  integer :: grid_position !< integer corresponding to the grid position
+
+  select case (grid_string_id)
+     case ('h') ; grid_position = CENTER
+     case ('q') ; grid_position = CORNER
+     case ('u') ; grid_position = EAST_FACE
+     case ('v') ; grid_position = NORTH_FACE
+     case ('T')  ; grid_position = CENTER
+     case ('Bu') ; grid_position = CORNER
+     case ('Cu') ; grid_position = EAST_FACE
+     case ('Cv') ; grid_position = NORTH_FACE
+     case ('1') ; grid_position = 0 
+     case default
+        call MOM_error(FATAL, "MOM_io:get_horizontal_grid_position "//&
+                        "Unrecognized grid_string_id argument "//trim(grid_string_id))
+  end select
+
+end function get_horizontal_grid_position
+
+!> append a string (substring) to another string (string_in) and return the result (string_out)
+function append_substring(string_in, substring) result(string_out)
+   character(len=*), intent(in) :: string_in !< input string
+   character(len=*), intent(in) :: substring !< string to append string_in
+   ! local
+   character(len=1024) :: string_out
+   character(len=1024) :: string_holder
+   integer :: string_in_length
+   integer :: substring_length
+   
+   string_out = ''
+   string_holder = ''
+   string_in_length = 0
+   substring_length = 0
+  
+   string_in_length = len_trim(string_in)
+   
+   substring_length = len_trim(substring)
+
+   if ((string_in_length > 0) .and. (substring_length > 0)) then     
+       string_holder = trim(string_in//substring)
+
+       string_out(1:len_trim(string_holder)) = trim(string_holder)
+   else
+      call MOM_error(WARNING, "MOM_io::append_substring: "//&
+                     "the input string or substring has zero length")
+   endif
+
+end function append_substring
+
+
 !> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
   character(len=*),   intent(in)  :: filename  !< Name of the file to read
