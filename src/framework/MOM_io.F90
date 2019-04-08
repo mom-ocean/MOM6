@@ -33,6 +33,15 @@ use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
+use fms2_io_mod,          only: fms2_register_restart_field => register_restart_field, &
+                                fms2_register_axis => register_axis, &
+                                fms2_register_field => register_field, &
+                                fms2_write_data => write_data, &
+                                fms2_variable_exists => variable_exists, &
+                                fms2_dimension_exists => dimension_exists, &
+                                fms2_file_exists => file_exists, &
+                                FmsNetcdfDomainFile_t, unlimited
+
 use netcdf
 
 implicit none ; private
@@ -432,6 +441,200 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
   endif
 
 end subroutine reopen_file
+
+!> Define the axis variable attributes, and write the axis data
+!! to the restart file
+subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, & 
+                           restart_time_in_days, t_grid_in, is_restart_file)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+  character(len=*), intent(in) :: axis_name        !< Name of the axis
+  type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                    !! is required if the new file uses any
+                                                    !! horizontal grid axes.
+  type(dyn_horgrid_type), optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                      !! is required if the new file uses any
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
+  real, optional, intent(in) :: timeunit !< length of the units for time [s]. The
+                                          !! default value is 86400.0, for 1 day.
+  real, optional, intent(in) :: restart_time_in_days !< restart time in days
+
+  character(len=*), optional, intent(in) :: t_grid_in
+  logical, optional, intent(in) :: is_restart_file !< indicates whether the file is a restart file
+
+  ! local
+  type(MOM_domain_type), pointer :: Domain => NULL()
+  type(domain1d) :: x_domain, y_domain
+  logical :: domain_set = .false.
+  real, pointer, dimension(:) :: &
+     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+     gridLatB => NULL(), & ! the purpose of labeling the output axes.
+     gridLonT => NULL(), & 
+     gridLonB => NULL()
+  
+  integer :: num_axes, num_periods, var_periods, k
+  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  character(len=40) :: axis_units,x_axis_units, y_axis_units, time_units
+  real, dimension(:), allocatable :: period_val
+  character(len=8) :: t_grid, t_grid_read
+  character(len=50) :: long_name
+  integer :: horgrid_position
+  logical :: is_restart = .false.
+  if ((trim(axisName) == "Period") .and. .not.(present(t_grid_in))) then 
+      call MOM_error(FATAL,"MOM_restart::write_axis_data: NO argument passed for 't_grid_in', "//&
+                     " which is required to determine the periodic time axis.")
+  endif
+
+  if (present(G)) then
+     domain_set = .true. ; Domain => G%Domain
+     gridLatT => G%gridLatT ; gridLatB => G%gridLatB
+     gridLonT => G%gridLonT ; gridLonB => G%gridLonB
+     x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
+     isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
+     IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+  elseif (present(dG)) then
+     domain_set = .true. ; Domain => dG%Domain
+     gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
+     gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
+     x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
+     isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
+     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+  endif
+
+  if (present(is_restart_file) .and. (is_restart_file = .true.)) is_restart = .true.
+
+  ! Register and write the axis data
+  select case (trim(axisName))
+     case ('latq')       
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, gridLatB(JsgB:JegB), &  
+                                      dimensions=(/'latq'/), domain_position=CORNER)
+        else
+           call fms2_register_field(CS%fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'latq'/), domain_position=CORNER)
+        endif       
+        
+        call fms2_write_data(fileObjWrite,axisName,gridLatB(JsgB:JegB))
+        long_name = 'Latitude'
+        axis_units = y_axis_units
+     case ('lath')
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, gridLatT(jsg:jeg), &  
+                                      dimensions=(/'lath'/), domain_position=CENTER)
+        else
+           call fms2_register_field(CS%fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'lath'/), domain_position=CENTER)
+        endif       
+      
+        call fms2_write_data(fileObjWrite,axisName,gridLatT(jsg:jeg))
+        long_name = 'Latitude'
+        axis_units = y_axis_units
+     case ('lonq')
+        call fms2_register_restart_field(fileObjWrite, axisName, gridLonB(IsgB:IegB), & 
+                                         dimensions=(/'lonq'/), domain_position=CORNER)
+        call fms2_write_data(fileObjWrite,axisName,gridLonB(IsgB:IegB))
+        long_name = 'Longitude'
+        axis_units = x_axis_units
+     case ('lonh')
+        call fms2_register_restart_field(fileObjWrite, axisName, gridLonT(isg:ieg), &
+                                         dimensions=(/'lonh'/), domain_position=CENTER)
+        call fms2_write_data(fileObjWrite,axisName,gridLonT(isg:ieg))
+        long_name = 'Longitude'
+        axis_units = x_axis_units
+     case ('Layer')
+        if (.not. (present(GV))) then
+           call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
+                          " which is required to write the Layer axis data.")
+        endif
+        call fms2_register_restart_field(fileObjWrite, axisName, GV%sLayer(1:GV%ke), & 
+                                   dimensions=(/'Layer'/))
+        call fms2_write_data(fileObjWrite,axisName,GV%sLayer(1:GV%ke))
+        long_name = 'Layer'
+        axis_units = trim(GV%zAxisUnits)
+     case ('Interface')
+        if (.not. (present(GV))) then
+           call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
+                          " which is required to write the Interface axis data.")
+        endif
+        call fms2_register_restart_field(fileObjWrite, axisName, GV%sInterface(1:GV%ke+1), & 
+                                   dimensions=(/'Interface'/))
+        call fms2_write_data(fileObjWrite,axisName,GV%sInterface(1:GV%ke+1))
+        long_name="Interface "//trim(GV%zAxisLongName)
+        axis_units = trim(GV%zAxisUnits)
+     case ('Time') 
+        if (present(timeunit)) then
+        ! Set appropriate units, depending on the value.
+           if (timeunit < 0.0) then
+              time_units = "days" ! The default value.
+           elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+              time_units = "seconds"
+           elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+              time_units = "hours"
+           elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+              time_units = "days"
+           elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+              time_units = "years"
+           else
+              write(time_units,'(es8.2," s")') timeunit
+           endif
+           axis_units = time_units
+        else
+           axis_units = "days"
+        endif
+        if (present(restart_time_in_days)) then
+           call fms2_register_restart_field(fileObjWrite, axisName, restart_time_in_days, dimensions=(/'Time'/))
+           call fms2_write_data(fileObjWrite,axisName,restart_time_in_days)
+        else
+           call fms2_register_restart_field(fileObjWrite, axisName, 1.0, & 
+                                   dimensions=(/'Time'/))
+           call fms2_write_data(fileObjWrite,axisName,1.0)
+        endif
+        long_name = "Time"
+     case ('Period')
+        t_grid = adjustl(t_grid_in)
+        if (len_trim(t_grid(2:8)) <= 0) then
+           call MOM_error(FATAL,"MOM_restart::write_axis_data: No periodic axis"//&
+                          "length was specified in "//trim(t_grid)//".")
+        endif
+        num_periods = 0
+        var_periods = -9999999
+        t_grid_read = adjustl(t_grid(2:8))
+        read(t_grid_read,*) var_periods
+        if (var_periods == -9999999) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: Failed to "//&
+                          "read the number of periods from "//trim(t_grid)// ".")
+        endif
+        if (var_periods < 1) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: The number of periods "//&
+                          trim(t_grid)//" must be positive.")
+        endif
+        if ((num_periods > 0) .and. (var_periods /= num_periods)) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: Only one value"//&
+                          " of the number of periods can be used for "//trim(t_grid)//".")
+        endif
+
+        num_periods = var_periods
+        if (num_periods <= 1) then
+           call MOM_error(FATAL, "MOM_restart::write_axis_data: num_periods must be at least 1.")
+        endif
+        ! Define a periodic axis with unit labels.
+        allocate(period_val(num_periods))
+        do k=1,num_periods
+           period_val(k) = real(k)
+        enddo
+        call fms2_register_restart_field(fileObjWrite, axisName, period_val, & 
+                                   dimensions=(/'Period'/))
+        call fms2_write_data(fileObjWrite, axisName, period_val)
+        deallocate(period_val)
+        axis_units = "nondimensional"
+        long_name="Periods for cyclical varaiables"
+   end select
+   ! write attributes
+   call fms2_register_variable_attribute(fileObjWrite,axisName,"units",axis_units)
+   call fms2_register_variable_attribute(fileObjWrite,axisName,"longname",long_name)
+
+end subroutine write_axis_data
 
 !> get the horizonatl grid coordinate values, and register the grid axes to the 
 !! restart file if they are not registered
