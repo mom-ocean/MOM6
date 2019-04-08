@@ -7,7 +7,7 @@ use MOM_domains, only : pe_here, num_PEs, MOM_domain_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
+use MOM_string_functions, only : lowercase, append_substring
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
 use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
@@ -2237,11 +2237,9 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
 end subroutine get_checksum_loop_ranges
 
-
-
 !> check restart file for an axis, and register it if it is unregistered
 
-subroutine check_for_restart_axis(fileObjWrite,axisName,axisLength)
+subroutine check_for_restart_axis(fileObjWrite, axisName, axisLength)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
    integer, intent(in) :: axisLength ! length of axis/dimension (only needed for Z and Time)
@@ -2444,56 +2442,5 @@ subroutine write_axis_data(fileObjWrite, axisName, G, dG, GV, timeunit, &
 
 end subroutine write_axis_data
 
-!> get list of restart files in the root directory
-!subroutine get_restart_file_list(base_name)
-!  character(len=*), intent(in) :: base_name
-! local
-!  character(len=500), dimension(:), allocatable :: file_list
-!  character(len=10) :: num_string
-!  character(len=500) :: file_name
-!  character(len=8) :: iformat ! format descriptor
-!  logical :: file_exist = .false.
-!  integer :: i
-!
-!  iformat = '(I4.4)' ! an integer of width 4 with zeros at the left
-!  
-!  do i=0,200
-!    
-!     write(num_string,iformat) i
-!     file_name = append_substring(base_name,num_string)
-!     file_exist = fms2_file_exists(file_name)
-!
-!     if (file_exist) then
-!        call add_to_list_string(file_list,file_name)
-!     else
-!        exit
-!     endif
-!  end do
-
-!end subroutine get_restart_file_list
-
-!subroutine add_to_list_string(list, element)
-!  character(len=*), intent(in) :: element
-!  character(len=*), dimension(:), allocatable, intent(inout) :: list
-!  !local
-!  character(len=*), dimension(:), allocatable :: clist
-!  integer :: i, isize
-!  if (allocated(list)) then
-!     isize = size(list)
-!     allocate(clist(isize+1))
-!     do i=1,isize          
-!        clist(i) = list(i)
-!     end do
-!     clist(isize+1) = element
-!
-!     deallocate(list)
-!     call move_alloc(clist, list)
-!
-!   else
-!      allocate(list(1))
-!      list(1) = element
-!   end if
-!
-!end subroutine add_to_list_string
 
 end module MOM_restart

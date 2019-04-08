@@ -642,37 +642,6 @@ function get_horizontal_grid_position(grid_string_id) result(grid_position)
 
 end function get_horizontal_grid_position
 
-!> append a string (substring) to another string (string_in) and return the result (string_out)
-function append_substring(string_in, substring) result(string_out)
-   character(len=*), intent(in) :: string_in !< input string
-   character(len=*), intent(in) :: substring !< string to append string_in
-   ! local
-   character(len=1024) :: string_out
-   character(len=1024) :: string_holder
-   integer :: string_in_length
-   integer :: substring_length
-   
-   string_out = ''
-   string_holder = ''
-   string_in_length = 0
-   substring_length = 0
-  
-   string_in_length = len_trim(string_in)
-   
-   substring_length = len_trim(substring)
-
-   if ((string_in_length > 0) .and. (substring_length > 0)) then     
-       string_holder = trim(string_in//substring)
-
-       string_out(1:len_trim(string_holder)) = trim(string_holder)
-   else
-      call MOM_error(WARNING, "MOM_io::append_substring: "//&
-                     "the input string or substring has zero length")
-   endif
-
-end function append_substring
-
-
 !> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
   character(len=*),   intent(in)  :: filename  !< Name of the file to read
