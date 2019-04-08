@@ -15,6 +15,8 @@ public extract_integer
 public extract_real
 public remove_spaces
 public slasher
+public append_substring
+public remove substring
 
 contains
 

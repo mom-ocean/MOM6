@@ -105,10 +105,6 @@ type, public :: MOM_restart_CS ; private
   logical :: restart_file_created = .false. !< If true, one or more restart files with the restartfile name root have
                                     !! were created (nc mode = 'write') during a previous call 
                                     !! to register_restart_field
-  logical :: initcond_file_created = .false. !< If true, one or more initial conditions files with 
-                                    !! the CS%IC_fild name root have were created (nc mode = 'write') 
-                                    !! during a previous call to register_restart_field
-
 
   !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
