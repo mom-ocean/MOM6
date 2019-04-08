@@ -304,7 +304,7 @@ end subroutine register_restart_field_ptr0d
 
 !> Register a 4-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename, & 
-                                     longname, units, hor_grid, z_grid, t_grid, file_is_initcond)
+                                     longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
@@ -320,16 +320,14 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  logical,          optional, intent(in) :: file_is_initcond   !< flag for initial conditions file
+ 
   ! local
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
-  logical :: is_restart_file = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(4)
-  character(len=500), dimension(:), allocatable :: restart_file_list
   character(len=16) :: nc_action
   character(len=200) :: mesg
   integer :: name_length = 0
@@ -344,19 +342,12 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   WRITE(mpp_pe()+2000,*) "register_restart_field_4d: registering restart variable ", trim(name)
   call flush(mpp_pe()+2000)
 
-
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   base_file_name = ''
   restart_file_name = ''
   nc_action = ''
-
-  if (present(file_is_initcond) .and. (file_is_initcond)) then
-     is_restart_file = .false.
-  else
-     is_restart_file = .true.
-  endif
 
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
@@ -373,27 +364,21 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   endif
 
   ! check if file is an existing restart or initial conditions file
-  if (.not.(is_restart_file) .and. (CS%initcond_file_created)) then
-     nc_action = "append"
-  elseif ((is_restart_file) .and. (CS%restart_file_created)) then
+  CS%restart_file_created = fms2_file_exists(base_file_name)
+
+  if (CS%restart_file_created) then
      nc_action = "append"
   else
      nc_action = "write" 
   endif                 
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = is_restart_file)
-
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
   endif
-
-  if(is_restart_file) then
-     CS%restart_file_created = .true.
-  else
-     CS%initcond_file_created = .true.
-  endif    
 
   ! get the axis coordinate values, 
   ! check if axes are registered in file, 
@@ -424,25 +409,20 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   ! 2. axes for a given variable are determined
   ! 3. axes metadata are associated with variable by referencing the axis structure
   
-  if (is_restart_file) then
-     call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
+  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
        dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  else
-     call fms2_register_field(CS%fileObjWrite, name, "double", & 
-       dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  endif
+  
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObjWrite,name,'units',vd%units)
   if (present(longname)) call fms2_register_variable_attribute(CS%fileObjWrite,name,'long_name',vd%longname)
 
   call fms2_close_file(CS%fileObjWrite)
-  deallocate(restart_file_list)
-
+ 
 end subroutine register_restart_field_4d
 
 !> Register a 3-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename, & 
-                                     longname, units, hor_grid, z_grid, t_grid, file_is_initcond)
+                                     longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
@@ -458,13 +438,11 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  logical, optional, intent(in) :: file_is_initcond   !< flag for initial conditions file
 
   ! local
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
-  logical :: is_restart_file = .false.
   character(len=200) :: base_file_name 
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(4)
@@ -489,12 +467,6 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   restart_file_name = ''
   nc_action = ''
 
-  if (present(file_is_initcond) .and. (file_is_initcond)) then
-     is_restart_file = .false.
-  else
-     is_restart_file = .true.
-  endif
-
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
   else
@@ -510,27 +482,23 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   endif
 
   ! check if file is an existing restart or initial conditions file
-  if (.not.(is_restart_file) .and. (CS%initcond_file_created)) then
-     nc_action = "append"
-  elseif ((is_restart_file) .and. (CS%restart_file_created)) then
+  CS%restart_file_created = fms2_file_exists(base_file_name)
+
+  if (CS%restart_file_created) then
      nc_action = "append"
   else
      nc_action = "write" 
-  endif                 
+  endif                          
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = is_restart_file)
+  file_open_success = fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
+                                      G%Domain%mpp_domain, is_restart = .true.)
 
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
   endif
 
-  if(is_restart_file) then
-     CS%restart_file_created = .true.
-  else
-     CS%initcond_file_created = .true.
-  endif    
   ! get the axis coordinate values, 
   ! check if axes are registered in file, 
   ! and register them if they are not
@@ -554,13 +522,9 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   ! register the restart field
   call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS)
 
-  if (is_restart_file) then
-     call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
+  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
        dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  else
-     call fms2_register_field(CS%fileObjWrite, name, "double", & 
-       dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  endif
+ 
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObjWrite, name,'units',vd%units)
   if (present(longname)) call fms2_register_variable_attribute(CS%fileObjWrite ,name,'long_name',vd%longname)
@@ -571,7 +535,7 @@ end subroutine register_restart_field_3d
 
 !> Register a 2-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename, & 
-                                     longname, units, hor_grid, z_grid, t_grid, file_is_initcond)
+                                     longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
@@ -587,13 +551,11 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  logical,          optional, intent(in) :: file_is_initcond   !< flag for initial conditions file
   ! local
   type(vardesc) :: vd
   character(len=8) :: Zgrid
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
-  logical :: is_restart_file = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(3)
@@ -625,12 +587,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   restart_file_name = ''
   nc_action = ''
 
-  if (present(file_is_initcond) .and. (file_is_initcond)) then
-     is_restart_file = .false.
-  else
-     is_restart_file = .true.
-  endif
-
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
   else
@@ -645,29 +601,23 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if file is an existing restart or initial conditions file
-  if (.not.(is_restart_file) .and. (CS%initcond_file_created)) then
-     nc_action = "append"
-  elseif ((is_restart_file) .and. (CS%restart_file_created)) then
+  CS%restart_file_created = fms2_file_exists(base_file_name)
+
+  if (CS%restart_file_created) then
      nc_action = "append"
   else
      nc_action = "write" 
   endif                 
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = is_restart_file)
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
+                                   G%Domain%mpp_domain, is_restart = .true.)
 
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_2d: "//mesg)
   endif
-
-  if(is_restart_file) then
-     CS%restart_file_created = .true.
-  else
-     CS%initcond_file_created = .true.
-  endif                                
-                                          
+                     
   ! get the axis coordinate values, 
   ! check if axes are registered in file, 
   ! and register them if they are not
@@ -693,14 +643,9 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   ! register the restart field
   call register_restart_field_ptr2d(f_ptr, vd, mandatory, CS)
 
-  if (is_restart_file) then
-     call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
+  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
        dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  else
-     call fms2_register_field(CS%fileObjWrite, name, "double", & 
-       dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  endif
-
+  
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObjWrite,name,'units',vd%units)
   if (present(longname)) call fms2_register_variable_attribute(CS%fileObjWrite,name,'long_name',vd%longname)
@@ -711,7 +656,7 @@ end subroutine register_restart_field_2d
 
 !> Register a 1-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename, & 
-                                     longname, units, hor_grid, z_grid, t_grid, file_is_initcond)
+                                     longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
@@ -727,13 +672,12 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  logical,          optional, intent(in) :: file_is_initcond !< flag for initial conditions file
+
   ! local 
   type(vardesc) :: vd
   character(len=8) :: hgrid
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
-  logical :: is_restart_file = .false.
   character(len=200) :: dim_names(2)
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
@@ -763,12 +707,6 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   restart_file_name = ''
   nc_action = ''
 
-  if (present(file_is_initcond) .and. (file_is_initcond)) then
-     is_restart_file = .false.
-  else
-     is_restart_file = .true.
-  endif
-
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
   else
@@ -783,29 +721,23 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if file is an existing restart or initial conditions file
-  if (.not.(is_restart_file) .and. (CS%initcond_file_created)) then
-     nc_action = "append"
-  elseif ((is_restart_file) .and. (CS%restart_file_created)) then
+  CS%restart_file_created = fms2_file_exists(base_file_name)
+
+  if (CS%restart_file_created) then
      nc_action = "append"
   else
      nc_action = "write" 
-  endif                 
+  endif           
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = is_restart_file)
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
+                                   G%Domain%mpp_domain, is_restart = .true.)
 
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_1d: "//mesg)
   endif
 
-  if(is_restart_file) then
-     CS%restart_file_created = .true.
-  else
-     CS%initcond_file_created = .true.
-  endif                        
-            
   ! get the axis coordinate values, 
   ! check if axes are registered in file, 
   ! and register them if they are not
@@ -843,8 +775,8 @@ end subroutine register_restart_field_1d
 
 !> Register a 0-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename, & 
-                                     longname, units, t_grid, file_is_initcond)
-  real,                target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
+                                     longname, units, t_grid)
+  real,               target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
@@ -856,12 +788,11 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  logical,          optional, intent(in) :: file_is_initcond !< flag for initial conditions file
+
   !local
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
-  logical :: is_restart_file = .false.
   character(len=200) :: dim_names(1)
   character(len=16) :: nc_action
   character(len=200) :: base_file_name
@@ -886,12 +817,6 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   restart_file_name = ''
   nc_action = ''
 
-  if (present(file_is_initcond) .and. (file_is_initcond)) then
-     is_restart_file = .false.
-  else
-     is_restart_file = .true.
-  endif
-
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
   else
@@ -906,29 +831,23 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if file is an existing restart or initial conditions file
-  if (.not.(is_restart_file) .and. (CS%initcond_file_created)) then
-     nc_action = "append"
-  elseif ((is_restart_file) .and. (CS%restart_file_created)) then
+  CS%restart_file_created = fms2_file_exists(base_file_name)
+
+  if (CS%restart_file_created) then
      nc_action = "append"
   else
      nc_action = "write" 
-  endif                 
+  endif                            
 
   ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, G%Domain%mpp_domain, is_restart = is_restart_file)
+  file_open_success = fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
+                                      G%Domain%mpp_domain, is_restart = .true.)
 
   if (.not. file_open_success) then 
      write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
      call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
   endif
-
-  if(is_restart_file) then
-     CS%restart_file_created = .true.
-  else
-     CS%initcond_file_created = .true.
-  endif                               
-                                          
+                 
   ! get the axis coordinate values, 
   ! check if axes are registered in file, 
   ! and register them if they are not
@@ -946,13 +865,8 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   ! register the restart field
   call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
        
-  if (is_restart_file) then
-     call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
-       dimensions=dim_names, domain_position=horgrid_position)
-  else
-     call fms2_register_field(CS%fileObjWrite, name, "double", & 
-       dimensions=dim_names, domain_position=horgrid_position)
-  endif
+  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
+                                   dimensions=dim_names, domain_position=horgrid_position)
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObjWrite, name,'units',vd%units)
   if (present(longname)) call fms2_register_variable_attribute(CS%fileObjWrite, name,'long_name',vd%longname)
@@ -2241,7 +2155,7 @@ subroutine check_for_restart_axis(fileObjWrite, axis_name, axis_length)
    ! local  
    logical :: axis_exists 
    
-   axis_exists= .false.
+   axis_exists = .false.
  
    axis_exists = fms2_dimension_exists(fileObjWrite, axis_name)
    if (.not. (axis_exists)) then
