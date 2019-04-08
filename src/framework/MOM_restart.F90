@@ -2234,30 +2234,29 @@ end subroutine get_checksum_loop_ranges
 
 !> check restart file for an axis, and register it if it is unregistered
 
-subroutine check_for_restart_axis(fileObjWrite, axisName, axisLength)
+subroutine check_for_restart_axis(fileObjWrite, axis_name, axis_length)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-   character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
-   integer, intent(in) :: axisLength ! length of axis/dimension (only needed for Z and Time)
+   character(len=*), intent(in) :: axis_name ! name of the restart file axis to register to file
+   integer, intent(in) :: axis_length ! length of axis/dimension (only needed for Z and Time)
    ! local  
-   logical :: axisExists 
+   logical :: axis_exists 
    
-   axisExists= .false.
+   axis_exists= .false.
  
-   axisExists = fms2_dimension_exists(fileObjWrite,axisName)
-   if (.not. (axisExists)) then
-      select case (trim(axisName))
+   axis_exists = fms2_dimension_exists(fileObjWrite, axis_name)
+   if (.not. (axis_exists)) then
+      select case (trim(axis_name))
          case ('latq'); call fms2_register_axis(fileObjWrite,'latq','y')
          case ('lath'); call fms2_register_axis(fileObjWrite,'lath','y') 
          case ('lonq'); call fms2_register_axis(fileObjWrite,'lonq','x') 
          case ('lonh'); call fms2_register_axis(fileObjWrite,'lonh','x')
-         case ('Layer'); call fms2_register_axis(fileObjWrite,'Layer',axisLength)
-         case ('Interface'); call fms2_register_axis(fileObjWrite,'Interface',axisLength)
-         case ('Time'); call fms2_register_axis(fileObjWrite,'Time', axisLength)
-         case ('Period'); call fms2_register_axis(fileObjWrite,'Period',axisLength)
+         case ('Layer'); call fms2_register_axis(fileObjWrite,'Layer',axis_length)
+         case ('Interface'); call fms2_register_axis(fileObjWrite,'Interface',axis_length)
+         case ('Time'); call fms2_register_axis(fileObjWrite,'Time', axis_length)
+         case ('Period'); call fms2_register_axis(fileObjWrite,'Period',axis_length)
       end select
    endif
   
 end subroutine check_for_restart_axis
-
 
 end module MOM_restart
