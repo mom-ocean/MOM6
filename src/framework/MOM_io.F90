@@ -75,7 +75,6 @@ end type vardesc
 
 !> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
-  module procedure FMS_file_exists
   module procedure MOM_file_exists
 end interface
 
@@ -1228,33 +1227,15 @@ function ensembler(name, ens_no_in) result(en_nm)
 end function ensembler
 
 
-!> Returns true if the named file or its domain-decomposed variant exists.
-function MOM_file_exists(filename, MOM_Domain)
+!> Returns true if the named file exists.
+function MOM_file_exists(filename)
   character(len=*),       intent(in) :: filename   !< The name of the file being inquired about
-  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
 ! This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
-
   logical :: MOM_file_exists
-
-  MOM_file_exists = file_exist(filename, MOM_Domain%mpp_domain)
-
+  MOM_file_exists = fms2_file_exists(filename)
 end function MOM_file_exists
-
-!> Returns true if the named file or its domain-decomposed variant exists.
-function FMS_file_exists(filename, domain, no_domain)
-  character(len=*), intent(in)         :: filename  !< The name of the file being inquired about
-  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
-  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
-! This function uses the fms_io function file_exist to determine whether
-! a named file (or its decomposed variant) exists.
-
-  logical :: FMS_file_exists
-
-  FMS_file_exists = file_exist(filename, domain, no_domain)
-
-end function FMS_file_exists
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".

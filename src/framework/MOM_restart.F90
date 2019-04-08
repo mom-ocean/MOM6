@@ -9,7 +9,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase, append_substring
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
+use MOM_io, only : create_file, fieldtype,open_file, close_file
 use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
@@ -2066,7 +2066,8 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
           if (present(global_files)) global_files(n) = .true.
         elseif (CS%parallel_restartfiles) then
           ! Look for decomposed files using the I/O Layout.
-          fexists = file_exists(filepath, G%Domain)
+          !fexists = file_exists(filepath, G%Domain)
+          fexists = fms2_file_exists(filepath)
           if (fexists .and. (present(units))) &
             call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
                            domain=G%Domain%mpp_domain)
