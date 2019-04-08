@@ -328,6 +328,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=16)  :: nc_action
   character(len=200) :: mesg
   integer :: name_length = 0
+  integer :: axis_length = 0
   integer :: num_axes, i
   integer :: substring_index = 0
   integer :: horgrid_position = 1
@@ -457,6 +458,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
+  integer :: axis_length = 0
   integer :: name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
@@ -572,13 +574,14 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   logical :: file_open_success = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
-  character(len=200) :; dim_name_str
+  character(len=200) :: dim_name_str
   character(len=200) :: dim_names(3)
   character(len=16) ::  nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
+  integer :: axis_length = 0
   integer :: name_length=0
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
@@ -709,6 +712,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
+  integer :: axis_length = 0
   integer :: name_length = 0
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -828,6 +832,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
+  integer :: axis_length = 0
   integer :: name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -1564,8 +1569,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer(kind=8)                  :: checksum_data
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
   type(MOM_restart_CS) :: fileObjRead  ! fms2 data structure
-  integer :: str_split_index = 1
-  integer :: str_end_index = 1
+  integer :: str_index = 0
   character(len=200) :: file_path_1,file_path_2
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
@@ -1591,19 +1595,20 @@ subroutine restore_state(filename, directory, day, G, CS)
                   trim(filename), trim(directory)
      call MOM_error(FATAL,"MOM_restart: "//mesg)
   endif
-
+  
+  file_path_1 = ''
+  file_path_2 = ''
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
      file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
-     str_split_index = INDEX(file_path_1,'.res')
-     str_end_index = INDEX(file_path_1,'.nc') 
-     if (str_split_index > 1 .and. str_end_index > 1 )then ! remove .res. from the file name since fms read automatically appends it to the file name
-         file_path_2 = trim(file_path_1(1:str_split_index-1)// &
-                         file_path_1(str_split_index+4:str_end_index-1))//'.nc'                         
+     str_index = INDEX(file_path_1,'.nc') 
+     if (str_index <=0) then
+        file_path_2 = append_substring(file_path_1, '.nc')                         
      else 
-         file_path_2 = trim(file_path_1)
+        file_path_2 = trim(file_path_1)
      endif
-     file_open_success=fms2_open_file(CS%fileObjRead, trim(file_path_2),"read",  G%Domain%mpp_domain, is_restart = .true.)
+     file_open_success=fms2_open_file(CS%fileObjRead, trim(file_path_2),"read", &
+                    G%Domain%mpp_domain, is_restart = .true.)
                                                 
      if(.not. file_open_success) then 
         write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
@@ -1632,15 +1637,14 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (is_root_pe()) then
      do m = n+1,num_file
         file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
-        str_split_index = INDEX(file_path_1,'.res')
-        str_end_index = INDEX(file_path_1,'.nc')
-        if (str_split_index > 1 .and. str_end_index > 1 )then
-           file_path_2 = trim(file_path_1(1:str_split_index-1)// &
-                         file_path_1(str_split_index+4:str_end_index-1))//'.nc'                         
+        str_index = INDEX(file_path_1,'.nc')
+        if (str_index <=0) then
+           file_path_2 = append_substring(file_path_1, '.nc')                         
         else 
-          file_path_2 = trim(file_path_1)
+           file_path_2 = trim(file_path_1)
         endif
-        file_open_success=fms2_open_file(CS%fileObjRead, trim(file_path_2),"read", G%Domain%mpp_domain, is_restart = .true.)
+        file_open_success=fms2_open_file(CS%fileObjRead, file_path_2, "read", &
+                                       G%Domain%mpp_domain, is_restart = .true.)
                                                 
         if(.not. file_open_success) then 
            write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
@@ -1673,16 +1677,14 @@ subroutine restore_state(filename, directory, day, G, CS)
   do n=1,num_file
      !call get_file_info(unit(n), ndim, nvar, natt, ntime)
      file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
-     str_split_index = INDEX(file_path_1,'.res')
-     str_end_index = INDEX(file_path_1,'.nc')
-     if (str_split_index > 1 .and. str_end_index > 1 )then
-        file_path_2 = trim(file_path_1(1:str_split_index-1)// &
-                         file_path_1(str_split_index+4:str_end_index-1))//'.nc'                         
+     str_index = INDEX(file_path_1,'.nc')
+     if (str_index <=0) then
+        file_path_2 = append_substring(file_path_1, '.nc')                         
      else 
         file_path_2 = trim(file_path_1)
      endif
-     file_open_success=fms2_open_file(CS%fileObjRead, trim(file_path_2),"read", G%Domain%mpp_domain, is_restart = .true.)
-                                                
+     file_open_success=fms2_open_file(CS%fileObjRead, file_path_2,"read", & 
+                                      G%Domain%mpp_domain, is_restart = .true.)                                            
      if (.not. file_open_success) then 
         write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
         call MOM_error(FATAL,"MOM_restart: "//mesg)

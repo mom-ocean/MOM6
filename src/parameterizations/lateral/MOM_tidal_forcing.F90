@@ -360,7 +360,7 @@ subroutine find_in_files(filenames, varname, array, G)
   enddo
 
   do nf=size(filenames),1,-1
-    if (file_exists(filenames(nf), G%Domain)) then
+    if (file_exists(filenames(nf))) then
       call MOM_error(FATAL, "MOM_tidal_forcing.F90: Unable to find "// &
          trim(varname)//" in any of the tidal input files, last tried "// &
          trim(filenames(nf)))

@@ -179,7 +179,7 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, dia
   if (.not.restart) then
     if (len_trim(CS%tracer_IC_file) >= 1) then
       !  Read the tracer concentrations from a netcdf file.
-      if (.not.file_exists(CS%tracer_IC_file, G%Domain)) &
+      if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "dyed_obc_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
       do m=1,CS%ntr

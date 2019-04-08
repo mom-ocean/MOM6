@@ -382,7 +382,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
 
   if (len_trim(CS%IC_file) > 0) then
     !  Read the tracer concentrations from a netcdf file.
-    if (.not.file_exists(CS%IC_file, G%Domain)) &
+    if (.not.file_exists(CS%IC_file)) &
       call MOM_error(FATAL, "initialize_OCMIP2_CFC: Unable to open "//CS%IC_file)
     if (CS%Z_IC_file) then
       OK = tracer_Z_init(tr, h, CS%IC_file, name, G, US)

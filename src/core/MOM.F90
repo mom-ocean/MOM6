@@ -2225,7 +2225,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
     if (use_ice_shelf) then
       filename = trim(inputdir)//trim(ice_shelf_file)
-      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+      if (.not.file_exists(filename)) call MOM_error(FATAL, &
         "MOM: Unable to open "//trim(filename))
 
       allocate(area_shelf_h(isd:ied,jsd:jed))
@@ -2518,12 +2518,14 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
-    call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, G, GV, &
-                                filename=CS%IC_file, longname="Interface heights", &
-                                units="meter", z_grid='i', file_is_initcond=.true.)
+    !call MOM_save_IC(CS%IC_file,"eta",z_interface,G,GV, longname="Interface heights", &
+     !                           units="meter", z_grid='i')
+    !call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, G, GV, &
+    !                            filename=CS%IC_file, longname="Interface heights", &
+    !                            units="meter", z_grid='i')
 
-    call save_restart(dirs%output_directory, Time, G, &
-                      restart_CSp_tmp, filename=CS%IC_file, GV=GV, file_is_initcond=.true.)
+    !call save_restart(dirs%output_directory, Time, G, restart_CSp_tmp, filename=CS%IC_file, GV=GV)
+
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
   endif

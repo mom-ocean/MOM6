@@ -246,7 +246,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
 
       if (len_trim(CS%IC_file) > 0) then
   !  Read the tracer concentrations from a netcdf file.
-        if (.not.file_exists(CS%IC_file, G%Domain)) &
+        if (.not.file_exists(CS%IC_file)) &
           call MOM_error(FATAL, "initialize_ideal_age_tracer: "// &
                                  "Unable to open "//CS%IC_file)
 

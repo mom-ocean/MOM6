@@ -480,7 +480,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
       filename = trim(inputdir)//trim(IC_file)
       call log_param(param_file, mdl, "INPUTDIR/CALVING_MASK_FILE", filename)
-      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+      if (.not.file_exists(filename)) call MOM_error(FATAL, &
          " calving mask file: Unable to open "//trim(filename))
 
       call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)

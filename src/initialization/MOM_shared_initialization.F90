@@ -161,7 +161,7 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
   filename = trim(inputdir)//trim(topo_file)
   call log_param(param_file, mdl, "INPUTDIR/TOPO_FILE", filename)
 
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(filename)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
   D(:,:) = -9.e30*m_to_Z ! Initializing to a very large negative depth (tall mountains) everywhere
@@ -206,7 +206,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   if (len_trim(topo_edits_file)==0) return
 
   topo_edits_file = trim(inputdir)//trim(topo_edits_file)
-  if (.not.file_exists(topo_edits_file, G%Domain)) call MOM_error(FATAL, &
+  if (.not.file_exists(topo_edits_file)) call MOM_error(FATAL, &
      'initialize_topography_from_file: Unable to open '//trim(topo_edits_file))
 
   ncstatus = nf90_open(trim(topo_edits_file), NF90_NOWRITE, ncid)

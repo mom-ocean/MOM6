@@ -1651,7 +1651,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
                              domain=G%Domain%mpp_domain)
       endif
 
-      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+      if (.not.file_exists(filename)) call MOM_error(FATAL, &
            " initialize_shelf_mass: Unable to open "//trim(filename))
 
     case ("zero")

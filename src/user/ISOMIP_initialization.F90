@@ -642,7 +642,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
 
     !read temp and eta
     filename = trim(inputdir)//trim(state_file)
-    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+    if (.not.file_exists(filename)) call MOM_error(FATAL, &
           "ISOMIP_initialize_sponges: Unable to open "//trim(filename))
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
     call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)

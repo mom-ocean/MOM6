@@ -57,6 +57,13 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: get_axis_data
+public :: get_vertical_grid_coordinates
+public :: get_horizontal_grid_coordinates
+public :: get_time_coordinates
+public :: write_axis_data
+public :: get_horizontal_grid_position
+public :: MOM_write_data
+
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -90,6 +97,15 @@ end interface
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
+end interface
+
+!> Write a data field from a netCDF file
+interface MOM_read_data
+  module procedure MOM_write_data_4d
+  module procedure MOM_write_data_3d
+  module procedure MOM_write_data_2d
+  module procedure MOM_write_data_1d
+  module procedure MOM_write_data_0d
 end interface
 
 contains
@@ -502,7 +518,7 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
      IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
 
-  if (present(is_restart_file) .and. (is_restart_file = .true.)) is_restart = .true.
+  if (present(is_restart_file) .and. (is_restart_file)) is_restart = .true.
 
   ! Register and write the axis data
   select case (trim(axis_name))
@@ -610,7 +626,7 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
         endif
         if (is_restart) then
            call fms2_register_restart_field(fileObjWrite, axis_name, &
-                   time_vals, dimensions=(/'Time'/))
+                   time_val, dimensions=(/'Time'/))
         else
            call fms2_register_field(fileObjWrite, axis_name, "double", & 
                                     dimensions=(/'Time'/))
@@ -669,7 +685,99 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
 
 end subroutine write_axis_data
 
-!> get the horizonatl grid coordinate values, and register the grid axes to the 
+!> write 4d data to a netcdf file
+subroutine MOM_write_data_4d(fileObjWrite, field_name, field_data, units, long_name)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  character(len=*),           intent(in) :: field_name        !< Name of the field
+  real, dimension(:,:,:,:),   intent(in) :: field_data        !< data to write to the file
+  character(len=*), optional, intent(in) :: units             !< field units
+  character(len=*), optional, intent(in) :: long_name         !< long name of field to write to file 
+ 
+  call fms2_write_data(file_name, field_name, field_data)
+
+  ! write attributes
+  if (present(units)) &
+  call fms2_register_variable_attribute(fileObjWrite, field_name,"units", units)
+
+  if (present(long_name)) &
+  call fms2_register_variable_attribute(fileObjWrite field_name,"longname",long_name)
+
+end subroutine MOM_write_data_4d
+
+!> write 3d data to a netcdf file
+subroutine MOM_write_data_3d(fileObjWrite, field_name, field_data, units, long_name)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  character(len=*),           intent(in) :: field_name        !< Name of the field
+  real, dimension(:,:,:),     intent(in) :: field_data        !< data to write to the file
+  character(len=*), optional, intent(in) :: units             !< field units
+  character(len=*), optional, intent(in) :: long_name         !< long name of field to write to file 
+ 
+  call fms2_write_data(file_name, field_name, field_data)
+
+  ! write attributes
+  if (present(units)) &
+  call fms2_register_variable_attribute(fileObjWrite, field_name,"units", units)
+
+  if (present(long_name)) &
+  call fms2_register_variable_attribute(fileObjWrite field_name,"longname",long_name)
+
+end subroutine MOM_write_data_3d
+!> write 2d data to a netcdf file
+subroutine MOM_write_data_2d(fileObjWrite, field_name, field_data, units, long_name)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  character(len=*),           intent(in) :: field_name        !< Name of the field
+  real, dimension(:,:),       intent(in) :: field_data        !< data to write to the file
+  character(len=*), optional, intent(in) :: units             !< field units
+  character(len=*), optional, intent(in) :: long_name         !< long name of field to write to file 
+ 
+  call fms2_write_data(file_name, field_name, field_data)
+
+  ! write attributes
+  if (present(units)) &
+  call fms2_register_variable_attribute(fileObjWrite, field_name,"units", units)
+
+  if (present(long_name)) &
+  call fms2_register_variable_attribute(fileObjWrite field_name,"longname",long_name)
+
+end subroutine MOM_write_data_2d
+!> write 1d data to a netcdf file
+subroutine MOM_write_data_1d(fileObjWrite, field_name, field_data, units, long_name)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  character(len=*),           intent(in) :: field_name        !< Name of the field
+  real, dimension(:),         intent(in) :: field_data        !< data to write to the file
+  character(len=*), optional, intent(in) :: units             !< field units
+  character(len=*), optional, intent(in) :: long_name         !< long name of field to write to file 
+ 
+  call fms2_write_data(file_name, field_name, field_data)
+
+  ! write attributes
+  if (present(units)) &
+  call fms2_register_variable_attribute(fileObjWrite, field_name,"units", units)
+
+  if (present(long_name)) &
+  call fms2_register_variable_attribute(fileObjWrite field_name,"longname",long_name)
+
+end subroutine MOM_write_data_1d
+!> write 0d data to a netcdf file
+subroutine MOM_write_data_0d(fileObjWrite, field_name, field_data, units, long_name)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  character(len=*),           intent(in) :: field_name        !< Name of the field
+  real,                        intent(in) :: field_data        !< data to write to the file
+  character(len=*), optional, intent(in) :: units             !< field units
+  character(len=*), optional, intent(in) :: long_name         !< long name of field to write to file 
+ 
+  call fms2_write_data(file_name, field_name, field_data)
+
+  ! write attributes
+  if (present(units)) &
+  call fms2_register_variable_attribute(fileObjWrite, field_name,"units", units)
+
+  if (present(long_name)) &
+  call fms2_register_variable_attribute(fileObjWrite field_name,"longname",long_name)
+
+end subroutine MOM_write_data_0d
+
+!> get the horizontal grid coordinate values, and register the grid axes to the 
 !! restart file if they are not registered
 subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, hor_grid, G, grid_position)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
@@ -818,7 +926,6 @@ subroutine get_time_coordinates(fileObjWrite, num_axes, t_grid_in, dim_name_str)
   logical :: use_time = .false.
   logical :: use_periodic = .false.
   character(len=8) :: t_grid, t_grid_read
-  character(len=200) :: dim_name_str
   integer :: axis_length = 0
 
   t_grid = adjustl(t_grid_in)
