@@ -479,8 +479,9 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
   character(len=8) :: t_grid, t_grid_read
   character(len=50) :: long_name
   integer :: horgrid_position
+  real :: time_val
   logical :: is_restart = .false.
-  if ((trim(axisName) == "Period") .and. .not.(present(t_grid_in))) then 
+  if ((trim(axis_name) == "Period") .and. .not.(present(t_grid_in))) then 
       call MOM_error(FATAL,"MOM_restart::write_axis_data: NO argument passed for 't_grid_in', "//&
                      " which is required to determine the periodic time axis.")
   endif
@@ -504,17 +505,17 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
   if (present(is_restart_file) .and. (is_restart_file = .true.)) is_restart = .true.
 
   ! Register and write the axis data
-  select case (trim(axisName))
+  select case (trim(axis_name))
      case ('latq')       
         if (is_restart) then
            call fms2_register_restart_field(fileObjWrite, axis_name, gridLatB(JsgB:JegB), &  
                                       dimensions=(/'latq'/), domain_position=CORNER)
         else
-           call fms2_register_field(CS%fileObjWrite, axis_name, "double", & 
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
                                     dimensions=(/'latq'/), domain_position=CORNER)
         endif       
         
-        call fms2_write_data(fileObjWrite,axisName,gridLatB(JsgB:JegB))
+        call fms2_write_data(fileObjWrite,axis_name,gridLatB(JsgB:JegB))
         long_name = 'Latitude'
         axis_units = y_axis_units
      case ('lath')
@@ -522,23 +523,33 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
            call fms2_register_restart_field(fileObjWrite, axis_name, gridLatT(jsg:jeg), &  
                                       dimensions=(/'lath'/), domain_position=CENTER)
         else
-           call fms2_register_field(CS%fileObjWrite, axis_name, "double", & 
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
                                     dimensions=(/'lath'/), domain_position=CENTER)
         endif       
       
-        call fms2_write_data(fileObjWrite,axisName,gridLatT(jsg:jeg))
+        call fms2_write_data(fileObjWrite, axis_name,gridLatT(jsg:jeg))
         long_name = 'Latitude'
         axis_units = y_axis_units
      case ('lonq')
-        call fms2_register_restart_field(fileObjWrite, axisName, gridLonB(IsgB:IegB), & 
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, gridLonB(IsgB:IegB), & 
                                          dimensions=(/'lonq'/), domain_position=CORNER)
-        call fms2_write_data(fileObjWrite,axisName,gridLonB(IsgB:IegB))
+        else
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'lonq'/), domain_position=CORNER)
+        endif
+        call fms2_write_data(fileObjWrite, axis_name, gridLonB(IsgB:IegB))
         long_name = 'Longitude'
         axis_units = x_axis_units
      case ('lonh')
-        call fms2_register_restart_field(fileObjWrite, axisName, gridLonT(isg:ieg), &
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, gridLonT(isg:ieg), &
                                          dimensions=(/'lonh'/), domain_position=CENTER)
-        call fms2_write_data(fileObjWrite,axisName,gridLonT(isg:ieg))
+        else
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'lonh'/), domain_position=CENTER)
+        endif
+        call fms2_write_data(fileObjWrite, axis_name, gridLonT(isg:ieg))
         long_name = 'Longitude'
         axis_units = x_axis_units
      case ('Layer')
@@ -546,9 +557,14 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
            call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
                           " which is required to write the Layer axis data.")
         endif
-        call fms2_register_restart_field(fileObjWrite, axisName, GV%sLayer(1:GV%ke), & 
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, GV%sLayer(1:GV%ke), & 
                                    dimensions=(/'Layer'/))
-        call fms2_write_data(fileObjWrite,axisName,GV%sLayer(1:GV%ke))
+        else
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'Layer'/))
+        endif
+        call fms2_write_data(fileObjWrite, axis_name, GV%sLayer(1:GV%ke))
         long_name = 'Layer'
         axis_units = trim(GV%zAxisUnits)
      case ('Interface')
@@ -556,9 +572,14 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
            call MOM_error(FATAL,"MOM_restart::write_axis_data: No argument passed for 'GV', "//&
                           " which is required to write the Interface axis data.")
         endif
-        call fms2_register_restart_field(fileObjWrite, axisName, GV%sInterface(1:GV%ke+1), & 
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, GV%sInterface(1:GV%ke+1), & 
                                    dimensions=(/'Interface'/))
-        call fms2_write_data(fileObjWrite,axisName,GV%sInterface(1:GV%ke+1))
+        else
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'Interface'/))
+        endif
+        call fms2_write_data(fileObjWrite, axis_name, GV%sInterface(1:GV%ke+1))
         long_name="Interface "//trim(GV%zAxisLongName)
         axis_units = trim(GV%zAxisUnits)
      case ('Time') 
@@ -582,13 +603,20 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
            axis_units = "days"
         endif
         if (present(restart_time_in_days)) then
-           call fms2_register_restart_field(fileObjWrite, axisName, restart_time_in_days, dimensions=(/'Time'/))
-           call fms2_write_data(fileObjWrite,axisName,restart_time_in_days)
+           time_val = restart_time_in_days
+
         else
-           call fms2_register_restart_field(fileObjWrite, axisName, 1.0, & 
-                                   dimensions=(/'Time'/))
-           call fms2_write_data(fileObjWrite,axisName,1.0)
+           time_val = 1.0
         endif
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, &
+                   time_vals, dimensions=(/'Time'/))
+        else
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'Time'/))
+        endif
+
+        call fms2_write_data(fileObjWrite, axis_name, time_val)
         long_name = "Time"
      case ('Period')
         t_grid = adjustl(t_grid_in)
@@ -622,16 +650,22 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
         do k=1,num_periods
            period_val(k) = real(k)
         enddo
-        call fms2_register_restart_field(fileObjWrite, axisName, period_val, & 
+        if (is_restart) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, period_val, & 
                                    dimensions=(/'Period'/))
-        call fms2_write_data(fileObjWrite, axisName, period_val)
+        else
+           call fms2_register_field(fileObjWrite, axis_name, "double", & 
+                                    dimensions=(/'Period'/))
+        endif
+
+        call fms2_write_data(fileObjWrite, axis_name, period_val)
         deallocate(period_val)
         axis_units = "nondimensional"
         long_name="Periods for cyclical varaiables"
    end select
    ! write attributes
-   call fms2_register_variable_attribute(fileObjWrite,axisName,"units",axis_units)
-   call fms2_register_variable_attribute(fileObjWrite,axisName,"longname",long_name)
+   call fms2_register_variable_attribute(fileObjWrite,axis_name,"units",axis_units)
+   call fms2_register_variable_attribute(fileObjWrite,axis_name,"longname",long_name)
 
 end subroutine write_axis_data
 

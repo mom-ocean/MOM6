@@ -2,7 +2,7 @@
 module MOM_string_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
+use MOM_error_handler, only : MOM_error, WARNING
 implicit none ; private
 
 public lowercase, uppercase
@@ -16,7 +16,7 @@ public extract_real
 public remove_spaces
 public slasher
 public append_substring
-public remove substring
+public remove_substring
 
 contains
 
@@ -435,7 +435,7 @@ function append_substring(string_in, substring) result(string_out)
 
        string_out(1:len_trim(string_holder)) = trim(string_holder)
    else
-      call MOM_error(WARNING, "MOM_io::append_substring: "//&
+      call MOM_error(WARNING, "MOM_string_functions::append_substring: "//&
                      "the input string or substring has zero length")
    endif
 
@@ -468,7 +468,7 @@ function remove_substring(string_in, substring) result(string_out)
 
        string_out(1:len_trim(string_holder)) = trim(string_holder)
    else
-      call MOM_error(WARNING, "MOM_io::remove_substring "//trim(substring)//&
+      call MOM_error(WARNING, "MOM_string_functions ::remove_substring "//trim(substring)//&
                      " not found in the string "//trim(string_in))
    endif
 end function remove_substring
