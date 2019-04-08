@@ -7,7 +7,7 @@ use MOM_domains, only : pe_here, num_PEs, MOM_domain_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions, only : lowercase
+use MOM_string_functions, only : lowercase, append_substring
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
 use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
@@ -15,13 +15,15 @@ use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_io, only : get_horizontal_grid_coordinates, get_horizontal_grid_position
+use MOM_io, only : get_vertical_grid_coordinates, get_time_coordinates
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum,mpp_pe
-use mpp_domains_mod, only : domain1d, domain2d
-use mpp_io_mod,      only: mpp_attribute_exist, mpp_get_atts
-use mpp_io_mod,      only: axistype
+use mpp_mod,         only:  mpp_chksum, mpp_pe
+!use mpp_domains_mod, only : domain1d, domain2d
+!use mpp_io_mod,      only: mpp_attribute_exist, mpp_get_atts
+!use mpp_io_mod,      only: axistype
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_axis => register_axis, &
                            fms2_register_field => register_field, &
@@ -2235,196 +2237,9 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
 end subroutine get_checksum_loop_ranges
 
-!> get the horizonatl grid coordinate values, and register the grid axes to the 
-!! restart file if they are not registered
-subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, hor_grid, G, grid_position)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
-  integer, intent(inout) ::  num_axes !< number of axes in restart file
-  character(len=*), intent(in) :: hor_grid !< name of the horizontal grid
-  type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
-  integer, intent(out) :: grid_position !< integer corresponding to the grid position
-   
-  ! local
-  logical :: use_lath = .false.
-  logical :: use_lonh = .false.
-  logical :: use_latq = .false.
-  logical :: use_lonq = .false.
-  integer :: axis_length = 0
-  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
-  real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
-     gridLatB => NULL(), & ! the purpose of labeling the output axes.
-     gridLonT => NULL(), &
-     gridLonB => NULL()
-  character(len=200) :: dim_name_str
-  
-  ! set the ocean grid coordinates
-  gridLatT => G%gridLatT
-  gridLatB => G%gridLatB
-  gridLonT => G%gridLonT
-  gridLonB => G%gridLonB
-  isg = G%isg
-  ieg = G%ieg 
-  jsg = G%jsg
-  jeg = G%jeg
-  IsgB = G%IsgB
-  IegB = G%IegB
-  JsgB = G%JsgB
-  JegB = G%JegB
-  
-  select case (trim(hor_grid))
-     case ('h') ; use_lath = .true. ; use_lonh = .true.
-     case ('q') ; use_latq = .true. ; use_lonq = .true.
-     case ('u') ; use_lath = .true. ; use_lonq = .true.
-     case ('v') ; use_latq = .true. ; use_lonh = .true.
-     case ('T')  ; use_lath = .true. ; use_lonh = .true.
-     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-     case ('1') ; grid_position = 0 
-     case default
-        call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
-                        "Unrecognized hor_grid argument "//trim(hor_grid))
-  end select
-
-  grid_position = get_horizontal_grid_position(hor_grid)
-
-  ! add longitude name to dimension name array
-  dim_name_str = ''
-  if (use_lonh) then
-     dim_name_str = 'lonh'
-     num_axes = num_axes+1 
-     axis_length = size(gridLonT(isg:ieg))
-  elseif (use_lonq) then
-     dim_name_str ='lonq'
-     num_axes = num_axes+1
-     axis_length = size(gridLonB(IsgB:IegB)) 
-  endif
- 
-  ! register the restart axis if it is not
-  if (num_axes > 0) then
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
-  ! add latitude name to dimension name array
-  dim_name_str = ''
-  if (use_lath) then
-     dim_name_str = 'lath'
-     num_axes = num_axes+1
-     axis_length = size(gridLatT(jsg:jeg))
-  elseif (use_latq) then
-     dim_name_str = 'latq'
-     num_axes = num_axes+1
-     axis_length = size(gridLatB(JsgB:JegB))
-  endif
-  
-  ! register the restart axis if it is not
-  if (num_axes > 0) then
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
-
-end subroutine get_horizontal_grid_coordinates
-
-!> get the vertical grid coordinate values, and register the vertical grid axis to the 
-!! restart file if it is not registered
-subroutine get_vertical_grid_coordinates(fileObjWrite, dim_names, num_axes, GV, z_grid)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
-  integer, intent(inout) ::  num_axes !< number of axes in restart file
-  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
-  character(len=*), intent(in) :: z_grid !< vertical grid
-  ! local
-  logical :: use_layer = .false.
-  logical :: use_int = .false.
-  character(len=200) :: dim_name_str
-  integer :: axis_length = 0
-
-  select case (trim(z_grid))
-     case ('L') ; use_layer = .true.
-     case ('i') ; use_int = .true.
-     case ('1') ! Do nothing.
-     case default
-       call MOM_error(FATAL, "MOM_restart: get_vertical_grid_coordinates: "//&
-                        " has unrecognized z_grid argument"//trim(z_grid))
-  end select
-  
-  dim_name_str = ''
-
-  if (use_layer) then
-     dim_name_str = 'Layer'
-     num_axes = num_axes+1
-     axis_length = size(GV%sLayer(1:GV%ke))  
-  elseif (use_int) then
-     dim_name_str = 'Interface'
-     num_axes = num_axes+1
-     axis_length = size(GV%sInterface(1:GV%ke+1))
-  endif
-
-  ! register the restart axis if it is not registered
-  if (num_axes > 0) then
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
-
-end subroutine get_vertical_grid_coordinates
-
-!> get the time coordinate values, and register the time axis to the 
-!! restart file if it is not registered
-subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
-  integer, intent(inout) ::  num_axes !< number of axes in restart file
-  character(len=*), intent(in) :: t_grid_in !< 's', 'a', 'm' for time,
-                                            !< 'p' for periodic, '1' for no time axis
-  ! local
-  logical :: use_time = .false.
-  logical :: use_periodic = .false.
-  character(len=8) :: t_grid, t_grid_read
-  character(len=200) :: dim_name_str
-  integer :: axis_length = 0
-
-  t_grid = adjustl(t_grid_in)
-
-  select case (t_grid(1:1))
-     case ('s', 'a', 'm') ; use_time = .true.
-     case ('p')
-        if (len_trim(t_grid(2:8)) <= 0) then
-            call MOM_error(FATAL,"MOM_restart:get_time_coordinates: "//&
-                           "No periodic axis length was specified in "//trim(t_grid))
-        endif
-        use_periodic = .true.
-     case ('1') ! Do nothing.
-     case default
-        call MOM_error(WARNING, "MOM_restart: get_time_coordinates: "//&
-                       "Unrecognized t_grid "//trim(t_grid))
-  end select
-
-  dim_name_str = ''
-      
-  if (use_time) then
-     num_axes = num_axes+1
-     dim_name_str = 'Time'
-  elseif (use_periodic) then
-     num_axes = num_axes+1
-     dim_name_str = 'Period'
-  endif
-
-  ! register the restart axis if it is not registered
-  if (num_axes > 0) then
-     axis_length = unlimited ! time is the unlimited dimension
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
-end subroutine get_time_coordinates
-
 !> check restart file for an axis, and register it if it is unregistered
 
-subroutine check_for_restart_axis(fileObjWrite,axisName,axisLength)
+subroutine check_for_restart_axis(fileObjWrite, axisName, axisLength)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: axisName ! name of the restart file axis to register to file
    integer, intent(in) :: axisLength ! length of axis/dimension (only needed for Z and Time)
@@ -2626,141 +2441,6 @@ subroutine write_axis_data(fileObjWrite, axisName, G, dG, GV, timeunit, &
    call fms2_register_variable_attribute(fileObjWrite,axisName,"longname",long_name)
 
 end subroutine write_axis_data
-!> get the position parameter value from the horizontal grid (hor_grid) string id
 
-function get_horizontal_grid_position(grid_string_id) result(grid_position)
-  character(len=*), intent(in) :: grid_string_id !< horizontal grid string
-  integer :: grid_position !< integer corresponding to the grid position
-
-  select case (grid_string_id)
-     case ('h') ; grid_position = CENTER
-     case ('q') ; grid_position = CORNER
-     case ('u') ; grid_position = EAST_FACE
-     case ('v') ; grid_position = NORTH_FACE
-     case ('T')  ; grid_position = CENTER
-     case ('Bu') ; grid_position = CORNER
-     case ('Cu') ; grid_position = EAST_FACE
-     case ('Cv') ; grid_position = NORTH_FACE
-     case ('1') ; grid_position = 0 
-     case default
-        call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_position "//&
-                        "Unrecognized grid_string_id argument "//trim(grid_string_id))
-  end select
-
-end function get_horizontal_grid_position
-!> get list of restart files in the root directory
-!subroutine get_restart_file_list(base_name)
-!  character(len=*), intent(in) :: base_name
-! local
-!  character(len=500), dimension(:), allocatable :: file_list
-!  character(len=10) :: num_string
-!  character(len=500) :: file_name
-!  character(len=8) :: iformat ! format descriptor
-!  logical :: file_exist = .false.
-!  integer :: i
-!
-!  iformat = '(I4.4)' ! an integer of width 4 with zeros at the left
-!  
-!  do i=0,200
-!    
-!     write(num_string,iformat) i
-!     file_name = append_substring(base_name,num_string)
-!     file_exist = fms2_file_exists(file_name)
-!
-!     if (file_exist) then
-!        call add_to_list_string(file_list,file_name)
-!     else
-!        exit
-!     endif
-!  end do
-
-!end subroutine get_restart_file_list
-
-!subroutine add_to_list_string(list, element)
-!  character(len=*), intent(in) :: element
-!  character(len=*), dimension(:), allocatable, intent(inout) :: list
-!  !local
-!  character(len=*), dimension(:), allocatable :: clist
-!  integer :: i, isize
-!  if (allocated(list)) then
-!     isize = size(list)
-!     allocate(clist(isize+1))
-!     do i=1,isize          
-!        clist(i) = list(i)
-!     end do
-!     clist(isize+1) = element
-!
-!     deallocate(list)
-!     call move_alloc(clist, list)
-!
-!   else
-!      allocate(list(1))
-!      list(1) = element
-!   end if
-!
-!end subroutine add_to_list_string
-
-!> append a string (substring) to another string (string_in) and return the result (string_out)
-function append_substring(string_in, substring) result(string_out)
-   character(len=*), intent(in) :: string_in !< input string
-   character(len=*), intent(in) :: substring !< string to append string_in
-   ! local
-   character(len=1024) :: string_out
-   character(len=1024) :: string_holder
-   integer :: string_in_length
-   integer :: substring_length
-   
-   string_out = ''
-   string_holder = ''
-   string_in_length = 0
-   substring_length = 0
-  
-   string_in_length = len_trim(string_in)
-   
-   substring_length = len_trim(substring)
-
-   if ((string_in_length > 0) .and. (substring_length > 0)) then     
-       string_holder = trim(string_in//substring)
-
-       string_out(1:len_trim(string_holder)) = trim(string_holder)
-   else
-      call MOM_error(WARNING, "MOM_restart::append_substring: "//&
-                     "the input string or substring has zero length")
-   endif
-
-end function append_substring
-
-!> remove a substring from a string, and return the resulting string
-function remove_substring(string_in, substring) result(string_out)
-   character(len=*), intent(in) :: string_in !< input string
-   character(len=*), intent(in) :: substring !< string to remove from string_in
-   ! local
-   character(len=1024) :: string_out
-   character(len=1024) :: string_holder 
-   integer :: string_in_length
-   integer :: substring_length
-   integer :: string_split_index
-
-   string_out = ''
-   string_in_length = 0
-   substring_length = 0
-   string_split_index = 0
-   
-   ! find the position of the first substring character in string_in
-   string_in_length = len_trim(string_in)
-   string_split_index = INDEX(string_in, trim(substring))
-   substring_length = len_trim(substring)
-
-   if (string_split_index > 0) then     
-       string_holder = trim(string_in(1:string_split_index-1)//&
-                            string_in(substring_length+1:string_in_length))
-
-       string_out(1:len_trim(string_holder)) = trim(string_holder)
-   else
-      call MOM_error(WARNING, "MOM_restart::remove_substring "//trim(substring)//&
-                     " not found in the string "//trim(string_in))
-   endif
-
-end function remove_substring
 
 end module MOM_restart
