@@ -324,7 +324,8 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(4)
-  character(len=16) :: nc_action
+  character(len=200) :: dim_name_str
+  character(len=16)  :: nc_action
   character(len=200) :: mesg
   integer :: name_length = 0
   integer :: num_axes, i
@@ -344,6 +345,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   base_file_name = ''
   restart_file_name = ''
   nc_action = ''
+  dim_name_str=''
 
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
@@ -390,7 +392,14 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
   call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
 
   ! time (t) grid  
-  call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
+  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  ! register the restart axis if it is not registered
+  if (num_axes > 0) then
+     axis_length = unlimited ! time is the unlimited dimension
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
   
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_4d: dim name ", trim(dim_names(i))
@@ -442,6 +451,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=200) :: base_file_name 
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(4)
+  character(len=200) :: dim_name_str
   character(len=16) :: nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
@@ -462,6 +472,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   base_file_name = ''
   restart_file_name = ''
   nc_action = ''
+  dim_name_str = ''
 
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
@@ -508,7 +519,14 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
  
   ! time (t) grid  
-  call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
+  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  ! register the restart axis if it is not registered
+  if (num_axes > 0) then
+     axis_length = unlimited ! time is the unlimited dimension
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
 
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dim name ", trim(dim_names(i))
@@ -554,6 +572,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   logical :: file_open_success = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
+  character(len=200) :; dim_name_str
   character(len=200) :: dim_names(3)
   character(len=16) ::  nc_action
   character(len=200) :: mesg
@@ -582,6 +601,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   base_file_name = ''
   restart_file_name = ''
   nc_action = ''
+  dim_name_str = ''
 
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
@@ -629,7 +649,13 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   endif
 
   ! time (t) grid   
-  call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
+  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  if (num_axes > 0) then
+     axis_length = unlimited ! time is the unlimited dimension
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
 
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_2d: dim name ", trim(dim_names(i))
@@ -677,6 +703,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=200) :: dim_names(2)
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
+  character(len=200) :: dim_name_str
   character(len=16) :: nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
@@ -702,6 +729,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   base_file_name = ''
   restart_file_name = ''
   nc_action = ''
+  dim_name_str = ''
 
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
@@ -743,7 +771,14 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
 
   ! time (t) grid  
-  call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
+  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  ! register the restart axis if it is not registered
+  if (num_axes > 0) then
+     axis_length = unlimited ! time is the unlimited dimension
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
   
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_1d: dim name ", trim(dim_names(i))
@@ -753,13 +788,8 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, filename
   ! register the restart field
   call register_restart_field_ptr1d(f_ptr, vd, mandatory, CS)
 
-  if (is_restart_file) then
-     call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
+  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
        dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  else
-     call fms2_register_field(CS%fileObjWrite, name, "double", & 
-       dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  endif
 
   ! register variable attributes
   if (present(units)) call fms2_register_variable_attribute(CS%fileObjWrite, name,'units',vd%units)
@@ -793,6 +823,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=16) :: nc_action
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
+  character(len=200) :: dim_name_str
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes, i
@@ -812,6 +843,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   base_file_name = ''
   restart_file_name = ''
   nc_action = ''
+  dim_name_str = ''
 
   if (present(filename)) then
      restart_file_name(1:len_trim(filename))=trim(filename)
@@ -851,8 +883,14 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, filename
   num_axes = 0
 
   ! time (t) grid  
-  call get_time_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%t_grid)
-
+  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  ! register the restart axis if it is not registered
+  if (num_axes > 0) then
+     axis_length = unlimited ! time is the unlimited dimension
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  endif
   do i=1,num_axes
      WRITE(mpp_pe()+2000,*) "register_restart_field_0d: dim name ", trim(dim_names(i))
      call flush(mpp_pe()+2000)

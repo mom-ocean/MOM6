@@ -774,12 +774,12 @@ end subroutine get_vertical_grid_coordinates
 
 !> get the time coordinate values, and register the time axis to the 
 !! restart file if it is not registered
-subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
+subroutine get_time_coordinates(fileObjWrite, num_axes, t_grid_in, dim_name_str)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
   integer, intent(inout) ::  num_axes !< number of axes in restart file
   character(len=*), intent(in) :: t_grid_in !< 's', 'a', 'm' for time,
                                             !< 'p' for periodic, '1' for no time axis
+  character(len=*), intent(out) :: dim_name_str !< array of dimension names
   ! local
   logical :: use_time = .false.
   logical :: use_periodic = .false.
@@ -813,13 +813,6 @@ subroutine get_time_coordinates(fileObjWrite, dim_names, num_axes, t_grid_in)
      dim_name_str = 'Period'
   endif
 
-  ! register the restart axis if it is not registered
-  if (num_axes > 0) then
-     axis_length = unlimited ! time is the unlimited dimension
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
 end subroutine get_time_coordinates
 
 !> get the position parameter value from the horizontal grid (hor_grid) string id
