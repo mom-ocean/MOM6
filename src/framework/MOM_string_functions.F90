@@ -410,6 +410,70 @@ function slasher(dir)
   endif
 end function slasher
 
+!> append a string (substring) to another string (string_in) and return the
+!! concatenated string (string_out)
+function append_substring(string_in, substring) result(string_out)
+   character(len=*), intent(in) :: string_in !< input string
+   character(len=*), intent(in) :: substring !< string to append string_in
+   ! local
+   character(len=1024) :: string_out
+   character(len=1024) :: string_holder
+   integer :: string_in_length
+   integer :: substring_length
+   
+   string_out = ''
+   string_holder = ''
+   string_in_length = 0
+   substring_length = 0
+  
+   string_in_length = len_trim(string_in)
+   
+   substring_length = len_trim(substring)
+
+   if ((string_in_length > 0) .and. (substring_length > 0)) then     
+       string_holder = trim(string_in//substring)
+
+       string_out(1:len_trim(string_holder)) = trim(string_holder)
+   else
+      call MOM_error(WARNING, "MOM_io::append_substring: "//&
+                     "the input string or substring has zero length")
+   endif
+
+end function append_substring
+
+!> remove a substring from a string, and return the resulting string
+function remove_substring(string_in, substring) result(string_out)
+   character(len=*), intent(in) :: string_in !< input string
+   character(len=*), intent(in) :: substring !< string to remove from string_in
+   ! local
+   character(len=1024) :: string_out
+   character(len=1024) :: string_holder 
+   integer :: string_in_length
+   integer :: substring_length
+   integer :: string_split_index
+
+   string_out = ''
+   string_in_length = 0
+   substring_length = 0
+   string_split_index = 0
+   
+   ! find the position of the first substring character in string_in
+   string_in_length = len_trim(string_in)
+   string_split_index = INDEX(string_in, trim(substring))
+   substring_length = len_trim(substring)
+
+   if (string_split_index > 0) then     
+       string_holder = trim(string_in(1:string_split_index-1)//&
+                            string_in(substring_length+1:string_in_length))
+
+       string_out(1:len_trim(string_holder)) = trim(string_holder)
+   else
+      call MOM_error(WARNING, "MOM_io::remove_substring "//trim(substring)//&
+                     " not found in the string "//trim(string_in))
+   endif
+end function remove_substring
+
+
 !> \namespace mom_string_functions
 !!
 !!  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.
