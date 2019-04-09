@@ -357,7 +357,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !$OMP do
   do j=js,je ; do I=is-1,ie
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
-    absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
           ( sqrt( 0.5 * ( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 ) ) * I_l_f ) &
@@ -433,7 +433,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !$OMP do
   do J=js-1,je ; do i=is,ie
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
-    absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
           ( sqrt( 0.5 * ( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 ) ) * I_l_f ) &
@@ -657,7 +657,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
       h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
       u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
-      absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+      absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
       ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
       ! momentum mixing rate: pi^2*visc/h_ml^2
       ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
@@ -705,7 +705,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_Z
 
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
-    absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.

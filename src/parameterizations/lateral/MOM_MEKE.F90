@@ -561,7 +561,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: beta, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
   real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
-  real :: FatH    ! Coriolis parameter at h points; to compute topographic beta
+  real :: FatH    ! Coriolis parameter at h points; to compute topographic beta [s-1]
   integer :: i, j, is, ie, js, je, n1, n2
   real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket [m2 s-2].
   logical :: useSecant, debugIteration
@@ -579,11 +579,12 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min( min(SN_u(I,j) , SN_u(I-1,j)) , min(SN_v(i,J), SN_v(i,J-1)) )
 
-    FatH = 0.25*((G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) + &
+    FatH = 0.25*US%s_to_T*((G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) + &
            (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1))) !< Coriolis parameter at h points
-    beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j)* &
+    !### This expression should be recast to use a single division, but it will change answers.
+    beta = sqrt( ( US%s_to_T*G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j)* &
            (G%bathyT(i+1,j) - G%bathyT(i-1,j))/2./G%dxT(i,j) )**2. &
-           + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
+           + ( US%s_to_T*G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
            *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
 
     I_H = GV%Rho0 * I_mass(i,j)
@@ -690,7 +691,8 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length [m].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
-  real :: beta, SN, FatH
+  real :: beta, SN
+  real :: FatH ! Coriolis parameter at h points [s-1]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -703,11 +705,12 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
       else
         SN = 0.
       endif
-      FatH = 0.25*( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
-             ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  ! Coriolis parameter at h points
-      beta = sqrt( ( G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
+      FatH = 0.25*US%s_to_T* ( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
+                               ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  ! Coriolis parameter at h points
+      !### This expression should be recast to use a single division, but it will change answers.
+      beta = sqrt( ( US%s_to_T*G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
              *(G%bathyT(i+1,j) - G%bathyT(i-1,j)) /2./G%dxT(i,j) )**2. &
-             + ( G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
+             + ( US%s_to_T*G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
              *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
