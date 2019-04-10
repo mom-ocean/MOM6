@@ -963,6 +963,127 @@ subroutine get_time_coordinates(fileObjWrite, num_axes, t_grid_in, dim_name_str)
 
 end subroutine get_time_coordinates
 
+subroutine get_dimension_features(dim_names, dim_length, num_axes, &
+                                  hor_grid, z_grid, t_grid_in, G, GV)
+  character(len=*), dimension(:), intent(out) :: dim_names !< array of dimension names
+  integer, dimension(:), intent(out) :: dim_length !< array of dimension sizes
+  integer, intent(out) ::  num_axes !< number of axes in restart file
+  character(len=*), optional, intent(in) :: hor_grid !< horizontal grid
+  character(len=*), optional, intent(in) :: z_grid !< vertical grid
+  character(len=*), optional, intent(in) :: t_grid_in !< time grid
+  type(ocean_grid_type), optional, intent(in)  :: G !< The ocean's grid structure
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure
+  
+  ! local
+  logical :: use_lath = .false.
+  logical :: use_lonh = .false.
+  logical :: use_latq = .false.
+  logical :: use_lonq = .false.
+  logical :: use_layer = .false.
+  logical :: use_int = .false.
+  logical :: use_time = .false.
+  logical :: use_periodic = .false.
+  character(len=8) :: t_grid
+  character(len=8) :: t_grid_read
+  character(len=200) :: dim_name_str
+  integer :: i
+  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+     gridLatB => NULL(), & ! the purpose of labeling the output axes.
+     gridLonT => NULL(), &
+     gridLonB => NULL()
+  
+  num_axes = 0
+  if (present(hor_grid)) then
+     if (.not.(present(G)) then
+     endif
+  
+     select case (trim(hor_grid))
+        case ('h') ; use_lath = .true. ; use_lonh = .true.
+        case ('q') ; use_latq = .true. ; use_lonq = .true.
+        case ('u') ; use_lath = .true. ; use_lonq = .true.
+        case ('v') ; use_latq = .true. ; use_lonh = .true.
+        case ('T')  ; use_lath = .true. ; use_lonh = .true.
+        case ('Bu') ; use_latq = .true. ; use_lonq = .true.
+        case ('Cu') ; use_lath = .true. ; use_lonq = .true.
+        case ('Cv') ; use_latq = .true. ; use_lonh = .true.
+        case ('1') ; 
+        case default
+           call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
+                        "Unrecognized hor_grid argument "//trim(hor_grid))
+     end select
+     ! set the ocean grid coordinates
+     gridLatT => G%gridLatT
+     gridLatB => G%gridLatB
+     gridLonT => G%gridLonT
+     gridLonB => G%gridLonB
+     isg = G%isg
+     ieg = G%ieg 
+     jsg = G%jsg
+     jeg = G%jeg
+     IsgB = G%IsgB
+     IegB = G%IegB
+     JsgB = G%JsgB
+     JegB = G%JegB
+  
+     ! add longitude name to dimension name array
+     if (use_lonh) then
+        num_axes = num_axes+1 
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('lonh')) = 'lonh'
+        axis_length(num_axes) = size(gridLonT(isg:ieg))
+     elseif (use_lonq) then
+        num_axes = num_axes+1
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('lonq')) ='lonq'
+        axis_length(num_axes) = size(gridLonB(IsgB:IegB)) 
+     endif
+ 
+     ! add latitude name to dimension name array
+     if (use_lath) then
+        num_axes = num_axes+1 
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('lath')) = 'lath'
+        axis_length(num_axes) = size(gridLatT(jsg:jeg))
+     elseif (use_latq) then
+        num_axes = num_axes+1 
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('latq')) = 'latq'
+        axis_length(num_axes) = size(gridLatB(JsgB:JegB))
+     endif
+  endif
+  if (present(z_grid)) then
+     if (.not.(present(GV))) then 
+         call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
+                        " GV argument is missing. It is required to get the z_grid size")
+     endif
+     select case (trim(z_grid))
+        case ('L') ; use_layer = .true.
+        case ('i') ; use_int = .true.
+        case ('1') ! Do nothing.
+        case default
+           call MOM_error(FATAL, "MOM_restart: get_vertical_grid_coordinates: "//&
+                        " has unrecognized z_grid argument"//trim(z_grid))
+     end select
+
+     if (use_layer) then
+        num_axes = num_axes+1
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('Layer')) = 'Layer'
+        axis_length(num_axes) = size(GV%sLayer(1:GV%ke))  
+     elseif (use_int) then
+        num_axes = num_axes+1
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('Interface')) = 'Interface'
+        axis_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
+     endif
+  endif
+  ! add t_grid here, axis length = unlimited
+  t_grid = adjustl(t_grid_in)
+
+end subroutine get_dimension_features
+
+
 !> get the position parameter value from the horizontal grid (hor_grid) string id
 function get_horizontal_grid_position(grid_string_id) result(grid_position)
   character(len=*), intent(in) :: grid_string_id !< horizontal grid string
