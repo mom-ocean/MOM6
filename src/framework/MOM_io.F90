@@ -783,26 +783,32 @@ end subroutine MOM_write_data_0d
 
 !> get the horizontal grid coordinate values, and register the grid axes to the 
 !! restart file if they are not registered
-subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, hor_grid, G, grid_position)
+subroutine get_horizontal_grid_coordinates(fileObjWrite, num_axes_in, axis_length, hor_grid, &
+                                           G, dim_name_arr, num_axes_out)
+)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-  character(len=*),dimension(:), intent(inout) :: dim_names !< array of dimension names
-  integer, intent(inout) ::  num_axes !< number of axes in restart file
+  integer, intent(inout) ::  num_axes  !< number of axes registered in restart file
+                                       !! before the call to get_horizontal_grid_coordinates
+  integer, dimension(:), intent(in) ::  axis_length_in !< lengths of the axes registered in restart file
+                                                       !! before the call to get_horizontal_grid_coordinates
   character(len=*), intent(in) :: hor_grid !< name of the horizontal grid
   type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
-  integer, intent(out) :: grid_position !< integer corresponding to the grid position
-   
+  character(len=*),dimension(2), intent(out) :: dim_name_arr !< array of dimension names
+  integer,dimension(:), intent(out) :: num_axes_out !< new number of axes to be registered
+  integer,dimension(:), intent(out) :: axis_length_out !< new axis lengths to be registered
+ 
   ! local
   logical :: use_lath = .false.
   logical :: use_lonh = .false.
   logical :: use_latq = .false.
   logical :: use_lonq = .false.
-  integer :: axis_length = 0
+  integer :: i
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
      gridLonT => NULL(), &
      gridLonB => NULL()
-  character(len=200) :: dim_name_str
+  character(len=200), dimension(2) :: dim_name_arr
   
   ! set the ocean grid coordinates
   gridLatT => G%gridLatT
@@ -827,51 +833,48 @@ subroutine get_horizontal_grid_coordinates(fileObjWrite, dim_names, num_axes, ho
      case ('Bu') ; use_latq = .true. ; use_lonq = .true.
      case ('Cu') ; use_lath = .true. ; use_lonq = .true.
      case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-     case ('1') ; grid_position = 0 
+     case ('1') ; 
      case default
         call MOM_error(FATAL, "MOM_restart:get_horizontal_grid_coordinates "//&
                         "Unrecognized hor_grid argument "//trim(hor_grid))
   end select
-
-  grid_position = get_horizontal_grid_position(hor_grid)
-
+  
+  if(size(num_axes_in) \= size(axis_lengths_in)) then
+    call MOM_error(FATAL, "MOM_io:get_horizontal_grid_coordinates "//&
+                   "size of num_axes_in is different from the size of axis_length_in "//&
+                   trim(hor_grid))
+  endif
+  do i=1,size(num_axes_in)
+    num_axes_out(i) = num_axes_in(i)
+    axis_length_out(i) = axis_length_in(i)
+  enddo
+  
   ! add longitude name to dimension name array
-  dim_name_str = ''
   if (use_lonh) then
-     dim_name_str = 'lonh'
-     num_axes = num_axes+1 
-     axis_length = size(gridLonT(isg:ieg))
+     num_axes_out = num_axes_out+1 
+     dim_name_arr(num_axes_out) = ''
+     dim_name_arr(num_axes_out) = 'lonh'
+     axis_length_out(num_axes_out) = size(gridLonT(isg:ieg))
   elseif (use_lonq) then
-     dim_name_str ='lonq'
-     num_axes = num_axes+1
-     axis_length = size(gridLonB(IsgB:IegB)) 
+     num_axes_out = num_axes_out+1
+     dim_name_arr(num_axes_out) = ''
+     dim_name_arr(num_axes_out) ='lonq'
+     axis_length_out(num_axes_out) = size(gridLonB(IsgB:IegB)) 
   endif
  
-  ! register the restart axis if it is not
-  if (num_axes > 0) then
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
   ! add latitude name to dimension name array
-  dim_name_str = ''
   if (use_lath) then
-     dim_name_str = 'lath'
-     num_axes = num_axes+1
-     axis_length = size(gridLatT(jsg:jeg))
+     num_axes_out = num_axes_out+1
+     dim_name_arr(num_axes_out) = ''
+     dim_name_arr(num_axes_out) = 'lath'
+     axis_length_out(num_axes_out) = size(gridLatT(jsg:jeg))
   elseif (use_latq) then
-     dim_name_str = 'latq'
-     num_axes = num_axes+1
-     axis_length = size(gridLatB(JsgB:JegB))
+     num_axes_out = num_axes_out+1
+     dim_name_arr(num_axes_out) = ''
+     dim_name_arr(num_axes_out) = 'latq'
+     axis_length_out(num_axes_out) = size(gridLatB(JsgB:JegB))
   endif
-  
-  ! register the restart axis if it is not
-  if (num_axes > 0) then
-     call check_for_restart_axis(fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
-  endif
-
+ 
 end subroutine get_horizontal_grid_coordinates
 
 !> get the vertical grid coordinate values, and register the vertical grid axis to the 

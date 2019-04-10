@@ -385,21 +385,34 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, filename
                                    
   ! 4d variables are lon x lat x vertical level x time
   ! horizontal grid (hor_grid)
-  num_axes = 0
-
-  call get_horizontal_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%hor_grid, &
-                                       G, horgrid_position)
+  ! horizontal grid (hor_grid)
+  num_axes_in = 0
+  call get_horizontal_grid_coordinates(CS%fileObjWrite, num_axes_in, axis_length_in, vd%hor_grid, &
+                                       G, dim_name_arr, num_axes_out, axis_length_out)
+  ! register the restart axis if it is not
+  if (num_axes_out > 0) then
+     do i=1,num_axes_out
+        call check_for_restart_axis(fileObjWrite, dim_name_arr(i), axis_length_out(i))
+        dim_names(num_axes_out) = ''
+        dim_names(num_axes_out)(1:len_trim(dim_name_arr(i))) = trim(dim_name_arr(i))
+     enddo
+     num_axes_in = num_axes_out
+     axis_length_in = axis_length_out
+     horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+  endif
   ! Vertical (z) grid 
-  call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
-
-  ! time (t) grid  
-  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  call get_vertical_grid_coordinates(CS%fileObjWrite, num_axes_in, axis_length_in, GV, vd%z_grid, &
+                                     dim_name_str, num_axes_out, axis_length_out)
+  ! time (t) grid
+  num_axes_in = num_axes_out
+  axis_length_in = axis_length_out  
+  call get_time_coordinates(CS%fileObjWrite, num_axes_in, axis_length_in, &
+                            vd%t_grid, dim_name_str, num_axes_out, axis_length_out)
   ! register the restart axis if it is not registered
-  if (num_axes > 0) then
-     axis_length = unlimited ! time is the unlimited dimension
-     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  if (num_axes_out > 0) then
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length_out)
+     dim_names(num_axes_out) = ''
+     dim_names(num_axes_out)(1:len_trim(dim_name_str)) = trim(dim_name_str)
   endif
   
   do i=1,num_axes
@@ -456,9 +469,13 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=16) :: nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
-  integer :: num_axes, i
+  integer :: num_axes_in
+  integer :: num_axes_out
   integer :: substring_index = 0
-  integer :: axis_length = 0
+  integer, dimension(2) :: axis_length_in
+  integer, dimension(2) :: axis_length_out
+  integer :: substring_index = 0
+  integer :: i
   integer :: name_length
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
@@ -513,21 +530,31 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, filename
   ! and register them if they are not
 
   ! horizontal grid (hor_grid)
-  num_axes = 0
+  num_axes_in = 0
+  call get_horizontal_grid_coordinates(CS%fileObjWrite, num_axes_in, axis_length_in, vd%hor_grid, &
+                                       G, dim_name_arr, num_axes_out, axis_length_out)
+  ! register the restart axis if it is not
+  if (num_axes_out > 0) then
+     do i=1,num_axes_out
+        call check_for_restart_axis(fileObjWrite, dim_name_arr(i), axis_length_out(i))
+        dim_names(num_axes_out) = ''
+        dim_names(num_axes_out)(1:len_trim(dim_name_arr(i))) = trim(dim_name_arr(i))
+     enddo
+     num_axes_in = num_axes_out
+     horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+  endif
 
-  call get_horizontal_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%hor_grid, &
-                                       G, horgrid_position)
   ! Vertical (z) grid 
   call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
  
   ! time (t) grid  
-  call get_time_coordinates(CS%fileObjWrite, num_axes, vd%t_grid, dim_name_str)
+  call get_time_coordinates(CS%fileObjWrite, num_axes_in, vd%t_grid, &,
+                            dim_name_str, num_axes_out, axis_length_out)
   ! register the restart axis if it is not registered
-  if (num_axes > 0) then
-     axis_length = unlimited ! time is the unlimited dimension
-     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length)
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim(dim_name_str)) = trim(dim_name_str)
+  if (num_axes_out > 0) then
+     call check_for_restart_axis(CS%fileObjWrite, dim_name_str, axis_length_out(num_axes_out))
+     dim_names(num_axes_out) = ''
+     dim_names(num_axes_out)(1:len_trim(dim_name_str)) = trim(dim_name_str)
   endif
 
   do i=1,num_axes
@@ -575,14 +602,18 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=200) :: dim_name_str
+  character(len=200), dimension(2) :: dim_name_arr
   character(len=200) :: dim_names(3)
   character(len=16) ::  nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
-  integer :: num_axes, i
+  integer :: num_axes_in
+  integer :: num_axes_out
   integer :: substring_index = 0
-  integer :: axis_length = 0
+  integer, dimension(2) :: axis_length_in
+  integer, dimension(2) :: axis_length_out
   integer :: name_length=0
+  integer :: i
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_2d: Module must be initialized before "//&
@@ -642,13 +673,23 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, filename
   ! and register them if they are not
 
   ! horizontal grid (hor_grid)
-  num_axes = 0
+  num_axes_in = 0
 
-  call get_horizontal_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, vd%hor_grid, &
-                                       G, horgrid_position)
+  call get_horizontal_grid_coordinates(CS%fileObjWrite, num_axes_in, axis_length_in, vd%hor_grid, &
+                                       G, dim_name_arr, num_axes_out, axis_length_out)
+  ! register the restart axis if it is not
+  if (num_axes_out > 0) then
+     do i=1,num_axes_out
+        call check_for_restart_axis(fileObjWrite, dim_name_arr(i), axis_length_out(i))
+        dim_names(num_axes_out) = ''
+        dim_names(num_axes_out)(1:len_trim(dim_name_arr(i))) = trim(dim_name_arr(i))
+     enddo
+     num_axes_in = num_axes_out
+  endif
   if (num_axes < 2) then
      ! Vertical (z) grid 
-     call get_vertical_grid_coordinates(CS%fileObjWrite, dim_names, num_axes, GV, vd%z_grid)
+     call get_vertical_grid_coordinates(CS%fileObjWrite, num_axes_in, axis_length_in, &
+                                        GV, vd%z_grid, dim_name_str, num_axes_out, axis_length_out)
   endif
 
   ! time (t) grid   
