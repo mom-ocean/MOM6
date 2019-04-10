@@ -1586,7 +1586,7 @@ subroutine restore_state(filename, directory, day, G, CS)
      num_file = open_restart_units('r', directory, G, CS, &
                      file_paths=unit_path, global_files=unit_is_global)
   else
-    num_file = open_restart_units(filename, directory, G, CS, &
+     num_file = open_restart_units(filename, directory, G, CS, &
                      file_paths=unit_path, global_files=unit_is_global)
   endif
 
@@ -1709,18 +1709,8 @@ subroutine restore_state(filename, directory, day, G, CS)
         if (CS%restart_field(m)%initialized) cycle
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                              caller="restore_state")
-        select case (hor_grid)
-           case ('q') ; pos = CORNER
-           case ('h') ; pos = CENTER
-           case ('u') ; pos = EAST_FACE
-           case ('v') ; pos = NORTH_FACE
-           case ('Bu') ; pos = CORNER
-           case ('T')  ; pos = CENTER
-           case ('Cu') ; pos = EAST_FACE
-           case ('Cv') ; pos = NORTH_FACE
-           case ('1') ; pos = 0
-           case default ; pos = 0
-        end select
+        
+        pos = get_horizontal_grid_position(hor_grid)
 
         call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
         do i=1, nvar
@@ -1957,7 +1947,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 
 
   logical :: fexists
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
+  character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
   character(len=80) :: restartname
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -1986,11 +1976,12 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
         restartname = trim(CS%restartfile)
 
        !query fms_io if there is a filename_appendix (for ensemble runs)
+       filename_appendix = ''
        call get_filename_appendix(filename_appendix)
        if (len_trim(filename_appendix) > 0) then
          length = len_trim(restartname)
          if (restartname(length-2:length) == '.nc') then
-         restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
          else
            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
          endif
