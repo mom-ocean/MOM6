@@ -111,11 +111,11 @@ type, public :: wave_parameters_CS ; private
   type(diag_ctrl), pointer, public :: diag !< A structure that is used to regulate the
                                            !! timing of diagnostic output.
 
-  ! An arbitrary lower-bound on the Langmuir number.  Run-time parameter.
-  ! Langmuir number is sqrt(u_star/u_stokes). When both are small
-  ! but u_star is orders of magnitude smaller the Langmuir number could
-  ! have unintended consequences.  Since both are small it can be safely capped
-  ! to avoid such consequences.
+  !> An arbitrary lower-bound on the Langmuir number.  Run-time parameter.
+  !! Langmuir number is sqrt(u_star/u_stokes). When both are small
+  !! but u_star is orders of magnitude smaller the Langmuir number could
+  !! have unintended consequences.  Since both are small it can be safely capped
+  !! to avoid such consequences.
   real :: La_min = 0.05
 
   !>@{ Diagnostic handles
