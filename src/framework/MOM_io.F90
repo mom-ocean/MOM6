@@ -463,7 +463,7 @@ end subroutine reopen_file
 !> Define the axis variable attributes, and write the axis data
 !! to the restart file
 subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, & 
-                           restart_time_in_days, t_grid_in, is_restart_file)
+                           restart_time_in_days, t_grid_in)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
   character(len=*), intent(in) :: axis_name        !< Name of the axis
   type(ocean_grid_type), optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
@@ -479,8 +479,7 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
   real, optional, intent(in) :: restart_time_in_days !< restart time in days
 
   character(len=*), optional, intent(in) :: t_grid_in
-  logical, optional, intent(in) :: is_restart_file !< indicates whether the file is a restart file
-
+ 
   ! local
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(domain1d) :: x_domain, y_domain
@@ -602,31 +601,7 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
         long_name="Interface "//trim(GV%zAxisLongName)
         axis_units = trim(GV%zAxisUnits)
      case ('Time') 
-        if (present(timeunit)) then
-        ! Set appropriate units, depending on the value.
-           if (timeunit < 0.0) then
-              time_units = "days" ! The default value.
-           elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
-              time_units = "seconds"
-           elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
-              time_units = "hours"
-           elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
-              time_units = "days"
-           elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
-              time_units = "years"
-           else
-              write(time_units,'(es8.2," s")') timeunit
-           endif
-           axis_units = time_units
-        else
-           axis_units = "days"
-        endif
-        if (present(restart_time_in_days)) then
-           time_val = restart_time_in_days
-
-        else
-           time_val = 1.0
-        endif
+        
         if (is_restart) then
            call fms2_register_restart_field(fileObjWrite, axis_name, &
                    time_val, dimensions=(/'Time'/))

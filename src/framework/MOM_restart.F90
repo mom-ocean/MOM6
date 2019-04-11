@@ -356,7 +356,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if file is an existing restart or initial conditions file
+  ! check if file exists
   CS%restart_file_created = fms2_file_exists(base_file_name)
 
   if (CS%restart_file_created) then
@@ -1210,8 +1210,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
+  type(MOM_restart_CS) :: fileObjWrite  ! file object returned by a call to fms2_open_file
   character(len=512) :: restartpath     ! The restart file path (dir/file).
-  character(len=512) :: restartpath2     ! The restart file path (dir/file).
   character(len=256) :: restartname     ! The restart file name (no dir).
   character(len=256) :: base_file_name  ! Temporary location for restart file name (no dir)
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
@@ -1230,17 +1230,18 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=8) :: t_grid_read
   character(len=16) :: nc_action
   character(len=64) :: var_name         ! A variable's name.
-  character(len=256) :: restartnameapp
-  real :: restart_time
+  character(len=512) :: restartpath_temp ! temporary location for the restart file path (dir/file).
+  character(len=256) :: restartname_temp ! temporary location for restart name
+  character(len=256) :: date_appendix ! date string to append to a file name if desired
   character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
   integer :: substring_index = 0
-  type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
   logical :: variable_exists = .false.
+  real :: restart_time
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -1256,37 +1257,47 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   nz = 1 ; if (present(GV)) nz = GV%ke
 
   restart_time = time_type_to_real(time) / 86400.0
-
+  length = 0
   pos = 1
   restartname = ''
   base_file_name = ''
+  restartname_temp = ''
+  date_appendix = ''
   nc_action = ''
-
+  
   if (present(filename)) then 
      base_file_name = trim(filename) 
   else
      base_file_name=trim(CS%restartfile)
   endif
 
-  if (PRESENT(time_stamped)) then ; if (time_stamped) then
-    call get_date(time,year,month,days,hour,minute,seconds)
-    ! Compute the year-day, because I don't like months. - RWH
-    do m=1,month-1
-      days = days + days_in_month(set_date(year,m,2,0,0,0))
-    enddo
-    seconds = seconds + 60*minute + 3600*hour
-    if (year <= 9999) then
-      write(restartname,'("_Y",I4.4,"_D",I3.3,"_S",I5.5)') year, days, seconds
-    elseif (year <= 99999) then
-      write(restartname,'("_Y",I5.5,"_D",I3.3,"_S",I5.5)') year, days, seconds
-    else
-      write(restartname,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
-    endif
-    restartname = trim(base_file_name)//trim(restartname)
-  endif ; 
- else
-    restartname = trim(base_file_name)
- endif
+  ! append a time stamp to the file name if time_stamp is specified
+  if (PRESENT(time_stamped)) then
+     if (time_stamped) then
+        call get_date(time,year,month,days,hour,minute,seconds)
+        ! Compute the year-day, because I don't like months. - RWH
+        do m=1,month-1
+          days = days + days_in_month(set_date(year,m,2,0,0,0))
+        enddo
+        seconds = seconds + 60*minute + 3600*hour
+        if (year <= 9999) then
+           write(date_appendix,'("_Y",I4.4,"_D",I3.3,"_S",I5.5)') year, days, seconds
+        elseif (year <= 99999) then
+           write(date_appendix,'("_Y",I5.5,"_D",I3.3,"_S",I5.5)') year, days, seconds
+        else
+           write(date_appendix,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
+        endif
+        restartname_temp = trim(base_file_name)//trim(date_appendix)
+     endif 
+  else
+     restartname_temp = trim(base_file_name)
+  endif
+
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(restartnametemp))
+  if (substring_index <= 0) then
+     restartname = append_substring(restartname_temp,'.nc')
+  endif
  
   next_var = 1
   do while (next_var <= CS%novars )
@@ -1303,14 +1314,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            size_in_file = size_in_file + var_sz
         else ; exit
         endif
-
      enddo
      next_var = m
 
      restartpath = ''
-     restartpath2 = ''
+     restartpath_temp = ''
      filename_appendix = ''
-     restartnameapp = '' 
+     restartnameapp = ''
+     suffix = ''
 
      !query fms_io if there is a filename_appendix (for ensemble runs)
      call get_filename_appendix(filename_appendix)
@@ -1321,17 +1332,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         else
            restartnameapp = restartname(1:length)  //'.'//trim(filename_appendix)
         endif
-        restartpath = trim(directory)//trim(restartnameapp)
+        length = len_trim(trim(directory)//trim(restartnameapp))
+        restartpathtemp(1:length) = trim(directory)//trim(restartnameapp)
      else
-        restartpath = trim(directory)//trim(restartname)
-     endif
-
-     ! append '.nc' to the restart file name if it is missing
-     substring_index = index('.nc', trim(restartpath))
-     if (substring_index <= 0) then
-        restartpath2 = append_substring(restartpath,'.nc')
-     else
-        restartpath2(1:len_trim(restartpath)) = trim(restartpath)
+        length = len_trim(trim(directory)//trim(restartname))
+        restartpathtemp(1:length) = trim(directory)//trim(restartname)
      endif
 
      if (num_files < 10) then
@@ -1340,7 +1345,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         write(suffix,'("_",I2)') num_files
      endif
 
-     if (num_files > 0) restartpath2 = trim(restartpath2) // trim(suffix)
+     if (num_files > 0) restartpath = trim(restartpathtemp) // trim(suffix)
        
      !Prepare the checksum of the restart fields to be written to restart files
      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
@@ -1359,7 +1364,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      enddo
      
      file_open_success = .false.
-     file_open_success = fms2_open_file(CS%fileObjWrite, restartpath2,"append", &
+     file_open_success = fms2_open_file(CS%fileObjWrite, restartpath,"append", &
                                         G%Domain%mpp_domain, is_restart=.true.)
      if (.not. (file_open_success)) then
         call MOM_error(FATAL,"MOM_restart::save_restart: Failed to open file "//trim(restartpath))
@@ -1370,38 +1375,68 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      ! write the axis (dimension) data to the restart file
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lath')
      variable_exists = fms2_variable_exists(CS%fileobjWrite, 'lath')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lath', &
-                                                                   G=G, is_restart_file = .true.) 
+     if (axis_exists .and. .not.(variable_exists)) then
+        call fms2_register_restart_field(fileObjWrite, axis_name, G%gridLatT(G%jsg:G%jeg), &  
+                                      dimensions=(/'lath'/), domain_position=CENTER)
+        call write_axis_data(CS%fileObjWrite,'lath', G=G) 
+     endif    
+   
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lonh')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'lonh')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lonh', &
-                                                                   G=G, is_restart_file = .true.)
+     if (axis_exists .and. .not.(variable_exists)) then
+        call fms2_register_restart_field(CS%fileObjWrite, axis_name, G%gridLonT(G%isg:G%ieg), &
+                                         dimensions=(/'lonh'/), domain_position=CENTER)
+        call write_axis_data(CS%fileObjWrite,'lonh', G=G)
+     endif
+
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'latq')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'latq')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'latq', &
-                                                                   G=G, is_restart_file = .true.)
+     if (axis_exists .and. .not.(variable_exists)) then
+        call fms2_register_restart_field(fileObjWrite, axis_name, G%gridLatB(G%JsgB:G%JegB), &  
+                                      dimensions=(/'latq'/), domain_position=CORNER)
+        call write_axis_data(CS%fileObjWrite,'latq', G=G)
+     endif
+
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lonq')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'lonq')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'lonq', &
-                                                                   G=G, is_restart_file = .true.)
+     if (axis_exists .and. .not.(variable_exists)) then
+        call fms2_register_restart_field(fileObjWrite, axis_name, G%gridLonB(G%IsgB:G%IegB), & 
+                                         dimensions=(/'lonq'/), domain_position=CORNER)
+        call write_axis_data(CS%fileObjWrite,'lonq', G=G)
+     endif
+
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Layer')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Layer')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'Layer', &
-                                                                   GV=GV, is_restart_file = .true.)
+     if (axis_exists .and. .not.(variable_exists)) then
+        call fms2_register_restart_field(fileObjWrite, axis_name, GV%sLayer(1:GV%ke), & 
+                                   dimensions=(/'Layer'/))
+        call write_axis_data(CS%fileObjWrite,'Layer', GV=GV)
+     endif
+
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Interface')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Interface')
-     if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite,'Interface', &
-                                                                   GV=GV, is_restart_file = .true.)
+     if (axis_exists .and. .not.(variable_exists)) then
+        call fms2_register_restart_field(fileObjWrite, axis_name, GV%sInterface(1:GV%ke+1), & 
+                                   dimensions=(/'Interface'/)) 
+        call write_axis_data(CS%fileObjWrite,'Interface', GV=GV)
+     endif
+
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Time')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Time')
      if (axis_exists .and. .not.(variable_exists)) then
+        !! insert routine to get time value
+        call fms2_register_restart_field(fileObjWrite, axis_name, &
+                   time_val, dimensions=(/'Time'/))
         call write_axis_data(CS%fileObjWrite,'Time', &
-                             restart_time_in_days=restart_time, is_restart_file = .true.)
+                             restart_time_in_days=restart_time)
      else
         axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Period')
         variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Period')
-        if (axis_exists .and. .not.(variable_exists)) call write_axis_data(CS%fileObjWrite, 'Period', & 
-                                                                        t_grid_in=t_grid, is_restart_file = .true.)
+        if (axis_exists .and. .not.(variable_exists)) then
+           call fms2_register_restart_field(fileObjWrite, axis_name, period_val, & 
+                                   dimensions=(/'Period'/)) 
+           call write_axis_data(CS%fileObjWrite, 'Period', t_grid_in=t_grid)
+        endif
      endif
      
      do m=start_var,next_var-1     
@@ -2120,5 +2155,34 @@ subroutine register_restart_axis(fileObj, axis_name, axis_length)
             call fms2_register_axis(fileObj,'Period',axis_length)
    end select
 end subroutine register_restart_axis
+
+function get_time_units (timeunit) result(axis_units)
+   if (present(timeunit)) then
+        ! Set appropriate units, depending on the value.
+           if (timeunit < 0.0) then
+              time_units = "days" ! The default value.
+           elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+              time_units = "seconds"
+           elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+              time_units = "hours"
+           elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+              time_units = "days"
+           elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+              time_units = "years"
+           else
+              write(time_units,'(es8.2," s")') timeunit
+           endif
+           axis_units = time_units
+        else
+           axis_units = "days"
+        endif
+        if (present(restart_time_in_days)) then
+           time_val = restart_time_in_days
+
+        else
+           time_val = 1.0
+        endif
+end function get_time_value()
+
 
 end module MOM_restart
