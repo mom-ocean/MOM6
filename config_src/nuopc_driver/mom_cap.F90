@@ -817,19 +817,29 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   ! reset shr logging to my log file
   if (is_root_pe()) then
-     call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, &
+     call NUOPC_CompAttributeGet(gcomp, name="diro", &
           isPresent=isPresentDiro, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return
-     call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, &
+     call NUOPC_CompAttributeGet(gcomp, name="logfile", &
           isPresent=isPresentLogfile, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
          line=__LINE__, &
          file=__FILE__)) &
          return
      if (isPresentDiro .and. isPresentLogfile) then
+          call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+              line=__LINE__, &
+              file=__FILE__)) &
+              return
+          call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+              line=__LINE__, &
+              file=__FILE__)) &
+              return
         open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
      else
         logunit = output_unit
