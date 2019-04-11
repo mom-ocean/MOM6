@@ -175,14 +175,14 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
      ! rotate taux and tauy from true zonal/meridional to local coordinates
      do j = jsc, jec
-	jg = j + ocean_grid%jsc - jsc
-	do i = isc, iec
-	   ig = i + ocean_grid%isc - isc
-	   ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg)*taux(i,j) &
-					  - ocean_grid%sin_rot(ig,jg)*tauy(i,j)
-	   ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg)*tauy(i,j) &
-					  + ocean_grid%sin_rot(ig,jg)*taux(i,j)
-	enddo
+        jg = j + ocean_grid%jsc - jsc
+        do i = isc, iec
+           ig = i + ocean_grid%isc - isc
+           ice_ocean_boundary%u_flux(i,j) = ocean_grid%cos_rot(ig,jg)*taux(i,j) &
+                                          - ocean_grid%sin_rot(ig,jg)*tauy(i,j)
+           ice_ocean_boundary%v_flux(i,j) = ocean_grid%cos_rot(ig,jg)*tauy(i,j) &
+                                          + ocean_grid%sin_rot(ig,jg)*taux(i,j)
+        enddo
      enddo
 
      deallocate(taux, tauy)
@@ -191,41 +191,41 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
      ! sensible heat flux (W/m2)
      !----
      call state_getimport(importState, 'mean_sensi_heat_flx', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%t_flux, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%t_flux, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! evaporation flux (W/m2)
      !----
      call state_getimport(importState, 'mean_evap_rate', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%q_flux, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%q_flux, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! liquid precipitation (rain)
      !----
      call state_getimport(importState, 'mean_prec_rate', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%lprec, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%lprec, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! frozen precipitation (snow)
      !----
      call state_getimport(importState, 'mean_fprec_rate', &
-	  isc, iec, jsc, jec, ice_ocean_boundary%fprec, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%fprec, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! runoff and heat content of runoff
@@ -236,38 +236,38 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
      ! liquid runoff
      ice_ocean_boundary%rofl_flux (:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'Foxx_rofl',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%rofl_flux,rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%rofl_flux,rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      ! ice runoff
      ice_ocean_boundary%rofi_flux (:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'Foxx_rofi',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%rofi_flux,rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%rofi_flux,rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      ! total runoff
      ice_ocean_boundary%runoff (:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'mean_runoff_rate',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%runoff, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%runoff, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      ! heat content of runoff
      ice_ocean_boundary%runoff_hflx(:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'mean_runoff_heat_flux',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%runoff_hflx, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%runoff_hflx, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! calving rate and heat flux
@@ -277,29 +277,29 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
      ice_ocean_boundary%calving(:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'mean_calving_rate',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%calving, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%calving, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      ice_ocean_boundary%calving_hflx(:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'mean_calving_heat_flux',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%calving_hflx, rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%calving_hflx, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! salt flux from ice
      !----
      call state_getimport(importState, 'mean_salt_rate',  &
-	  isc, iec, jsc, jec, ice_ocean_boundary%salt_flux,rc=rc)
+          isc, iec, jsc, jec, ice_ocean_boundary%salt_flux,rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      ! !----
      ! ! snow&ice melt heat flux  (W/m^2)
@@ -406,8 +406,8 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   do j = jsc, jec
      jg = j + ocean_grid%jsc - jsc
      do i = isc, iec
-	ig = i + ocean_grid%isc - isc
-	omask(i,j) = nint(ocean_grid%mask2dT(ig,jg))
+        ig = i + ocean_grid%isc - isc
+        omask(i,j) = nint(ocean_grid%mask2dT(ig,jg))
      enddo
   enddo
 
@@ -455,11 +455,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   do j = jsc, jec
      jg = j + ocean_grid%jsc - jsc
      do i = isc, iec
-	ig = i + ocean_grid%isc - isc
-	ocz(i,j) = ocean_public%u_surf(i,j)
-	ocm(i,j) = ocean_public%v_surf(i,j)
-	ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) + ocean_grid%sin_rot(ig,jg)*ocm(i,j)
-	ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) - ocean_grid%sin_rot(ig,jg)*ocz(i,j)
+        ig = i + ocean_grid%isc - isc
+        ocz(i,j) = ocean_public%u_surf(i,j)
+        ocm(i,j) = ocean_public%v_surf(i,j)
+        ocz_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocz(i,j) + ocean_grid%sin_rot(ig,jg)*ocm(i,j)
+        ocm_rot(i,j) = ocean_grid%cos_rot(ig,jg)*ocm(i,j) - ocean_grid%sin_rot(ig,jg)*ocz(i,j)
      enddo
   enddo
 
@@ -485,11 +485,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   call ESMF_StateGet(exportState, 'So_bldepth', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State_SetExport(exportState, 'So_bldepth', &
-	  isc, iec, jsc, jec, ocean_public%obld, ocean_grid, rc=rc)
+          isc, iec, jsc, jec, ocean_public%obld, ocean_grid, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
   endif
 
   ! -------
@@ -502,12 +502,12 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   do j = jsc,jec
      do i = isc,iec
-	if (ocean_public%frazil(i,j) > 0.0) then
-	   melt_potential(i,j) =  ocean_public%frazil(i,j) * inv_dt_int
-	else
-	   melt_potential(i,j) = -ocean_public%melt_potential(i,j) * inv_dt_int
-	   if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
-	endif
+        if (ocean_public%frazil(i,j) > 0.0) then
+           melt_potential(i,j) =  ocean_public%frazil(i,j) * inv_dt_int
+        else
+           melt_potential(i,j) = -ocean_public%melt_potential(i,j) * inv_dt_int
+           if (melt_potential(i,j) > 0.0) melt_potential(i,j) = 0.0
+        endif
      enddo
   enddo
 
@@ -526,11 +526,11 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   call ESMF_StateGet(exportState, 'sea_level', itemFlag, rc=rc)
   if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
      call State_SetExport(exportState, 'sea_level', &
-	  isc, iec, jsc, jec, ocean_public%sea_lev, ocean_grid, rc=rc)
+          isc, iec, jsc, jec, ocean_public%sea_lev, ocean_grid, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
   endif
 
   !----------------
@@ -551,8 +551,8 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   do j = ocean_grid%jsc, ocean_grid%jec
      jloc = j + ocean_grid%jdg_offset
      do i = ocean_grid%isc,ocean_grid%iec
-	iloc = i + ocean_grid%idg_offset
-	ssh(i,j) = ocean_public%sea_lev(iloc,jloc)
+        iloc = i + ocean_grid%idg_offset
+        ssh(i,j) = ocean_public%sea_lev(iloc,jloc)
      enddo
   enddo
 
@@ -574,15 +574,15 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
       if (ocean_grid%mask2dCu(i+1,j)==0.) slp_R = 0.
       slp_C = 0.5 * (slp_L + slp_R)
       if ( (slp_L * slp_R) > 0.0 ) then
-	! This limits the slope so that the edge values are bounded by the
-	! two cell averages spanning the edge.
-	u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-	u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-	slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        ! This limits the slope so that the edge values are bounded by the
+        ! two cell averages spanning the edge.
+        u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+        u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+        slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
       else
-	! Extrema in the mean values require a PCM reconstruction avoid generating
-	! larger extreme values.
-	slope = 0.0
+        ! Extrema in the mean values require a PCM reconstruction avoid generating
+        ! larger extreme values.
+        slope = 0.0
       endif
       dhdx(iglob,jglob) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
       if (ocean_grid%mask2dT(i,j)==0.) dhdx(iglob,jglob) = 0.0
@@ -604,15 +604,15 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
       if (ocean_grid%mask2dCv(i,j+1)==0.) slp_R = 0.
       slp_C = 0.5 * (slp_L + slp_R)
       if ((slp_L * slp_R) > 0.0) then
-	! This limits the slope so that the edge values are bounded by the
-	! two cell averages spanning the edge.
-	u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-	u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-	slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+        ! This limits the slope so that the edge values are bounded by the
+        ! two cell averages spanning the edge.
+        u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+        u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+        slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
       else
-	! Extrema in the mean values require a PCM reconstruction avoid generating
-	! larger extreme values.
-	slope = 0.0
+        ! Extrema in the mean values require a PCM reconstruction avoid generating
+        ! larger extreme values.
+        slope = 0.0
       endif
       dhdy(iglob,jglob) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
       if (ocean_grid%mask2dT(i,j)==0.) dhdy(iglob,jglob) = 0.0
@@ -625,9 +625,9 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
   do j = jsc, jec
      jg = j + ocean_grid%jsc - jsc
      do i = isc, iec
-	ig = i + ocean_grid%isc - isc
-	dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) + ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
-	dhdy_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
+        ig = i + ocean_grid%isc - isc
+        dhdx_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdx(i,j) + ocean_grid%sin_rot(ig,jg)*dhdy(i,j)
+        dhdy_rot(i,j) = ocean_grid%cos_rot(ig,jg)*dhdy(i,j) - ocean_grid%sin_rot(ig,jg)*dhdx(i,j)
      enddo
   enddo
 
@@ -735,48 +735,48 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
 
      if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-	! get field pointer
-	call state_getfldptr(state, trim(fldname), dataptr1d, rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	     line=__LINE__, &
-	     file=__FILE__)) &
-	     return  ! bail out
+        ! get field pointer
+        call state_getfldptr(state, trim(fldname), dataptr1d, rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
 
-	! determine output array
-	n = 0
-	do j = jsc,jec
-	   do i = isc,iec
-	      n = n + 1
-	      if (present(do_sum)) then
-		 output(i,j)  = output(i,j) + dataPtr1d(n)
-	      else
-		 output(i,j)  = dataPtr1d(n)
-	      endif
-	   enddo
-	enddo
+        ! determine output array
+        n = 0
+        do j = jsc,jec
+           do i = isc,iec
+              n = n + 1
+              if (present(do_sum)) then
+                 output(i,j)  = output(i,j) + dataPtr1d(n)
+              else
+                 output(i,j)  = dataPtr1d(n)
+              endif
+           enddo
+        enddo
 
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
-	call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	     line=__LINE__, &
-	     file=__FILE__)) &
-	     return  ! bail out
+        call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
 
-	lbnd1 = lbound(dataPtr2d,1)
-	lbnd2 = lbound(dataPtr2d,2)
+        lbnd1 = lbound(dataPtr2d,1)
+        lbnd2 = lbound(dataPtr2d,2)
 
-	do j = jsc, jec
-	   j1 = j + lbnd2 - jsc
-	   do i = isc, iec
-	      i1 = i + lbnd1 - isc
-	      if (present(do_sum)) then
-		 output(i,j) = output(i,j) + dataPtr2d(i1,j1)
-	      else
-		 output(i,j) = dataPtr2d(i1,j1)
-	      endif
-	   enddo
-	enddo
+        do j = jsc, jec
+           j1 = j + lbnd2 - jsc
+           do i = isc, iec
+              i1 = i + lbnd1 - isc
+              if (present(do_sum)) then
+                 output(i,j) = output(i,j) + dataPtr2d(i1,j1)
+              else
+                 output(i,j) = dataPtr2d(i1,j1)
+              endif
+           enddo
+        enddo
 
      endif
 
@@ -820,42 +820,42 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 
      if (geomtype == ESMF_GEOMTYPE_MESH) then
 
-	call state_getfldptr(state, trim(fldname), dataptr1d, rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	     line=__LINE__, &
-	     file=__FILE__)) &
-	     return  ! bail out
+        call state_getfldptr(state, trim(fldname), dataptr1d, rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
 
-	n = 0
-	do j = jsc, jec
-	   jg = j + ocean_grid%jsc - jsc
-	   do i = isc, iec
-	      ig = i + ocean_grid%isc - isc
-	      n = n+1
-	      dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
-	   enddo
-	enddo
+        n = 0
+        do j = jsc, jec
+           jg = j + ocean_grid%jsc - jsc
+           do i = isc, iec
+              ig = i + ocean_grid%isc - isc
+              n = n+1
+              dataPtr1d(n) = input(i,j) * ocean_grid%mask2dT(ig,jg)
+           enddo
+        enddo
 
      else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
-	call state_getfldptr(state, trim(fldname), dataptr2d, rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	     line=__LINE__, &
-	     file=__FILE__)) &
-	     return  ! bail out
+        call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
 
-	lbnd1 = lbound(dataPtr2d,1)
-	lbnd2 = lbound(dataPtr2d,2)
+        lbnd1 = lbound(dataPtr2d,1)
+        lbnd2 = lbound(dataPtr2d,2)
 
-	do j = jsc, jec
-	   j1 = j + lbnd2 - jsc
-	   jg = j + ocean_grid%jsc - jsc
-	   do i = isc, iec
-	      i1 = i + lbnd1 - isc
-	      ig = i + ocean_grid%isc - isc
-	      dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
-	   enddo
-	enddo
+        do j = jsc, jec
+           j1 = j + lbnd2 - jsc
+           jg = j + ocean_grid%jsc - jsc
+           do i = isc, iec
+              i1 = i + lbnd1 - isc
+              ig = i + ocean_grid%isc - isc
+              dataPtr2d(i1,j1)  = input(i,j) * ocean_grid%mask2dT(ig,jg)
+           enddo
+        enddo
 
      endif
 

@@ -1971,7 +1971,7 @@ subroutine ModelAdvance(gcomp, rc)
      call ocean_model_restart(ocean_state, restartname=restartname)
 
      if (is_root_pe()) then
-	write(logunit,*) subname//' writing restart file ',trim(restartname)
+       write(logunit,*) subname//' writing restart file ',trim(restartname)
      endif
   endif
 
@@ -2080,59 +2080,59 @@ subroutine ModelSetRunClock(gcomp, rc)
      restart_ymd = 0
 
      call NUOPC_CompAttributeGet(gcomp, name="restart_option", isPresent=isPresent, &
-	  isSet=isSet, value=restart_option, rc=rc)
+          isSet=isSet, value=restart_option, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
      if (isPresent .and. isSet) then
-	call NUOPC_CompAttributeGet(gcomp,  name="restart_n", value=cvalue, &
-	     isPresent=isPresent, isSet=isSet, rc=rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	     line=__LINE__, &
-	     file=__FILE__)) &
-	     return  ! bail out
-	if (isPresent .and. isSet) then
-	   read(cvalue,*) restart_n
-	endif
-	call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, &
-	     isPresent=isPresent, isSet=isSet, rc=rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	     line=__LINE__, &
-	     file=__FILE__)) &
-	     return  ! bail out
-	if (isPresent .and. isSet) then
-	   read(cvalue,*) restart_ymd
-	endif
+        call NUOPC_CompAttributeGet(gcomp,  name="restart_n", value=cvalue, &
+             isPresent=isPresent, isSet=isSet, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
+        if (isPresent .and. isSet) then
+           read(cvalue,*) restart_n
+        endif
+        call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, &
+             isPresent=isPresent, isSet=isSet, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
+        if (isPresent .and. isSet) then
+           read(cvalue,*) restart_ymd
+        endif
      else
-	restart_option = "none"
+        restart_option = "none"
      endif
 
      call AlarmInit(mclock, &
-	  alarm   = restart_alarm,         &
-	  option  = trim(restart_option),  &
-	  opt_n   = restart_n,             &
-	  opt_ymd = restart_ymd,           &
-	  RefTime = mcurrTime,             &
-	  alarmname = 'alarm_restart', rc=rc)
+          alarm   = restart_alarm,         &
+          option  = trim(restart_option),  &
+          opt_n   = restart_n,             &
+          opt_ymd = restart_ymd,           &
+          RefTime = mcurrTime,             &
+          alarmname = 'alarm_restart', rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
      first_time = .false.
 
      call ESMF_LogWrite(subname//" Set restart option = "//restart_option, &
-	  ESMF_LOGMSG_INFO, rc=rc)
+          ESMF_LOGMSG_INFO, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
   endif
 
@@ -2243,8 +2243,8 @@ subroutine State_SetScalar(value, scalar_id, State, mytask, scalar_name, scalar_
 
     if (scalar_id < 0 .or. scalar_id > scalar_count) then
        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	    msg=subname//": ERROR in scalar_id", &
-	    line=__LINE__, file=__FILE__, rcToReturn=rc)
+            msg=subname//": ERROR in scalar_id", &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
        return
     endif
 
@@ -2281,84 +2281,84 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
 
       if (field_defs(i)%shortname == scalar_field_name) then
 
-	call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected on root pe.", &
-	  ESMF_LOGMSG_INFO, &
-	  line=__LINE__, &
-	  file=__FILE__, &
-	  rc=rc)
+        call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected on root pe.", &
+          ESMF_LOGMSG_INFO, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rc=rc)
 
-	call SetScalarField(field, rc)
-	if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return  ! bail out
+        call SetScalarField(field, rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
       else
 
-	call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected.", &
-	  ESMF_LOGMSG_INFO, &
-	  line=__LINE__, &
-	  file=__FILE__, &
-	  rc=rc)
+        call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected.", &
+          ESMF_LOGMSG_INFO, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rc=rc)
 
-	if (present(grid)) then
+        if (present(grid)) then
 
-	   field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
-		name=field_defs(i)%shortname, rc=rc)
-	   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-		line=__LINE__, &
-		file=__FILE__)) &
-		return  ! bail out
+           field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
+                name=field_defs(i)%shortname, rc=rc)
+           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                line=__LINE__, &
+                file=__FILE__)) &
+                return  ! bail out
 
-	   ! initialize fldptr to zero
-	   call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
-	   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-		line=__LINE__, &
-		file=__FILE__)) &
-		return  ! bail out
-	   fldptr2d(:,:) = 0.0
+           ! initialize fldptr to zero
+           call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
+           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                line=__LINE__, &
+                file=__FILE__)) &
+                return  ! bail out
+           fldptr2d(:,:) = 0.0
 
-	else if (present(mesh)) then
+        else if (present(mesh)) then
 
-	   field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
-		name=field_defs(i)%shortname, rc=rc)
-	   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-		line=__LINE__, &
-		file=__FILE__)) &
-		return  ! bail out
+           field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                name=field_defs(i)%shortname, rc=rc)
+           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                line=__LINE__, &
+                file=__FILE__)) &
+                return  ! bail out
 
-	   ! initialize fldptr to zero
-	   call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
-	   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-		line=__LINE__, &
-		file=__FILE__)) &
-		return  ! bail out
-	   fldptr1d(:) = 0.0
+           ! initialize fldptr to zero
+           call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
+           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                line=__LINE__, &
+                file=__FILE__)) &
+                return  ! bail out
+           fldptr1d(:) = 0.0
 
-	endif
+        endif
 
       endif
 
       ! Realize connected field
       call NUOPC_Realize(state, field=field, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	line=__LINE__, &
-	file=__FILE__)) &
-	return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
     else ! field is not connected
 
       call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is not connected.", &
-	ESMF_LOGMSG_INFO, &
-	line=__LINE__, &
-	file=__FILE__, &
-	rc=rc)
+        ESMF_LOGMSG_INFO, &
+        line=__LINE__, &
+        file=__FILE__, &
+        rc=rc)
       ! remove a not connected Field from State
       call ESMF_StateRemove(state, (/field_defs(i)%shortname/), rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	line=__LINE__, &
-	file=__FILE__)) &
-	return  ! bail out
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
 
     endif
 

@@ -109,18 +109,18 @@ subroutine AlarmInit( clock, alarm, option, &
       trim(option) == optNYears    .or. trim(option) == optNYear   .or. &
       trim(option) == optIfdays0) then
      if (.not. present(opt_n)) then
-	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	     msg=subname//trim(option)//' requires opt_n', &
-	     line=__LINE__, &
-	     file=__FILE__, rcToReturn=rc)
-	return
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+             msg=subname//trim(option)//' requires opt_n', &
+             line=__LINE__, &
+             file=__FILE__, rcToReturn=rc)
+        return
      endif
      if (opt_n <= 0) then
-	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	     msg=subname//trim(option)//' invalid opt_n', &
-	     line=__LINE__, &
-	     file=__FILE__, rcToReturn=rc)
-	return
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+             msg=subname//trim(option)//' invalid opt_n', &
+             line=__LINE__, &
+             file=__FILE__, rcToReturn=rc)
+        return
      endif
   endif
 
@@ -162,157 +162,157 @@ subroutine AlarmInit( clock, alarm, option, &
   case (optNONE, optNever)
      call ESMF_TimeIntervalSet(AlarmInterval, yy=9999, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      call ESMF_TimeSet( NextAlarm, yy=9999, mm=12, dd=1, s=0, calendar=cal, rc=rc )
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      update_nextalarm  = .false.
 
   case (optDate)
      if (.not. present(opt_ymd)) then
-	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	     msg=subname//trim(option)//' requires opt_ymd', &
-	     line=__LINE__, &
-	     file=__FILE__, rcToReturn=rc)
-	return
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+             msg=subname//trim(option)//' requires opt_ymd', &
+             line=__LINE__, &
+             file=__FILE__, rcToReturn=rc)
+        return
      endif
      if (lymd < 0 .or. ltod < 0) then
-	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	     msg=subname//trim(option)//'opt_ymd, opt_tod invalid', &
-	     line=__LINE__, &
-	     file=__FILE__, rcToReturn=rc)
-	return
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+             msg=subname//trim(option)//'opt_ymd, opt_tod invalid', &
+             line=__LINE__, &
+             file=__FILE__, rcToReturn=rc)
+        return
      endif
      call ESMF_TimeIntervalSet(AlarmInterval, yy=9999, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      call TimeInit(NextAlarm, lymd, cal, tod=ltod, desc="optDate", rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      update_nextalarm  = .false.
 
   case (optIfdays0)
      if (.not. present(opt_ymd)) then
-	call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	     msg=subname//trim(option)//' requires opt_ymd', &
-	     line=__LINE__, &
-	     file=__FILE__, rcToReturn=rc)
-	return
+        call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+             msg=subname//trim(option)//' requires opt_ymd', &
+             line=__LINE__, &
+             file=__FILE__, rcToReturn=rc)
+        return
      endif
      call ESMF_TimeIntervalSet(AlarmInterval, mm=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      call ESMF_TimeSet( NextAlarm, yy=cyy, mm=cmm, dd=opt_n, s=0, calendar=cal, rc=rc )
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      update_nextalarm  = .true.
 
   case (optNSteps, optNStep)
      call ESMF_ClockGet(clock, TimeStep=AlarmInterval, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optNSeconds, optNSecond)
      call ESMF_TimeIntervalSet(AlarmInterval, s=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optNMinutes, optNMinute)
      call ESMF_TimeIntervalSet(AlarmInterval, s=60, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optNHours, optNHour)
      call ESMF_TimeIntervalSet(AlarmInterval, s=3600, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optNDays, optNDay)
      call ESMF_TimeIntervalSet(AlarmInterval, d=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optNMonths, optNMonth)
      call ESMF_TimeIntervalSet(AlarmInterval, mm=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optMonthly)
      call ESMF_TimeIntervalSet(AlarmInterval, mm=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      call ESMF_TimeSet( NextAlarm, yy=cyy, mm=cmm, dd=1, s=0, calendar=cal, rc=rc )
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      update_nextalarm  = .true.
 
   case (optNYears, optNYear)
      call ESMF_TimeIntervalSet(AlarmInterval, yy=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      AlarmInterval = AlarmInterval * opt_n
      update_nextalarm  = .true.
 
   case (optYearly)
      call ESMF_TimeIntervalSet(AlarmInterval, yy=1, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      call ESMF_TimeSet( NextAlarm, yy=cyy, mm=1, dd=1, s=0, calendar=cal, rc=rc )
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-	  line=__LINE__, &
-	  file=__FILE__)) &
-	  return
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
      update_nextalarm  = .true.
 
   case default
      call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	  msg=subname//' unknown option: '//trim(option), &
-	  line=__LINE__, &
-	  file=__FILE__, rcToReturn=rc)
+          msg=subname//' unknown option: '//trim(option), &
+          line=__LINE__, &
+          file=__FILE__, rcToReturn=rc)
      return
 
   end select
@@ -327,7 +327,7 @@ subroutine AlarmInit( clock, alarm, option, &
   if (update_nextalarm) then
      NextAlarm = NextAlarm - AlarmInterval
      do while (NextAlarm <= CurrTime)
-	NextAlarm = NextAlarm + AlarmInterval
+        NextAlarm = NextAlarm + AlarmInterval
      enddo
   endif
 
@@ -365,13 +365,13 @@ subroutine TimeInit( Time, ymd, cal, tod, desc, logunit, rc)
 
   if ( (ymd < 0) .or. (ltod < 0) .or. (ltod > SecPerDay) )then
      if (present(logunit)) then
-	write(logunit,*) subname//': ERROR yymmdd is a negative number or '// &
-	     'time-of-day out of bounds', ymd, ltod
+        write(logunit,*) subname//': ERROR yymmdd is a negative number or '// &
+             'time-of-day out of bounds', ymd, ltod
      endif
      call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-	  msg=subname//' yymmdd is negative or time-of-day out of bounds ', &
-	  line=__LINE__, &
-	  file=__FILE__, rcToReturn=rc)
+          msg=subname//' yymmdd is negative or time-of-day out of bounds ', &
+          line=__LINE__, &
+          file=__FILE__, rcToReturn=rc)
      return
   endif
 
