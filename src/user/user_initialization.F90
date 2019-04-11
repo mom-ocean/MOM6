@@ -1,3 +1,4 @@
+!> A template of a user to code up customized initial conditions.
 module user_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -12,6 +13,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
 use MOM_open_boundary, only : OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -23,6 +25,13 @@ public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
 public USER_initialize_sponges, USER_set_OBC_data, USER_set_rotation
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
+!> A module variable that should not be used.
+!! \todo Move this module variable into a control structure.
 logical :: first_call = .true.
 
 contains
@@ -33,7 +42,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface, in m s-2.
+                                                     !! each interface [m2 Z-1 s-2 ~> m s-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
                                                      !! open file to parse for model
                                                      !! parameter values.
@@ -41,8 +50,8 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! equation of state.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_set_coord: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_set_coord: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
   Rlay(:) = 0.0
   g_prime(:) = 0.0
 
@@ -51,16 +60,17 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 end subroutine USER_set_coord
 
 !> Initialize topography.
-subroutine USER_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_topography: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_topography: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   D(:,:) = 0.0
 
@@ -73,7 +83,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h  !< The thicknesses being initialized, in H.
+                           intent(out) :: h  !< The thicknesses being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open
                                              !! file to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -82,14 +92,14 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_thickness: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_thickness: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  h(:,:,1) = 0.0 * GV%m_to_H
+  h(:,:,1) = 0.0 ! h should be set [H ~> m or kg m-2].
 
   if (first_call) call write_user_log(param_file)
 
@@ -98,7 +108,7 @@ end subroutine USER_initialize_thickness
 !> initialize velocities.
 subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m/s]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m s-1]
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [m/s]
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
@@ -109,8 +119,8 @@ subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_velocity: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_velocity: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -127,21 +137,21 @@ end subroutine USER_initialize_velocity
 !! into T(:,:,:) and S(:,:,:).
 subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC).
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC].
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt].
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
   type(EOS_type),                            pointer     :: eqn_of_state !< Integer that selects the
                                                             !! equation of state.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will only
+                                                           !! read parameters without changing T & S.
 
   logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_init_temperature_salinity: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_init_temperature_salinity: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -155,24 +165,24 @@ subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, jus
 end subroutine USER_init_temperature_salinity
 
 !> Set up the sponges.
-subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
-  type(ocean_grid_type), intent(in) :: G               !< Ocean grid structure.
-  logical,               intent(in) :: use_temperature !< Whether to use potential
-                                                       !! temperature.
-  type(thermo_var_ptrs), intent(in) :: tv              !< A structure containing pointers
+subroutine USER_initialize_sponges(G, GV, use_temp, tv, param_file, CSp, h)
+  type(ocean_grid_type),   intent(in) :: G             !< Ocean grid structure.
+  type(verticalGrid_type), intent(in) :: GV            !< The ocean's vertical grid structure.
+  logical,                 intent(in) :: use_temp      !< If true, temperature and salinity are state variables.
+  type(thermo_var_ptrs),   intent(in) :: tv            !< A structure containing pointers
                                                        !! to any available thermodynamic
                                                        !! fields, potential temperature and
                                                        !! salinity or mixed layer density.
                                                        !! Absent fields have NULL ptrs.
-  type(param_file_type), intent(in) :: param_file      !< A structure indicating the
+  type(param_file_type),   intent(in) :: param_file    !< A structure indicating the
                                                        !! open file to parse for model
                                                        !! parameter values.
-  type(sponge_CS),       pointer    :: CSp             !< A pointer to the sponge control
-                                                       !! structure.
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), intent(in) :: h !< Layer thicknesses.
+  type(sponge_CS),         pointer    :: CSp           !< A pointer to the sponge control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h             !< Layer thicknesses [H ~> m or kg m-2].
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_initialize_sponges: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_initialize_sponges: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   if (first_call) call write_user_log(param_file)
 
@@ -204,8 +214,8 @@ subroutine USER_set_rotation(G, param_file)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_set_rotation: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+    "USER_initialization.F90, USER_set_rotation: " // &
+    "Unmodified user routine called - you must edit the routine to use it")
 
   if (first_call) call write_user_log(param_file)
 
@@ -228,61 +238,43 @@ end subroutine write_user_log
 
 !> \namespace user_initialization
 !!
-!!  By Robert Hallberg, April 1994 - June 2002                         *
-!!                                                                     *
-!!    This subroutine initializes the fields for the simulations.      *
-!!  The one argument passed to initialize, Time, is set to the         *
-!!  current time of the simulation.  The fields which are initialized  *
-!!  here are:                                                          *
-!!    u - Zonal velocity in m s-1.                                     *
-!!    v - Meridional velocity in m s-1.                                *
-!!    h - Layer thickness in m.  (Must be positive.)                   *
-!!    G%bathyT - Basin depth in m.  (Must be positive.)                *
-!!    G%CoriolisBu - The Coriolis parameter, in s-1.                   *
-!!    GV%g_prime - The reduced gravity at each interface, in m s-2.    *
-!!    GV%Rlay - Layer potential density (coordinate variable), kg m-3. *
-!!  If ENABLE_THERMODYNAMICS is defined:                               *
-!!    T - Temperature in C.                                            *
-!!    S - Salinity in psu.                                             *
-!!  If BULKMIXEDLAYER is defined:                                      *
-!!    Rml - Mixed layer and buffer layer potential densities in        *
-!!          units of kg m-3.                                           *
-!!  If SPONGE is defined:                                              *
-!!    A series of subroutine calls are made to set up the damping      *
-!!    rates and reference profiles for all variables that are damped   *
-!!    in the sponge.                                                   *
-!!  Any user provided tracer code is also first linked through this    *
-!!  subroutine.                                                        *
-!!                                                                     *
-!!    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!!  in MOM_surface_forcing.F90.                                        *
-!!                                                                     *
-!!    These variables are all set in the set of subroutines (in this   *
-!!  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
-!!  USER_initialize_velocity,  USER_initialize_temperature_salinity,   *
-!!  USER_initialize_mixed_layer_density, USER_initialize_sponges,      *
-!!  USER_set_coord, and USER_set_ref_profile.                          *
-!!                                                                     *
-!!    The names of these subroutines should be self-explanatory. They  *
-!!  start with "USER_" to indicate that they will likely have to be    *
-!!  modified for each simulation to set the initial conditions and     *
-!!  boundary conditions.  Most of these take two arguments: an integer *
-!!  argument specifying whether the fields are to be calculated        *
-!!  internally or read from a NetCDF file; and a string giving the     *
-!!  path to that file.  If the field is initialized internally, the    *
-!!  path is ignored.                                                   *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!!    j+1  > o > o >   At ^:  v, tauy                                  *
-!!    j    x ^ x ^ x   At >:  u, taux                                  *
-!!    j    > o > o >   At o:  h, bathyT, buoy, tr, T, S, Rml, ustar    *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
+!!  This subroutine initializes the fields for the simulations.
+!!  The one argument passed to initialize, Time, is set to the
+!!  current time of the simulation.  The fields which are initialized
+!!  here are:
+!!  - u - Zonal velocity [m s-1].
+!!  - v - Meridional velocity [m s-1].
+!!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
+!!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
+!!  - G%CoriolisBu - The Coriolis parameter [s-1].
+!!  - GV%g_prime - The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+!!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
+!!  If ENABLE_THERMODYNAMICS is defined:
+!!  - T - Temperature [degC].
+!!  - S - Salinity [psu].
+!!  If BULKMIXEDLAYER is defined:
+!!  - Rml - Mixed layer and buffer layer potential densities [kg m-3].
+!!  If SPONGE is defined:
+!!  - A series of subroutine calls are made to set up the damping
+!!    rates and reference profiles for all variables that are damped
+!!    in the sponge.
+!!
+!!  Any user provided tracer code is also first linked through this
+!!  subroutine.
+!!
+!!  These variables are all set in the set of subroutines (in this
+!!  file) USER_initialize_bottom_depth, USER_initialize_thickness,
+!!  USER_initialize_velocity,  USER_initialize_temperature_salinity,
+!!  USER_initialize_mixed_layer_density, USER_initialize_sponges,
+!!  USER_set_coord, and USER_set_ref_profile.
+!!
+!!  The names of these subroutines should be self-explanatory. They
+!!  start with "USER_" to indicate that they will likely have to be
+!!  modified for each simulation to set the initial conditions and
+!!  boundary conditions.  Most of these take two arguments: an integer
+!!  argument specifying whether the fields are to be calculated
+!!  internally or read from a NetCDF file; and a string giving the
+!!  path to that file.  If the field is initialized internally, the
+!!  path is ignored.
+
 end module user_initialization

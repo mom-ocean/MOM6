@@ -1,39 +1,7 @@
+!> A tracer package that mimics salinity
 module pseudo_salt_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Andrew Shao, 2016                                               *
-!*                                                                     *
-!*    This file contains the routines necessary to model a passive     *
-!*  tracer that uses the same boundary fluxes as salinity. At the      *
-!*  beginning of the run, salt is set to the same as tv%S. Any         *
-!*  deviations between this salt-like tracer and tv%S signifies a      *
-!*  difference between how active and passive tracers are treated.     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -48,7 +16,7 @@ use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_var
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
@@ -67,51 +35,48 @@ public register_pseudo_salt_tracer, initialize_pseudo_salt_tracer
 public pseudo_salt_tracer_column_physics, pseudo_salt_tracer_surface_state
 public pseudo_salt_stock, pseudo_salt_tracer_end
 
+!> The control structure for the pseudo-salt tracer
 type, public :: pseudo_salt_tracer_CS ; private
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: ps(:,:,:) => NULL()   ! The array of pseudo-salt tracer used in this
-                                         ! subroutine, in psu
-  real, pointer :: diff(:,:,:) => NULL() ! The difference between the pseudo-salt
-                                         ! tracer and the real salt, in psu.
-  logical :: pseudo_salt_may_reinit = .true. ! Hard coding since this should not matter
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
+  real, pointer :: ps(:,:,:) => NULL()   !< The array of pseudo-salt tracer used in this
+                                         !! subroutine [ppt}
+  real, pointer :: diff(:,:,:) => NULL() !< The difference between the pseudo-salt
+                                         !! tracer and the real salt [ppt].
+  logical :: pseudo_salt_may_reinit = .true. !< Hard coding since this should not matter
 
-  integer :: id_psd = -1
+  integer :: id_psd = -1   !< A diagnostic ID
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  type(vardesc) :: tr_desc
+  type(vardesc) :: tr_desc !< A description and metadata for the pseudo-salt tracer
 end type pseudo_salt_tracer_CS
 
 contains
 
+!> Register the pseudo-salt tracer with MOM6
 function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),       intent(in) :: HI
+  type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(pseudo_salt_tracer_CS),  pointer    :: CS
-  type(tracer_registry_type), pointer    :: tr_Reg
-  type(MOM_restart_CS),       pointer    :: restart_CS
+  type(pseudo_salt_tracer_CS),  pointer  :: CS !< The control structure returned by a previous
+                                               !! call to register_pseudo_salt_tracer.
+  type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
+                                                  !! structure for the tracer advection and
+                                                  !! diffusion module
+  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in/out)  tr_Reg - A pointer that is set to point to the control structure
-!                  for the tracer advection and diffusion module.
-!  (in)      restart_CS - A pointer to the restart control structure.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
   character(len=40)  :: mdl = "pseudo_salt_tracer" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying pseudo_salt
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_pseudo_salt_tracer
   integer :: isd, ied, jsd, jed, nz, i, j
@@ -147,36 +112,30 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 end function register_pseudo_salt_tracer
 
+!> Initialize the pseudo-salt tracer
 subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp, tv)
-  logical,                            intent(in) :: restart
-  type(time_type), target,            intent(in) :: day
+  logical,                            intent(in) :: restart !< .true. if the fields have already
+                                                         !! been read from a restart file.
+  type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(diag_ctrl), target,            intent(in) :: diag
-  type(ocean_OBC_type),               pointer    :: OBC
-  type(pseudo_salt_tracer_CS),          pointer    :: CS
-  type(sponge_CS),                    pointer    :: sponge_CSp
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
+                                                         !! diagnostic output.
+  type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
+                                                         !! whether, where, and what open boundary
+                                                         !! conditions are used.
+  type(pseudo_salt_tracer_CS),        pointer    :: CS !< The control structure returned by a previous
+                                                       !! call to register_pseudo_salt_tracer.
+  type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
+  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                                  !! for diagnostics in depth space.
   type(thermo_var_ptrs),              intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 !   This subroutine initializes the tracer fields in CS%ps(:,:,:).
 
-! Arguments: restart - .true. if the fields have already been read from
-!                     a restart file.
-!  (in)      day - Time of the start of the run.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 register_pseudo_salt_tracer.
-!  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
-!                         they are in use.  Otherwise this may be unassociated.
-!  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
-!                            in depth space.
+  ! Local variables
   character(len=16) :: name     ! A variable's name in a NetCDF file.
   character(len=72) :: longname ! The long name of that variable.
   character(len=48) :: units    ! The dimensions of the variable.
@@ -213,58 +172,48 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
 
 end subroutine initialize_pseudo_salt_tracer
 
+!> Apply sources, sinks and diapycnal diffusion to the tracers in this package.
 subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, debug, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(pseudo_salt_tracer_CS),                pointer    :: CS
-  type(thermo_var_ptrs),              intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-  logical,                            intent(in) :: debug
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: ea   !< an array to which the amount of fluid entrained
+                                              !! from the layer above during this call will be
+                                              !! added [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: eb   !< an array to which the amount of fluid entrained
+                                              !! from the layer below during this call will be
+                                              !! added [H ~> m or kg m-2].
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
+                                              !! and tracer forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  type(pseudo_salt_tracer_CS), pointer :: CS  !< The control structure returned by a previous
+                                              !! call to register_pseudo_salt_tracer.
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  logical,                 intent(in) :: debug !< If true calculate checksums
+  real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
+                                              !! be fluxed out of the top layer in a timestep [nondim]
+  real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
+                                              !! fluxes can be applied [m]
 
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
-! This is a simple example of a set of advected passive tracers.
 
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_pseudo_salt_tracer.
-!  (in)      tv - Thermodynamic structure with T and S
-!  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
-!                             Stored previously in diabatic CS.
-!  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
-!                             Stored previously in diabatic CS.
-!  (in)      debug - Calculates checksums
-!
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
-  real :: Isecs_per_year = 1.0 / (365.0*86400.0)
+  ! Local variables
   real :: year, h_total, scale, htot, Ih_limit
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, k_max
-  real, allocatable :: local_tr(:,:,:)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real, dimension(:,:), pointer :: net_salt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  net_salt=>fluxes%netSalt
 
   if (.not.associated(CS)) return
   if (.not.associated(CS%diff)) return
@@ -276,11 +225,11 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
 
   ! This uses applyTracerBoundaryFluxesInOut, usually in ALE mode
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-    do k=1,nz ;do j=js,je ; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;
+    enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CS%ps, dt, fluxes, h_work, &
-      evap_CFL_limit, minimum_forcing_depth, out_flux_optional=net_salt)
+      evap_CFL_limit, minimum_forcing_depth, out_flux_optional=fluxes%netSalt)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%ps, G, GV)
   else
     call tracer_vertdiff(h_old, ea, eb, dt, CS%ps, G, GV)
@@ -290,7 +239,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     CS%diff(i,j,k) = CS%ps(i,j,k)-tv%S(i,j,k)
   enddo ; enddo ; enddo
 
-  if(debug) then
+  if (debug) then
     call hchksum(tv%S,"salt post pseudo-salt vertdiff", G%HI)
     call hchksum(CS%ps,"pseudo_salt post pseudo-salt vertdiff", G%HI)
   endif
@@ -299,31 +248,27 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
 
 end subroutine pseudo_salt_tracer_column_physics
 
+
+!> Calculates the mass-weighted integral of all tracer stocks, returning the number of stocks it has
+!! calculated.  If the stock_index is present, only the stock corresponding to that coded index is returned.
 function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(:),                 intent(out)   :: stocks
-  type(pseudo_salt_tracer_CS),                pointer       :: CS
-  character(len=*), dimension(:),     intent(out)   :: names
-  character(len=*), dimension(:),     intent(out)   :: units
-  integer, optional,                  intent(in)    :: stock_index
-  integer                                           :: pseudo_salt_stock
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
+                                                              !! tracer, in kg times concentration units [kg conc].
+  type(pseudo_salt_tracer_CS),        pointer       :: CS !< The control structure returned by a previous
+                                                          !! call to register_pseudo_salt_tracer.
+  character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
+  character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
+  integer, optional,                  intent(in)    :: stock_index !< The coded index of a specific stock
+                                                              !! being sought.
+  integer                                           :: pseudo_salt_stock !< Return value: the number of
+                                                              !! stocks calculated here.
+
 ! This function calculates the mass-weighted integral of all tracer stocks,
 ! returning the number of stocks it has calculated.  If the stock_index
 ! is present, only the stock corresponding to that coded index is returned.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (out)     stocks - the mass-weighted integrated amount of each tracer,
-!                     in kg times concentration units.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_pseudo_salt_tracer.
-!  (out)     names - the names of the stocks calculated.
-!  (out)     units - the units of the stocks calculated.
-!  (in,opt)  stock_index - the coded index of a specific stock being sought.
-! Return value: the number of stocks calculated here.
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -360,7 +305,7 @@ subroutine pseudo_salt_tracer_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(pseudo_salt_tracer_CS), pointer  :: CS !< The control structure returned by a previous
                                               !! call to register_pseudo_salt_tracer.
 
@@ -377,8 +322,10 @@ subroutine pseudo_salt_tracer_surface_state(state, h, G, CS)
 
 end subroutine pseudo_salt_tracer_surface_state
 
+!> Deallocate memory associated with this tracer package
 subroutine pseudo_salt_tracer_end(CS)
-  type(pseudo_salt_tracer_CS), pointer :: CS
+  type(pseudo_salt_tracer_CS), pointer :: CS !< The control structure returned by a previous
+                                              !! call to register_pseudo_salt_tracer.
   integer :: m
 
   if (associated(CS)) then
@@ -387,5 +334,15 @@ subroutine pseudo_salt_tracer_end(CS)
     deallocate(CS)
   endif
 end subroutine pseudo_salt_tracer_end
+
+!> \namespace pseudo_salt_tracer
+!!
+!!  By Andrew Shao, 2016
+!!
+!!    This file contains the routines necessary to model a passive
+!!  tracer that uses the same boundary fluxes as salinity. At the
+!!  beginning of the run, salt is set to the same as tv%S. Any
+!!  deviations between this salt-like tracer and tv%S signifies a
+!!  difference between how active and passive tracers are treated.
 
 end module pseudo_salt_tracer

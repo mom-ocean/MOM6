@@ -8,20 +8,19 @@ use MOM_string_functions, only : uppercase
 
 implicit none ; public
 
-integer, parameter :: REGRIDDING_NUM_TYPES  = 2
-
 ! List of regridding types. These should be consecutive and starting at 1.
 ! This allows them to be used as array indices.
-integer, parameter :: REGRIDDING_LAYER     = 1      !< Layer mode
-integer, parameter :: REGRIDDING_ZSTAR     = 2      !< z* coordinates
-integer, parameter :: REGRIDDING_RHO       = 3      !< Target interface densities
-integer, parameter :: REGRIDDING_SIGMA     = 4      !< Sigma coordinates
-integer, parameter :: REGRIDDING_ARBITRARY = 5      !< Arbitrary coordinates
+integer, parameter :: REGRIDDING_LAYER     = 1      !< Layer mode identifier
+integer, parameter :: REGRIDDING_ZSTAR     = 2      !< z* coordinates identifier
+integer, parameter :: REGRIDDING_RHO       = 3      !< Density coordinates identifier
+integer, parameter :: REGRIDDING_SIGMA     = 4      !< Sigma coordinates identifier
+integer, parameter :: REGRIDDING_ARBITRARY = 5      !< Arbitrary coordinates identifier
 integer, parameter :: REGRIDDING_HYCOM1    = 6      !< Simple HyCOM coordinates without BBL
-integer, parameter :: REGRIDDING_SLIGHT    = 7      !< Stretched coordinates in the
-integer, parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR = 8   !< z* coordinates at the bottom, sigma-near the top
+integer, parameter :: REGRIDDING_SLIGHT    = 7      !< Identifier for stretched coordinates in the
                                                     !! lightest water, isopycnal below
-integer, parameter :: REGRIDDING_ADAPTIVE = 9
+integer, parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR = 8 !< Identifiered for z* coordinates at the bottom,
+                                                    !!  sigma-near the top
+integer, parameter :: REGRIDDING_ADAPTIVE = 9       !< Adaptive coordinate mode identifier
 
 character(len=*), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
 character(len=*), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
@@ -32,26 +31,16 @@ character(len=*), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary 
 character(len=*), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
 character(len=*), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
 character(len=*), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
-character(len=*), parameter :: REGRIDDING_ADAPTIVE_STRING = "ADAPTIVE"
+character(len=*), parameter :: REGRIDDING_ADAPTIVE_STRING = "ADAPTIVE" !< Adaptive coordinate string
 character(len=*), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
 
-integer, dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coords = &
-  (/ REGRIDDING_LAYER, REGRIDDING_ZSTAR /)
- !(/ REGRIDDING_LAYER, REGRIDDING_ZSTAR, REGRIDDING_RHO, &
- !  REGRIDDING_SIGMA, REGRIDDING_ARBITRARY, &
- !  REGRIDDING_HYCOM1, REGRIDDING_SLIGHT /)
-
-character(len=*), dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coord_strings = &
-  (/ REGRIDDING_LAYER_STRING, REGRIDDING_ZSTAR_STRING /)
- !(/ REGRIDDING_LAYER_STRING, REGRIDDING_ZSTAR_STRING, REGRIDDING_RHO_STRING, &
- !  REGRIDDING_SIGMA_STRING, REGRIDDING_ARBITRARY_STRING, &
- !  REGRIDDING_HYCOM1_STRING, REGRIDDING_SLIGHT_STRING /)
-
+!> Returns a string with the coordinate units associated with the coordinate mode.
 interface coordinateUnits
   module procedure coordinateUnitsI
   module procedure coordinateUnitsS
 end interface
 
+!> Returns true if the coordinate is dependent on the state density, returns false otherwise.
 interface state_dependent
   module procedure state_dependent_char
   module procedure state_dependent_int

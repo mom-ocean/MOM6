@@ -1,16 +1,7 @@
+!> Handy functions for manipulating strings
 module MOM_string_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.  *
-!*                                                                     *
-!*    The functions here perform a set of useful manipulations of      *
-!*  character strings.   Although they are a part of MOM6, the do not  *
-!*  require any other MOM software to be useful.                       *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 implicit none ; private
 
@@ -27,14 +18,14 @@ public slasher
 
 contains
 
+!> Return a string in which all uppercase letters have been replaced by
+!! their lowercase counterparts.
 function lowercase(input_string)
+  character(len=*),     intent(in) :: input_string !< The string to modify
+  character(len=len(input_string)) :: lowercase !< The modified output string
 !   This function returns a string in which all uppercase letters have been
 ! replaced by their lowercase counterparts.  It is loosely based on the
 ! lowercase function in mpp_util.F90.
-  ! Arguments
-  character(len=*),     intent(in) :: input_string
-  character(len=len(input_string)) :: lowercase
-  ! Local variables
   integer, parameter :: co=iachar('a')-iachar('A') ! case offset
   integer :: k
 
@@ -42,16 +33,17 @@ function lowercase(input_string)
   do k=1, len_trim(input_string)
     if (lowercase(k:k) >= 'A' .and. lowercase(k:k) <= 'Z') &
         lowercase(k:k) = achar(ichar(lowercase(k:k))+co)
-  end do
+  enddo
 end function lowercase
 
+!> Return a string in which all uppercase letters have been replaced by
+!! their lowercase counterparts.
 function uppercase(input_string)
-  character(len=*),     intent(in) :: input_string
-  character(len=len(input_string)) :: uppercase
+  character(len=*),     intent(in) :: input_string !< The string to modify
+  character(len=len(input_string)) :: uppercase !< The modified output string
 !   This function returns a string in which all lowercase letters have been
 ! replaced by their uppercase counterparts.  It is loosely based on the
 ! uppercase function in mpp_util.F90.
-  ! Arguments
   integer, parameter :: co=iachar('A')-iachar('a') ! case offset
   integer :: k
 
@@ -59,28 +51,26 @@ function uppercase(input_string)
   do k=1, len_trim(input_string)
     if (uppercase(k:k) >= 'a' .and. uppercase(k:k) <= 'z') &
         uppercase(k:k) = achar(ichar(uppercase(k:k))+co)
-  end do
+  enddo
 end function uppercase
 
+!> Returns a character string of a left-formatted integer
+!! e.g. "123       "  (assumes 19 digit maximum)
 function left_int(i)
-! Returns a character string of a left-formatted integer
-! e.g. "123       "  (assumes 19 digit maximum)
-  ! Arguments
-  character(len=19) :: left_int
-  integer, intent(in) :: i
-  ! Local variables
+  integer, intent(in) :: i !< The integer to convert to a string
+  character(len=19) :: left_int !< The output string
+
   character(len=19) :: tmp
   write(tmp(1:19),'(I19)') i
   write(left_int(1:19),'(A)') adjustl(tmp)
 end function left_int
 
+!> Returns a character string of a comma-separated, compact formatted,
+!! integers  e.g. "1, 2, 3, 4"
 function left_ints(i)
-! Returns a character string of a comma-separated, compact formatted,
-! integers  e.g. "1, 2, 3, 4"
-  ! Arguments
-  character(len=1320) :: left_ints
-  integer, intent(in) :: i(:)
-  ! Local variables
+  integer, intent(in) :: i(:) !< The array of integers to convert to a string
+  character(len=1320) :: left_ints !< The output string
+
   character(len=1320) :: tmp
   integer :: j
   write(left_ints(1:1320),'(A)') trim(left_int(i(1)))
@@ -92,10 +82,11 @@ function left_ints(i)
   endif
 end function left_ints
 
+!> Returns a left-justified string with a real formatted like '(G)'
 function left_real(val)
-  real, intent(in)  :: val
-  character(len=32) :: left_real
-! Returns a left-justified string with a real formatted like '(G)'
+  real, intent(in)  :: val !< The real variable to convert to a string
+  character(len=32) :: left_real !< The output string
+
   integer :: l, ind
 
   if ((abs(val) < 1.0e4) .and. (abs(val) >= 1.0e-3)) then
@@ -143,17 +134,18 @@ function left_real(val)
   left_real = adjustl(left_real)
 end function left_real
 
+!> Returns a character string of a comma-separated, compact formatted, reals
+!! e.g. "1., 2., 5*3., 5.E2"
 function left_reals(r,sep)
-! Returns a character string of a comma-separated, compact formatted, reals
-! e.g. "1., 2., 5*3., 5.E2"
-  ! Arguments
-  character(len=1320) :: left_reals
-  real, intent(in) :: r(:)
-  character(len=*), optional :: sep
-  ! Local variables
+  real, intent(in) :: r(:) !< The array of real variables to convert to a string
+  character(len=*), optional, intent(in) :: sep !< The separator between
+                                    !! successive values, by default it is ', '.
+  character(len=1320) :: left_reals !< The output string
+
   integer :: j, n, b, ns
   logical :: doWrite
   character(len=10) :: separator
+
   n=1 ; doWrite=.true. ; left_reals='' ; b=1
   if (present(sep)) then
     separator=sep ; ns=len(sep)
@@ -183,11 +175,10 @@ function left_reals(r,sep)
   enddo
 end function left_reals
 
+!> Returns True if the string can be read/parsed to give the exact value of "val"
 function isFormattedFloatEqualTo(str, val)
-! Returns True if the string can be read/parsed to give the exact
-! value of "val"
-  character(len=*), intent(in) :: str
-  real,             intent(in) :: val
+  character(len=*), intent(in) :: str !< The string to parse
+  real,             intent(in) :: val !< The real value to compare with
   logical                      :: isFormattedFloatEqualTo
   ! Local variables
   real :: scannedVal
@@ -202,8 +193,8 @@ end function isFormattedFloatEqualTo
 !! or "" if the string is not long enough. Both spaces and commas
 !! are interpreted as separators.
 character(len=120) function extractWord(string, n)
-  character(len=*),   intent(in) :: string
-  integer,            intent(in) :: n
+  character(len=*),   intent(in) :: string !< The string to scan
+  integer,            intent(in) :: n      !< Number of word to extract
 
   extractWord = extract_word(string, ' ,', n)
 
@@ -222,7 +213,7 @@ character(len=120) function extract_word(string, separators, n)
   extract_word = ''
   lastCharIsSeperator = .true.
   ns = len_trim(string)
-  i = 0; b=0; e=0; nw=0;
+  i = 0; b=0; e=0; nw=0
   do while (i<ns)
     i = i+1
     if (lastCharIsSeperator) then ! search for end of word
@@ -416,5 +407,13 @@ function slasher(dir)
     slasher = trim(dir)//"/"
   endif
 end function slasher
+
+!> \namespace mom_string_functions
+!!
+!!  By Alistair Adcroft and Robert Hallberg, last updated Sept. 2013.
+!!
+!!    The functions here perform a set of useful manipulations of
+!!  character strings.   Although they are a part of MOM6, the do not
+!!  require any other MOM software to be useful.
 
 end module MOM_string_functions

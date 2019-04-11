@@ -1,3 +1,9 @@
+!> Use control-theory to adjust the surface heat flux and precipitation.
+!!
+!! Adjustments are based on the time-mean or periodically (seasonally) varying
+!! anomalies from the observed state.
+!!
+!! The techniques behind this are described in Hallberg and Adcroft (2018, in prep.).
 module MOM_controlled_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -12,13 +18,9 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
-use MOM_time_manager, only : get_time, get_date, set_time, set_date
-use MOM_time_manager, only : time_type_to_real
+use MOM_time_manager, only : get_date, set_date
+use MOM_time_manager, only : time_type_to_real, real_to_time
 use MOM_variables, only : surface
-!   Forcing is a structure containing pointers to the forcing fields
-! which may be used to drive MOM.  All fluxes are positive downward.
-!   Surface is a structure containing pointers to various fields that
-! may be used describe the surface state of MOM.
 
 implicit none ; private
 
@@ -27,30 +29,33 @@ implicit none ; private
 public apply_ctrl_forcing, register_ctrl_forcing_restarts
 public controlled_forcing_init, controlled_forcing_end
 
+!> Control structure for MOM_controlled_forcing
 type, public :: ctrl_forcing_CS ; private
-  logical :: use_temperature ! If true, temperature and salinity are used as
-                             ! state variables.
-  logical :: do_integrated   ! If true, use time-integrated anomalies to control
-                             ! the surface state.
-  integer :: num_cycle       ! The number of elements in the forcing cycle.
-  real    :: heat_int_rate  ! The rate at which heating anomalies accumulate, in s-1.
-  real    :: prec_int_rate  ! The rate at which precipitation anomalies accumulate, in s-1.
-  real    :: heat_cyc_rate  ! The rate at which cyclical heating anomaliess
-                            ! accumulate, in s-1.
-  real    :: prec_cyc_rate  ! The rate at which cyclical precipitation anomaliess
-                            ! accumulate, in s-1.
-  real    :: Len2           ! The square of the length scale over which the anomalies
-                            ! are smoothed via a Laplacian filter, in m2.
-  real    :: lam_heat       ! A constant of proportionality between SST anomalies
-                            ! and heat fluxes, in W m-2 K-1.
-  real    :: lam_prec       ! A constant of proportionality between SSS anomalies
-                            ! (normalised by mean SSS) and precipitation, in kg m-2.
-  real    :: lam_cyc_heat   ! A constant of proportionality between cyclical SST
-                            ! anomalies and corrective heat fluxes, in W m-2 K-1.
-  real    :: lam_cyc_prec   ! A constant of proportionality between cyclical SSS
-                            ! anomalies (normalised by mean SSS) and corrective
-                            ! precipitation, in kg m-2.
+  logical :: use_temperature !< If true, temperature and salinity are used as
+                             !! state variables.
+  logical :: do_integrated   !< If true, use time-integrated anomalies to control
+                             !! the surface state.
+  integer :: num_cycle       !< The number of elements in the forcing cycle.
+  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate [s-1].
+  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate [s-1].
+  real    :: heat_cyc_rate  !< The rate at which cyclical heating anomaliess
+                            !! accumulate [s-1].
+  real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomaliess
+                            !! accumulate [s-1].
+  real    :: Len2           !< The square of the length scale over which the anomalies
+                            !! are smoothed via a Laplacian filter [m2].
+  real    :: lam_heat       !< A constant of proportionality between SST anomalies
+                            !! and heat fluxes [W m-2 degC-1].
+  real    :: lam_prec       !< A constant of proportionality between SSS anomalies
+                            !! (normalised by mean SSS) and precipitation [kg m-2].
+  real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
+                            !! anomalies and corrective heat fluxes [W m-2 degC-1].
+  real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
+                            !! anomalies (normalised by mean SSS) and corrective
+                            !! precipitation [kg m-2].
 
+  !>@{ Pointers for data.
+  !! \todo Needs more complete documentation.
   real, pointer, dimension(:) :: &
     avg_time => NULL()
   real, pointer, dimension(:,:) :: &
@@ -62,9 +67,10 @@ type, public :: ctrl_forcing_CS ; private
     avg_SST_anom => NULL(), &
     avg_SSS_anom => NULL(), &
     avg_SSS => NULL()
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  integer :: id_heat_0 = -1 ! See if these are neede later...
+  !!@}
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                            !! regulate the timing of diagnostic output.
+  integer :: id_heat_0 = -1 !< Diagnostic handle
 end type ctrl_forcing_CS
 
 contains
@@ -75,21 +81,21 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
                               day_start, dt, G, CS)
   type(ocean_grid_type), intent(inout) :: G                    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
-                                                               !! anomalies, in deg C.
+                                                               !! anomalies [degC].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity
-                                                               !! anomlies, in g kg-1.
+                                                               !! anomlies [ppt].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface
-                                                               !! salinity, in g kg-1.
+                                                               !! salinity [ppt].
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat !< Virtual (corrective) heat
                                                                !! fluxes that are augmented
-                                                               !! in this subroutine, in W m-2.
+                                                               !! in this subroutine [W m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_precip !< Virtual (corrective)
                                                                !! precipitation fluxes that
                                                                !! are augmented in this
-                                                               !! subroutine, in kg m-2 s-1.
+                                                               !! subroutine [kg m-2 s-1].
   type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
   real,                  intent(in)    :: dt             !< Length of time over which these
-                                                         !! fluxes will be applied, in s.
+                                                         !! fluxes will be applied [s].
   type(ctrl_forcing_CS), pointer       :: CS             !< A pointer to the control structure
                                                          !! returned by a previous call to
                                                          !! ctrl_forcing_init.
@@ -101,7 +107,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     flux_heat_y, &
     flux_prec_y
   type(time_type) :: day_end
-  real    :: coef    ! A heat-flux coefficient with units of m2.
+  real    :: coef    ! A heat-flux coefficient [m2].
   real    :: mr_st, mr_end, mr_mid, mr_prev, mr_next
   real    :: dt_wt, dt_heat_rate, dt_prec_rate
   real    :: dt1_heat_rate, dt1_prec_rate, dt2_heat_rate, dt2_prec_rate
@@ -115,7 +121,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   if (.not.associated(CS)) return
   if ((CS%num_cycle <= 0) .and. (.not.CS%do_integrated)) return
 
-  day_end = day_start + set_time(floor(dt+0.5))
+  day_end = day_start + real_to_time(dt)
 
   do j=js,je ; do i=is,ie
     virt_heat(i,j) = 0.0 ; virt_precip(i,j) = 0.0

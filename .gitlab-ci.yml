@@ -8,7 +8,7 @@ stages:
 # Merges MOM6 with dev/gfdl. Changes directory to test directory, if it exists.
 before_script:
   - MOM6_SRC=$CI_PROJECT_DIR
-  - CACHE_DIR=/lustre/f1/oar.gfdl.ogrp-account/runner/cache/
+  - echo Cache directory set to ${CACHE_DIR:=/lustre/f2/scratch/oar.gfdl.ogrp-account/runner/cache/}
   - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl && git submodule init && git submodule update
   - pwd ; ls
 
@@ -34,10 +34,12 @@ setup:
     - git clone https://github.com/adcroft/MRS.git MRS
     # Update MOM6-examples and submodules
     - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
+    - (cd MOM6-examples/src/MOM6 && git submodule update)
     - test -d MOM6-examples/src/LM3 || make -f MRS/Makefile.clone clone_gfdl -s
     - make -f MRS/Makefile.clone MOM6-examples/.datasets -s
     #- (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
     - env > gitlab_session.log
+    # Cache everything under tests to unpack for each subsequent stage
     - cd ../ ; time tar zcf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz tests
 
 # Compiles
@@ -114,8 +116,9 @@ run:
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
     - echo "make -f MRS/Makefile.tests all -B" > job.sh
-    - msub -l partition=c4,nodes=29,walltime=00:29:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
+    - msub -l partition=c4,nodes=29,walltime=00:31:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
     - cat log.$CI_PIPELINE_ID
+    - test -f restart_results_gnu.tar.gz
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz
 
 # Tests
@@ -217,6 +220,16 @@ gnu:restart:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
     - make -f MRS/Makefile.tests gnu_check_restarts
+
+gnu:params:
+  stage: tests
+  tags:
+    - ncrc4
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests params_gnu_symmetric
+  allow_failure: true
 
 cleanup:
   stage: cleanup

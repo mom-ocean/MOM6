@@ -22,7 +22,7 @@ use MOM_shortwave_abs,    only : optics_type
 use MOM_diag_mediator,    only : post_data
 use MOM_forcing_type,     only : forcing
 
-implicit none
+implicit none ; private
 
 public update_offline_from_files
 public update_offline_from_arrays
@@ -44,12 +44,16 @@ contains
 !> This updates thickness based on the convergence of horizontal mass fluxes
 !! NOTE: Only used in non-ALE mode
 subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)       :: uhtr
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)       :: vhtr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_new
+  type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: uhtr  !< Accumulated mass flux through zonal face [kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: vhtr  !< Accumulated mass flux through meridional face [kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h_pre !< Previous layer thicknesses [kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: h_new !< Updated layer thicknesses [kg m-2].
 
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
@@ -66,7 +70,7 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
       ! add a bit of mass to avoid truncation errors.  This will lead to
       ! non-conservation of tracers
       h_new(i,j,k) = h_new(i,j,k) + &
-        max(GV%Angstrom, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
+        max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
       h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
@@ -78,12 +82,19 @@ end subroutine update_h_horizontal_flux
 !> Updates layer thicknesses due to vertical mass transports
 !! NOTE: Only used in non-ALE configuration
 subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: ea
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: eb
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_new
+  type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: ea    !< Mass of fluid entrained from the layer
+                                                  !! above within this timestep [kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: eb    !< Mass of fluid entrained from the layer
+                                                  !! below within this timestep [kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h_pre !< Layer thicknesses at the end of the previous
+                                                  !! step [kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: h_new !< Updated layer thicknesses [kg m-2].
 
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
@@ -124,13 +135,21 @@ end subroutine update_h_vertical_flux
 !> This routine limits the mass fluxes so that the a layer cannot be completely depleted.
 !! NOTE: Only used in non-ALE mode
 subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
+  type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: uh    !< Mass flux through zonal face [kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(inout) :: vh    !< Mass flux through meridional face [kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: ea    !< Mass of fluid entrained from the layer
+                                                  !! above within this timestep [kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: eb    !< Mass of fluid entrained from the layer
+                                                  !! below within this timestep [kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h_pre !< Layer thicknesses at the end of the previous
+                                                  !! step [kg m-2].
 
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
@@ -219,10 +238,13 @@ end subroutine limit_mass_flux_3d
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into remainder of the water column as a barotropic equivalent
 subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )    :: hvol
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+  type(ocean_grid_type),   pointer       :: G    !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV   !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in   ) :: hvol !< Mass of water in the cells at the end
+                                                 !! of the previous timestep [kg]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: uh   !< Zonal mass transport within a timestep [kg]
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
   real, dimension(SZIB_(G))           :: uh2d_sum
@@ -252,7 +274,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       else
         h2d(i,k) = GV%H_subroundoff
       endif
-    enddo; enddo;
+    enddo ; enddo
 
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
     ! does not deplete a cell
@@ -272,7 +294,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i+1,j))
       if ( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "barotropic redistribution")
@@ -287,10 +309,13 @@ end subroutine distribute_residual_uh_barotropic
 
 !> Redistribute the v-flux as a barotropic equivalent
 subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )    :: hvol
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+  type(ocean_grid_type),   pointer       :: G    !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV   !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in   ) :: hvol !< Mass of water in the cells at the end
+                                                 !! of the previous timestep [kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(inout) :: vh   !< Meridional mass transport within a timestep [kg]
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
   real, dimension(SZJB_(G))           :: vh2d_sum
@@ -320,7 +345,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       else
         h2d(j,k) = GV%H_subroundoff
       endif
-    enddo; enddo;
+    enddo ; enddo
 
     ! Distribute flux evenly throughout a column
     do j=js-1,je
@@ -339,7 +364,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i,j+1))
       if ( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) then
           call MOM_error(WARNING,"Column integral of vh does not match after "//&
           "barotropic redistribution")
@@ -357,10 +382,13 @@ end subroutine distribute_residual_vh_barotropic
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into layers above
 subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )    :: hvol
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+  type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in   ) :: hvol  !< Mass of water in the cells at the end
+                                                  !! of the previous timestep [kg]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: uh    !< Zonal mass transport within a timestep [kg]
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
   real, dimension(SZI_(G),SZK_(G))    :: h2d
@@ -372,7 +400,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
-  min_h = GV%Angstrom*0.1
+  min_h = GV%Angstrom_H*0.1
 
   do j=js,je
     ! Copy over uh and cell volume to working arrays
@@ -432,7 +460,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i+1,j))
       if (abs(uh_col - sum(uh2d(I,:)))>uh_neglect) then
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "upwards redistribution")
@@ -450,10 +478,13 @@ end subroutine distribute_residual_uh_upwards
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into layers above
 subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
-  type(ocean_grid_type),    pointer                          :: G
-  type(verticalGrid_type),  pointer                          :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )   :: hvol
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)   :: vh
+  type(ocean_grid_type),   pointer       :: G     !< ocean grid structure
+  type(verticalGrid_type), pointer       :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in   ) :: hvol  !< Mass of water in the cells at the end
+                                                  !! of the previous timestep [kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(inout) :: vh    !< Meridional mass transport within a timestep [kg]
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
   real, dimension(SZJB_(G))           :: vh2d_sum
@@ -467,7 +498,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
-  min_h = 0.1*GV%Angstrom
+  min_h = 0.1*GV%Angstrom_H
 
   do i=is,ie
     ! Copy over uh and cell volume to working arrays
@@ -527,7 +558,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i,j+1))
       if ( ABS(vh_col-SUM(vh2d(J,:))) > vh_neglect) then
         call MOM_error(WARNING,"Column integral of vh does not match after "//&
                                "upwards redistribution")
@@ -544,10 +575,10 @@ end subroutine distribute_residual_vh_upwards
 !> add_diurnal_SW adjusts the shortwave fluxes in an forcying_type variable
 !! to add a synthetic diurnal cycle. Adapted from SIS2
 subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
-  type(forcing),                 intent(inout) :: fluxes !< The type with atmospheric fluxes to be adjusted.
-  type(ocean_grid_type),         intent(in)    :: G   !< The sea-ice lateral grid type.
-  type(time_type),               intent(in)    :: Time_start !< The start time for this step.
-  type(time_type),               intent(in)    :: Time_end   !< The ending time for this step.
+  type(forcing),         intent(inout) :: fluxes !< The type with atmospheric fluxes to be adjusted.
+  type(ocean_grid_type), intent(in)    :: G      !< The ocean lateral grid type.
+  type(time_type),       intent(in)    :: Time_start !< The start time for this step.
+  type(time_type),       intent(in)    :: Time_end   !< The ending time for this step.
 
   real :: diurnal_factor, time_since_ae, rad
   real :: fracday_dt, fracday_day
@@ -578,16 +609,16 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
 
     call diurnal_solar(G%geoLatT(i,j)*rad, G%geoLonT(i,j)*rad, Time_start, cosz=cosz_dt, &
                        fracday=fracday_dt, rrsun=rrsun_dt, dt_time=dt_here)
-    call daily_mean_solar (G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
+    call daily_mean_solar(G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
     diurnal_factor = cosz_dt*fracday_dt*rrsun_dt / &
                      max(1e-30, cosz_day*fracday_day*rrsun_day)
 
     i2 = i+i_off ; j2 = j+j_off
     fluxes%sw(i2,j2) = fluxes%sw(i2,j2) * diurnal_factor
     fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
-    fluxes%sw_vis_dif (i2,j2) = fluxes%sw_vis_dif (i2,j2) * diurnal_factor
+    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
     fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
-    fluxes%sw_nir_dif (i2,j2) = fluxes%sw_nir_dif (i2,j2) * diurnal_factor
+    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
   enddo ; enddo
 
 end subroutine offline_add_diurnal_sw
@@ -606,9 +637,9 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   character(len=*),        intent(in   ) :: snap_file !< Name of file with snapshot fields
   character(len=*),        intent(in   ) :: surf_file !< Name of file with surface fields
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(inout) :: uhtr      !< Zonal mass fluxes
+                           intent(inout) :: uhtr      !< Zonal mass fluxes [kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(inout) :: vhtr      !< Meridional mass fluxes
+                           intent(inout) :: vhtr      !< Meridional mass fluxes [kg]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(inout) :: h_end     !< End of timestep layer thickness
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
@@ -631,7 +662,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   integer :: i, j, k, is, ie, js, je, nz
   real    :: Initer_vert
 
-  do_ale = .false.;
+  do_ale = .false.
   if (present(do_ale_in) ) do_ale = do_ale_in
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -707,17 +738,17 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
         timelevel=ridx_sum)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
-    fluxes%sw_vis_dif (:,:) = fluxes%sw_vis_dir
+    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
     fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
-    fluxes%sw_nir_dif (:,:) = fluxes%sw_nir_dir
+    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir
     fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
         fluxes%sw(i,j) = 0.0
         fluxes%sw_vis_dir(i,j) = 0.0
         fluxes%sw_nir_dir(i,j) = 0.0
-        fluxes%sw_vis_dif (i,j) = 0.0
-        fluxes%sw_nir_dif (i,j) = 0.0
+        fluxes%sw_vis_dif(i,j) = 0.0
+        fluxes%sw_nir_dif(i,j) = 0.0
       endif
     enddo ; enddo
     call pass_var(fluxes%sw,G%Domain)
@@ -739,12 +770,12 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   character(len=200),                        intent(in   ) :: mean_file !< Name of file with averages fields
   character(len=200),                        intent(in   ) :: sum_file  !< Name of file with summed fields
   character(len=200),                        intent(in   ) :: snap_file !< Name of file with snapshot fields
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hend      !< End of timestep layer thickness
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: uhtr_all  !< Zonal mass fluxes
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: vhtr_all  !< Meridional mass fluxes
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes [kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes [kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hend      !< End of timestep layer thickness [kg m-2]
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: uhtr_all  !< Zonal mass fluxes [kg]
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: vhtr_all  !< Meridional mass fluxes [kg]
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness [kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp      !< Temperature array
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt      !< Salinity array
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array

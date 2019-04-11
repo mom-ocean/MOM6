@@ -20,17 +20,17 @@ public refine_nondim_position
 public check_neutral_positions
 public kahan_sum
 
+!> The control structure for this module
 type, public :: ndiff_aux_CS_type ; private
   integer :: nterm        !< Number of terms in polynomial (deg+1)
   integer :: max_iter     !< Maximum number of iterations
-  real :: drho_tol        !< Tolerance criterion for difference in density (kg/m3)
-  real :: xtol            !< Criterion for how much position changes (nondim)
+  real :: drho_tol        !< Tolerance criterion for difference in density [kg m-3]
+  real :: xtol            !< Criterion for how much position changes [nondim]
   real :: ref_pres        !< Determines whether a constant reference pressure is used everywhere or locally referenced
                           !< density is done. ref_pres <-1 is the latter, ref_pres >= 0. otherwise
-  logical :: force_brent = .false.  !< Use Brent's method instead of Newton even when second derivatives are available
-  logical :: debug
+  logical :: force_brent = .false. !< Use Brent's method instead of Newton even when second derivatives are available
+  logical :: debug        !< If true, write verbose debugging messages and checksusm
   type(EOS_type), pointer :: EOS !< Pointer to equation of state used in the model
-
 end type ndiff_aux_CS_type
 
 contains
@@ -62,10 +62,10 @@ end subroutine set_ndiff_aux_params
 !! For an layer to be unstable the top interface must be denser than the bottom or the bottom interface of the layer
 subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
   integer,                intent(in)    :: nk          !< Number of levels in a column
-  real, dimension(nk,2),  intent(in)    :: dRdT        !< drho/dT (kg/m3/degC) at interfaces
-  real, dimension(nk,2),  intent(in)    :: dRdS        !< drho/dS (kg/m3/ppt) at interfaces
-  real, dimension(nk,2),  intent(in)    :: T           !< drho/dS (kg/m3/ppt) at interfaces
-  real, dimension(nk,2),  intent(in)    :: S           !< drho/dS (kg/m3/ppt) at interfaces
+  real, dimension(nk,2),  intent(in)    :: dRdT        !< drho/dT [kg m-3 degC-1] at interfaces
+  real, dimension(nk,2),  intent(in)    :: dRdS        !< drho/dS [kg m-3 ppt-1] at interfaces
+  real, dimension(nk,2),  intent(in)    :: T           !< Temperature [degC] at interfaces
+  real, dimension(nk,2),  intent(in)    :: S           !< Salinity [ppt] at interfaces
   logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
   integer,                intent(  out) :: ns          !< Number of neutral surfaces in unmasked part of the column
 
@@ -174,7 +174,7 @@ subroutine drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppol
   real, dimension(CS%nterm), intent(in)  :: ppoly_T   !< Coefficients of T reconstruction
   real, dimension(CS%nterm), intent(in)  :: ppoly_S   !< Coefficients of S reconstruciton
   real,                   intent(in)  :: x0        !< Nondimensional position to evaluate
-  real,                   intent(out) :: delta_rho
+  real,                   intent(out) :: delta_rho !< The density difference from a reference value
   real,         optional, intent(out) :: P_out         !< Pressure at point x0
   real,         optional, intent(out) :: T_out         !< Temperature at point x0
   real,         optional, intent(out) :: S_out         !< Salinity at point x0
@@ -328,8 +328,10 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   else ! dRhoPos - dRhoNeg < 0
     interpolate_for_nondim_position = 0.5
   endif
-  if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
-  if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
+  if ( interpolate_for_nondim_position < 0. ) &
+    stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
+  if ( interpolate_for_nondim_position > 1. ) &
+    stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
 
 !> Use root-finding methods to find where dRho = 0, based on the equation of state and the polynomial
@@ -339,8 +341,8 @@ end function interpolate_for_nondim_position
 !! to see if it it diverges outside the interval. In that case (or in the case that second derivatives are not
 !! available), Brent's method is used following the implementation found at
 !! https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
-real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, drho_top, &
-                                     drho_bot, min_bound)
+real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, &
+                                     ppoly_T, ppoly_S, drho_top, drho_bot, min_bound)
   type(ndiff_aux_CS_type),  intent(in) :: CS        !< Control structure with parameters for this module
   real,                     intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
   real,                     intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
@@ -463,7 +465,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
 
       ! For the logic to find neutral surfaces to work properly, the function needs to converge to zero
       !  or a small negative value
-      if( (fb <= 0.) .and. (fb >= -CS%drho_tol) ) then
+      if ((fb <= 0.) .and. (fb >= -CS%drho_tol)) then
         refine_nondim_position = b
         exit
       endif
@@ -505,7 +507,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         fa = fb
         fb = fc
         fc = fa
-      end if
+      endif
       tol = 2. * machep * abs ( sb ) + CS%xtol
       m = 0.5 * ( c - sb )
       if ( abs ( m ) <= tol .or. fb == 0. ) then
@@ -524,12 +526,12 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
           r = fb / fc
           p = s0 * ( 2. * m * q * ( q - r ) - ( sb - sa ) * ( r - 1. ) )
           q = ( q - 1. ) * ( r - 1. ) * ( s0 - 1. )
-        end if
+        endif
         if ( 0. < p ) then
           q = - q
         else
           p = - p
-        end if
+        endif
         s0 = e
         e = d
         if ( 2. * p < 3. * m * q - abs ( tol * q ) .and. &
@@ -538,17 +540,17 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         else
           e = m
           d = e
-        end if
-      end if
+        endif
+      endif
       sa = sb
       fa = fb
       if ( tol < abs ( d ) ) then
         sb = sb + d
-      else if ( 0. < m ) then
+      elseif ( 0. < m ) then
         sb = sb + tol
       else
         sb = sb - tol
-      end if
+      endif
       call drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
                        sb, fb)
       if ( ( 0. < fb .and. 0. < fc ) .or. &
@@ -557,7 +559,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         fc = fa
         e = sb - sa
         d = e
-      end if
+      endif
     enddo
     ! Modified from original to ensure that the minimum is found
     fa = ABS(fa) ; fb = ABS(fb) ; fc = ABS(fc)

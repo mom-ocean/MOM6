@@ -1,3 +1,4 @@
+!> Time steps the ocean dynamics with an unsplit quasi 2nd order Runge-Kutta scheme
 module MOM_dynamics_unsplit_RK2
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -69,7 +70,7 @@ use MOM_get_input, only : directories
 use MOM_io, only : MOM_io_init
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
+use MOM_time_manager, only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
@@ -88,6 +89,7 @@ use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
@@ -97,62 +99,71 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+!> MOM_dynamics_unsplit_RK2 module control structure
 type, public :: MOM_dyn_unsplit_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    ! PFu = -dM/dx, in m s-2.
-    diffu     ! Zonal acceleration due to convergence of the along-isopycnal
-              ! stress tensor, in m s-2.
+    CAu, &    !< CAu = f*v - u.grad(u) [m s-2].
+    PFu, &    !< PFu = -dM/dx [m s-2].
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
+
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    ! PFv = -dM/dy, in m s-2.
-    diffv     ! Meridional acceleration due to convergence of the
-              ! along-isopycnal stress tensor, in m s-2.
+    CAv, &    !< CAv = -f*u - u.grad(v) [m s-2].
+    PFv, &    !< PFv = -dM/dy [m s-2].
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
 
+  real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean to the seafloor (Pa)
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL(), tauy_bot => NULL()
-    ! The frictional bottom stresses from the ocean to the seafloor, in Pa.
+  real    :: be      !< A nondimensional number from 0.5 to 1 that controls
+                     !! the backward weighting of the time stepping scheme.
+  real    :: begw    !< A nondimensional number from 0 to 1 that controls
+                     !! the extent to which the treatment of gravity waves
+                     !! is forward-backward (0) or simulated backward
+                     !! Euler (1).  0 is almost always used.
+  logical :: debug   !< If true, write verbose checksums for debugging purposes.
 
-  real    :: be              ! A nondimensional number from 0.5 to 1 that controls
-                             ! the backward weighting of the time stepping scheme.
-  real    :: begw            ! A nondimensional number from 0 to 1 that controls
-                             ! the extent to which the treatment of gravity waves
-                             ! is forward-backward (0) or simulated backward
-                             ! Euler (1).  0 is almost always used.
-  logical :: debug           ! If true, write verbose checksums for debugging purposes.
+  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
 
-  logical :: module_is_initialized = .false.
-
+  !>@{ Diagnostic IDs
   integer :: id_uh = -1, id_vh = -1
   integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
+  !!@}
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output.
-  type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
-                                   ! accelerations in the momentum equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
-  type(cont_diag_ptrs), pointer :: CDp ! A structure with pointers to various
-                                   ! terms in the continuity equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(accel_diag_ptrs), pointer :: ADp => NULL() !< A structure pointing to the
+                                   !! accelerations in the momentum equations,
+                                   !! which can later be used to calculate
+                                   !! derived diagnostics like energy budgets.
+  type(cont_diag_ptrs), pointer :: CDp => NULL() !< A structure with pointers to
+                                   !! various terms in the continuity equations,
+                                   !! which can later be used to calculate
+                                   !! derived diagnostics like energy budgets.
 
-! The remainder of the structure is pointers to child subroutines' control strings.
+  ! The remainder of the structure points to child subroutines' control structures.
+  !> A pointer to the horizontal viscosity control structure
   type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
+  !> A pointer to the continuity control structure
   type(continuity_CS), pointer :: continuity_CSp => NULL()
+  !> A pointer to the CoriolisAdv control structure
   type(CoriolisAdv_CS), pointer :: CoriolisAdv_CSp => NULL()
+  !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  !> A pointer to the vertvisc control structure
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
+  !> A pointer to the set_visc control structure
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
-     ! condition type that specifies whether, where, and  what open boundary
-     ! conditions are used.  If no open BCs are used, this pointer stays
-     ! nullified.  Flather OBCs use open boundary_CS as well.
+  !> A pointer to the tidal forcing control structure
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
-  type(update_OBC_CS), pointer :: update_OBC_CSp => NULL()
-
-! This is a copy of the pointer in the top-level control structure.
+  !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
+
+  type(ocean_OBC_type), pointer :: OBC => NULL() !< A pointer to an open boundary
+     !! condition type that specifies whether, where, and what open boundary
+     !! conditions are used.  If no open BCs are used, this pointer stays
+     !! nullified.  Flather OBCs use open boundary_CS as well.
+  !> A pointer to the update_OBC control structure
+  type(update_OBC_CS), pointer :: update_OBC_CSp => NULL()
 
 end type MOM_dyn_unsplit_RK2_CS
 
@@ -160,30 +171,30 @@ end type MOM_dyn_unsplit_RK2_CS
 public step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 public initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 
+!>@{ CPU time clock IDs
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_horvisc, id_clock_continuity, id_clock_mom_update
 integer :: id_clock_pass, id_clock_pass_init
+!!@}
 
 contains
 
 ! =============================================================================
 
+!> Step the MOM6 dynamics using an unsplit quasi-2nd order Runge-Kutta scheme
 subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, forces, &
-                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
+                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
                   VarMix, MEKE)
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
-  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
-                                                              !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                     intent(inout) :: u_in    !< The input and output zonal
-                                                              !! velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                     intent(inout) :: v_in    !< The input and output meridional
-                                                              !! velocity, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                     intent(inout) :: h_in    !< The input and output layer
-                                              !! thicknesses, in m or kg m-2, depending on
-                                              !! whether the Boussinesq approximation is made.
+  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid structure.
+  type(unit_scale_type),             intent(in)    :: US      !< A dimensional unit scaling type
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_in !< The input and output zonal
+                                                              !! velocity [m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_in !< The input and output meridional
+                                                              !! velocity [m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_in !< The input and output layer thicknesses,
+                                                              !! [H ~> m or kg m-2], depending on whether
+                                                              !! the Boussinesq approximation is made.
   type(thermo_var_ptrs),             intent(in)    :: tv      !< A structure pointing to various
                                                               !! thermodynamic variables.
   type(vertvisc_type),               intent(inout) :: visc    !< A structure containing vertical
@@ -191,31 +202,26 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! viscosities, and related fields.
   type(time_type),                   intent(in)    :: Time_local   !< The model time at the end of
                                                               !! the time step.
-  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step,
-                                                              !! in s.
+  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step [s].
   type(mech_forcing),                intent(in)    :: forces  !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< A pointer (perhaps NULL) to
-                                                            !! the surface pressure at the beginning
-                                                            !! of this dynamic step, in Pa.
+                                                              !! the surface pressure at the beginning
+                                                              !! of this dynamic step [Pa].
   real, dimension(:,:),              pointer       :: p_surf_end   !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the end of
-                                                              !! this dynamic step, in Pa.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                     intent(inout) :: uh      !< The zonal volume or mass transport,
-                                                              !! in m3 s-1 or kg s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                     intent(inout) :: vh      !< The meridional volume or mass
-                                                              !! transport, in m3 s-1 or kg s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                     intent(inout) :: uhtr    !< The accumulated zonal volume or
+                                                              !! this dynamic step [Pa].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
+                                                              !! [H m2 s-1 ~> m3 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh  !< The meridional volume or mass
+                                                              !! transport [H m2 s-1 ~> m3 or kg s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or
                                                               !! mass transport since the last
-                                                              !! tracer advection, in m3 or kg.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                     intent(inout) :: vhtr    !< The accumulated meridional volume
+                                                              !! tracer advection [H m2 ~> m3 or kg].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume
                                                               !! or mass transport since the last
-                                                              !! tracer advection, in m3 or kg.
+                                                              !! tracer advection [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av  !< The time-mean free surface height
-                                                              !! or column mass, in m or kg m-2.
+                                                              !! or column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_RK2_CS),      pointer       :: CS      !< The control structure set up by
                                                               !! initialize_dyn_unsplit_RK2.
   type(VarMix_CS),                   pointer       :: VarMix  !< A pointer to a structure with
@@ -224,41 +230,12 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   type(MEKE_type),                   pointer       :: MEKE    !< A pointer to a structure containing
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.
-! Arguments: u_in - The input and output zonal velocity, in m s-1.
-!  (inout)   v_in - The input and output meridional velocity, in m s-1.
-!  (inout)   h_in - The input and output layer thicknesses, in m or kg m-2,
-!                depending on whether the Boussinesq approximation is made.
-!  (in)      tv - a structure pointing to various thermodynamic variables.
-!  (inout)   visc - A structure containing vertical viscosities, bottom drag
-!                   viscosities, and related fields.
-!  (in)      Time_local - The model time at the end of the time step.
-!  (in)      dt - The time step in s.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      p_surf_begin - A pointer (perhaps NULL) to the surface pressure
-!                     at the beginning of this dynamic step, in Pa.
-!  (in)      p_surf_end - A pointer (perhaps NULL) to the surface pressure
-!                     at the end of this dynamic step, in Pa.
-!  (inout)   uh - The zonal volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   uhtr - The accumulated zonal volume or mass transport since the last
-!                   tracer advection, in m3 or kg.
-!  (inout)   vhtr - The accumulated meridional volume or mass transport since the last
-!                   tracer advection, in m3 or kg.
-!  (out)     eta_av - The time-mean free surface height or column mass, in m or
-!                     kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure set up by initialize_dyn_unsplit_RK2.
-!  (in)      VarMix - A pointer to a structure with fields that specify the
-!                     spatially variable viscosities.
-!  (inout)   MEKE - A pointer to a structure containing fields related to
-!                   the Mesoscale Eddy Kinetic Energy.
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp
-  real, dimension(:,:), pointer :: p_surf
+  real, dimension(:,:), pointer :: p_surf => NULL()
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping.
   logical :: dyn_p_surf
@@ -326,14 +303,14 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.5*p_surf_begin(i,j) + 0.5*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, &
+  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, US, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
   call pass_vector(CS%PFu, CS%PFv, G%Domain, clock=id_clock_pass)
   call pass_vector(CS%CAu, CS%CAv, G%Domain, clock=id_clock_pass)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h_in, CS%update_OBC_CSp, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, US, tv, h_in, CS%update_OBC_CSp, Time_local)
   endif; endif
   if (associated(CS%OBC)) then
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
@@ -360,13 +337,13 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_pred, G, GV, &
+  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_pred, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp)
+                G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
 
@@ -416,14 +393,14 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up[n] <- up* + dt d/dz visc d/dz up
 ! u[n] <- u*[n] + dt d/dz visc d/dz u[n]
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
-  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, &
+                G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u_in, v_in, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
-                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+                G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
   call pass_vector(u_in, v_in, G%Domain, clock=id_clock_pass)
@@ -454,7 +431,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   endif
 
   if (GV%Boussinesq) then
-    do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%bathyT(i,j) ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; eta_av(i,j) = -GV%Z_to_H*G%bathyT(i,j) ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie ; eta_av(i,j) = 0.0 ; enddo ; enddo
   endif
@@ -479,6 +456,11 @@ end subroutine step_MOM_dyn_unsplit_RK2
 
 ! =============================================================================
 
+!> Allocate the control structure for this module, allocates memory in it, and registers
+!! any auxiliary restart variables that are specific to the unsplit RK2 time stepping scheme.
+!!
+!! All variables registered here should have the ability to be recreated if they are not present
+!! in a restart file.
 subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),         intent(in)    :: HI         !< A horizontal index type structure.
   type(verticalGrid_type),      intent(in)    :: GV         !< The ocean's vertical grid structure.
@@ -492,13 +474,7 @@ subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
 ! to the unsplit time stepping scheme.  All variables registered here should
 ! have the ability to be recreated if they are not present in a restart file.
 
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
-!  (inout)   restart_CS - A pointer to the restart control structure.
-
+  ! Local variables
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -526,18 +502,17 @@ subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
 
 end subroutine register_restarts_dyn_unsplit_RK2
 
-subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS, &
+!> Initialize parameters and allocate memory associated with the unsplit RK2 dynamics module.
+subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                                       restart_CS, Accel_diag, Cont_diag, MIS, &
                                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                                       visc, dirs, ntrunc)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
-                                                                   !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity,
-                                                                   !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity [m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity [m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(time_type),                   target, intent(in)    :: Time !< The current model time.
   type(param_file_type),                     intent(in)    :: param_file !< A structure to parse
                                                                          !! for run-time parameters.
@@ -550,7 +525,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   type(accel_diag_ptrs),             target, intent(inout) :: Accel_diag !< A set of pointers to the
                                       !! various accelerations in the momentum equations, which can
                                       !! be used for later derived diagnostics, like energy budgets.
-  type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag  !<A structure with pointers
+  type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag  !< A structure with pointers
                                                                          !! to various terms in the
                                                                          !! continuity equations.
   type(ocean_internal_state),                intent(inout) :: MIS  !< The "MOM6 Internal State"
@@ -575,39 +550,11 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   integer, target,                           intent(inout) :: ntrunc !< A target for the variable
                                                        !! that records the number of times the
                                                        !! velocity is truncated (this should be 0).
-! Arguments: u - The zonal velocity, in m s-1.
-!  (inout)   v - The meridional velocity, in m s-1.
-!  (inout)   h - The layer thicknesses, in m or kg m-2, depending on whether
-!                the Boussinesq approximation is made.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
-!  (in)      restart_CS - A pointer to the restart control structure.
-!  (inout)   Accel_diag - A set of pointers to the various accelerations in
-!                  the momentum equations, which can be used for later derived
-!                  diagnostics, like energy budgets.
-!  (inout)   Cont_diag - A structure with pointers to various terms in the
-!                   continuity equations.
-!  (inout)   MIS - The "MOM6 Internal State" structure, used to pass around
-!                  pointers to various arrays for diagnostic purposes.
-!  (in)      OBC - If open boundary conditions are used, this points to the
-!                  ocean_OBC_type that was set up in MOM_initialization.
-!  (in)      update_OBC_CSp - If open boundary condition updates are used,
-!                  this points to the appropriate control structure.
-!  (in)      ALE_CS - This points to the ALE control structure.
-!  (in)      setVisc_CSp - This points to the set_visc control structure.
-!  (inout)   visc - A structure containing vertical viscosities, bottom drag
-!                   viscosities, and related fields.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in)      ntrunc - A target for the variable that records the number of times
-!                     the velocity is truncated (this should be 0).
 
   !   This subroutine initializes all of the variables that are used by this
   ! dynamic core, including diagnostics and the cpu clocks.
+
+  ! Local varaibles
   character(len=40) :: mdl = "MOM_dynamics_unsplit_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   real :: H_convert
@@ -664,10 +611,10 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   call continuity_init(Time, G, GV, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
-  call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &
+  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, GV, param_file, diag, CS%ADp, dirs, &
+  call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_unsplit_RK2 called with setVisc_CSp unassociated.")
@@ -704,9 +651,10 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
 
 end subroutine initialize_dyn_unsplit_RK2
 
+!> Clean up and deallocate memory associated with the dyn_unsplit_RK2 module.
 subroutine end_dyn_unsplit_RK2(CS)
-  type(MOM_dyn_unsplit_RK2_CS), pointer :: CS
-!  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
+  type(MOM_dyn_unsplit_RK2_CS), pointer :: CS !< dyn_unsplit_RK2 control structure that
+                                              !! will be deallocated in this subroutine.
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)

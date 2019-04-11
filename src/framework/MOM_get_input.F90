@@ -38,7 +38,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   character(len=*),      optional, intent(in)  :: default_input_filename !< If present, is the value assumed for
                                                                !! input_filename if input_filename is not listed
                                                                !! in the namelist MOM_input_nml.
-  integer, intent(in), optional :: ensemble_num !< The ensemble id of the current member
+  integer, optional, intent(in) :: ensemble_num !< The ensemble id of the current member
   ! Local variables
   integer, parameter :: npf = 5 ! Maximum number of parameter files
   character(len=240) :: &

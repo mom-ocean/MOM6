@@ -1,30 +1,13 @@
+!> Debug accelerations at a given point
+!!
+!!    The two subroutines in this file write out all of the terms
+!! in the u- or v-momentum balance at a given point.  Usually
+!! these subroutines are called after the velocities exceed some
+!! threshold, in order to determine which term is culpable.
+!! often this is done for debugging purposes.
 module MOM_PointAccel
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!***********************************************************************
-!*                                                                     *
-!*     The two subroutines in this file write out all of the terms     *
-!*  in the u- or v-momentum balance at a given point.  Usually         *
-!*  these subroutines are called after the velocities exceed some      *
-!*  threshold, in order to determine which term is culpable.           *
-!*  often this is done for debugging purposes.                         *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h  *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, vbt, vhtr        *
-!*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, ubt, uhtr        *
-!*    j    > o > o >   At o:  h, bathyT, tr, T, S                      *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains, only : pe_here
@@ -35,6 +18,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : open_file
 use MOM_io, only : APPEND_FILE, ASCII_FILE, MULTIPLE, SINGLE_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_date, operator(-)
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : ocean_internal_state, accel_diag_ptrs, cont_diag_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -44,32 +28,36 @@ implicit none ; private
 
 public write_u_accel, write_v_accel, PointAccel_init
 
+!> The control structure for the MOM_PointAccel module
 type, public :: PointAccel_CS ; private
-  character(len=200) :: u_trunc_file ! The complete path to files in which a
-  character(len=200) :: v_trunc_file ! column's worth of accelerations are
-                                     ! written if velocity truncations occur.
-  integer :: u_file, v_file ! The unit numbers for opened u- or v- truncation
-                            ! files, or -1 if they have not yet been opened.
-  integer :: cols_written   ! The number of columns whose output has been
-                            ! written by this PE during the current run.
-  integer :: max_writes     ! The maximum number of times any PE can write out
-                            ! a column's worth of accelerations during a run.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A pointer to a structure of shareable
-                            ! ocean diagnostic fields.
+  character(len=200) :: u_trunc_file !< The complete path to the file in which a column's worth of
+                                     !! u-accelerations are written if u-velocity truncations occur.
+  character(len=200) :: v_trunc_file !< The complete path to the file in which a column's worth of
+                                     !! v-accelerations are written if v-velocity truncations occur.
+  integer :: u_file         !< The unit number for an opened u-truncation files, or -1 if it has not yet been opened.
+  integer :: v_file         !< The unit number for an opened v-truncation files, or -1 if it has not yet been opened.
+  integer :: cols_written   !< The number of columns whose output has been
+                            !! written by this PE during the current run.
+  integer :: max_writes     !< The maximum number of times any PE can write out
+                            !! a column's worth of accelerations during a run.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
 ! The following are pointers to many of the state variables and accelerations
 ! that are used to step the physical model forward.  They all use the same
 ! names as the variables they point to in MOM.F90
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), v_av => NULL(), & ! Time average velocities in m s-1.
-    u_prev => NULL(), v_prev => NULL(), & ! Previous velocities in m s-1.
-    T => NULL(), S => NULL(), &     ! Temperature and salinity in C and psu.
-    pbce => NULL(), &               ! pbce times eta gives the baroclinic
-                                    ! pressure anomaly in each layer due to
-                                    ! free surface height anomalies.
-                                    ! pbce has units of m s-2.
-    u_accel_bt => NULL(), &         ! Barotropic acclerations in m s-2.
-    v_accel_bt => NULL()
+    u_av => NULL(), &       !< Time average u-velocity [m s-1].
+    v_av => NULL(), &       !< Time average velocity [m s-1].
+    u_prev => NULL(), &     !< Previous u-velocity [m s-1].
+    v_prev => NULL(), &     !< Previous v-velocity [m s-1].
+    T => NULL(), &          !< Temperature [degC].
+    S => NULL(), &          !< Salinity [ppt].
+    u_accel_bt => NULL(), & !< Barotropic u-acclerations [m s-2]
+    v_accel_bt => NULL()    !< Barotropic v-acclerations [m s-2]
+  real, pointer, dimension(:,:,:) :: pbce => NULL() !< pbce times eta gives the baroclinic
+                            !! pressure anomaly in each layer due to free surface height anomalies
+                            !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2].
 
 end type PointAccel_CS
 
@@ -78,62 +66,38 @@ contains
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of zonal velocities over the
 !! previous timestep.  This subroutine is called from vertvisc.
-subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
-                         maxvel, minvel, str, a, hv)
+subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: I   !< The zonal index of the column to be documented.
-  integer,                     intent(in) :: j   !< The meridional index of the column to be
-                                                 !! documented.
+  integer,                     intent(in) :: j   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),       intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                               intent(in) :: um  !< The new zonal velocity, in m s-1.
+                               intent(in) :: um  !< The new zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                               intent(in) :: hin !< The layer thickness, in m.
+                               intent(in) :: hin !< The layer thickness [H ~> m or kg m-2].
   type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !<  A structure with pointers to various terms
                                                  !! in the continuity equations.
-  real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
+  real,                        intent(in) :: dt  !< The ocean dynamics time step [s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: maxvel, minvel
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [m s-1].
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
-                                                 !! step, in m2 s-1.
-  real, dimension(SZIB_(G),SZK_(G)),         &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from
-                                                 !! vertvisc, m.
-  real, dimension(SZIB_(G),SZK_(G)),         &
+                                                 !! step divided by the Boussinesq density [m2 s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
-                                                 !! from vertvisc, in m.
-
-! This subroutine writes to an output file all of the accelerations
-! that have been applied to a column of zonal velocities over the
-! previous timestep.  This subroutine is called from vertvisc.
-
-! Arguments: I - The zonal index of the column to be documented.
-!  (in)      j - The meridional index of the column to be documented.
-!  (in)      um - The new zonal velocity, in m s-1.
-!  (in)      hin - The layer thickness, in m.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - The model's dynamics time step.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PointAccel_init.
-!  (in)      str - The surface wind stress integrated over a time
-!                  step, in m2 s-1.
-!  (in)      a - The layer coupling coefficients from vertvisc, m.
-!  (in)      hv - The layer thicknesses at velocity grid points, from
-!                 vertvisc, in m.
-
+                                                 !! from vertvisc [H ~> m or kg m-2].
+  ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, du
   real    :: Inorm(SZK_(G))
   real    :: e(SZK_(G)+1)
+  real    :: h_scale, uh_scale
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
@@ -141,7 +105,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
   logical :: prev_avail
   integer :: file
 
-  Angstrom = GV%Angstrom + GV%H_subroundoff
+  Angstrom = GV%Angstrom_H + GV%H_subroundoff
+  h_scale = GV%H_to_m ; uh_scale = GV%H_to_m
 
 !  if (.not.associated(CS)) return
   nz = G%ke
@@ -167,14 +132,14 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
 
   ! Determine which layers to write out accelerations for.
     do k=1,nz
-      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= maxvel) .or. &
-           (min(CS%u_av(I,j,k),um(I,j,k)) <= minvel)) .and. &
+      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k),um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
-      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= maxvel) .or. &
-           (min(CS%u_av(I,j,k), um(I,j,k)) <= minvel)) .and. &
+      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k), um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
@@ -254,11 +219,11 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k)*US%Z_to_m*dt; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,j,k); enddo
     endif
     write(file,'(/,"Stress:  ",ES10.3)') str
 
@@ -270,27 +235,27 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
     endif
 
     write(file,'(/,"h--:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i,j-1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j-1,k)); enddo
     write(file,'(/,"h+-:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i+1,j-1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j-1,k)); enddo
     write(file,'(/,"h-0:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j,k)); enddo
     write(file,'(/,"h+0:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i+1,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j,k)); enddo
     write(file,'(/,"h-+:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i,j+1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j+1,k)); enddo
     write(file,'(/,"h++:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (hin(i+1,j+1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j+1,k)); enddo
 
 
-    e(nz+1) = -G%bathyT(i,j)
-    do k=nz,1,-1 ; e(K) = e(K+1) + hin(i,j,k) ; enddo
+    e(nz+1) = -US%Z_to_m*G%bathyT(i,j)
+    do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k) ; enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -G%bathyT(i+1,j)
-    do k=nz,1,-1 ; e(K) = e(K+1) + hin(i+1,j,k) ; enddo
+    e(nz+1) = -US%Z_to_m*G%bathyT(i+1,j)
+    do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i+1,j,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K) ; enddo
@@ -320,53 +285,53 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
 
     write(file,'(/,"vh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CDp%vh(i,J-1,k)*G%IdxCv(i,J-1)); enddo
+                                    (uh_scale*CDp%vh(i,J-1,k)*G%IdxCv(i,J-1)); enddo
     write(file,'(/," vhC--:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                        (0.5*CS%v_av(i,j-1,k)*(hin(i,j-1,k) + hin(i,j,k))); enddo
+                        (0.5*CS%v_av(i,j-1,k)*h_scale*(hin(i,j-1,k) + hin(i,j,k))); enddo
     if (prev_avail) then
       write(file,'(/," vhCp--:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (0.5*CS%v_prev(i,j-1,k)*(hin(i,j-1,k) + hin(i,j,k))); enddo
+                          (0.5*CS%v_prev(i,j-1,k)*h_scale*(hin(i,j-1,k) + hin(i,j,k))); enddo
     endif
 
     write(file,'(/,"vh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CDp%vh(i,J,k)*G%IdxCv(i,J)); enddo
+                                    (uh_scale*CDp%vh(i,J,k)*G%IdxCv(i,J)); enddo
     write(file,'(/," vhC-+:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                        (0.5*CS%v_av(i,J,k)*(hin(i,j,k) + hin(i,j+1,k))); enddo
+                        (0.5*CS%v_av(i,J,k)*h_scale*(hin(i,j,k) + hin(i,j+1,k))); enddo
     if (prev_avail) then
       write(file,'(/," vhCp-+:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (0.5*CS%v_prev(i,J,k)*(hin(i,j,k) + hin(i,j+1,k))); enddo
+                          (0.5*CS%v_prev(i,J,k)*h_scale*(hin(i,j,k) + hin(i,j+1,k))); enddo
     endif
 
     write(file,'(/,"vh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (CDp%vh(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
+                                      (uh_scale*CDp%vh(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
     write(file,'(/," vhC+-:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                    (0.5*CS%v_av(i+1,J-1,k)*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
+                    (0.5*CS%v_av(i+1,J-1,k)*h_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
     if (prev_avail) then
       write(file,'(/," vhCp+-:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                      (0.5*CS%v_prev(i+1,J-1,k)*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
+                      (0.5*CS%v_prev(i+1,J-1,k)*h_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
     endif
 
     write(file,'(/,"vh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (CDp%vh(i+1,J,k)*G%IdxCv(i+1,J)); enddo
+                          (uh_scale*CDp%vh(i+1,J,k)*G%IdxCv(i+1,J)); enddo
     write(file,'(/," vhC++:",$)')
          do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                     (0.5*CS%v_av(i+1,J,k)*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
+                     (0.5*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
     if (prev_avail) then
       write(file,'(/," vhCp++:",$)')
            do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                       (0.5*CS%v_av(i+1,J,k)*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
+                       (0.5*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') G%bathyT(i,j),G%bathyT(i+1,j)
+    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*G%bathyT(i,j),US%Z_to_m*G%bathyT(i+1,j)
 
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
@@ -432,62 +397,38 @@ end subroutine write_u_accel
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of meridional velocities over
 !! the previous timestep.  This subroutine is called from vertvisc.
-subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
-                         maxvel, minvel, str, a, hv)
+subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: i   !< The zonal index of the column to be documented.
-  integer,                     intent(in) :: J   !< The meridional index of the column to be
-                                                 !! documented.
+  integer,                     intent(in) :: J   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),       intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                               intent(in) :: vm  !< The new meridional velocity, in m s-1.
+                               intent(in) :: vm  !< The new meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                               intent(in) :: hin !< The layer thickness, in m.
+                               intent(in) :: hin !< The layer thickness [H ~> m or kg m-2].
   type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !< A structure with pointers to various terms in
                                                  !! the continuity equations.
-  real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
+  real,                        intent(in) :: dt  !< The ocean dynamics time step [s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: maxvel, minvel
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [m s-1].
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
-                                                 !! step, in m2 s-1.
-  real, dimension(SZI_(G),SZK_(G)),          &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from
-                                                 !! vertvisc, m.
-  real, dimension(SZI_(G),SZK_(G)),          &
+                                                 !! step divided by the Boussinesq density [m2 s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
-                                                 !! from vertvisc, in m.
-
-! This subroutine writes to an output file all of the accelerations
-! that have been applied to a column of meridional velocities over
-! the previous timestep.  This subroutine is called from vertvisc.
-
-! Arguments: i - The zonal index of the column to be documented.
-!  (in)      J - The meridional index of the column to be documented.
-!  (in)      vm - The new meridional velocity, in m s-1.
-!  (in)      hin - The layer thickness, in m.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      dt - The model's dynamics time step.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PointAccel_init.
-!  (in)      str - The surface wind stress integrated over a time
-!                  step, in m2 s-1.
-!  (in)      a - The layer coupling coefficients from vertvisc, m.
-!  (in)      hv - The layer thicknesses at velocity grid points, from
-!                 vertvisc, in m.
-
+                                                 !! from vertvisc [H ~> m or kg m-2].
+  ! Local variables
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, dv
   real    :: Inorm(SZK_(G))
   real    :: e(SZK_(G)+1)
+  real    :: h_scale, uh_scale
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
@@ -495,7 +436,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
   logical :: prev_avail
   integer :: file
 
-  Angstrom = GV%Angstrom + GV%H_subroundoff
+  Angstrom = GV%Angstrom_H + GV%H_subroundoff
+  h_scale = GV%H_to_m ; uh_scale = GV%H_to_m
 
 !  if (.not.associated(CS)) return
   nz = G%ke
@@ -520,14 +462,14 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     prev_avail = (associated(CS%u_prev) .and. associated(CS%v_prev))
 
     do k=1,nz
-      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
-           (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
+      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= vel_rpt) .or. &
+           (min(CS%v_av(i,J,k), vm(i,J,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
-      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
-           (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
+      if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= vel_rpt) .or. &
+           (min(CS%v_av(i,J,k), vm(i,J,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
@@ -612,11 +554,11 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,k); enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k)*US%Z_to_m*dt; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,J,k); enddo
     endif
     write(file,'(/,"Stress:  ",ES10.3)') str
 
@@ -628,26 +570,26 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
     endif
 
     write(file,'("h--:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i-1,j,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i-1,j,k); enddo
     write(file,'(/,"h0-:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i,j,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i,j,k); enddo
     write(file,'(/,"h+-:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i+1,j,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j,k); enddo
     write(file,'(/,"h-+:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i-1,j+1,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i-1,j+1,k); enddo
     write(file,'(/,"h0+:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i,j+1,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i,j+1,k); enddo
     write(file,'(/,"h++:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hin(i+1,j+1,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j+1,k); enddo
 
-    e(nz+1) = -G%bathyT(i,j)
-    do k=nz,1,-1 ; e(K) = e(K+1) + hin(i,j,k); enddo
+    e(nz+1) = -US%Z_to_m*G%bathyT(i,j)
+    do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k); enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -G%bathyT(i,j+1)
-    do k=nz,1,-1 ; e(K) = e(K+1) + hin(i,j+1,k) ; enddo
+    e(nz+1) = -US%Z_to_m*G%bathyT(i,j+1)
+    do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j+1,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
@@ -677,53 +619,53 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
 
     write(file,'(/,"uh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CDp%uh(I-1,j,k)*G%IdyCu(I-1,j)); enddo
+                                    (uh_scale*CDp%uh(I-1,j,k)*G%IdyCu(I-1,j)); enddo
     write(file,'(/," uhC--: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_av(I-1,j,k) * 0.5*(hin(i-1,j,k) + hin(i,j,k))); enddo
+            (CS%u_av(I-1,j,k) * h_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))); enddo
     if (prev_avail) then
       write(file,'(/," uhCp--:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (0.5*CS%u_prev(I-1,j,k)*(hin(i-1,j,k) + hin(i,j,k))); enddo
+            (CS%u_prev(I-1,j,k) * h_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))); enddo
     endif
 
     write(file,'(/,"uh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CDp%uh(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
+                                    (uh_scale*CDp%uh(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
     write(file,'(/," uhC-+: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_av(I-1,j+1,k) * 0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
+            (CS%u_av(I-1,j+1,k) * h_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
     if (prev_avail) then
       write(file,'(/," uhCp-+:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                    (0.5*CS%u_prev(I-1,j+1,k)*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
+            (CS%u_prev(I-1,j+1,k) * h_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
     endif
 
     write(file,'(/,"uh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CDp%uh(I,j,k)*G%IdyCu(I,j)); enddo
+                                    (uh_scale*CDp%uh(I,j,k)*G%IdyCu(I,j)); enddo
     write(file,'(/," uhC+-: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_av(I,j,k) * 0.5*(hin(i,j,k) + hin(i+1,j,k))); enddo
+            (CS%u_av(I,j,k) * h_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))); enddo
     if (prev_avail) then
       write(file,'(/," uhCp+-:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                            (0.5*CS%u_prev(I,j,k)*(hin(i,j,k) + hin(i+1,j,k))); enddo
+            (CS%u_prev(I,j,k) * h_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))); enddo
     endif
 
     write(file,'(/,"uh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (CDp%uh(I,j+1,k)*G%IdyCu(I,j+1)); enddo
+                                    (uh_scale*CDp%uh(I,j+1,k)*G%IdyCu(I,j+1)); enddo
     write(file,'(/," uhC++: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_av(I,j+1,k) * 0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
+            (CS%u_av(I,j+1,k) * 0.5*h_scale*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
     if (prev_avail) then
       write(file,'(/," uhCp++:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                      (0.5*CS%u_prev(I,j+1,k)*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
+            (CS%u_prev(I,j+1,k) * h_scale*0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') G%bathyT(i,j),G%bathyT(i,j+1)
+    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*G%bathyT(i,j),US%Z_to_m*G%bathyT(i,j+1)
 
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
@@ -782,7 +724,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
 
 end subroutine write_v_accel
 
-! #@# This subroutine needs a doxygen description
+!> This subroutine initializes the parameters regulating how truncations are logged.
 subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   type(ocean_internal_state), &
                         target, intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers
@@ -798,17 +740,6 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
                                                       !! directory paths.
   type(PointAccel_CS),          pointer       :: CS   !< A pointer that is set to point to the
                                                       !! control structure for this module.
-
-! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
-!                  accelerations that make up the ocean's physical state.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PointAccel" ! This module's name.
@@ -851,4 +782,5 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   CS%u_file = -1 ; CS%v_file = -1 ; CS%cols_written = 0
 
 end subroutine PointAccel_init
+
 end module MOM_PointAccel

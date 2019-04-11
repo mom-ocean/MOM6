@@ -28,18 +28,20 @@ public tracer_advect_end
 
 !> Control structure for this module
 type, public :: tracer_advect_CS ; private
-  real    :: dt                    !< The baroclinic dynamics time step, in s.
+  real    :: dt                    !< The baroclinic dynamics time step [s].
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !< timing of diagnostic output.
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
   logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
-  type(group_pass_type) :: pass_uhr_vhr_t_hprev ! For group pass
+  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structred used for group passes
 end type tracer_advect_CS
 
+!>@{ CPU time clocks
 integer :: id_clock_advect
 integer :: id_clock_pass
 integer :: id_clock_sync
+!!@}
 
 contains
 
@@ -47,35 +49,45 @@ contains
 !! monotonic, conservative, weakly diffusive scheme.
 subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
       h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
-  type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg)
-  type(ocean_OBC_type),                      pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                                      intent(in)    :: dt    !< time increment (seconds)
-  type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module
-  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_prev_opt !< layer thickness before advection (m or kg m-2)
-  integer,                                   optional      :: max_iter_in
-  logical,                                   optional      :: x_first_in
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face (m3 or kg)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_out !< layer thickness before advection (m or kg m-2)
+  type(ocean_grid_type),   intent(inout) :: G     !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h_end !< layer thickness after advection [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face [H m2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face [H m2 ~> m3 or kg]
+  type(ocean_OBC_type),    pointer       :: OBC   !< specifies whether, where, and what OBCs are used
+  real,                    intent(in)    :: dt    !< time increment [s]
+  type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
+  type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                 optional, intent(in)    :: h_prev_opt !< layer thickness before advection [H ~> m or kg m-2]
+  integer,       optional, intent(in)    :: max_iter_in !< The maximum number of iterations
+  logical,       optional, intent(in)    :: x_first_in !< If present, indicate whether to update
+                                                  !! first in the x- or y-direction.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                 optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face
+                                                  !! [H m2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                 optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face
+                                                  !! [H m2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                 optional, intent(out)    :: h_out !< layer thickness before advection [H ~> m or kg m-2]
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    hprev           ! cell volume at the end of previous tracer change (m3)
+    hprev           ! cell volume at the end of previous tracer change [H m2 ~> m3 or kg]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
-    uhr             ! The remaining zonal thickness flux (m3)
+    uhr             ! The remaining zonal thickness flux [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
-    vhr             ! The remaining meridional thickness fluxes (m3)
+    vhr             ! The remaining meridional thickness fluxes [H m2 ~> m3 or kg]
   real :: uh_neglect(SZIB_(G),SZJ_(G)) ! uh_neglect and vh_neglect are the
   real :: vh_neglect(SZI_(G),SZJB_(G)) ! magnitude of remaining transports that
-                                       ! can be simply discarded (m3 or kg).
+                                       ! can be simply discarded [H m2 ~> m3 or kg].
 
-  real :: landvolfill                   ! An arbitrary? nonzero cell volume, m3.
-  real :: Idt                           ! 1/dt in s-1.
+  real :: landvolfill                   ! An arbitrary? nonzero cell volume [H m2 ~> m3 or kg].
+  real :: Idt                           ! 1/dt [s-1].
   logical :: domore_u(SZJ_(G),SZK_(G))  ! domore__ indicate whether there is more
   logical :: domore_v(SZJB_(G),SZK_(G)) ! advection to be done in the corresponding
                                         ! row or column.
@@ -113,8 +125,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
-  if(present(max_iter_in)) max_iter = max_iter_in
-  if(present(x_first_in))  x_first = x_first_in
+  if (present(max_iter_in)) max_iter = max_iter_in
+  if (present(x_first_in))  x_first = x_first_in
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
@@ -154,7 +166,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
         enddo ; enddo
     else
       do i=is,ie ; do j=js,je
-        hprev(i,j,k) = h_prev_opt(i,j,k);
+        hprev(i,j,k) = h_prev_opt(i,j,k)
       enddo ; enddo
     endif
   enddo
@@ -301,9 +313,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
   enddo ! Iterations loop
 
-  if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
-  if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
-  if(present(h_out)) h_out(:,:,:) = hprev(:,:,:)
+  if (present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
+  if (present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
+  if (present(h_out)) h_out(:,:,:) = hprev(:,:,:)
 
   call cpu_clock_end(id_clock_advect)
 
@@ -316,37 +328,47 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev !< cell volume at the end of previous
+                                                                  !! tracer change [H m2 ~> m3 or kg]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr !< accumulated volume/mass flux through
-                                                                  !!the zonal face (m3 or kg)
-   real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect
-  type(ocean_OBC_type),                      pointer       :: OBC
-  logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u
-  real,                                      intent(in)    :: Idt
-  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
-  logical,                                   intent(in)    :: usePPM, useHuynh
+                                                                  !! the zonal face [H m2 ~> m3 or kg]
+   real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect !< A tiny zonal mass flux that can
+                                                                  !! be neglected [H m2 ~> m3 or kg]
+  type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
+  logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u !< If true, there is more advection to be
+                                                                  !! done in this u-row
+  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
+  integer,                                   intent(in)    :: ntr !< The number of tracers
+  integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
+  integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
+  integer,                                   intent(in)    :: js  !< The starting tracer j-index to work on
+  integer,                                   intent(in)    :: je  !< The ending tracer j-index to work on
+  integer,                                   intent(in)    :: k   !< The k-level to work on
+  logical,                                   intent(in)    :: usePPM !< If true, use PPM instead of PLM
+  logical,                                   intent(in)    :: useHuynh !< If true, use the Huynh scheme
+                                                                     !! for PPM interface values
 
   real, dimension(SZI_(G),ntr) :: &
-    slope_x             ! The concentration slope per grid point in units of
-                        ! concentration (nondim.).
+    slope_x             ! The concentration slope per grid point [conc].
   real, dimension(SZIB_(G),ntr) :: &
-    flux_x              ! The tracer flux across a boundary in m3*conc or kg*conc.
+    flux_x              ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
   real :: maxslope      ! The maximum concentration slope per grid point
-                        ! consistent with monotonicity, in conc. (nondim.).
+                        ! consistent with monotonicity [conc].
   real :: hup, hlos     ! hup is the upwind volume, hlos is the
                         ! part of that volume that might be lost
                         ! due to advection out the other side of
-                        ! the grid box, both in m3 or kg.
+                        ! the grid box, both in [H m2 ~> m3 or kg].
   real :: uhh(SZIB_(G)) ! The zonal flux that occurs during the
-                        ! current iteration, in m3 or kg.
+                        ! current iteration [H m2 ~> m3 or kg].
   real, dimension(SZIB_(G)) :: &
-    hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
-    CFL                 ! A nondimensional work variable.
+    hlst, &             ! Work variable [H m2 ~> m3 or kg].
+    Ihnew, &            ! Work variable [H-1 m-2 ~> m-3 or kg-1].
+    CFL                 ! A nondimensional work variable [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
-                        ! any of the passes, in m or kg m-2.
+                        ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
   integer :: i, j, m, n, i_up, stencil
@@ -362,7 +384,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   stencil = 1
   if (usePPM .and. .not. useHuynh) stencil = 2
 
-  min_h = 0.1*GV%Angstrom
+  min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
   dt=1.0/Idt
 
@@ -544,13 +566,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
             idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
             if (segment%direction == OBC_DIRECTION_W) then
-                ishift=1
-                idir=-1
+              ishift=1
+              idir=-1
             endif
             ! update the reservoir tracer concentration implicitly
             ! using Backward-Euler timestep
             do m=1,ntr
-             if (associated(segment%tr_Reg%Tr(m)%tres)) then
+              if (associated(segment%tr_Reg%Tr(m)%tres)) then
                 uhh(I)=uhr(I,j,k)
                 u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale3_in,0.)
                 u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale3_out,0.)
@@ -558,21 +580,18 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                      dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
                      u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
-!                if (j.eq.10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k.eq.1) &
-!                  print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k),&
-!                segment%tr_Reg%Tr(m)%t(I,j,k), fac1
               endif
             enddo
 
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
-                uhh(I) = uhr(I,j,k)
-                do m=1,ntr
-                  if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                    flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
-                  else; flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc; endif
-                enddo
+              uhh(I) = uhr(I,j,k)
+              do m=1,ntr
+                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                  flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
+                else; flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc; endif
+              enddo
             endif
           endif
         enddo
@@ -637,37 +656,47 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev !< cell volume at the end of previous
+                                                                  !! tracer change [H m2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr !< accumulated volume/mass flux through
-                                                                  !! the meridional face (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect
-  type(ocean_OBC_type),                      pointer       :: OBC
-  logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v
-  real,                                      intent(in)    :: Idt
-  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
-  logical,                                   intent(in)    :: usePPM, useHuynh
+                                                                  !! the meridional face [H m2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect !< A tiny meridional mass flux that can
+                                                                  !! be neglected [H m2 ~> m3 or kg]
+  type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
+  logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v !< If true, there is more advection to be
+                                                                  !! done in this v-row
+  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
+  integer,                                   intent(in)    :: ntr !< The number of tracers
+  integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
+  integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
+  integer,                                   intent(in)    :: js  !< The starting tracer j-index to work on
+  integer,                                   intent(in)    :: je  !< The ending tracer j-index to work on
+  integer,                                   intent(in)    :: k   !< The k-level to work on
+  logical,                                   intent(in)    :: usePPM !< If true, use PPM instead of PLM
+  logical,                                   intent(in)    :: useHuynh !< If true, use the Huynh scheme
+                                                                     !! for PPM interface values
 
   real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
-    slope_y                     ! The concentration slope per grid point in units of
-                                ! concentration (nondim.).
+    slope_y                     ! The concentration slope per grid point [conc].
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    flux_y                      ! The tracer flux across a boundary in m3 * conc or kg*conc.
+    flux_y                      ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
   real :: maxslope              ! The maximum concentration slope per grid point
-                                ! consistent with monotonicity, in conc. (nondim.).
+                                ! consistent with monotonicity [conc].
   real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
-                                ! current iteration, in m3 or kg.
+                                ! current iteration [H m2 ~> m3 or kg].
   real :: hup, hlos             ! hup is the upwind volume, hlos is the
                                 ! part of that volume that might be lost
                                 ! due to advection out the other side of
-                                ! the grid box, both in m3 or kg.
+                                ! the grid box, both in  [H m2 ~> m3 or kg].
   real, dimension(SZIB_(G)) :: &
-    hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
+    hlst, &             ! Work variable [H m2 ~> m3 or kg].
+    Ihnew, &            ! Work variable [H-1 m-2 ~> m-3 or kg-1].
     CFL                 ! A nondimensional work variable.
   real :: min_h         ! The minimum thickness that can be realized during
-                        ! any of the passes, in m or kg m-2.
+                        ! any of the passes [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
@@ -684,7 +713,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   stencil = 1
   if (usePPM .and. .not. useHuynh) stencil = 2
 
-  min_h = 0.1*GV%Angstrom
+  min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
   dt=1.0/Idt
   !do i=is,ie ; ts2(i) = 0.0 ; enddo
@@ -1021,7 +1050,7 @@ end subroutine tracer_advect_init
 
 !> Close the tracer advection module
 subroutine tracer_advect_end(CS)
-  type(tracer_advect_CS), pointer :: CS
+  type(tracer_advect_CS), pointer :: CS  !< module control structure
 
   if (associated(CS)) deallocate(CS)
 

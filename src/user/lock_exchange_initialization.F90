@@ -1,3 +1,5 @@
+!> Initialization of the "lock exchange" experiment.
+!! lock_exchange = A 2-d density driven hydraulic exchange flow.
 module lock_exchange_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -7,6 +9,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -20,22 +23,22 @@ contains
 
 !> This subroutine initializes layer thicknesses for the lock_exchange experiment.
 ! -----------------------------------------------------------------------------
-subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(GV))     ! The resting interface heights, in m, usually !
-                           ! negative because it is positive upward.      !
-  real :: e_pert(SZK_(GV)) ! Interface height perturbations, positive     !
-                           ! upward, in m.                                !
-  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
-                           ! positive upward, in m.                       !
+  real :: e0(SZK_(GV))     ! The resting interface heights [Z ~> m], usually
+                           ! negative because it is positive upward.
+  real :: e_pert(SZK_(GV)) ! Interface height perturbations, positive upward [Z ~> m].
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
+                           ! positive upward [Z ~> m].
   real :: front_displacement ! Vertical displacement acrodd front
   real :: thermocline_thickness ! Thickness of stratified region
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -55,12 +58,12 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
   call get_param(param_file, mdl, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
                  "A value larger in magnitude that MAX_DEPTH is truncated,", &
-                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read, scale=US%m_to_Z)
   call get_param(param_file, mdl, "THERMOCLINE_THICKNESS", thermocline_thickness, &
                  "The thickness of the thermocline in the lock exchange \n"//&
                  "experiment.  A value of zero creates a two layer system \n"//&
                  "with vanished layers in between the two inflated layers.", &
-                 default=0., units="m", do_not_log=just_read)
+                 default=0., units="m", do_not_log=just_read, scale=US%m_to_Z)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -69,9 +72,9 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
       eta1D(K) = -0.5 * G%max_depth & ! Middle of column
               - thermocline_thickness * ( (real(k-1))/real(nz) -0.5 ) ! Stratification
       if (G%geoLonT(i,j)-G%west_lon < 0.5 * G%len_lon) then
-        eta1D(K)=eta1D(K) + 0.5 * front_displacement
+        eta1D(K) = eta1D(K) + 0.5 * front_displacement
       elseif (G%geoLonT(i,j)-G%west_lon > 0.5 * G%len_lon) then
-        eta1D(K)=eta1D(K) - 0.5 * front_displacement
+        eta1D(K) = eta1D(K) - 0.5 * front_displacement
       endif
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
@@ -83,15 +86,11 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
       eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_Z )
     enddo
     do k=nz,1,-1
-      h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
     enddo
   enddo ; enddo
 
 end subroutine lock_exchange_initialize_thickness
 ! -----------------------------------------------------------------------------
 
-!> \namespace lock_exchange_initialization
-!!
-!! The module configures the model for the "lock_exchange" experiment.
-!! lock_exchange = A 2-d density driven hydraulic exchange flow.
 end module lock_exchange_initialization

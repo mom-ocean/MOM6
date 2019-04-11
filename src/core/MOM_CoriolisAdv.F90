@@ -70,11 +70,12 @@ type, public :: CoriolisAdv_CS ; private
                              !! SADOURNY75_ENERGY.
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
+  !>@{ Diagnostic IDs
   integer :: id_rv = -1, id_PV = -1, id_gKEu = -1, id_gKEv = -1
-  integer :: id_rvxu = -1, id_rvxv = -1
+  integer :: id_rvxu = -1, id_rvxv = -1   !!@}
 end type CoriolisAdv_CS
 
-! Enumeration values for Coriolis_Scheme
+!>@{ Enumeration values for Coriolis_Scheme
 integer, parameter :: SADOURNY75_ENERGY = 1
 integer, parameter :: ARAKAWA_HSU90     = 2
 integer, parameter :: ROBUST_ENSTRO     = 3
@@ -87,106 +88,108 @@ character*(20), parameter :: ROBUST_ENSTRO_STRING = "ROBUST_ENSTRO"
 character*(20), parameter :: SADOURNY75_ENSTRO_STRING = "SADOURNY75_ENSTRO"
 character*(20), parameter :: ARAKAWA_LAMB_STRING = "ARAKAWA_LAMB81"
 character*(20), parameter :: AL_BLEND_STRING = "ARAKAWA_LAMB_BLEND"
-! Enumeration values for KE_Scheme
+!!@}
+!>@{ Enumeration values for KE_Scheme
 integer, parameter :: KE_ARAKAWA        = 10
 integer, parameter :: KE_SIMPLE_GUDONOV = 11
 integer, parameter :: KE_GUDONOV        = 12
 character*(20), parameter :: KE_ARAKAWA_STRING = "KE_ARAKAWA"
 character*(20), parameter :: KE_SIMPLE_GUDONOV_STRING = "KE_SIMPLE_GUDONOV"
 character*(20), parameter :: KE_GUDONOV_STRING = "KE_GUDONOV"
-! Enumeration values for PV_Adv_Scheme
+!!@}
+!>@{ Enumeration values for PV_Adv_Scheme
 integer, parameter :: PV_ADV_CENTERED   = 21
 integer, parameter :: PV_ADV_UPWIND1    = 22
 character*(20), parameter :: PV_ADV_CENTERED_STRING = "PV_ADV_CENTERED"
 character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
+!!@}
 
 contains
 
 !> Calculates the Coriolis and momentum advection contributions to the acceleration.
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
-  type(ocean_grid_type),                     intent(in)    :: G !< Ocen grid structure
+  type(ocean_grid_type),                     intent(in)    :: G  !< Ocen grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u !< Zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v !< Meridional velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h !< Layer thickness (m or kg/m2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh !< Zonal transport u*h*dy (m3/s or kg/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh !< Meridional transport v*h*dx (m3/s or kg/s)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< Zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< Meridional velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh !< Zonal transport u*h*dy
+                                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh !< Meridional transport v*h*dx
+                                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu !< Zonal acceleration due to Coriolis
-                                                                  !! and momentum advection, in m/s2.
+                                                                  !! and momentum advection [m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
-                                                                  !! and momentum advection, in m/s2.
+                                                                  !! and momentum advection [m s-2].
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   type(accel_diag_ptrs),                     intent(inout) :: AD !< Storage for acceleration diagnostics
   type(CoriolisAdv_CS),                      pointer       :: CS !< Control structure for MOM_CoriolisAdv
-  ! Local variables
 
+  ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
-    q, &        ! Layer potential vorticity, in m-1 s-1.
-    Ih_q, &     ! The inverse of thickness interpolated to q pointes, in
-                ! units of m-1 or m2 kg-1.
-    Area_q      ! The sum of the ocean areas at the 4 adjacent thickness
-                ! points, in m2.
+    q, &        ! Layer potential vorticity [m-1 s-1].
+    Ih_q, &     ! The inverse of thickness interpolated to q points [H-1 ~> m-1 or m2 kg-1].
+    Area_q      ! The sum of the ocean areas at the 4 adjacent thickness points [m2].
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     a, b, c, d  ! a, b, c, & d are combinations of the potential vorticities
                 ! surrounding an h grid point.  At small scales, a = q/4,
-                ! b = q/4, etc.  All are in units of m-1 s-1 or m2 kg-1 s-1,
+                ! b = q/4, etc.  All are in [H-1 s-1 ~> m-1 s-1 or m2 kg-1 s-1],
                 ! and use the indexing of the corresponding u point.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Area_h, &   ! The ocean area at h points, in m2.  Area_h is used to find the
+    Area_h, &   ! The ocean area at h points [m2].  Area_h is used to find the
                 ! average thickness in the denominator of q.  0 for land points.
-    KE          ! Kinetic energy per unit mass, KE = (u^2 + v^2)/2, in m2 s-2.
+    KE          ! Kinetic energy per unit mass [m2 s-2], KE = (u^2 + v^2)/2.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     hArea_u, &  ! The cell area weighted thickness interpolated to u points
-                ! times the effective areas, in H m2.
-    KEx, &      ! The zonal gradient of Kinetic energy per unit mass,
-                ! KEx = d/dx KE, in m s-2.
-    uh_center   ! centered u times h at u-points
+                ! times the effective areas [H m2 ~> m3 or kg].
+    KEx, &      ! The zonal gradient of Kinetic energy per unit mass [m s-2],
+                ! KEx = d/dx KE.
+    uh_center   ! Transport based on arithmetic mean h at u-points [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
     hArea_v, &  ! The cell area weighted thickness interpolated to v points
-                ! times the effective areas, in H m2.
-    KEy, &      ! The meridonal gradient of Kinetic energy per unit mass,
-                ! KEy = d/dy KE, in m s-2.
-    vh_center   ! centered v times h at v-points
+                ! times the effective areas [H m2 ~> m3 or kg].
+    KEy, &      ! The meridonal gradient of Kinetic energy per unit mass [m s-2],
+                ! KEy = d/dy KE.
+    vh_center   ! Transport based on arithmetic mean h at v-points [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     uh_min, uh_max, &   ! The smallest and largest estimates of the volume
-    vh_min, vh_max, &   ! fluxes through the faces (i.e. u*h*dy & v*h*dx),
-                        ! in m3 s-1 or kg s-1.
+    vh_min, vh_max, &   ! fluxes through the faces (i.e. u*h*dy & v*h*dx)
+                        ! [H m2 s-1 ~> m3 s-1 or kg s-1].
     ep_u, ep_v  ! Additional pseudo-Coriolis terms in the Arakawa and Lamb
-                ! discretization, in m-1 s-1 or m2 kg-1 s-1.
+                ! discretization [H-1 s-1 ~> m-1 s-1 or m2 kg-1 s-1].
   real, dimension(SZIB_(G),SZJB_(G)) :: &
-    dvdx,dudy, &! Contributions to the circulation around q-points (m2 s-1)
-    abs_vort, & ! Absolute vorticity at q-points, in s-1.
-    q2, &       ! Relative vorticity over thickness.
+    dvdx,dudy, &! Contributions to the circulation around q-points [m2 s-1]
+    abs_vort, & ! Absolute vorticity at q-points [s-1].
+    q2, &       ! Relative vorticity over thickness [H-1 s-1 ~> m-1 s-1 or m2 kg-1 s-1].
     max_fvq, &  ! The maximum or minimum of the
     min_fvq, &  ! adjacent values of (-u) or v times
-    max_fuq, &  ! the absolute vorticity, in m s-2.
+    max_fuq, &  ! the absolute vorticity [m s-2].
     min_fuq     ! All are defined at q points.
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
-    PV, &       ! A diagnostic array of the potential vorticities, in m-1 s-1.
-    RV          ! A diagnostic array of the relative vorticities, in s-1.
-  real :: fv1, fv2, fu1, fu2   ! (f+rv)*v or (f+rv)*u in m s-2.
-  real :: max_fv, max_fu       ! The maximum or minimum of the neighbor-
-  real :: min_fv, min_fu       ! max(min)_fu(v)q, in m s-2.
+    PV, &       ! A diagnostic array of the potential vorticities [m-1 s-1].
+    RV          ! A diagnostic array of the relative vorticities [s-1].
+  real :: fv1, fv2, fu1, fu2   ! (f+rv)*v or (f+rv)*u [m s-2].
+  real :: max_fv, max_fu       ! The maximum or minimum of the neighboring Coriolis
+  real :: min_fv, min_fu       ! accelerations [m s-2], i.e. max(min)_fu(v)q.
 
   real, parameter :: C1_12=1.0/12.0 ! C1_12 = 1/12
   real, parameter :: C1_24=1.0/24.0 ! C1_24 = 1/24
-  real :: absolute_vorticity     ! Absolute vorticity, in s-1.
-  real :: relative_vorticity     ! Relative vorticity, in s-1.
-  real :: Ih                     ! Inverse of thickness, m-1 or m2 kg-1.
-  real :: max_Ihq, min_Ihq       ! The maximum and minimum of the nearby Ihq.
+  real :: absolute_vorticity     ! Absolute vorticity [s-1].
+  real :: relative_vorticity     ! Relative vorticity [s-1].
+  real :: Ih                     ! Inverse of thickness [H-1 ~> m-1 or m2 kg-1].
+  real :: max_Ihq, min_Ihq       ! The maximum and minimum of the nearby Ihq [H-1 ~> m-1 or m2 kg-1].
   real :: hArea_q                ! The sum of area times thickness of the cells
-                                 ! surrounding a q point, in m3 or kg.
+                                 ! surrounding a q point [H m2 ~> m3 or kg].
   real :: h_neglect              ! A thickness that is so small it is usually
-                                 ! lost in roundoff and can be neglected, in m.
-  real :: temp1, temp2           ! Temporary variables, in m2 s-2.
-  real, parameter :: eps_vel=1.0e-10 ! A tiny, positive velocity, in m s-1.
+                                 ! lost in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: temp1, temp2           ! Temporary variables [m2 s-2].
+  real, parameter :: eps_vel=1.0e-10 ! A tiny, positive velocity [m s-1].
 
-  real :: uhc, vhc               ! Centered estimates of uh and vh in m3 s-1 or kg s-1.
-  real :: uhm, vhm               ! The input estimates of uh and vh in m3 s-1 or kg s-1.
-  real :: c1, c2, c3, slope      ! Nondimensional parameters for the Coriolis
-                                 ! limiter scheme.
+  real :: uhc, vhc               ! Centered estimates of uh and vh [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real :: uhm, vhm               ! The input estimates of uh and vh [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real :: c1, c2, c3, slope      ! Nondimensional parameters for the Coriolis limiter scheme.
 
   real :: Fe_m2         ! Nondimensional temporary variables asssociated with
   real :: rat_lin       ! the ARAKAWA_LAMB_BLEND scheme.
@@ -198,27 +201,24 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
                         ! the other two with the ARAKAWA_LAMB_BLEND scheme,
                         ! nondimensional between 0 and 1.
 
-  real :: Heff1, Heff2  ! Temporary effective H at U or V points in m or kg m-2.
-  real :: Heff3, Heff4  ! Temporary effective H at U or V points in m or kg m-2.
-  real :: h_tiny        ! A very small thickness, in m or kg m-2.
-  real :: UHeff, VHeff  ! More temporary variables, in m3 s-1 or kg s-1.
-  real :: QUHeff,QVHeff ! More temporary variables, in m3 s-2 or kg s-2.
+  real :: Heff1, Heff2  ! Temporary effective H at U or V points [H ~> m or kg m-2].
+  real :: Heff3, Heff4  ! Temporary effective H at U or V points [H ~> m or kg m-2].
+  real :: h_tiny        ! A very small thickness [H ~> m or kg m-2].
+  real :: UHeff, VHeff  ! More temporary variables [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real :: QUHeff,QVHeff ! More temporary variables [H m2 s-1 ~> m3 s-1 or kg s-1].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
-!  v[is-1,ie+1,ie+2], u[is-1,ie+1], vh[ie+1], uh[is-1], and
-!  h[is-1,ie+1,ie+2].
-! In the y-direction, the following fields must be set:
-!  v[js-1,je+1], u[js-1,je+1,je+2], vh[js-1], uh[je+1], and
-!  h[js-1,je+1,je+2].
+!   v(is-1:ie+2,js-1:je+1), u(is-1:ie+1,js-1:je+2), h(is-1:ie+2,js-1:je+2),
+!   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je).
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
   h_neglect = GV%H_subroundoff
-  h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
+  h_tiny = GV%Angstrom_H  ! Perhaps this should be set to h_neglect instead.
 
   !$OMP parallel do default(private) shared(Isq,Ieq,Jsq,Jeq,G,Area_h)
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
@@ -290,6 +290,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         if (OBC%freeslip_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
           dudy(I,J) = 0.
         enddo ; endif
+        if (OBC%computed_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            dudy(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%dxCu(I,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            dudy(I,J) = 2.0*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dxCu(I,j+1)
+          endif
+        enddo ; endif
+        if (OBC%specified_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
+          endif
+        enddo ; endif
 
         ! Project thicknesses across OBC points with a no-gradient condition.
         do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
@@ -315,6 +329,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         enddo ; endif
         if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           dvdx(I,J) = 0.
+        enddo ; endif
+        if (OBC%computed_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            dvdx(I,J) = 2.0*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dyCv(i+1,J)
+          endif
+        enddo ; endif
+        if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
+          endif
         enddo ; endif
 
         ! Project thicknesses across OBC points with a no-gradient condition.
@@ -521,7 +549,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           vhm = 10.0*vhc
         elseif (abs(vhc) > c1*abs(vhm)) then
           if (abs(vhc) < c2*abs(vhm)) then ; vhc = (3.0*vhc+(1.0-c2*3.0)*vhm)
-          else if (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
+          elseif (abs(vhc) <= c3*abs(vhm)) then ; vhc = vhm
           else ; vhc = slope*vhc+(1.0-c3*slope)*vhm
           endif
         endif
@@ -810,21 +838,21 @@ end subroutine CorAdCalc
 !> Calculates the acceleration due to the gradient of kinetic energy.
 subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
   type(ocean_grid_type),                      intent(in)  :: G !< Ocen grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: u !< Zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: v !< Meridional velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness (m or kg/m2)
-  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE !< Kinetic energy (m2/s2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: u !< Zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: v !< Meridional velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE !< Kinetic energy [m2 s-2]
   real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx !< Zonal acceleration due to kinetic
-                                                                 !! energy gradient (m/s2)
+                                                                 !! energy gradient [m s-2]
   real, dimension(SZI_(G) ,SZJB_(G)),         intent(out) :: KEy !< Meridional acceleration due to kinetic
-                                                                 !! energy gradient (m/s2)
+                                                                 !! energy gradient [m s-2]
   integer,                                    intent(in)  :: k !< Layer number to calculate for
   type(ocean_OBC_type),                       pointer     :: OBC !< Open boundary control structure
   type(CoriolisAdv_CS),                       pointer     :: CS !< Control structure for MOM_CoriolisAdv
   ! Local variables
-  real :: um, up, vm, vp         ! Temporary variables with units of m s-1.
-  real :: um2, up2, vm2, vp2     ! Temporary variables with units of m2 s-2.
-  real :: um2a, up2a, vm2a, vp2a ! Temporary variables with units of m4 s-2.
+  real :: um, up, vm, vp         ! Temporary variables [m s-1].
+  real :: um2, up2, vm2, vp2     ! Temporary variables [m2 s-2].
+  real :: um2a, up2a, vm2a, vp2a ! Temporary variables [m4 s-2].
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -832,7 +860,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
 
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
-  if (CS%KE_Scheme.eq.KE_ARAKAWA) then
+  if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
@@ -843,7 +871,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
                    +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
                 )*0.25*G%IareaT(i,j)
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -853,7 +881,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
-  elseif (CS%KE_Scheme.eq.KE_GUDONOV) then
+  elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
