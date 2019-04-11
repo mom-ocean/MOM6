@@ -101,7 +101,7 @@ interface MOM_read_vector
   module procedure MOM_read_vector_2d
 end interface
 
-!> Write a data field from a netCDF file
+!> Write a data field tooo a netCDF file
 interface MOM_write_data
   module procedure MOM_write_data_4d
   module procedure MOM_write_data_3d
