@@ -18,7 +18,8 @@ use MOM_kappa_shear, only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
-use MOM_restart, only : register_restart_field, MOM_restart_CS
+use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : register_restart_field_as_obsolete
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type
@@ -1746,6 +1747,9 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                  "layer scheme to determine the diffusivity and viscosity \n"//&
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
+
+  call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
+  call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
 
   if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
     call safe_alloc_ptr(visc%Kd_shear, isd, ied, jsd, jed, nz+1)
