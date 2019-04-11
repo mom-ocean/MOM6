@@ -320,6 +320,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(4)
@@ -380,7 +381,10 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
   ! and register them if they are not
   if (num_axes> 0) then
      do i=1,num_axes
-        call check_for_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if(.not.(axis_exists)) then 
+           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        endif
         WRITE(mpp_pe()+2000,*) "register_restart_field_4d: dim name ", trim(dim_names(i))
         call flush(mpp_pe()+2000)
      enddo
@@ -423,6 +427,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
   character(len=200) :: base_file_name 
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(3)
@@ -485,7 +490,10 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
   ! and register them if they are not
   if (num_axes> 0) then
      do i=1,num_axes
-        call check_for_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if(.not.(axis_exists)) then 
+           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        endif
         WRITE(mpp_pe()+2000,*) "register_restart_field_3d: dim name ", trim(dim_names(i))
         call flush(mpp_pe()+2000)
      enddo
@@ -528,6 +536,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
   character(len=8) :: Zgrid
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=200) :: dim_names(2)
@@ -594,7 +603,10 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
   ! and register them if they are not
   if (num_axes> 0) then
      do i=1,num_axes
-        call check_for_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if(.not.(axis_exists)) then 
+           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        endif
         WRITE(mpp_pe()+2000,*) "register_restart_field_2d: dim name ", trim(dim_names(i))
         call flush(mpp_pe()+2000)
      enddo
@@ -638,6 +650,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   character(len=8) :: hgrid
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
   character(len=200) :: dim_names
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
@@ -703,7 +716,10 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   ! and register them if they are not
   if (num_axes> 0) then
      do i=1,num_axes
-        call check_for_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if(.not.(axis_exists)) then 
+           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        endif
         WRITE(mpp_pe()+2000,*) "register_restart_field_1d: dim name ", trim(dim_names(i))
         call flush(mpp_pe()+2000)
      enddo
@@ -742,6 +758,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
   type(vardesc) :: vd
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
   character(len=200) :: dim_names
   character(len=16) :: nc_action
   character(len=200) :: base_file_name
@@ -802,7 +819,10 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
   ! and register them if they are not
   if (num_axes> 0) then
      do i=1,num_axes
-        call check_for_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if(.not.(axis_exists)) then 
+           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+        endif
         WRITE(mpp_pe()+2000,*) "register_restart_field_0d: dim name ", trim(dim_names(i))
         call flush(mpp_pe()+2000)
      enddo
@@ -1481,8 +1501,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
   integer(LONG_KIND) :: checksumh
-  integer :: num_checksumh, last, is, k
+  integer :: num_checksumh, last, is, k, i
   logical :: var_exists = .false.
+  character(len=16) :: axis_names(4) 
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1505,6 +1526,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   
   file_path_1 = ''
   file_path_2 = ''
+  axis_names(:)(1:4) = (/'lath','lonh','latq','lonq'/)
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
      file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
@@ -1538,7 +1560,6 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
                                  "No times found in restart files.")
-
 ! Check the remaining files, if any, for different times and issue a warning
 ! if they differ from the first time.
   if (is_root_pe()) then
@@ -1597,11 +1618,12 @@ subroutine restore_state(filename, directory, day, G, CS)
         call MOM_error(FATAL,"MOM_restart: "//mesg)
      endif
      ! register the horizontal axes
-     call fms2_register_axis(CS%fileObjRead,'latq','y')
-     call fms2_register_axis(CS%fileObjRead,'lath','y')
-     call fms2_register_axis(CS%fileObjRead,'lonq','x')
-     call fms2_register_axis(CS%fileObjRead,'lonh','x')
-
+     do i=1,size(axis_names)
+        axis_exists = fms2_dimension_exists(CS%fileObjRead, axis_names(i))
+        if (axis_exists) then 
+           call register_restart_axis(CS%fileObjWrite, axis_names(i))
+        endif
+     enddo
      ! get number of variables in the file
      nvar=fms2_get_num_variables(CS%fileObjRead)
      ! get the names of the variables in the file
@@ -2080,31 +2102,42 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
 end subroutine get_checksum_loop_ranges
 
-!> check restart file for an axis, and register it if it is unregistered
-
-subroutine check_for_restart_axis(fileObjWrite, axis_name, axis_length)
+!> register an axis to a restart file
+subroutine register_restart_axis(fileObj, axis_name, axis_length)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
-   character(len=*), intent(in) :: axis_name ! name of the restart file axis to register to file
-   integer, intent(in) :: axis_length ! length of axis/dimension (only needed for Z and Time)
-   ! local  
-   logical :: axis_exists 
-   
-   axis_exists = .false.
- 
-   axis_exists = fms2_dimension_exists(fileObjWrite, axis_name)
-   if (.not. (axis_exists)) then
-      select case (trim(axis_name))
-         case ('latq'); call fms2_register_axis(fileObjWrite,'latq','y')
-         case ('lath'); call fms2_register_axis(fileObjWrite,'lath','y') 
-         case ('lonq'); call fms2_register_axis(fileObjWrite,'lonq','x') 
-         case ('lonh'); call fms2_register_axis(fileObjWrite,'lonh','x')
-         case ('Layer'); call fms2_register_axis(fileObjWrite,'Layer',axis_length)
-         case ('Interface'); call fms2_register_axis(fileObjWrite,'Interface',axis_length)
-         case ('Time'); call fms2_register_axis(fileObjWrite,'Time', axis_length)
-         case ('Period'); call fms2_register_axis(fileObjWrite,'Period',axis_length)
-      end select
-   endif
-  
-end subroutine check_for_restart_axis
+   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
+   integer, optional, intent(in) :: axis_length !< length of axis/dimension
+                                                !! (only needed for z-grid and Time)
+   select case (trim(axis_name))
+         case ('latq'); call fms2_register_axis(fileObj,'latq','y')
+         case ('lath'); call fms2_register_axis(fileObj,'lath','y') 
+         case ('lonq'); call fms2_register_axis(fileObj,'lonq','x') 
+         case ('lonh'); call fms2_register_axis(fileObj,'lonh','x')
+         case ('Layer')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Layer axis")
+            endif 
+            call fms2_register_axis(fileObj,'Layer',axis_length)
+         case ('Interface')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Interface axis")
+            endif 
+            call fms2_register_axis(fileObj,'Interface',axis_length)
+         case ('Time')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Time axis")
+            endif 
+            call fms2_register_axis(fileObj,'Time', axis_length)
+         case ('Period')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Period axis")
+            endif 
+            call fms2_register_axis(fileObj,'Period',axis_length)
+   end select
+end subroutine register_restart_axis
 
 end module MOM_restart
