@@ -1825,10 +1825,20 @@ subroutine get_domain_extent_dsamp2(Domain, isc_d2, iec_d2, jsc_d2, jec_d2,&
                                             isd_d2, ied_d2, jsd_d2, jed_d2,&
                                             isg_d2, ieg_d2, jsg_d2, jeg_d2)
   type(MOM_domain_type), &
-           intent(in)  :: Domain         !< The MOM domain from which to extract information
-  integer, intent(out) :: isc_d2, iec_d2, jsc_d2, jec_d2
-  integer, intent(out) :: isd_d2, ied_d2, jsd_d2, jed_d2
-  integer, intent(out) :: isg_d2, ieg_d2, jsg_d2, jeg_d2
+           intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer, intent(out) :: isc_d2 !< The start i-index of the computational domain
+  integer, intent(out) :: iec_d2 !< The end i-index of the computational domain
+  integer, intent(out) :: jsc_d2 !< The start j-index of the computational domain
+  integer, intent(out) :: jec_d2 !< The end j-index of the computational domain
+  integer, intent(out) :: isd_d2 !< The start i-index of the data domain
+  integer, intent(out) :: ied_d2 !< The end i-index of the data domain
+  integer, intent(out) :: jsd_d2 !< The start j-index of the data domain
+  integer, intent(out) :: jed_d2 !< The end j-index of the data domain
+  integer, intent(out) :: isg_d2 !< The start i-index of the global domain
+  integer, intent(out) :: ieg_d2 !< The end i-index of the global domain
+  integer, intent(out) :: jsg_d2 !< The start j-index of the global domain
+  integer, intent(out) :: jeg_d2 !< The end j-index of the global domain
+
   call mpp_get_compute_domain(Domain%mpp_domain_d2, isc_d2, iec_d2, jsc_d2, jec_d2)
   call mpp_get_data_domain(Domain%mpp_domain_d2, isd_d2, ied_d2, jsd_d2, jed_d2)
   call mpp_get_global_domain (Domain%mpp_domain_d2, isg_d2, ieg_d2, jsg_d2, jeg_d2)

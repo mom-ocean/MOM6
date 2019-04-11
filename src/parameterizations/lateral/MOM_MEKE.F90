@@ -1267,7 +1267,7 @@ end subroutine MEKE_end
 !!
 !! \f$L_c\f$ is a constant and \f$\delta[L_c]\f$ is the impulse function so that the term
 !! \f$\frac{\delta[L_c]}{L_c}\f$ evaluates to \f$\frac{1}{L_c}\f$ when \f$L_c\f$ is non-zero
-!! but is dropped if \f$L_c=0\fi$.
+!! but is dropped if \f$L_c=0\f$.
 !!
 !! \f$\beta^*\f$ is the effective \f$\beta\f$ that combines both the planetary vorticity
 !! gradient (i.e. \f$\beta=\nabla f\f$) and the topographic \f$\beta\f$ effect,

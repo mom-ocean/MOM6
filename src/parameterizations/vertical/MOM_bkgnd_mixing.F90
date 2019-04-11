@@ -48,7 +48,7 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
                                     !! Bryan-Lewis profile [m]
   real    :: bckgrnd_vdc1           !< Background diffusivity (Ledwell) when
                                     !! horiz_varying_background=.true.
-  real    :: bckgrnd_vdc_eq         !! Equatorial diffusivity (Gregg) when
+  real    :: bckgrnd_vdc_eq         !< Equatorial diffusivity (Gregg) when
                                     !! horiz_varying_background=.true.
   real    :: bckgrnd_vdc_psim       !< Max. PSI induced diffusivity (MacKinnon) when
                                     !! horiz_varying_background=.true.
