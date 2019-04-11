@@ -1251,7 +1251,7 @@ end subroutine StokesMixing
 !! CHECK THAT RIGHT TIMESTEP IS PASSED IF YOU USE THIS**
 !!
 !! Not accessed in the standard code.
-subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
+subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
@@ -1265,8 +1265,9 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
        intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
+  type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
   ! Local variables
-  real :: DVel
+  real :: DVel ! A rescaled velocity change [m s-1 T-1 ~> m s-2]
   integer :: i,j,k
 
   do k = 1, G%ke
@@ -1274,7 +1275,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
                0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
-        u(I,j,k) = u(I,j,k) + DVEL*DT
+        u(I,j,k) = u(I,j,k) + DVEL*US%s_to_T*DT
       enddo
     enddo
   enddo
@@ -1284,7 +1285,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
       do i = G%isc, G%iec
         DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
                0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
-        v(i,J,k) = v(i,j,k) - DVEL*DT
+        v(i,J,k) = v(i,j,k) - DVEL*US%s_to_T*DT
       enddo
     enddo
   enddo

@@ -459,8 +459,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
 
             ! Calculate wavenumber magnitude
-            f2 = G%CoriolisBu(I,J)**2
-            !f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+            f2 = US%s_to_T**2 * G%CoriolisBu(I,J)**2
+            !f2 = 0.25*US%s_to_T**2 *((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
             !    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
             Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
 

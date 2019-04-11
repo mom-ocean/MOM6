@@ -147,13 +147,13 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
 
 !    Calculate the value of the Coriolis parameter at the latitude   !
 !  of the q grid points [s-1].
-  call MOM_initialize_rotation(G%CoriolisBu, G, PF)
+  call MOM_initialize_rotation(G%CoriolisBu, G, PF, US=US)
 !   Calculate the components of grad f (beta)
-  call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)
+  call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G, US=US)
   if (debug) then
-    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
+    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI, scale=US%s_to_T)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, scale=US%s_to_T)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, scale=US%s_to_T)
   endif
 
   call initialize_grid_rotation_angle(G, PF)

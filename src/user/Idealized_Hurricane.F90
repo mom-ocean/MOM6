@@ -258,8 +258,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
       Uocn = state%u(I,j)*REL_TAU_FAC
       Vocn = 0.25*(state%v(i,J)+state%v(i+1,J-1)&
              +state%v(i+1,J)+state%v(i,J-1))*REL_TAU_FAC
-      f = abs(0.5*(G%CoriolisBu(I,J)+G%CoriolisBu(I,J-1)))*fbench_fac &
-           + fbench
+      f = abs(0.5*US%s_to_T*(G%CoriolisBu(I,J)+G%CoriolisBu(I,J-1)))*fbench_fac + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
         YY = YC + CS%dy_from_center
@@ -281,8 +280,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
       Uocn = 0.25*(state%u(I,j)+state%u(I-1,j+1)&
             +state%u(I-1,j)+state%u(I,j+1))*REL_TAU_FAC
       Vocn = state%v(i,J)*REL_TAU_FAC
-      f = abs(0.5*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))*fbench_fac &
-           + fbench
+      f = abs(0.5*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))*fbench_fac + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
         YY = YC + CS%dy_from_center
@@ -487,10 +485,10 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
      B = C**2 * 1.2 * exp(1.0)
   endif
   A = (CS%rad_max_wind/1000.)**B
-  f =G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  f = US%s_to_T*G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
   if (BR_Bench) then
      ! f reset to value used in generated wind for benchmark test
-     f = 5.5659e-05
+     f = 5.5659e-05  !### A constant value in s-1.
   endif
   !/ BR
   ! Calculate x position as a function of time.
