@@ -15,8 +15,8 @@ use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
-use MOM_io, only : get_horizontal_grid_coordinates, get_horizontal_grid_position
-use MOM_io, only : get_vertical_grid_coordinates, get_time_coordinates
+use MOM_io, only : get_horizontal_grid_position
+use MOM_io, only : get_variable_byte_size
 use MOM_io, only : write_axis_data
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
@@ -1296,24 +1296,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      do m=start_var,CS%novars
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
-        if (hor_grid == '1') then
-           var_sz = 8
-        else
-           var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
-        endif
-        select case (z_grid)
-           case ('L') ; var_sz = var_sz * nz
-           case ('i') ; var_sz = var_sz * (nz+1)
-        end select
-        t_grid = adjustl(t_grid)
-        if (t_grid(1:1) == 'p') then
-           if (len_trim(t_grid(2:8)) > 0) then
-              var_periods = -1
-              t_grid_read = adjustl(t_grid(2:8))
-              read(t_grid_read,*) var_periods
-              if (var_periods > 1) var_sz = var_sz * var_periods
-           endif
-        endif
+        
+        var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
 
         if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
            size_in_file = size_in_file + var_sz
@@ -1643,8 +1627,8 @@ subroutine restore_state(filename, directory, day, G, CS)
 
         call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
         do i=1, nvar
-           varname = " "
-           checksum_char = " "
+           varname = ''
+           checksum_char = ''
            var_exists = .false.
            varname(1:len_trim(CS%restart_field(m)%var_name)) = trim(CS%restart_field(m)%var_name)
            ! check if variable is in the restart file
@@ -1764,7 +1748,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 end subroutine restore_state
 
-!> restart_files_exist determines whether any restart files exist.
+!> restart_files_exist determines whether any restart files exist in the restart directory
 function restart_files_exist(filename, directory, G, CS)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
@@ -1873,8 +1857,6 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
   integer :: start_char      ! The location of the starting character in the
                              ! current file name.
   integer :: n, m, err, length
-
-
   logical :: fexists
   character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
   character(len=80) :: restartname
@@ -1912,7 +1894,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
          if (restartname(length-2:length) == '.nc') then
             restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
          else
-           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
          endif
         endif
         filepath = trim(directory) // trim(restartname)
@@ -1936,8 +1918,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
           if (present(global_files)) global_files(n) = .true.
         elseif (CS%parallel_restartfiles) then
           ! Look for decomposed files using the I/O Layout.
-          !fexists = file_exists(filepath, G%Domain)
-          fexists = fms2_file_exists(filepath)
+          fexists = file_exists(filepath)
           if (fexists .and. (present(units))) &
             call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
                            domain=G%Domain%mpp_domain)

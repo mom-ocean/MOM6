@@ -62,6 +62,7 @@ public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: get_axis_data
 public :: get_dimension_features
+public :: get_variable_byte_size
 public :: write_axis_data
 public :: get_horizontal_grid_position
 public :: MOM_write_data
@@ -942,6 +943,45 @@ function get_horizontal_grid_position(grid_string_id) result(grid_position)
   end select
 
 end function get_horizontal_grid_position
+
+function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) &
+  result(var_sz)
+
+  character(len=*), intent(in) :: hor_grid !< horizontal grid string
+  character(len=*), intent(in) :: z_grid !< vertical grid string
+  character(len=*), intent(in) :: t_grid !< time string
+  type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure;
+  integer, intent(in) :: num_zlevels     !< number of vertical levels
+  ! local
+  integer(kind=8) :: var_sz !< The size in bytes of each variable
+  integer :: var_periods
+  character(len=8) :: t_grid_read
+  
+  var_periods = 0
+  
+  if (trim(hor_grid) == '1') then
+     var_sz = 8
+  else
+     var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
+  endif
+  
+  select case (trim(z_grid))
+     case ('L') ; var_sz = var_sz * num_zlevels
+     case ('i') ; var_sz = var_sz * (num_zlevels+1)
+  end select
+ 
+  if (present(t_grid)) then
+     t_grid = adjustl(t_grid)
+     if (t_grid(1:1) == 'p') then
+           if (len_trim(t_grid(2:8)) > 0) then
+              var_periods = -1
+              t_grid_read = adjustl(t_grid(2:8))
+              read(t_grid_read,*) var_periods
+              if (var_periods > 1) var_sz = var_sz * var_periods
+           endif
+     endif
+
+end function get_variable_byte_size
 
 !> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
