@@ -66,6 +66,7 @@ public :: get_variable_byte_size
 public :: write_axis_data
 public :: get_horizontal_grid_position
 public :: MOM_write_data
+public :: MOM_register_field
 
 
 !> Type for describing a variable, typically a tracer
@@ -662,6 +663,24 @@ subroutine write_axis_data(fileObjWrite, axis_name, G, dG, GV, timeunit, &
    call fms2_register_variable_attribute(fileObjWrite, axis_name,"longname",long_name)
 
 end subroutine write_axis_data
+
+!> Register fields to non-restart netCDF files
+subroutine MOM_register_field(fileObjWrite, field_name, dimension_names, &
+                              domain_position)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+  character(len=*), intent(in) :: field_name  !< Name of the field to register to the file
+  character(len=*), dimension(:), intent(in)  :: dimension_names !< array of the dimension names for the field
+  integer, optional, intent(in) ::domain_position !< position value for domain-decomposed data
+ 
+  if (present(domain_position)) then
+     call fms2_register_field(fileObjWrite, field_name, "double", & 
+                              dimensions=dimension_names, domain_position=domain_position)
+  else
+     call fms2_register_field(fileObjWrite, field_name, "double", & 
+                              dimensions=dimension_names)
+  endif
+    
+end subroutine MOM_register_field
 
 !> write 4d data to a netcdf file
 subroutine MOM_write_data_4d(fileObjWrite, field_name, field_data, units, long_name)
