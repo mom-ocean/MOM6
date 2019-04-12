@@ -19,6 +19,7 @@ use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : register_restart_field_as_obsolete
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
@@ -2024,6 +2025,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
   endif
+
+  call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
+  call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
 
   if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
     Z_rescale = US%m_to_Z / US%m_to_Z_restart
