@@ -17,7 +17,7 @@ use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_size, read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
-use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
+!use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! this function only trims strings
 use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
@@ -63,8 +63,8 @@ public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: get_axis_data
 public :: get_dimension_features
 public :: get_variable_byte_size
-public :: write_axis_data
 public :: get_horizontal_grid_position
+public :: get_period_value
 public :: MOM_write_data
 public :: MOM_register_field
 public :: MOM_register_variable_attribute

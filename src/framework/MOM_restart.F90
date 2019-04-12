@@ -1239,7 +1239,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=512) :: restartpath_temp ! temporary location for the restart file path (dir/file).
   character(len=256) :: restartname_temp ! temporary location for restart name
   character(len=256) :: date_appendix ! date string to append to a file name if desired
-  character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
+  !character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
@@ -1334,24 +1334,25 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      restartpath = ''
      restartpath_temp = ''
      filename_appendix = ''
-     restartnameapp = ''
+     !restartnameapp = ''
      suffix = ''
 
      !query fms_io if there is a filename_appendix (for ensemble runs)
-     call get_filename_appendix(filename_appendix)
-     if (len_trim(filename_appendix) > 0 .and. (trim(filename_appendix) /= '')) then
-        length = len_trim(restartname)
-        if (restartname(length-2:length) == '.nc') then
-           restartnameapp = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-        else
-           restartnameapp = restartname(1:length)  //'.'//trim(filename_appendix)
-        endif
-        length = len_trim(trim(directory)//trim(restartnameapp))
-        restartpath_temp(1:length) = trim(directory)//trim(restartnameapp)
-     else
-        length = len_trim(trim(directory)//trim(restartname))
-        restartpath_temp(1:length) = trim(directory)//trim(restartname)
-     endif
+     !call get_filename_appendix(filename_appendix) ! note: all this function does is trim the string
+     ! so I'm commenting it out b/c it is pointless. Will remove with Bob's approval
+     !if (len_trim(filename_appendix) > 0 .and. (trim(filename_appendix) /= '')) then
+     !   length = len_trim(restartname)
+     !   if (restartname(length-2:length) == '.nc') then
+     !      restartnameapp = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+     !   else
+     !      restartnameapp = restartname(1:length)  //'.'//trim(filename_appendix)
+     !   endif
+     !   length = len_trim(trim(directory)//trim(restartnameapp))
+     !   restartpath_temp(1:length) = trim(directory)//trim(restartnameapp)
+     !else
+     length = len_trim(trim(directory)//trim(restartname))
+     restartpath_temp(1:length) = trim(directory)//trim(restartname)
+     !endif
 
      WRITE(mpp_pe()+2000,*) "save_restart: restartpath_temp is ", trim(restartpath_temp)
      call flush(mpp_pe()+2000)
@@ -1964,7 +1965,7 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 
        !query fms_io if there is a filename_appendix (for ensemble runs)
        filename_appendix = ''
-       call get_filename_appendix(filename_appendix)
+       !call get_filename_appendix(filename_appendix) all this dows
        if (len_trim(filename_appendix) > 0) then
          length = len_trim(restartname)
          if (restartname(length-2:length) == '.nc') then
