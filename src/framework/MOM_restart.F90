@@ -62,8 +62,9 @@ type field_restart
   character(len=32) :: var_name !< A name by which a variable may be queried.
 end type field_restart
 
+!> A structure to store information about restart fields that are no longer used
 type obsolete_restart
-   character(len=32) :: field_name    !< Name of restart field that is no longer in use
+   character(len=32) :: field_name       !< Name of restart field that is no longer in use
    character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
 end type obsolete_restart
 
@@ -124,9 +125,9 @@ end interface
 contains
 !!> Register a restart field as obsolete
 subroutine register_restart_field_as_obsolete(field_name, replacement_name, CS)
-  character(len=32), intent(in) :: field_name    !< Name of restart field that is no longer in use
-  character(len=32), intent(in) :: replacement_name !< Name of replacement restart field, if applicable
-  type(MOM_restart_CS), pointer :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  character(*), intent(in) :: field_name       !< Name of restart field that is no longer in use
+  character(*), intent(in) :: replacement_name !< Name of replacement restart field, if applicable
+  type(MOM_restart_CS), pointer :: CS          !< A pointer to a MOM_restart_CS object (intent in/out)
 
   CS%num_obsolete_vars = CS%num_obsolete_vars+1
   CS%restart_obsolete(CS%num_obsolete_vars)%field_name = field_name
@@ -1083,13 +1084,14 @@ subroutine restore_state(filename, directory, day, G, CS)
     call get_file_fields(unit(n),fields(1:nvar))
 
     do m=1, nvar
-      call get_file_atts(fields(i),name=varname)
+      call get_file_atts(fields(m),name=varname)
       do i=1,CS%num_obsolete_vars
-        if (lowercase(trim(varname)) == lowercase(trim(CS%restart_obsolete(i)%field_name))) then
+        if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
             call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
-                           trim(varname))
+                           trim(varname)//" - the new corresponding restart field is "//&
+                           trim(CS%restart_obsolete(i)%replacement_name))
         endif
-      enddo 
+      enddo
     enddo
 
     missing_fields = 0
