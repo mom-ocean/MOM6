@@ -10,11 +10,12 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase, append_substring
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : fieldtype,open_file, close_file
-use MOM_io, only : MOM_read_data, get_filename_appendix
+use MOM_io, only : MOM_read_data
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_io, only : file_exists
 use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_period_value
 use MOM_io, only : get_time_units
@@ -41,7 +42,6 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
-                           fms2_file_exists => file_exists, &
                            FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
@@ -331,6 +331,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
   integer :: num_axes, i
   integer :: substring_index = 0
   integer :: horgrid_position = 1
+  integer :: name_length = 0
  
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
@@ -358,7 +359,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
   endif
 
   ! check if file exists
-  CS%restart_file_created = fms2_file_exists(base_file_name)
+  CS%restart_file_created = file_exists(base_file_name)
 
   if (CS%restart_file_created) then
      nc_action = "append"
@@ -467,7 +468,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
   endif
 
   ! check if file is an existing restart or initial conditions file
-  CS%restart_file_created = fms2_file_exists(base_file_name)
+  CS%restart_file_created = file_exists(base_file_name)
 
   if (CS%restart_file_created) then
      nc_action = "append"
@@ -582,7 +583,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  CS%restart_file_created = fms2_file_exists(base_file_name)
+  CS%restart_file_created = file_exists(base_file_name)
 
   if (CS%restart_file_created) then
      nc_action = "append"
@@ -654,7 +655,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
-  character(len=200) :: dim_names
+  character(len=200) :: dim_names(1)
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=16) :: nc_action
@@ -695,7 +696,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  CS%restart_file_created = fms2_file_exists(base_file_name)
+  CS%restart_file_created = file_exists(base_file_name)
 
   if (CS%restart_file_created) then
      nc_action = "append"
@@ -714,7 +715,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
 
  ! get the axis (dimension) names and lengths                                   
   call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                                  z_grid=vd%z_grid, t_grid=vd%t_grid, GV=GV)
+                                  z_grid=vd%z_grid, t_grid_in=vd%t_grid, GV=GV)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -732,10 +733,10 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   call register_restart_field_ptr1d(f_ptr, vd, mandatory, CS)
 
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
-       dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
+       dimensions=dim_names, domain_position=horgrid_position)
 
   ! register variable attributes
-  if (present(units)) call MOM_register_variable_attribute(CS%fileObjWrite, name,&
+  if (present(units)) call MOM_register_variable_attribute(CS%fileObjWrite, name, &
                                                            'units',vd%units)
   if (present(longname)) call MOM_register_variable_attribute(CS%fileObjWrite, name, &
                                                               'long_name',vd%longname)
@@ -764,7 +765,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
-  character(len=200) :: dim_names
+  character(len=200) :: dim_names(1)
   character(len=16) :: nc_action
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
@@ -773,7 +774,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
   integer :: num_axes, i
   integer :: substring_index = 0
   integer :: dim_lengths
-  integer :: name_length
+  integer :: name_length = 0
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_0d: Module must be initialized before "//&
@@ -800,7 +801,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  CS%restart_file_created = fms2_file_exists(base_file_name)
+  CS%restart_file_created = file_exists(base_file_name)
 
   if (CS%restart_file_created) then
      nc_action = "append"
@@ -819,7 +820,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
                  
   ! get the axis (dimension) names and lengths                                   
   call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                              t_grid=vd%t_grid)
+                              t_grid_in=vd%t_grid)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -1249,6 +1250,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   logical :: variable_exists = .false.
   real :: restart_time
   character(len=10) :: restart_time_units
+  character(len=64) :: checksum_char =''
   real, dimension(:), allocatable :: var_periods
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -1333,7 +1335,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      restartpath = ''
      restartpath_temp = ''
-     filename_appendix = ''
+     !filename_appendix = ''
      !restartnameapp = ''
      suffix = ''
 
@@ -1398,7 +1400,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lath')
      variable_exists = fms2_variable_exists(CS%fileobjWrite, 'lath')
      if (axis_exists .and. .not.(variable_exists)) then
-        call fms2_register_restart_field(fileObjWrite, axis_name, G%gridLatT(G%jsg:G%jeg), &  
+        call fms2_register_restart_field(CS%fileObjWrite, 'lath', G%gridLatT(G%jsg:G%jeg), &  
                                       dimensions=(/'lath'/), domain_position=CENTER)
         call MOM_write_data(CS%fileObjWrite,'lath', G%gridLatT(G%jsg:G%jeg))
         call MOM_register_variable_attribute(CS%fileObjWrite,'lath','long_name','Latitude')
@@ -1408,7 +1410,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lonh')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'lonh')
      if (axis_exists .and. .not.(variable_exists)) then
-        call fms2_register_restart_field(CS%fileObjWrite, axis_name, G%gridLonT(G%isg:G%ieg), &
+        call fms2_register_restart_field(CS%fileObjWrite, 'lonh', G%gridLonT(G%isg:G%ieg), &
                                          dimensions=(/'lonh'/), domain_position=CENTER)
         call MOM_write_data(CS%fileObjWrite,'lonh',G%gridLonT(G%isg:G%ieg))
         call MOM_register_variable_attribute(CS%fileObjWrite,'lonh','long_name','Longitude')
@@ -1418,7 +1420,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'latq')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'latq')
      if (axis_exists .and. .not.(variable_exists)) then
-        call fms2_register_restart_field(fileObjWrite, axis_name, G%gridLatB(G%JsgB:G%JegB), &  
+        call fms2_register_restart_field(CS%fileObjWrite, 'latq', G%gridLatB(G%JsgB:G%JegB), &  
                                       dimensions=(/'latq'/), domain_position=CORNER)
         call MOM_write_data(CS%fileObjWrite,'latq', G%gridLatB(G%JsgB:G%JegB))
         call MOM_register_variable_attribute(CS%fileObjWrite,'latq','long_name','Latitude')
@@ -1428,7 +1430,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'lonq')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'lonq')
      if (axis_exists .and. .not.(variable_exists)) then
-        call fms2_register_restart_field(fileObjWrite, axis_name, G%gridLonB(G%IsgB:G%IegB), & 
+        call fms2_register_restart_field(CS%fileObjWrite, 'lonq', G%gridLonB(G%IsgB:G%IegB), & 
                                          dimensions=(/'lonq'/), domain_position=CORNER)
         call MOM_write_data(CS%fileObjWrite,'lonq', G%gridLonB(G%IsgB:G%IegB))
         call MOM_register_variable_attribute(CS%fileObjWrite,'lonq','long_name','Longitude')
@@ -1438,8 +1440,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Layer')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Layer')
      if (axis_exists .and. .not.(variable_exists)) then
-        call fms2_register_restart_field(fileObjWrite, axis_name, GV%sLayer(1:GV%ke), & 
-                                   dimensions=(/'Layer'/))
+        call fms2_register_restart_field(CS%fileObjWrite, 'Layer', GV%sLayer(1:GV%ke), & 
+                                   dimensions=(/'Layer'/), domain_position=CENTER)
         call MOM_write_data(CS%fileObjWrite,'Layer', GV%sLayer(1:GV%ke))
         call MOM_register_variable_attribute(CS%fileObjWrite,'Layer','long_name','Layer')
         call MOM_register_variable_attribute(CS%fileObjWrite,'Layer','units', GV%zAxisUnits)
@@ -1448,8 +1450,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Interface')
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Interface')
      if (axis_exists .and. .not.(variable_exists)) then
-        call fms2_register_restart_field(fileObjWrite, axis_name, GV%sInterface(1:GV%ke+1), & 
-                                   dimensions=(/'Interface'/)) 
+        call fms2_register_restart_field(CS%fileObjWrite, 'Interface', GV%sInterface(1:GV%ke+1), & 
+                                   dimensions=(/'Interface'/), domain_position=CENTER) 
         call MOM_write_data(CS%fileObjWrite,'Interface', GV%sInterface(1:GV%ke+1))
         call MOM_register_variable_attribute(CS%fileObjWrite,'Interface','long_name', &
                                              'Interface'//trim(GV%zAxisLongName))
@@ -1460,20 +1462,20 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Time')
      if (axis_exists .and. .not.(variable_exists)) then
         !! insert routine to get time value
-        call fms2_register_restart_field(fileObjWrite, axis_name, &
-                   restart_time, dimensions=(/'Time'/))
+        call fms2_register_restart_field(CS%fileObjWrite, 'Time', &
+                   restart_time, dimensions=(/'Time'/),domain_position=CENTER)
         call MOM_write_data(CS%fileObjWrite,'Time', restart_time)
         call MOM_register_variable_attribute(CS%fileObjWrite,'Time','long_name','Time')
-        call MOM_register_variable_attribute(CS%fileObjWrite,'Time','units', time_units)
+        call MOM_register_variable_attribute(CS%fileObjWrite,'Time','units', restart_time_units)
      else
         axis_exists = fms2_dimension_exists(CS%fileObjWrite,'Period')
         variable_exists = fms2_dimension_exists(CS%fileObjWrite,'Period')
         if (axis_exists .and. .not.(variable_exists)) then
            var_periods = get_period_value(t_grid)
-           call fms2_register_restart_field(fileObjWrite, 'Period', var_periods, & 
-                                   dimensions=(/'Period'/)) 
-           call MOM_write_data(CS%fileObjWrite, 'Period', period_val)
-           call MOM_register_variable_attribute(CS%fileObjWrite,'long_name', &
+           call fms2_register_restart_field(CS%fileObjWrite, 'Period', var_periods, & 
+                                   dimensions=(/'Period'/), domain_position=CENTER) 
+           call MOM_write_data(CS%fileObjWrite, 'Period', var_periods)
+           call MOM_register_variable_attribute(CS%fileObjWrite,'Period','long_name', &
                                                 'Periods for cyclical variables')
            call MOM_register_variable_attribute(CS%fileObjWrite, 'Period', 'units', &
                                                 'nondimensional')
@@ -1502,8 +1504,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            !                 restart_time)
            call MOM_write_data(CS%fileObjWrite,vars(m)%name, CS%var_ptr0d(m)%p)
         endif
+        ! convert the checksum
+        checksum_char = ''
+        checksum_char = convert_checksum_to_string(check_val(m,1))
         ! write the checksum
-        call MOM_register_variable_attribute(CS%fileObjWrite,vars(m)%name,'checksum',check_val(m,1))      
+        call MOM_register_variable_attribute(CS%fileObjWrite,vars(m)%name,'checksum',checksum_char)      
      enddo
 
      !call close_file(unit)
@@ -1562,8 +1567,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
   integer(LONG_KIND) :: checksumh
-  integer :: num_checksumh, last, is, k, i
+  integer :: num_checksumh, last, is, k
   logical :: var_exists = .false.
+  logical :: axis_exists = .false.
   character(len=16) :: axis_names(4) 
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -2162,7 +2168,7 @@ end subroutine get_checksum_loop_ranges
 
 !> register an axis to a restart file
 subroutine register_restart_axis(fileObj, axis_name, axis_length)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
                                                 !! (only needed for z-grid and Time)
@@ -2197,5 +2203,22 @@ subroutine register_restart_axis(fileObj, axis_name, axis_length)
             call fms2_register_axis(fileObj,'Period',axis_length)
    end select
 end subroutine register_restart_axis
+
+!> convert the checksum integer(s) to a single string
+!> If there is more than 1 checksum, commas are inserted between 
+!> each checksum value in the output string
+function convert_checksum_to_string(checksum_int) result (checksum_string)
+  integer(kind=8), intent(in) :: checksum_int(:,:) !< checksum integer values
+! local
+  character(len=64) :: checksum_string
+  integer :: i
+  checksum_string = ''
+
+  write (checksum_string,'(Z16)') checksum_int(1,1) ! Z16 is the hexadecimal format string
+
+  do i = 2,size(checksum_int(:,1))
+     write (checksum_string,'(a,Z16)') trim(checksum_string)//",",checksum_int(i,1)
+  enddo
+end function convert_checksum_to_string
 
 end module MOM_restart

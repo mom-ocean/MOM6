@@ -50,7 +50,7 @@ use netcdf
 
 implicit none ; private
 
-public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
+public :: close_file, create_file, field_exists, field_size, fieldtype
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
@@ -65,6 +65,7 @@ public :: get_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
 public :: get_period_value
+public :: get_time_units
 public :: MOM_write_data
 public :: MOM_register_field
 public :: MOM_register_variable_attribute
@@ -111,6 +112,12 @@ interface MOM_write_data
   module procedure MOM_write_data_2d
   module procedure MOM_write_data_1d
   module procedure MOM_write_data_0d
+end interface
+
+interface MOM_register_variable_attribute
+  module procedure register_variable_attribute_string
+  module procedure register_variable_attribute_integer
+  module procedure register_variable_attribute_real  
 end interface
 
 contains
@@ -480,15 +487,35 @@ subroutine MOM_register_field(fileObjWrite, field_name, dimension_names, &
     
 end subroutine MOM_register_field
 
-!> register a variable attribute to a netCDF file
-subroutine MOM_register_variable_attribute(fileObjWrite, var_name, att_name, att_value)
+!> register a string variable attribute to a netCDF file
+subroutine register_variable_attribute_string(fileObjWrite, var_name, att_name, att_value)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: var_name  !< Name of the variable
    character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
    character(len=*), intent(in) :: att_value !< The variable attribute value
 
    call fms2_register_variable_attribute(fileObjWrite, trim(var_name), trim(att_name), trim(att_value))
-end subroutine MOM_register_variable_attribute
+end subroutine register_variable_attribute_string
+
+!> register an integer variable attribute to a netCDF file
+subroutine register_variable_attribute_integer(fileObjWrite, var_name, att_name, att_value)
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+   character(len=*), intent(in) :: var_name  !< Name of the variable
+   character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
+   integer, intent(in) :: att_value !< The variable attribute value
+
+   call fms2_register_variable_attribute(fileObjWrite, trim(var_name), trim(att_name), att_value)
+end subroutine register_variable_attribute_integer
+
+!> register an integer variable attribute to a netCDF file
+subroutine register_variable_attribute_real(fileObjWrite, var_name, att_name, att_value)
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+   character(len=*), intent(in) :: var_name  !< Name of the variable
+   character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
+   real, intent(in) :: att_value !< The variable attribute value
+
+   call fms2_register_variable_attribute(fileObjWrite, trim(var_name), trim(att_name), att_value)
+end subroutine register_variable_attribute_real
 
 !> write 4d data to a netcdf file
 subroutine MOM_write_data_4d(fileObjWrite, field_name, field_data)
@@ -571,7 +598,7 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
   num_axes = 0
   ! latitude and longitude
   if (present(hor_grid)) then
-     if (.not.(present(G)) then
+     if (.not.(present(G))) then
          call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
                         " G argument is missing from the subroutine call. "//&
                          "It is required to get the horgrid_grid dimension sizes.")
@@ -610,12 +637,12 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
         num_axes = num_axes+1 
         dim_names(num_axes) = ''
         dim_names(num_axes)(1:len_trim('lonh')) = 'lonh'
-        axis_length(num_axes) = size(gridLonT(isg:ieg))
+        dim_length(num_axes) = size(gridLonT(isg:ieg))
      elseif (use_lonq) then
         num_axes = num_axes+1
         dim_names(num_axes) = ''
         dim_names(num_axes)(1:len_trim('lonq')) ='lonq'
-        axis_length(num_axes) = size(gridLonB(IsgB:IegB)) 
+        dim_length(num_axes) = size(gridLonB(IsgB:IegB)) 
      endif
  
      ! add latitude name to dimension name array
@@ -623,12 +650,12 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
         num_axes = num_axes+1 
         dim_names(num_axes) = ''
         dim_names(num_axes)(1:len_trim('lath')) = 'lath'
-        axis_length(num_axes) = size(gridLatT(jsg:jeg))
+        dim_length(num_axes) = size(gridLatT(jsg:jeg))
      elseif (use_latq) then
         num_axes = num_axes+1 
         dim_names(num_axes) = ''
         dim_names(num_axes)(1:len_trim('latq')) = 'latq'
-        axis_length(num_axes) = size(gridLatB(JsgB:JegB))
+        dim_length(num_axes) = size(gridLatB(JsgB:JegB))
      endif
   endif
   ! vertical grid
@@ -642,12 +669,12 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
            num_axes = num_axes+1
            dim_names(num_axes) = ''
            dim_names(num_axes)(1:len_trim('Layer')) = 'Layer'
-           axis_length(num_axes) = size(GV%sLayer(1:GV%ke))  
+           dim_length(num_axes) = size(GV%sLayer(1:GV%ke))  
         case ('i')
            num_axes = num_axes+1
            dim_names(num_axes) = ''
            dim_names(num_axes)(1:len_trim('Interface')) = 'Interface'
-           axis_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
+           dim_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
         case ('1') ! Do nothing.
         case default
            call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
@@ -662,7 +689,7 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
            num_axes = num_axes+1
            dim_names(num_axes) = ''
            dim_names(num_axes)(1:len_trim('Time')) = 'Time'
-           axis_length(num_axes) = 'unlimited'
+           dim_length(num_axes) = unlimited
         case ('p')
            if (len_trim(t_grid(2:8)) <= 0) then
                call MOM_error(FATAL,"MOM_io:get_dimension_features: "//&
@@ -671,7 +698,7 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
            num_axes = num_axes+1
            dim_names(num_axes) = ''
            dim_names(num_axes)(1:len_trim('Period')) = 'Period'
-           axis_length(num_axes) = 'unlimited'
+           dim_length(num_axes) = unlimited
         case ('1') ! Do nothing.
         case default
            call MOM_error(WARNING, "MOM_io: get_dimension_features: "//&
@@ -702,9 +729,7 @@ function get_horizontal_grid_position(grid_string_id) result(grid_position)
 
 end function get_horizontal_grid_position
 
-function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) &
-  result(var_sz)
-
+function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
   character(len=*), intent(in) :: hor_grid !< horizontal grid string
   character(len=*), intent(in) :: z_grid !< vertical grid string
   character(len=*), intent(in) :: t_grid !< time string
@@ -713,7 +738,7 @@ function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) &
   ! local
   integer(kind=8) :: var_sz !< The size in bytes of each variable
   integer :: var_periods
-  character(len=8) :: t_grid_read
+  character(len=8) :: t_grid_read=''
   
   var_periods = 0
   
@@ -727,23 +752,21 @@ function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) &
      case ('L') ; var_sz = var_sz * num_zlevels
      case ('i') ; var_sz = var_sz * (num_zlevels+1)
   end select
- 
-  if (present(t_grid)) then
-     t_grid = adjustl(t_grid)
-     if (t_grid(1:1) == 'p') then
-           if (len_trim(t_grid(2:8)) > 0) then
-              var_periods = -1
-              t_grid_read = adjustl(t_grid(2:8))
-              read(t_grid_read,*) var_periods
-              if (var_periods > 1) var_sz = var_sz * var_periods
-           endif
+
+  if (adjustl(t_grid(1:1)) == 'p') then
+     if (len_trim(t_grid(2:8)) > 0) then
+        var_periods = -1
+        t_grid_read = adjustl(t_grid(2:8))
+        read(t_grid_read,*) var_periods
+        if (var_periods > 1) var_sz = var_sz * var_periods
      endif
+  endif
 
 end function get_variable_byte_size
 
-!< Define the time units from the real time value
-function get_time_units (time_value) result(time_units_out)
-   real, intent(in), time_value !< numerical time value
+!> Define the time units from the real time value
+function get_time_units(time_value) result(time_units_out)
+   real, intent(in) :: time_value !< numerical time value
    ! local
    character(len=10) :: time_units !< time units
    character(len=10) :: time_units_out !< time units trimmed
@@ -770,7 +793,7 @@ end function get_time_units
 !! at the end of the routine that calls this function to
 !! avoid memory leaks.
 function get_period_value(t_grid_in) result(period_value)
-  character(len=*) :: t_grid_in !< string for the time grid
+  character(len=*), intent(in) :: t_grid_in !< string for the time grid
   ! local
   character(len=12) :: t_grid
   character(len=12) :: t_grid_read
@@ -780,7 +803,6 @@ function get_period_value(t_grid_in) result(period_value)
   
   t_grid = ''
   t_grid_read = ''
-  num_periods = 0
   var_periods = -9999999
   t_grid = adjustl(t_grid_in)
 
@@ -789,24 +811,30 @@ function get_period_value(t_grid_in) result(period_value)
         call MOM_error(FATAL, "MOM_io::get_period_value: The t_grid string"//&
                         " corresponds to `Time` not 'Period'. Check the location of the call"//&
                         " to this function")     
-     case ('p') ; use_periodic = .true.
-        if (len_trim(t_grid(2:8)) <= 0) call MOM_error(FATAL, &
+     case ('p')
+        if (len_trim(t_grid(2:8)) <= 0) then
+             call MOM_error(FATAL, &
              "MOM_io::get_period_value: No periodic axis length was specified in "//&
           trim(t_grid_in) // " in the periodic axis argument")
-         var_periods = -9999999
-         t_grid_read = adjustl(t_grid(2:8))
+        endif
+        var_periods = -9999999
+        t_grid_read = adjustl(t_grid(2:8))
         read(t_grid_read,*) var_periods
-        if (var_periods == -9999999) call MOM_error(FATAL, &
+
+        if (var_periods == -9999999) then
+             call MOM_error(FATAL, &
              "MOM_io:: get_period_value: Failed to read the number of periods from "//&
               trim(t_grid_in))
-        if (var_periods < 1) call MOM_error(FATAL, "MOM_io create_file: "//&
-           "variable "//trim(vars(k)%name)//" in file "//trim(filename)//&
-           " uses a periodic time axis, and must have a positive "//&
-           "value for the number of periods in "//vars(k)%t_grid )
+        endif
+
+        if (var_periods < 1) then 
+            call MOM_error(FATAL, "MOM_io::get_period_value: "//&
+           "Period value must be positive.")
+        endif
      case ('1') ! Do nothing.
      case default
         call MOM_error(WARNING, "MOM_io::get_period_value:"//trim(t_grid_in)//&
-                       " is an unrecognized t_grid value."
+                       " is an unrecognized t_grid value.")
   end select
 
   ! Define a periodic axis array
