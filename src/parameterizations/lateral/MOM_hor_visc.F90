@@ -1039,6 +1039,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
               +str_xy(I,J-1)*(                                   &
                    (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
                   +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+ 
+      if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+        FrictWorkMax(i,j,k) = MEKE%MEKE * sqrt(dudx(i,j)**2 + dvdy(i,j)**2 + &
+             (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
+             (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2)
+      endif ; endif
+
     enddo ; enddo ; endif
 
 

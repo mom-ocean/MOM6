@@ -490,6 +490,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
       endif
     endif ! MEKE_KH>=0
 !$OMP end parallel
+    
+    ! Ensure that MEKE is non-negative 
+    do j=js,je ; do i=is,ie
+      MEKE%MEKE(i,j) = MAX(0.0, MEKE%MEKE(i,j)
+    enddo ; enddo      
+
 
     call cpu_clock_begin(CS%id_clock_pass)
     call do_group_pass(CS%pass_MEKE, G%Domain)
