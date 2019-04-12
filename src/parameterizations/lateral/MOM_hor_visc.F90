@@ -276,6 +276,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     FrictWork, &     ! energy dissipated by lateral friction (W/m2)
+    FrictWorkMax, &     ! maximum possible energy dissipated by lateral friction (W/m2)
     div_xx_h         ! horizontal divergence (s-1)
   !real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
