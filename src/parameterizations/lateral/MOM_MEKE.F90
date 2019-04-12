@@ -493,7 +493,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     
     ! Ensure that MEKE is non-negative 
     do j=js,je ; do i=is,ie
-      MEKE%MEKE(i,j) = MAX(0.0, MEKE%MEKE(i,j)
+      MEKE%MEKE(i,j) = MAX(0.0, MEKE%MEKE(i,j))
     enddo ; enddo      
 
 

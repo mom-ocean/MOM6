@@ -277,6 +277,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     FrictWork, &     ! energy dissipated by lateral friction (W/m2)
     FrictWorkMax, &     ! maximum possible energy dissipated by lateral friction (W/m2)
+    target_FrictWork_GME, &   ! target amount of energy to add via GME (W/m2) 
     div_xx_h         ! horizontal divergence (s-1)
   !real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -314,6 +315,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: epsilon
   real :: GME_coeff ! The GME (negative) viscosity coefficient (m2 s-1)
   real :: GME_coeff_limiter
+  real :: FWfrac
   real :: DY_dxBu, DX_dyBu
   real :: H0
   real :: tmp
@@ -1042,10 +1044,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                   +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
  
       if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
-        FrictWorkMax(i,j,k) = MEKE%MEKE * sqrt(dudx(i,j)**2 + dvdy(i,j)**2 + &
+        FrictWorkMax(i,j,k) = MEKE%MEKE(i,j) * sqrt(dudx(i,j)**2 + dvdy(i,j)**2 + &
              (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
              (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2)
       endif ; endif
+
+      ! Determine how much work GME needs to do to reach the "target" ratio between
+      ! the amount of work actually done and the maximum allowed by theory. Note that 
+      ! we need to add the FrictWork done by the dissipation operators, since this work
+      ! is done only for numerical stability and is therefore spurious  
+      if (CS%use_GME) then
+        target_FrictWork_GME(i,j,k) = FWfrac * FrictWorkMax(i,j,k) - FrictWork(i,j,k)
+      endif
 
     enddo ; enddo ; endif
 
@@ -1064,14 +1074,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !                      (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
 !                     epsilon))
 
-        GME_coeff = 2.0 * MAX(0.0,MEKE%MEKE(i,j)) / &
-                   SQRT( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
+!        GME_coeff = 2.0 * MAX(0.0,MEKE%MEKE(i,j)) / &
+!                   SQRT( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
+!                      (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
+!                      (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
+!                     epsilon)
+
+      if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+        GME_coeff = target_FrictWork_GME(i,j,k) / ( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
                       (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
                       (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
-                     epsilon)
+                      epsilon)          
+      endif ; endif
 
-        ! apply mask
-        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
+!        ! apply mask
+!        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
 
 !        GME_coeff_limiter = 1e5
 !        GME_coeff_limiter =  2.0 * MAX(0.0,MEKE%MEKE(i,j)) / sqrt(dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
@@ -1115,11 +1132,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !                       (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
 !                         epsilon))
 
-        GME_coeff = 2.0* MAX(0.0,MEKE%MEKE(i,j)) / &
-                     SQRT( dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+!        GME_coeff = 2.0* MAX(0.0,MEKE%MEKE(i,j)) / &
+!                     SQRT( dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+!                        (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
+!                       (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
+!                         epsilon)
+
+      if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+        GME_coeff = target_FrictWork_GME(i,j,k) / (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
                         (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
-                       (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
-                         epsilon)
+                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
+                        epsilon)
+      endif ; endif
 
         ! apply mask
         GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
@@ -1161,10 +1185,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         endif
       enddo ; enddo
     endif
-
-
-
-
 
 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
