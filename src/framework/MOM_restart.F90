@@ -1527,7 +1527,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         endif
         ! convert the checksum
         checksum_char = ''
-        checksum_char = convert_checksum_to_string(check_val(m,1))
+        checksum_char = convert_checksum_to_string(check_val(1,m))
         ! write the checksum
         call MOM_register_variable_attribute(CS%fileObjWrite,vars(m)%name,'checksum',checksum_char)      
      enddo
@@ -2232,17 +2232,16 @@ end subroutine register_restart_axis
 !> If there is more than 1 checksum, commas are inserted between 
 !> each checksum value in the output string
 function convert_checksum_to_string(checksum_int) result (checksum_string)
-  integer(kind=8), intent(in) :: checksum_int(:,:) !< checksum integer values
+  integer(kind=8), intent(in) :: checksum_int !< checksum integer values
 ! local
   character(len=64) :: checksum_string
   integer :: i
+  integer(kind=8) :: checksum_1d
+
   checksum_string = ''
 
-  write (checksum_string,'(Z16)') checksum_int(1,1) ! Z16 is the hexadecimal format string
+  write (checksum_string,'(Z16)') checksum_int ! Z16 is the hexadecimal format string
 
-  do i = 2,size(checksum_int(:,1))
-     write (checksum_string,'(a,Z16)') trim(checksum_string)//",",checksum_int(i,1)
-  enddo
 end function convert_checksum_to_string
 
 end module MOM_restart
