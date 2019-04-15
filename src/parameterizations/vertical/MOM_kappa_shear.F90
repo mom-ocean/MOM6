@@ -289,8 +289,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-      f2 = 0.25*((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25 * US%s_to_T**2 * ((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
 
     ! ----------------------------------------------------
@@ -612,7 +612,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-      f2 = G%CoriolisBu(I,J)**2
+      f2 = US%s_to_T**2 * G%CoriolisBu(I,J)**2
       surface_pres = 0.0 ; if (associated(p_surf)) then
         surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
                                (p_surf(i+1,j) + p_surf(i,j+1)))

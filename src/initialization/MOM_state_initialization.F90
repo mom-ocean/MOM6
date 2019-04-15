@@ -415,7 +415,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
      case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, US, PF, &
                                  just_read_params=just_read)
      case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
-                                     G, GV, PF, just_read_params=just_read)
+                                     G, GV, US, PF, just_read_params=just_read)
      case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
      case ("USER"); call user_initialize_velocity(u, v, G, PF, &
                              just_read_params=just_read)

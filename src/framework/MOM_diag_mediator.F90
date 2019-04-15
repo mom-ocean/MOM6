@@ -69,18 +69,22 @@ interface post_data
   module procedure post_data_3d, post_data_2d, post_data_1d_k, post_data_0d
 end interface post_data
 
+!> Down sample a field
 interface downsample_field
    module procedure downsample_field_2d, downsample_field_3d
 end interface downsample_field
 
+!> Down sample the mask of a field
 interface downsample_mask
    module procedure downsample_mask_2d, downsample_mask_3d
 end interface downsample_mask
 
+!> Down sample a diagnostic field
 interface downsample_diag_field
    module procedure downsample_diag_field_2d, downsample_diag_field_3d
 end interface downsample_diag_field
 
+!> Contained for down sampled masks
 type, private :: diag_dsamp
    real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
    real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
@@ -143,25 +147,25 @@ type, public :: diag_grid_storage
   type(diag_grids_type), dimension(:), allocatable :: diag_grids      !< Primarily empty, except h field
 end type diag_grid_storage
 
-!> integers to encode the total cell methods
+! Integers to encode the total cell methods
 !integer :: PPP=111  ! x:point,y:point,z:point, this kind of diagnostic is not currently present in diag_table.MOM6
 !integer :: PPS=112  ! x:point,y:point,z:sum  , this kind of diagnostic is not currently present in diag_table.MOM6
 !integer :: PPM=113  ! x:point,y:point,z:mean , this kind of diagnostic is not currently present in diag_table.MOM6
-integer :: PSP=121  ! x:point,y:sum,z:point
-integer :: PSS=122  ! x:point,y:sum,z:point
-integer :: PSM=123  ! x:point,y:sum,z:mean
-integer :: PMP=131  ! x:point,y:mean,z:point
-integer :: PMM=133  ! x:point,y:mean,z:mean
-integer :: SPP=211  ! x:sum,y:point,z:point
-integer :: SPS=212  ! x:sum,y:point,z:sum
-integer :: SSP=221  ! x:sum;y:sum,z:point
-integer :: MPP=311  ! x:mean,y:point,z:point
-integer :: MPM=313  ! x:mean,y:point,z:mean
-integer :: MMP=331  ! x:mean,y:mean,z:point
-integer :: MMS=332  ! x:mean,y:mean,z:sum
-integer :: SSS=222  ! x:sum,y:sum,z:sum
-integer :: MMM=333  ! x:mean,y:mean,z:mean
-integer :: MSK=-1   ! Use the downsample method of a mask
+integer :: PSP=121  !< x:point,y:sum,z:point
+integer :: PSS=122  !< x:point,y:sum,z:point
+integer :: PSM=123  !< x:point,y:sum,z:mean
+integer :: PMP=131  !< x:point,y:mean,z:point
+integer :: PMM=133  !< x:point,y:mean,z:mean
+integer :: SPP=211  !< x:sum,y:point,z:point
+integer :: SPS=212  !< x:sum,y:point,z:sum
+integer :: SSP=221  !< x:sum;y:sum,z:point
+integer :: MPP=311  !< x:mean,y:point,z:point
+integer :: MPM=313  !< x:mean,y:point,z:mean
+integer :: MMP=331  !< x:mean,y:mean,z:point
+integer :: MMS=332  !< x:mean,y:mean,z:sum
+integer :: SSS=222  !< x:sum,y:sum,z:sum
+integer :: MMM=333  !< x:mean,y:mean,z:mean
+integer :: MSK=-1   !< Use the downsample method of a mask
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
 !!
@@ -182,9 +186,10 @@ type, private :: diag_type
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated).
                                    !! False for intensive (concentrations).
   integer :: xyz_method = 0 !< A 3 digit integer encoding the diagnostics cell method
-                                   !! It can be used to determine the downsample algorithm
+                            !! It can be used to determine the downsample algorithm
 end type diag_type
 
+!> Container for down sampling information
 type diagcs_dsamp
   integer :: isc !< The start i-index of cell centers within the computational domain
   integer :: iec !< The end i-index of cell centers within the computational domain
@@ -194,14 +199,22 @@ type diagcs_dsamp
   integer :: ied !< The end i-index of cell centers within the data domain
   integer :: jsd !< The start j-index of cell centers within the data domain
   integer :: jed !< The end j-index of cell centers within the data domain
-  integer :: isg,ieg,jsg,jeg
-  integer :: isgB,iegB,jsgB,jegB
+  integer :: isg !< The start i-index of cell centers within the global domain
+  integer :: ieg !< The end i-index of cell centers within the global domain
+  integer :: jsg !< The start j-index of cell centers within the global domain
+  integer :: jeg !< The end j-index of cell centers within the global domain
+  integer :: isgB !< The start i-index of cell corners within the global domain
+  integer :: iegB !< The end i-index of cell corners within the global domain
+  integer :: jsgB !< The start j-index of cell corners within the global domain
+  integer :: jegB !< The end j-index of cell corners within the global domain
 
+  !>@{ Axes for each location on a diagnostic grid
   type(axes_grp)  :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp)  :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp)  :: axesB1, axesT1, axesCu1, axesCv1
   type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
+  !!@}
 
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
@@ -216,6 +229,7 @@ type diagcs_dsamp
   real, dimension(:,:,:), pointer :: mask3dBi  => null()
   real, dimension(:,:,:), pointer :: mask3dCui => null()
   real, dimension(:,:,:), pointer :: mask3dCvi => null()
+  !!@}
 end type diagcs_dsamp
 
 !> The following data type a list of diagnostic fields an their variants,
@@ -515,7 +529,8 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl),       intent(inout) :: diag_cs !< Diagnostics control structure
-  integer,               intent(in)    :: id_zl_native, id_zi_native
+  integer,               intent(in)    :: id_zl_native !< ID of native layers
+  integer,               intent(in)    :: id_zi_native !< ID of native interfaces
 
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
@@ -3533,11 +3548,15 @@ end subroutine downsample_diag_masks_set
 
 !> Get the diagnostics-compute indices (to be passed to send_data) based on the shape of
 !! the diag field (the same way they are deduced for non-downsampled fields)
-subroutine downsample_diag_indices_get(fo1,fo2, dl, diag_cs,isv,iev,jsv,jev)
-  integer,           intent(in) :: fo1,fo2 !< the sizes of the diag field in x and y
-  integer,           intent(in) :: dl      !< integer downsample level
-  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  integer,           intent(out) ::isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
+subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev)
+  integer,           intent(in)  :: fo1     !< The size of the diag field in x
+  integer,           intent(in)  :: fo2     !< The size of the diag field in y
+  integer,           intent(in)  :: dl      !< Integer downsample level
+  type(diag_ctrl),   intent(in)  :: diag_CS !< Structure used to regulate diagnostic output
+  integer,           intent(out) :: isv     !< i-start index for diagnostics
+  integer,           intent(out) :: iev     !< i-end index for diagnostics
+  integer,           intent(out) :: jsv     !< j-start index for diagnostics
+  integer,           intent(out) :: jev     !< j-end index for diagnostics
   ! Local variables
   integer :: dszi,cszi,dszj,cszj,f1,f2
   character(len=500) :: mesg
@@ -3602,15 +3621,18 @@ end subroutine downsample_diag_indices_get
 !> This subroutine allocates and computes a downsampled array from an input array
 !! It also determines the diagnostics-compurte indices for the downsampled array
 !! 3d interface
-subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
-  real, dimension(:,:,:), pointer :: locfield  !< input array pointer
-  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_dsamp !< output (downsampled) array
+subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag, isv, iev, jsv, jev, mask)
+  real, dimension(:,:,:), pointer :: locfield  !< Input array pointer
+  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_dsamp !< Output (downsampled) array
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
-  integer, intent(in) :: dl !< integer downsample level
-  integer, intent(inout):: isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
+  integer, intent(in) :: dl                !< Level of down sampling
+  integer, intent(inout) :: isv            !< i-start index for diagnostics
+  integer, intent(inout) :: iev            !< i-end index for diagnostics
+  integer, intent(inout) :: jsv            !< j-start index for diagnostics
+  integer, intent(inout) :: jev            !< j-end index for diagnostics
   real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
-  !locals
+  ! Locals
   real, dimension(:,:,:), pointer :: locmask
   integer :: f1,f2,isv_o,jsv_o
 
@@ -3640,15 +3662,18 @@ end subroutine downsample_diag_field_3d
 !> This subroutine allocates and computes a downsampled array from an input array
 !! It also determines the diagnostics-compurte indices for the downsampled array
 !! 2d interface
-subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,isv,iev,jsv,jev, mask)
-  real, dimension(:,:), pointer :: locfield !< input array pointer
-  real, dimension(:,:), allocatable, intent(inout) :: locfield_dsamp !< output (downsampled) array
+subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag, isv, iev, jsv, jev, mask)
+  real, dimension(:,:), pointer :: locfield !< Input array pointer
+  real, dimension(:,:), allocatable, intent(inout) :: locfield_dsamp !< Output (downsampled) array
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
-  integer, intent(in) :: dl !< integer downsample level
-  integer, intent(out):: isv,iev,jsv,jev !<  diagnostics-compute indices (to be passed to send_data)
+  type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
+  integer, intent(in) :: dl                !< Level of down sampling
+  integer, intent(inout) :: isv            !< i-start index for diagnostics
+  integer, intent(inout) :: iev            !< i-end index for diagnostics
+  integer, intent(inout) :: jsv            !< j-start index for diagnostics
+  integer, intent(inout) :: jev            !< j-end index for diagnostics
   real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
-  !locals
+  ! Locals
   real, dimension(:,:), pointer :: locmask
   integer :: f1,f2,isv_o,jsv_o
 
@@ -3675,50 +3700,58 @@ subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,
 
 end subroutine downsample_diag_field_2d
 
-!> The downsample algorithm
-!! The downsample method could be deduced (before send_data call)
+!> \section downsampling The down sample algorithm
+!!
+!! The down sample method could be deduced (before send_data call)
 !!  from the diag%x_cell_method, diag%y_cell_method and diag%v_cell_method
 !!
-!! This is the summary of the downsample algoritm for a diagnostic field f:
-!!  f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
-!!     i and j run from 0 to dl-1 (dl being the downsample level)
-!!     Id,Jd are the downsampled (coarse grid) indices run over the coarsened compute grid,
-!!     if and jf are the original (fine grid) indices
+!! This is the summary of the down sample algoritm for a diagnostic field f:
+!!  \f[
+!!     f(Id,Jd) = \sum_{i,j} f(Id+i,Jd+j) * weight(Id+i,Jd+j) / [ \sum_{i,j} weight(Id+i,Jd+j)]
+!!  \f]
+!!  Here, i and j run from 0 to dl-1 (dl being the down sample level).
+!!  Id,Jd are the down sampled (coarse grid) indices run over the coarsened compute grid,
+!!  if and jf are the original (fine grid) indices.
 !!
-!!example   x_cell y_cell v_cell algorithm_id    impemented weight(if,jf)
-!!---------------------------------------------------------------------------------------
-!!theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)
-!!u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)
-!!v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)
-!!?         point  sum    mean   PSM =012        h(if,jf)*delta(if,Id)
-!!volcello  sum    sum    sum    SSS =111        1
-!!T_dfxy_co sum    sum    point  SSP =110        1
-!!umo       point  sum    sum    PSS =011        1*delta(if,Id)
-!!vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)
-!!umo_2d    point  sum    point  PSP =010        1*delta(if,Id)
-!!vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)
-!!?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)
-!!?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)
-!!w         mean   mean   point  MMP =220        G%areaT(if,jf)
-!!h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)
+!! \verbatim
+!! Example   x_cell y_cell v_cell algorithm_id    implemented weight(if,jf)
+!! ---------------------------------------------------------------------------------------
+!! theta     mean   mean   mean   MMM =222        G%areaT(if,jf)*h(if,jf)
+!! u         point  mean   mean   PMM =022        dyCu(if,jf)*h(if,jf)*delta(if,Id)
+!! v         mean   point  mean   MPM =202        dxCv(if,jf)*h(if,jf)*delta(jf,Jd)
+!! ?         point  sum    mean   PSM =012        h(if,jf)*delta(if,Id)
+!! volcello  sum    sum    sum    SSS =111        1
+!! T_dfxy_co sum    sum    point  SSP =110        1
+!! umo       point  sum    sum    PSS =011        1*delta(if,Id)
+!! vmo       sum    point  sum    SPS =101        1*delta(jf,Jd)
+!! umo_2d    point  sum    point  PSP =010        1*delta(if,Id)
+!! vmo_2d    sum    point  point  SPP =100        1*delta(jf,Jd)
+!! ?         point  mean   point  PMP =020        dyCu(if,jf)*delta(if,Id)
+!! ?         mean   point  point  MPP =200        dxCv(if,jf)*delta(jf,Jd)
+!! w         mean   mean   point  MMP =220        G%areaT(if,jf)
+!! h*theta   mean   mean   sum    MMS =221        G%areaT(if,jf)
 !!
-!!delta is the Kroneker delta
+!! delta is the Kronecker delta
+!! \endverbatim
 
-!> This subroutine allocates and computes a downsampled array given an input array
-!! The downsample method is based on the "cell_methods" for the diagnostics as explained
+!> This subroutine allocates and computes a down sampled 3d array given an input array
+!! The down sample method is based on the "cell_methods" for the diagnostics as explained
 !! in the above table
-!! 3d interface
 subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
-  real, dimension(:,:,:) , pointer :: field_in
-  real, dimension(:,:,:) , allocatable :: field_out
-  integer , intent(in) :: dl
-  integer,  intent(in) :: method !< sampling method
-  real,  dimension(:,:,:), pointer :: mask
-  type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
-  integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
-  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< dsampaed indices
-  !locals
+  real, dimension(:,:,:), pointer :: field_in      !< Original field to be down sampled
+  real, dimension(:,:,:), allocatable :: field_out !< down sampled field
+  integer, intent(in) :: dl                !< Level of down sampling
+  integer,  intent(in) :: method           !< Sampling method
+  real,  dimension(:,:,:), pointer :: mask !< Mask for field
+  type(diag_ctrl), intent(in) :: diag_CS   !< Structure used to regulate diagnostic output
+  type(diag_type), intent(in) :: diag      !< A structure describing the diagnostic to post
+  integer, intent(in) :: isv_o             !< Original i-start index
+  integer, intent(in) :: jsv_o             !< Original j-start index
+  integer, intent(in) :: isv_d             !< i-start index of down sampled data
+  integer, intent(in) :: iev_d             !< i-end index of down sampled data
+  integer, intent(in) :: jsv_d             !< j-start index of down sampled data
+  integer, intent(in) :: jev_d             !< j-end index of down sampled data
+  ! Locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   integer :: k,ks,ke
@@ -3726,7 +3759,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   real :: epsilon = 1.0e-20
 
   ks=1 ; ke =size(field_in,3)
-  !Allocate the downsampled field on the downsampled data domain
+  ! Allocate the down sampled field on the down sampled data domain
 !  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed,ks:ke))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl,ks:ke))
   f_in1 = size(field_in,1)
@@ -3740,7 +3773,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   endif
   allocate(field_out(1:f1,1:f2,ks:ke))
 
-  !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
+  ! Fill the down sampled field on the down sampled diagnostics (almost always compuate) domain
   if(method .eq. MMM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
@@ -3871,31 +3904,39 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
 
 end subroutine downsample_field_3d
 
-subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
-  real, dimension(:,:) , pointer :: field_in
-  real, dimension(:,:) , allocatable :: field_out
-  integer , intent(in) :: dl
-  integer,  intent(in) :: method !< sampling method
-  real, dimension(:,:), pointer :: mask
+!> This subroutine allocates and computes a down sampled 2d array given an input array
+!! The down sample method is based on the "cell_methods" for the diagnostics as explained
+!! in the above table
+subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, diag, &
+                               isv_o, jsv_o, isv_d, iev_d, jsv_d, jev_d)
+  real, dimension(:,:), pointer :: field_in      !< Original field to be down sampled
+  real, dimension(:,:), allocatable :: field_out !< Down sampled field
+  integer, intent(in) :: dl                !< Level of down sampling
+  integer,  intent(in) :: method           !< Sampling method
+  real, dimension(:,:), pointer :: mask    !< Mask for field
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
-  type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
-  integer , intent(in) :: isv_o,jsv_o             !< original indices,  In practice  isv_o=jsv_o=1
-  integer , intent(in) :: isv_d,iev_d,jsv_d,jev_d !< dsampaed indices
-  !locals
+  type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
+  integer, intent(in) :: isv_o             !< Original i-start index
+  integer, intent(in) :: jsv_o             !< Original j-start index
+  integer, intent(in) :: isv_d             !< i-start index of down sampled data
+  integer, intent(in) :: iev_d             !< i-end index of down sampled data
+  integer, intent(in) :: jsv_d             !< j-start index of down sampled data
+  integer, intent(in) :: jev_d             !< j-end index of down sampled data
+  ! Locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   real :: ave,total_weight,weight
   real :: epsilon = 1.0e-20
 
-  !Allocate the downsampled field on the downsampled data domain
+  ! Allocate the down sampled field on the down sampled data domain
 !  allocate(field_out(diag_cs%dsamp(dl)%isd:diag_cs%dsamp(dl)%ied,diag_cs%dsamp(dl)%jsd:diag_cs%dsamp(dl)%jed))
 !  allocate(field_out(1:size(field_in,1)/dl,1:size(field_in,2)/dl))
-  !Fill the downsampled field on the downsampled diagnostics (almost always compuate) domain
+  ! Fill the down sampled field on the down sampled diagnostics (almost always compuate) domain
   f_in1 = size(field_in,1)
   f_in2 = size(field_in,2)
   f1 = f_in1/dl
   f2 = f_in2/dl
-  !Correction for the symmetric case
+  ! Correction for the symmetric case
   if (diag_cs%G%symmetric) then
      f1 = f1 + mod(f_in1,dl)
      f2 = f2 + mod(f_in2,dl)
@@ -4004,19 +4045,28 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs,di
 
 end subroutine downsample_field_2d
 
-!> Allocate and compute the downsampled masks
-!! The masks are downsampled based on a minority rule, i.e., a coarse cell is open (1)
+!> Allocate and compute the 2d down sampled mask
+!! The masks are down sampled based on a minority rule, i.e., a coarse cell is open (1)
 !! if at least one of the sub-cells are open, otherwise it's closed (0)
-subroutine downsample_mask_2d(field_in, field_out, dl, isc_o,jsc_o, isc_d,iec_d,jsc_d,jec_d , isd_d,ied_d,jsd_d,jed_d)
-  real, dimension(:,:) , intent(in) :: field_in
-  real, dimension(:,:) , pointer :: field_out
-  integer , intent(in) :: dl
-  integer , intent(in) :: isc_o,jsc_o
-  integer , intent(in) :: isc_d,iec_d,jsc_d,jec_d !< downsampled mask compute indices
-  integer , intent(in) :: isd_d,ied_d,jsd_d,jed_d !< downsampled mask data indices
+subroutine downsample_mask_2d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_d, jsc_d, jec_d, &
+                              isd_d, ied_d, jsd_d, jed_d)
+  real, dimension(:,:), intent(in) :: field_in !< Original field to be down sampled
+  real, dimension(:,:), pointer :: field_out   !< Down sampled field
+  integer, intent(in) :: dl    !< Level of down sampling
+  integer, intent(in) :: isc_o !< Original i-start index
+  integer, intent(in) :: jsc_o !< Original j-start index
+  integer, intent(in) :: isc_d !< Computational i-start index of down sampled data
+  integer, intent(in) :: iec_d !< Computational i-end index of down sampled data
+  integer, intent(in) :: jsc_d !< Computational j-start index of down sampled data
+  integer, intent(in) :: jec_d !< Computational j-end index of down sampled data
+  integer, intent(in) :: isd_d !< Computational i-start index of down sampled data
+  integer, intent(in) :: ied_d !< Computational i-end index of down sampled data
+  integer, intent(in) :: jsd_d !< Computational j-start index of down sampled data
+  integer, intent(in) :: jed_d !< Computational j-end index of down sampled data
+  ! Locals
   integer :: i,j,ii,jj,i0,j0
   real    :: tot_non_zero
-  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
+  ! down sampled mask = 0 unless the mask value of one of the down sampling cells is 1
   allocate(field_out(isd_d:ied_d,jsd_d:jed_d))
   field_out(:,:) = 0.0
   do j=jsc_d,jec_d ; do i=isc_d,iec_d
@@ -4030,16 +4080,28 @@ subroutine downsample_mask_2d(field_in, field_out, dl, isc_o,jsc_o, isc_d,iec_d,
   enddo; enddo
 end subroutine downsample_mask_2d
 
-subroutine downsample_mask_3d(field_in, field_out, dl, isc_o,jsc_o, isc_d,iec_d,jsc_d,jec_d , isd_d,ied_d,jsd_d,jed_d)
-  real, dimension(:,:,:) , intent(in) :: field_in
-  real, dimension(:,:,:) , pointer :: field_out
-  integer , intent(in) :: dl
-  integer , intent(in) :: isc_o,jsc_o
-  integer , intent(in) :: isc_d,iec_d,jsc_d,jec_d !< downsampled mask compute indices
-  integer , intent(in) :: isd_d,ied_d,jsd_d,jed_d !< downsampled mask data indices
+!> Allocate and compute the 3d down sampled mask
+!! The masks are down sampled based on a minority rule, i.e., a coarse cell is open (1)
+!! if at least one of the sub-cells are open, otherwise it's closed (0)
+subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_d, jsc_d, jec_d, &
+                              isd_d, ied_d, jsd_d, jed_d)
+  real, dimension(:,:,:), intent(in) :: field_in !< Original field to be down sampled
+  real, dimension(:,:,:), pointer :: field_out   !< down sampled field
+  integer, intent(in) :: dl    !< Level of down sampling
+  integer, intent(in) :: isc_o !< Original i-start index
+  integer, intent(in) :: jsc_o !< Original j-start index
+  integer, intent(in) :: isc_d !< Computational i-start index of down sampled data
+  integer, intent(in) :: iec_d !< Computational i-end index of down sampled data
+  integer, intent(in) :: jsc_d !< Computational j-start index of down sampled data
+  integer, intent(in) :: jec_d !< Computational j-end index of down sampled data
+  integer, intent(in) :: isd_d !< Computational i-start index of down sampled data
+  integer, intent(in) :: ied_d !< Computational i-end index of down sampled data
+  integer, intent(in) :: jsd_d !< Computational j-start index of down sampled data
+  integer, intent(in) :: jed_d !< Computational j-end index of down sampled data
+  ! Locals
   integer :: i,j,ii,jj,i0,j0,k,ks,ke
   real    :: tot_non_zero
-  !downsampled mask = 0 unless the mask value of one of the downsampling cells is 1
+  ! down sampled mask = 0 unless the mask value of one of the down sampling cells is 1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)
   allocate(field_out(isd_d:ied_d,jsd_d:jed_d,ks:ke))
   field_out(:,:,:) = 0.0
