@@ -16,6 +16,7 @@ use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : file_exists
+use MOM_io, only : get_dimension_features
 use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_period_value
 use MOM_io, only : get_time_units
@@ -37,6 +38,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_attribute_exists => variable_att_exists, &
+                           fms2_get_variable_attribute => get_variable_attribute, &
                            fms2_get_variable_names => get_variable_names, &
                            fms2_get_dimension_size => get_dimension_size, &
                            fms2_get_num_variables => get_num_variables, &
@@ -684,7 +686,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
-  integer :: dim_lengths 
+  integer :: dim_lengths(1) 
   integer :: name_length = 0
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -794,7 +796,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
-  integer :: dim_lengths
+  integer :: dim_lengths(1)
   integer :: name_length = 0
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
