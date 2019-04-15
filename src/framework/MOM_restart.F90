@@ -368,7 +368,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
 
   base_file_name = ''
   restart_file_name = ''
-  nc_action = ''
+  nc_action = 'append'
 
   restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
 
@@ -381,22 +381,19 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if file exists
-  CS%restart_file_created = file_exists(base_file_name)
-
-  if (CS%restart_file_created) then
-     nc_action = "append"
-  else
-     nc_action = "write" 
-  endif                 
-
-  ! open the restart file for domain-decomposed write
+  ! check if restart file already exists and can be appended
   file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
                                    G%Domain%mpp_domain, is_restart = .true.)
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-  endif
+  if (.not.(file_open_success) then
+     nc_action = "write" 
+     ! open the restart file for domain-decomposed write
+     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+     if (.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
+        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+     endif
+  endif          
 
   ! get the axis (dimension) names and lengths                                   
   ! 4d variables are lon x lat x vertical level x time
@@ -455,12 +452,12 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
   logical :: axis_exists = .false.
   character(len=200) :: base_file_name 
   character(len=200) :: restart_file_name
-  character(len=200) :: dim_names(3)
+  character(len=200) :: dim_names(4) ! size is ndims+1 to allow for a record dimension
   character(len=16) :: nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes
-  integer, dimension(3) :: dim_lengths
+  integer, dimension(4) :: dim_lengths ! size is ndims+1 to allow for a record dimension
   integer :: substring_index = 0
   integer :: i
   integer :: name_length
@@ -477,7 +474,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
   
   base_file_name = ''
   restart_file_name = ''
-  nc_action = ''
+  nc_action = 'append'
   
   restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
 
@@ -490,24 +487,21 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if file is an existing restart or initial conditions file
-  CS%restart_file_created = file_exists(base_file_name)
-
-  if (CS%restart_file_created) then
-     nc_action = "append"
-  else
+  ! check if restart file already exists and can be appended
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+  if (.not.(file_open_success) then
      nc_action = "write" 
-  endif                          
+     ! open the restart file for domain-decomposed write
+     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+     if (.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
+        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+     endif
+  endif                 
 
-  ! open the restart file for domain-decomposed write
-  file_open_success = fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                      G%Domain%mpp_domain, is_restart = .true.)
-
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_3d: "//mesg)
-  endif
-
+ 
   ! get the axis (dimension) names and lengths                                   
    call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
@@ -565,13 +559,13 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
   logical :: axis_exists = .false.
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
-  character(len=200) :: dim_names(2)
+  character(len=200) :: dim_names(3) ! size is ndims+1 to allow for a record dimension
   character(len=16) ::  nc_action
   character(len=200) :: mesg
   integer :: horgrid_position = 1
   integer :: num_axes
   integer :: substring_index = 0
-  integer, dimension(2) :: dim_lengths
+  integer, dimension(3) :: dim_lengths ! size is ndims+1 to allow for a record dimension
   integer :: name_length=0
   integer :: i
           
@@ -593,7 +587,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
 
   base_file_name = ''
   restart_file_name = ''
-  nc_action = ''
+  nc_action = 'append'
 
   restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
 
@@ -606,22 +600,19 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  CS%restart_file_created = file_exists(base_file_name)
-
-  if (CS%restart_file_created) then
-     nc_action = "append"
-  else
-     nc_action = "write" 
-  endif                 
-
-  ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
+  ! check if restart file already exists and can be appended
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
                                    G%Domain%mpp_domain, is_restart = .true.)
-
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_2d: "//mesg)
-  endif
+  if (.not.(file_open_success) then
+     nc_action = "write" 
+     ! open the restart file for domain-decomposed write
+     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+     if (.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
+        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+     endif
+  endif          
   ! get the axis (dimension) names and lengths                                   
    call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
@@ -678,7 +669,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   type(MOM_restart_CS) :: fileObjWrite
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
-  character(len=200) :: dim_names(1)
+  character(len=200) :: dim_names(2) ! size is ndims+1 to allow for a record dimension
   character(len=200) :: base_file_name
   character(len=200) :: restart_file_name
   character(len=16) :: nc_action
@@ -686,7 +677,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   integer :: horgrid_position = 1
   integer :: num_axes, i
   integer :: substring_index = 0
-  integer :: dim_lengths(1) 
+  integer :: dim_lengths(2) ! size is ndims+1 to allow for a record dimension
   integer :: name_length = 0
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
@@ -706,7 +697,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
                 z_grid=z_grid, t_grid=t_grid)
   base_file_name = ''
   restart_file_name = ''
-  nc_action = ''
+  nc_action = 'append'
 
   restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
 
@@ -719,22 +710,19 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  CS%restart_file_created = file_exists(base_file_name)
-
-  if (CS%restart_file_created) then
-     nc_action = "append"
-  else
-     nc_action = "write" 
-  endif           
-
-  ! open the restart file for domain-decomposed write
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
+  ! check if restart file already exists and can be appended
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
                                    G%Domain%mpp_domain, is_restart = .true.)
-
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_1d: "//mesg)
-  endif
+  if (.not.(file_open_success) then
+     nc_action = "write" 
+     ! open the restart file for domain-decomposed write
+     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+     if (.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
+        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+     endif
+  endif          
 
   ! get the axis (dimension) names and lengths                                   
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
@@ -811,7 +799,7 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
 
   base_file_name = ''
   restart_file_name = ''
-  nc_action = ''
+  nc_action = 'append'
 
   restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
 
@@ -824,22 +812,19 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  CS%restart_file_created = file_exists(base_file_name)
-
-  if (CS%restart_file_created) then
-     nc_action = "append"
-  else
+  ! check if restart file already exists and can be appended
+  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+  if (.not.(file_open_success) then
      nc_action = "write" 
-  endif                            
-
-  ! open the restart file for domain-decomposed write
-  file_open_success = fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, &
-                                      G%Domain%mpp_domain, is_restart = .true.)
-
-  if (.not. file_open_success) then 
-     write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-     call MOM_error(FATAL,"MOM_restart:register_restart_field_0d: "//mesg)
-  endif
+     ! open the restart file for domain-decomposed write
+     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
+                                   G%Domain%mpp_domain, is_restart = .true.)
+     if (.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
+        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
+     endif
+  endif          
                  
   ! get the axis (dimension) names and lengths                                   
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
