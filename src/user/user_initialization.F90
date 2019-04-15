@@ -246,7 +246,7 @@ end subroutine write_user_log
 !!  - v - Meridional velocity [m s-1].
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
-!!  - G%CoriolisBu - The Coriolis parameter [s-1].
+!!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
 !!  - GV%g_prime - The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
 !!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:

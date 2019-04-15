@@ -821,7 +821,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-1,je ; do I=is-1,ie
-      q(I,J) = 0.25 * G%CoriolisBu(I,J) * &
+      q(I,J) = 0.25 * US%s_to_T*G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
            ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
             (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)) )
@@ -1396,8 +1396,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
               gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
              (gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J)) + &
               gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1)))) + &
-            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
+            US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                          (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
       H_eff_dx2 = max(H_min_dyn * (G%IdxT(i,j)**2 + G%IdyT(i,j)**2), &
                       G%IareaT(i,j) * &
                         ((Datu(I,j)*G%IdxCu(I,j) + Datu(I-1,j)*G%IdxCu(I-1,j)) + &
@@ -2364,8 +2364,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
       ((gtot_E(i,j)*Datu(I,j)*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IdxCu(I-1,j)) + &
        (gtot_N(i,j)*Datv(i,J)*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IdyCv(i,J-1))) + &
-      ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
+      US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                    (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
   enddo ; enddo
   dtbt_max = sqrt(min_max_dt2 / dgeo_de)
@@ -4105,7 +4105,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     enddo ; enddo
     do J=js-1,je ; do I=is-1,ie
       if (G%mask2dT(i,j)+G%mask2dT(i,j+1)+G%mask2dT(i+1,j)+G%mask2dT(i+1,j+1)>0.) then
-        CS%q_D(I,J) = 0.25 * G%CoriolisBu(I,J) * &
+        CS%q_D(I,J) = 0.25 * US%s_to_T*G%CoriolisBu(I,J) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
            ((G%areaT(i,j) * G%bathyT(i,j) + G%areaT(i+1,j+1) * G%bathyT(i+1,j+1)) + &
             (G%areaT(i+1,j) * G%bathyT(i+1,j) + G%areaT(i,j+1) * G%bathyT(i,j+1)) )

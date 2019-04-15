@@ -95,8 +95,8 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
       enddo
 
       ustar = 0.01*US%m_to_Z ! Change this to being an input parameter?
-      absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                   (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
+      absf = 0.25*US%s_to_T*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                             (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
       do K=2,nz
         tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z

@@ -433,7 +433,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, Gv, CS%CoriolisAdv_CSp)
+                 G, Gv, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -682,14 +682,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
-                            MEKE, Varmix, G, GV, CS%hor_visc_CSp, OBC=CS%OBC)
+                            MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -1114,7 +1114,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
-  call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
+  call hor_visc_init(Time, G, US, param_file, diag, CS%hor_visc_CSp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
@@ -1154,7 +1154,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, CS%hor_visc_CSp, OBC=CS%OBC)
+                              G, GV, US, CS%hor_visc_CSp, OBC=CS%OBC)
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
     CS%u_av(:,:,:) = u(:,:,:)

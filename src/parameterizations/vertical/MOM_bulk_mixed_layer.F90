@@ -670,7 +670,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
             kU_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
                       fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
-        absf_x_H = 0.25 * US%m_to_Z * h(i,0) * &  !### I think this should be H_to_Z -RWH
+        absf_x_H = 0.25 * US%m_to_Z * US%s_to_T * h(i,0) * &  !### I think this should be H_to_Z -RWH
             ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
              (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         ! If the mixed layer vertical viscosity specification is changed in
@@ -1355,7 +1355,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   real :: totEn_Z   ! The total potential energy released by convection, [Z3 s-2 ~> m3 s-2].
   real :: Ih        ! The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
   real :: exp_kh    ! The nondimensional decay of TKE across a layer [nondim].
-  real :: absf      ! The absolute value of f averaged to thickness points, s-1.
+  real :: absf      ! The absolute value of f averaged to thickness points [s-1].
   real :: U_star    ! The friction velocity [Z s-1 ~> m s-1].
   real :: absf_Ustar  ! The absolute value of f divided by U_star [Z-1 ~> m-1].
   real :: wind_TKE_src ! The surface wind source of TKE [Z m2 s-3 ~> m3 s-3].
@@ -1377,8 +1377,8 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
     if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
     if (CS%omega_frac < 1.0) then
-      absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                   (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+      absf = 0.25*US%s_to_T*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+                             (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
       if (CS%omega_frac > 0.0) &
         absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
     endif

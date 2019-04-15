@@ -214,8 +214,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   if (CS%energized_angle <= 0) then
     frac_per_sector = 1.0 / real(CS%nAngle * CS%nMode * CS%nFreq)
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
-      f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                              (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      !### For rotational symmetry this should be
+      ! f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+      !                         (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
                             dt*frac_per_sector*(1-CS%q_itides)*TKE_itidal_input(i,j)
@@ -224,8 +227,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     frac_per_sector = 1.0 / real(CS%nMode * CS%nFreq)
     a = CS%energized_angle
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
-      f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                              (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      !### For rotational symmetry this should be
+      ! f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+      !                         (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
                             dt*frac_per_sector**(1-CS%q_itides)*TKE_itidal_input(i,j)
@@ -245,7 +251,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
-    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle, CS%use_PPMang)
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, US, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
 
   ! Check for En<0 - for debugging, delete later
@@ -271,7 +277,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Propagate the waves.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, G, CS, CS%NAngle)
+    call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, G, US, CS, CS%NAngle)
   enddo ; enddo
 
   ! Check for En<0 - for debugging, delete later
@@ -292,7 +298,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Apply the other half of the refraction.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%NAngle, CS%use_PPMang)
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, US, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
 
   ! Check for En<0 - for debugging, delete later
@@ -421,8 +427,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       do j=jsd,jed ; do i=isd,ied
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         ! Calculate horizontal phase velocity magnitudes
-        f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
-                 G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
+        f2 = 0.25*US%s_to_T**2*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
+                                G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
+        !### For rotational symmetry this should be
+        ! f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+        !                         (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
         Kmag2 = (freq2 - f2) / (cn(i,j,m)**2 + cn_subRO**2)
         c_phase = 0.0
         if (Kmag2 > 0.0) then
@@ -730,7 +739,7 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
 end subroutine get_lowmode_loss
 
 !> Implements refraction on the internal waves at a single frequency.
-subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
+subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure.
   integer,               intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -742,6 +751,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
                          intent(in)    :: cn   !< Baroclinic mode speed [m s-1].
   real,                  intent(in)    :: freq !< Wave frequency [s-1].
   real,                  intent(in)    :: dt   !< Time step [s].
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   logical,               intent(in)    :: use_PPMang !< If true, use PPM for advection rather
                                                !! than upwind.
   ! Local variables
@@ -795,24 +805,24 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
 
   ! Do the refraction.
     do i=is,ie
-      f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+      f2 = 0.25*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-      favg = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
-                 (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
-      df2_dx = 0.5*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2) - &
+      favg = 0.25*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
+                             (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
+      df2_dx = 0.5*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2) - &
                     (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I-1,J-1)**2)) * &
                G%IdxT(i,j)
-      df_dx = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
+      df_dx = 0.5*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * &
                G%IdxT(i,j)
       dlnCn_dx = 0.5*( G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
                        (0.5*(cn(i+1,j) + cn(i,j)) + cn_subRO) + &
                        G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
                        (0.5*(cn(i,j) + cn(i-1,j)) + cn_subRO) )
-      df2_dy = 0.5*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2) - &
+      df2_dy = 0.5*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2) - &
                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2)) * &
                G%IdyT(i,j)
-      df_dy = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
+      df_dy = 0.5*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                     (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * &
                G%IdyT(i,j)
       dlnCn_dy = 0.5*( G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
@@ -950,7 +960,7 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
 end subroutine PPM_angular_advect
 
 !> Propagates internal waves at a single frequency.
-subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
+subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   integer,               intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -962,6 +972,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
                          intent(in)    :: cn   !< Baroclinic mode speed [m s-1].
   real,                  intent(in)    :: freq !< Wave frequency [s-1].
   real,                  intent(in)    :: dt   !< Time step [s].
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(int_tide_CS),     pointer       :: CS   !< The control structure returned by a
                                                !! previous call to int_tide_init.
   ! Local variables
@@ -1012,7 +1023,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
     ! Fix indexing here later
     speed(:,:) = 0
     do J=jsh-1,jeh ; do I=ish-1,ieh
-      f2 = G%CoriolisBu(I,J)**2
+      f2 = US%s_to_T**2 * G%CoriolisBu(I,J)**2
       speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
@@ -1042,12 +1053,12 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
     enddo
 
     do j=jsh,jeh ; do I=ish-1,ieh
-      f2 = 0.5*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2)
+      f2 = 0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2)
       speed_x(I,j) = 0.5*(cn(i,j) + cn(i+1,j)) * G%mask2dCu(I,j) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
     do J=jsh-1,jeh ; do i=ish,ieh
-      f2 = 0.5*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2)
+      f2 = 0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2)
       speed_y(i,J) = 0.5*(cn(i,j) + cn(i,j+1)) * G%mask2dCv(i,J) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo

@@ -1219,8 +1219,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
     ustar_h = visc%ustar_BBL(i,j)
     if (associated(fluxes%ustar_tidal)) &
       ustar_h = ustar_h + US%m_to_Z*fluxes%ustar_tidal(i,j)
-    absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                 (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))))
+    absf = 0.25 * US%s_to_T * ((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                               (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))))
     if ((ustar_h > 0.0) .and. (absf > 0.5*CS%IMax_decay*ustar_h))  then
       I2decay(i) = absf / ustar_h
     else
@@ -1433,8 +1433,8 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   do i=G%isc,G%iec ! Developed in single-column mode
 
     ! Column-wise parameters.
-    absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                 (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
+    absf = 0.25*US%s_to_T*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                           (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
 
     ! u* at the bottom [m s-1].
     ustar = visc%ustar_BBL(i,j)
@@ -1583,8 +1583,8 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
     if (CS%ML_omega_frac >= 1.0) then
       f_sq = 4.0*Omega2
     else
-      f_sq = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                   (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f_sq = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                                (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%ML_omega_frac > 0.0) &
         f_sq = CS%ML_omega_frac*4.0*Omega2 + (1.0-CS%ML_omega_frac)*f_sq
     endif

@@ -377,8 +377,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
           ! Estimate the neutral ocean boundary layer thickness as the minimum of the
           ! reported ocean mixed layer thickness and the neutral Ekman depth.
-          absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                       (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+          absf = 0.25*US%s_to_T*((abs(US%s_to_T*G%CoriolisBu(I,J)) + abs(US%s_to_T*G%CoriolisBu(I-1,J-1))) + &
+                                 (abs(US%s_to_T*G%CoriolisBu(I,J-1)) + abs(US%s_to_T*G%CoriolisBu(I-1,J))))
           if (absf*state%Hml(i,j) <= VK*ustar_h) then ; hBL_neut = state%Hml(i,j)
           else ; hBL_neut = (VK*ustar_h) / absf ; endif
           hBL_neut_h_molec = ZETA_N * ((hBL_neut * ustar_h) / (5.0 * CS%Kv_molec))
@@ -1397,8 +1397,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, GV, diag, forces
   call rescale_dyn_horgrid_bathymetry(dG, US%Z_to_m)
 
   ! Set up the Coriolis parameter, G%f, usually analytically.
-  call MOM_initialize_rotation(dG%CoriolisBu, dG, param_file)
-  ! This copies grid elements, inglucy bathyT and CoriolisBu from dG to CS%grid.
+  call MOM_initialize_rotation(dG%CoriolisBu, dG, param_file, US)
+  ! This copies grid elements, including bathyT and CoriolisBu from dG to CS%grid.
   call copy_dyngrid_to_MOM_grid(dG, CS%grid)
 
   call destroy_dyn_horgrid(dG)

@@ -13,6 +13,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : uppercase
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -107,7 +108,7 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 contains
 
 !> Calculates the Coriolis and momentum advection contributions to the acceleration.
-subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< Ocen grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< Zonal velocity [m s-1]
@@ -122,8 +123,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
                                                                   !! and momentum advection [m s-2].
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  type(accel_diag_ptrs),                     intent(inout) :: AD !< Storage for acceleration diagnostics
-  type(CoriolisAdv_CS),                      pointer       :: CS !< Control structure for MOM_CoriolisAdv
+  type(accel_diag_ptrs),                     intent(inout) :: AD  !< Storage for acceleration diagnostics
+  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
+  type(CoriolisAdv_CS),                      pointer       :: CS  !< Control structure for MOM_CoriolisAdv
 
   ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -410,7 +412,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         relative_vorticity = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * &
                              G%IareaBu(I,J)
       endif
-      absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
+      absolute_vorticity = US%s_to_T*G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
       if (Area_q(i,j) > 0.0) then
         hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))

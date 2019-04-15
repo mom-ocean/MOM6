@@ -297,7 +297,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
           cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
-          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
+          val2 = fac * exp(- 0.5 * US%s_to_T * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = val1 * cff * sina / &
                  (0.5*(G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
