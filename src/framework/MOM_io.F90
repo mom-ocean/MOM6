@@ -567,16 +567,16 @@ end subroutine MOM_write_data_0d
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! from the grid ids returned by a prior call to query_vardesc
-subroutine get_dimension_features(dim_names, dim_length, num_axes, &
-                                  hor_grid, z_grid, t_grid_in, G, GV)
+subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, GV, &
+                                  dim_names, dim_length, num_axes)
+  character(len=*), intent(in) :: hor_grid !< horizontal grid
+  character(len=*), intent(in) :: z_grid !< vertical grid
+  character(len=*), intent(in) :: t_grid_in !< time grid
+  type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
   character(len=*), dimension(:), intent(out) :: dim_names !< array of dimension names
   integer, dimension(:), intent(out) :: dim_length !< array of dimension sizes
   integer, intent(out) ::  num_axes !< number of axes to register in the restart file
-  character(len=*), optional, intent(in) :: hor_grid !< horizontal grid
-  character(len=*), optional, intent(in) :: z_grid !< vertical grid
-  character(len=*), optional, intent(in) :: t_grid_in !< time grid
-  type(ocean_grid_type), optional, intent(in)  :: G !< The ocean's grid structure
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure
   
   ! local
   logical :: use_lath = .false.
@@ -596,115 +596,104 @@ subroutine get_dimension_features(dim_names, dim_length, num_axes, &
      gridLonB => NULL()
   
   num_axes = 0
-  ! latitude and longitude
-  if (present(hor_grid)) then
-     if (.not.(present(G))) then
-         call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
-                        " G argument is missing from the subroutine call. "//&
-                         "It is required to get the horgrid_grid dimension sizes.")
-     endif
-     ! set the ocean grid coordinates
-     gridLatT => G%gridLatT
-     gridLatB => G%gridLatB
-     gridLonT => G%gridLonT
-     gridLonB => G%gridLonB
-     isg = G%isg
-     ieg = G%ieg 
-     jsg = G%jsg
-     jeg = G%jeg
-     IsgB = G%IsgB
-     IegB = G%IegB
-     JsgB = G%JsgB
-     JegB = G%JegB
+ 
+  ! set the ocean grid coordinates
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
   
-     select case (trim(hor_grid))
-        case ('h') ; use_lath = .true. ; use_lonh = .true.
-        case ('q') ; use_latq = .true. ; use_lonq = .true.
-        case ('u') ; use_lath = .true. ; use_lonq = .true.
-        case ('v') ; use_latq = .true. ; use_lonh = .true.
-        case ('T')  ; use_lath = .true. ; use_lonh = .true.
-        case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-        case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-        case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-        case ('1') ; 
-        case default
-           call MOM_error(FATAL, "MOM_io:get_dimension_features "//&
+  select case (trim(hor_grid))
+     case ('h') ; use_lath = .true. ; use_lonh = .true.
+     case ('q') ; use_latq = .true. ; use_lonq = .true.
+     case ('u') ; use_lath = .true. ; use_lonq = .true.
+     case ('v') ; use_latq = .true. ; use_lonh = .true.
+     case ('T')  ; use_lath = .true. ; use_lonh = .true.
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
+     case ('1') ; 
+     case default
+        call MOM_error(FATAL, "MOM_io:get_dimension_features "//&
                         "Unrecognized hor_grid argument "//trim(hor_grid))
-     end select
+  end select
   
-     ! add longitude name to dimension name array
-     if (use_lonh) then
-        num_axes = num_axes+1 
-        dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('lonh')) = 'lonh'
-        dim_length(num_axes) = size(gridLonT(isg:ieg))
-     elseif (use_lonq) then
+  ! add longitude name to dimension name array
+  if (use_lonh) then
+     num_axes = num_axes+1 
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim('lonh')) = 'lonh'
+     dim_length(num_axes) = size(gridLonT(isg:ieg))
+  elseif (use_lonq) then
+     num_axes = num_axes+1
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim('lonq')) ='lonq'
+     dim_length(num_axes) = size(gridLonB(IsgB:IegB)) 
+  endif
+ 
+  ! add latitude name to dimension name array
+  if (use_lath) then
+     num_axes = num_axes+1 
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim('lath')) = 'lath'
+     dim_length(num_axes) = size(gridLatT(jsg:jeg))
+  elseif (use_latq) then
+     num_axes = num_axes+1 
+     dim_names(num_axes) = ''
+     dim_names(num_axes)(1:len_trim('latq')) = 'latq'
+     dim_length(num_axes) = size(gridLatB(JsgB:JegB))
+  endif
+
+  ! vertical grid
+ 
+  select case (trim(z_grid))
+     case ('L')
         num_axes = num_axes+1
         dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('lonq')) ='lonq'
-        dim_length(num_axes) = size(gridLonB(IsgB:IegB)) 
-     endif
- 
-     ! add latitude name to dimension name array
-     if (use_lath) then
-        num_axes = num_axes+1 
+        dim_names(num_axes)(1:len_trim('Layer')) = 'Layer'
+        dim_length(num_axes) = size(GV%sLayer(1:GV%ke))  
+     case ('i')
+        num_axes = num_axes+1
         dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('lath')) = 'lath'
-        dim_length(num_axes) = size(gridLatT(jsg:jeg))
-     elseif (use_latq) then
-        num_axes = num_axes+1 
-        dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('latq')) = 'latq'
-        dim_length(num_axes) = size(gridLatB(JsgB:JegB))
-     endif
-  endif
-  ! vertical grid
-  if (present(z_grid)) then
-     if (.not.(present(GV))) then 
-         call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
-                        " GV argument is missing. It is required to get the z_grid size")
-     endif
-     select case (trim(z_grid))
-        case ('L')
-           num_axes = num_axes+1
-           dim_names(num_axes) = ''
-           dim_names(num_axes)(1:len_trim('Layer')) = 'Layer'
-           dim_length(num_axes) = size(GV%sLayer(1:GV%ke))  
-        case ('i')
-           num_axes = num_axes+1
-           dim_names(num_axes) = ''
-           dim_names(num_axes)(1:len_trim('Interface')) = 'Interface'
-           dim_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
-        case ('1') ! Do nothing.
-        case default
-           call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
-                        " has an unrecognized z_grid argument"//trim(z_grid))
-     end select
-  endif
+        dim_names(num_axes)(1:len_trim('Interface')) = 'Interface'
+        dim_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
+     case ('1') ! Do nothing.
+     case default
+        call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
+                      " has an unrecognized z_grid argument"//trim(z_grid))
+  end select
+  
   ! time
-  if (present(t_grid_in)) then
-     t_grid = adjustl(t_grid_in)
-     select case (t_grid(1:1))
-        case ('s', 'a', 'm')
-           num_axes = num_axes+1
-           dim_names(num_axes) = ''
-           dim_names(num_axes)(1:len_trim('Time')) = 'Time'
-           dim_length(num_axes) = unlimited
-        case ('p')
-           if (len_trim(t_grid(2:8)) <= 0) then
-               call MOM_error(FATAL,"MOM_io:get_dimension_features: "//&
+  t_grid = adjustl(t_grid_in)
+  select case (t_grid(1:1))
+     case ('s', 'a', 'm')
+        num_axes = num_axes+1
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('Time')) = 'Time'
+        dim_length(num_axes) = unlimited
+     case ('p')
+        if (len_trim(t_grid(2:8)) <= 0) then
+            call MOM_error(FATAL,"MOM_io:get_dimension_features: "//&
                            "No periodic axis length was specified in "//trim(t_grid))
-           endif
-           num_axes = num_axes+1
-           dim_names(num_axes) = ''
-           dim_names(num_axes)(1:len_trim('Period')) = 'Period'
-           dim_length(num_axes) = unlimited
-        case ('1') ! Do nothing.
-        case default
+        endif
+        num_axes = num_axes+1
+        dim_names(num_axes) = ''
+        dim_names(num_axes)(1:len_trim('Period')) = 'Period'
+        dim_length(num_axes) = unlimited
+     case ('1') ! Do nothing.
+     case default
            call MOM_error(WARNING, "MOM_io: get_dimension_features: "//&
                        "Unrecognized t_grid "//trim(t_grid))
-     end select
-  endif
+  end select
+
 end subroutine get_dimension_features
 
 !> get the position parameter value from the horizontal grid (hor_grid) string id

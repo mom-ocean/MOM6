@@ -398,8 +398,8 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
 
   ! get the axis (dimension) names and lengths                                   
   ! 4d variables are lon x lat x vertical level x time
-  call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                                  vd%hor_grid, vd%z_grid, vd%t_grid, G, GV)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -507,8 +507,8 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
   endif
 
   ! get the axis (dimension) names and lengths                                   
-  call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                                  vd%hor_grid, vd%z_grid, vd%t_grid, G, GV)
+   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -621,8 +621,8 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
      call MOM_error(FATAL,"MOM_restart:register_restart_field_2d: "//mesg)
   endif
   ! get the axis (dimension) names and lengths                                   
-  call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                                  vd%hor_grid, vd%z_grid, vd%t_grid, G, GV)
+   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -734,9 +734,9 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
      call MOM_error(FATAL,"MOM_restart:register_restart_field_1d: "//mesg)
   endif
 
- ! get the axis (dimension) names and lengths                                   
-  call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                                  z_grid=vd%z_grid, t_grid_in=vd%t_grid, GV=GV)
+  ! get the axis (dimension) names and lengths                                   
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -840,8 +840,8 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
   endif
                  
   ! get the axis (dimension) names and lengths                                   
-  call get_dimension_features(dim_names, dim_lengths, num_axes, &
-                              t_grid_in=vd%t_grid)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
   ! check if axes (dimensions) are registered in the restart file, 
   ! and register them if they are not
   if (num_axes> 0) then
@@ -2236,7 +2236,6 @@ function convert_checksum_to_string(checksum_int) result (checksum_string)
 ! local
   character(len=64) :: checksum_string
   integer :: i
-  integer(kind=8) :: checksum_1d
 
   checksum_string = ''
 
