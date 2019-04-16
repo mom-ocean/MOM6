@@ -114,9 +114,6 @@ type, public :: MOM_restart_CS ; private
                                     !! made from a run with a different mask_table than the current run,
                                     !! in which case the checksums will not match and cause crash.
   character(len=240) :: restartfile !< The name or name root for MOM restart files.
-  logical :: restart_file_created = .false. !< If true, one or more restart files with the restartfile name root have
-                                    !! were created (nc mode = 'write') during a previous call 
-                                    !! to register_restart_field
 
   !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
@@ -382,9 +379,6 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! open the restart file
-  file_open_success=MOM_open_file(CS%fileObjWrite, base_file_name, & 
-                                   G, is_restart = .true.)
   ! get the axis (dimension) names and lengths                                   
   ! 4d variables are lon x lat x vertical level x time
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
@@ -401,10 +395,14 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
         call flush(mpp_pe()+2000)
      enddo
   endif
+
   
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
   ! register the restart field
   call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+
+  file_open_success=MOM_open_file(CS%fileObjRead, base_file_name,"write", &
+                    G, is_restart = .true.)
    
   call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
        dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
@@ -1385,8 +1383,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      enddo
      
      file_open_success = .false.
-     file_open_success = fms2_open_file(CS%fileObjWrite, restartpath,"append", &
-                                        G%Domain%mpp_domain, is_restart=.true.)
+ 
+     file_open_success=MOM_open_file(CS%fileObjWrite, restartpath,"write", &
+                    G, is_restart = .true.)
+   
      if (.not. (file_open_success)) then
         call MOM_error(FATAL,"MOM_restart::save_restart: Failed to open file "//trim(restartpath))
      endif
@@ -1601,13 +1601,13 @@ subroutine restore_state(filename, directory, day, G, CS)
      else 
         file_path_2 = trim(file_path_1)
      endif
-     file_open_success=fms2_open_file(CS%fileObjRead, trim(file_path_2),"read", &
-                    G%Domain%mpp_domain, is_restart = .true.)
-                                                
-     if(.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
-        call MOM_error(FATAL,"MOM_restart: "//mesg)
-     endif
+     file_open_success=MOM_open_file(CS%fileObjRead, trim(file_path_2),"read", &
+                    G, is_restart = .true.)
+     
+     if (.not.(file_open_success) then  
+        write(mesg,'( "ERROR, unable to open the file ",A) ') trim(filename)
+        call MOM_error(FATAL,"MOM_restart::MOM_open_file: "//mesg)
+     endif      
      call fms2_get_dimension_size(CS%fileObjRead, "Time", ntime)
 
      if (ntime < 1) cycle
@@ -1636,8 +1636,8 @@ subroutine restore_state(filename, directory, day, G, CS)
         else 
            file_path_2 = trim(file_path_1)
         endif
-        file_open_success=fms2_open_file(CS%fileObjRead, file_path_2, "read", &
-                                       G%Domain%mpp_domain, is_restart = .true.)
+        file_open_success=MOM_open_file(CS%fileObjRead, file_path_2, "read", &
+                                       G, is_restart = .true.)
                                                 
         if(.not. file_open_success) then 
            write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
@@ -1677,8 +1677,9 @@ subroutine restore_state(filename, directory, day, G, CS)
      else 
         file_path_2 = trim(file_path_1)
      endif
-     file_open_success=fms2_open_file(CS%fileObjRead, file_path_2,"read", & 
-                                      G%Domain%mpp_domain, is_restart = .true.)                                            
+
+     file_open_success=MOM_open_file(CS%fileObjRead, trim(file_path_2),"read", &
+                    G, is_restart = .true.)
      if (.not. file_open_success) then 
         write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
         call MOM_error(FATAL,"MOM_restart: "//mesg)

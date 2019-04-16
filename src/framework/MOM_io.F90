@@ -93,8 +93,7 @@ interface file_exists
 end interface
 !> Open a netCDF file 
 interface MOM_open_file
-  module procedure MOM_open_file_for_read_DD
-  module procedure MOM_open_file_for_write_DD
+  module procedure MOM_open_file_DD
 end interface
 
 !> Read a data field from a file
@@ -1233,29 +1232,36 @@ function MOM_file_exists(filename)
 end function MOM_file_exists
 
 !> Open domain-decomposed file(s) with the base file name
-!! 'filename' in append mode for files that exist, or write mode
-!! for files that do not exist
-function MOM_open_file_for_write_DD(fileObj, filename, G, is_restart) result(file_open_success)
+!! 'filename' to read from or write/append to
+!! 
+function MOM_open_file__DD(fileObj, filename, mode, G, is_restart) result(file_open_success)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
-  character(len=*),       intent(in) :: filename !< The base filename of the file being inquired about
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   type(ocean_grid_type),      intent(in) :: G !< The ocean's grid structure
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
 
   logical :: file_open_success !< returns .true. if the file(s) is(are) opened
-
-  ! check if file(s) already exists and can be appended
-  file_open_success=fms2_open_file(fileObj, filename, "append", & 
+  character(len=10) :: nc_action
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success=fms2_open_file(fileObj, filename, "read", & 
+                          G%Domain%mpp_domain, is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success=fms2_open_file(fileObj, filename, "append", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
-  if (.not.(file_open_success) then
-     ! create and open new file(s) for domain-decomposed write
-     file_open_success=fms2_open_file(fileObj, filename, "write", & 
+        if (.not.(file_open_success) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success=fms2_open_file(fileObj, filename, "write", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open the file ",A) ') trim(filename)
-        call MOM_error(FATAL,"MOM_io::MOM_open_file_for_write_DD: "//mesg)
-     endif
-  endif          
-end function MOM_open_file_for_write_DD
+        endif
+     case default
+        write(mesg,'( "ERROR, file mode must be "read" or "write to open " ",A) ') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD: "//mesg)
+  end select     
+end function MOM_open_file_DD
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
