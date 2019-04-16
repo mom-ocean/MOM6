@@ -64,13 +64,12 @@ public :: get_axis_data
 public :: get_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
-public :: get_period_value
+public :: get_time_values
 public :: get_time_units
 public :: MOM_write_data
 public :: MOM_open_file
 public :: MOM_register_field
 public :: MOM_register_variable_attribute
-
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -86,6 +85,15 @@ type, public :: vardesc
   real               :: conversion         !< for unit conversions, such as needed to
                                            !! convert from intensive to extensive
 end type vardesc
+
+!> Type for describing a variable axis
+type, public :: axis_data_type
+  character(len=64)  :: name = ''               !< Name of the axis
+  character(len=48)  :: units = ''              !< Physical dimensions of the axis
+  character(len=240) :: longname = ''           !< Long name of the axis
+  integer   :: horgrid_position = 0             !< Horizontal grid position
+  real, dimension(:), pointer :: data => NULL() !< pointer to the axis data
+end type axis_data_type
 
 !> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
@@ -723,6 +731,83 @@ function get_horizontal_grid_position(grid_string_id) result(grid_position)
 
 end function get_horizontal_grid_position
 
+!> get the axis data from the name and return the 
+!> structure with data and meta data
+! Type for describing a variable axis
+!type, public :: axis_data
+!  character(len=64)  :: name               !< name in a NetCDF file
+!  character(len=48)  :: units              !< Physical dimensions of the axis
+!  character(len=240) :: longname           !< Long name of the axis
+!  integer   :: horgrid_position   !< Horizontal grid position
+!  real, pointer :: data => NULL()         !< pointer to the axis data
+!end type axis_data
+
+subroutine get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
+  type(axis_data_type), intent(inout) :: axis_data_CS !< control structure with axis data
+  character(len=*), intent(in) :: axis_name
+  type(ocean_grid_type), intent(in) :: G !< ocean horizontal grid structure; G or dG
+  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
+  real,dimension(:),optional, intent(in) :: time_val :: !< time value
+  character(len=*), optional,intent(in) :: time_units :: !< tim
+
+  axis_data_CS%name(1:len_trim(axis_name))=trim(axis_name)
+  axis_data_CS%data => NULL()
+  axis_data_CS%units = ""
+  axis_data_CS%horgrid_position = 0
+  
+  select case(trim(axis_name))
+     case('lath')
+        axis_data_CS%data=>G%gridLatT(G%jsg:G%jeg)
+        axis_data_CS%longname = 'Latitude'
+        axis_data_CS%units = G%y_axis_units
+        axis_data_CS%horgrid_position = CENTER
+     case('lonh')
+        axis_data_CS%data=>G%gridLonT(G%isg:G%ieg)
+        axis_data_CS%horgrid_position = CENTER
+        axis_data_CS%longname = 'Longitude'
+        axis_data_CS%units = G%x_axis_units
+     case('latq')
+        axis_data_CS%data=>G%gridLatB(G%JsgB:G%JegB)
+        axis_data_CS%longname = 'Latitude'
+        axis_data_CS%units = G%y_axis_units
+        axis_data_CS%horgrid_position = CORNER
+     case('lonq')
+        axis_data_CS%data=>G%gridLonB(G%IsgB:G%IegB)
+        axis_data_CS%longname = 'Longitude'
+        axis_data_CS%units = G%x_axis_units
+        axis_data_CS%horgrid_position = CORNER
+     case('Layer')
+        axis_data_CS%data=>GV%sLayer(1:GV%ke)
+        axis_data_CS%longname = 'Layer'
+        axis_data_CS%units = GV%zAxisUnits
+        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+     case('Interface')
+        axis_data_CS%data=>GV%sInterface(1:GV%ke+1)
+        axis_data_CS%longname = 'Interface'
+        axis_data_CS%units = GV%zAxisUnits
+        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+     case('Time')
+        if (.not.(present(time_val)) .or. .not.(present(time_units))) then
+           call MOM_error(FATAL, "MOM_io::get_axis_data: requires time_val"//&
+                          " and time_units arguments for "//trim(axis_name))
+        axis_data_CS%data=>time_val
+        axis_data_CS%longname = 'Time'
+        axis_data_CS%units = time_units
+        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+     case('Period')
+        if (.not.(present(time_val))) then
+           call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//&
+                          " for "//trim(axis_name))
+        axis_data_CS%data=>time_val
+        axis_data_CS%longname = 'Periods for cyclical variables'
+        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+         
+     case default
+        call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
+                       " is an unrecognized axis")
+  end select
+
+end subroutine get_axis_data
 function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
   character(len=*), intent(in) :: hor_grid !< horizontal grid string
   character(len=*), intent(in) :: z_grid !< vertical grid string
@@ -782,18 +867,19 @@ function get_time_units(time_value) result(time_units_out)
    time_units_out = trim(time_units)
 end function get_time_units
 
-!> get the period from the t_grid string
-!>@note: Be sure to deallocate the period_value array
+!> get the time values from the t_grid string
+!>@note: Be sure to deallocate the time_values array
 !! at the end of the routine that calls this function to
 !! avoid memory leaks.
-function get_period_value(t_grid_in) result(period_value)
+function get_time_values(t_grid_in, array_size) result(time_values)
   character(len=*), intent(in) :: t_grid_in !< string for the time grid
+  integer, optional, intent(in) :: array_size !< array size to allocate
   ! local
   character(len=12) :: t_grid
   character(len=12) :: t_grid_read
   integer :: var_periods
   integer :: k
-  real, dimension(:), allocatable :: period_value
+  real, dimension(:), allocatable :: time_values
   
   t_grid = ''
   t_grid_read = ''
@@ -801,10 +887,8 @@ function get_period_value(t_grid_in) result(period_value)
   t_grid = adjustl(t_grid_in)
 
   select case (t_grid(1:1))
-     case ('s', 'a', 'm')
-        call MOM_error(FATAL, "MOM_io::get_period_value: The t_grid string"//&
-                        " corresponds to `Time` not 'Period'. Check the location of the call"//&
-                        " to this function")     
+     case ('s', 'a', 'm') ! allocate an empty array of desired size to populate after function call
+        allocate(time_values(array_size))
      case ('p')
         if (len_trim(t_grid(2:8)) <= 0) then
              call MOM_error(FATAL, &
@@ -825,18 +909,18 @@ function get_period_value(t_grid_in) result(period_value)
             call MOM_error(FATAL, "MOM_io::get_period_value: "//&
            "Period value must be positive.")
         endif
+        ! Define a periodic axis array
+        allocate(time_values(var_periods))
+        do k=1,var_periods
+           time_values(k) = real(k)
+        enddo
      case ('1') ! Do nothing.
      case default
         call MOM_error(WARNING, "MOM_io::get_period_value:"//trim(t_grid_in)//&
                        " is an unrecognized t_grid value.")
   end select
 
-  ! Define a periodic axis array
-  allocate(period_value(var_periods))
-  do k=1,var_periods
-     period_value(k) = real(k)
-  enddo
-end function get_period_value
+end function get_time_values
 
 !> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
