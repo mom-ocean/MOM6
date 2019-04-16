@@ -1065,13 +1065,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
         GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I-1,j,k) + &
                      KH_v_GME(i,J,k) + KH_v_GME(i,J-1,k)) * &
-                    sqrt(0.5*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)),0.0) * &
+                    (0.5*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)),0.0) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I-1,j,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i,J-1,k)) )**2 ) / &
                     ( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
                       (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
                       (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
                      epsilon))
+
+!        GME_coeff = 2.0 * (MIN(G%bathyT(i,j)/H0,1.0)**2) * 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I-1,j,k) + &
+!                     KH_v_GME(i,J,k) + KH_v_GME(i,J-1,k)) * &
+!                    sqrt(0.5*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)),0.0)) / &
+!                   sqrt( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
+!                      (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
+!                      (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + &
+!                     epsilon)
 
 !        GME_coeff = 2.0 * MAX(0.0,MEKE%MEKE(i,j)) / &
 !                   SQRT( dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
@@ -1089,7 +1097,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !        ! apply mask
 !        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
 
-        GME_coeff_limiter = 0.0
+        GME_coeff_limiter = 1e6 ! 1e8
 !        GME_coeff_limiter =  2.0 * MAX(0.0,MEKE%MEKE(i,j)) / sqrt(dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
 !                      (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
 !                      (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2 + epsilon)
@@ -1122,7 +1130,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
         GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
                             KH_v_GME(i,J,k) + KH_v_GME(i+1,J,k)) * &
-                     sqrt( 0.25*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
+                     ( 0.25*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
                             VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)),0.0) * &
                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I,j+1,k)) )**2 + &
                       (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i+1,J,k)) )**2 ) / &
@@ -1130,6 +1138,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                         (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
                        (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
                          epsilon))
+
+!        GME_coeff = 2.0 * (MIN(G%bathyT(i,j)/H0,1.0)**2) * 0.25*(KH_u_GME(I,j,k) + KH_u_GME(I,j+1,k) + &
+!                            KH_v_GME(i,J,k) + KH_v_GME(i+1,J,k)) * &
+!                     sqrt( 0.25*MAX((VarMix%N2_u(I,j,k)+VarMix%N2_u(I,j+1,k) + &
+!                            VarMix%N2_v(i,J,k)+VarMix%N2_v(i+1,J,k)),0.0)) / &
+!                      sqrt(dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+!                        (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
+!                       (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + &
+!                         epsilon)
 
 !        GME_coeff = 2.0* MAX(0.0,MEKE%MEKE(i,j)) / &
 !                     SQRT( dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
@@ -1147,7 +1164,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         ! apply mask
         GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
 
-       GME_coeff_limiter = 0.0
+       GME_coeff_limiter = 1e6 !1e8
 !        GME_coeff_limiter = 2.0 * MAX(0.0,MEKE%MEKE(i,j)) / sqrt( dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
 !                        (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
 !                       (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2 + epsilon)
@@ -1288,7 +1305,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
-         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
+         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork_diss(i,j,k)
         enddo ; enddo
       endif
     endif ; endif

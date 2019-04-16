@@ -108,6 +108,7 @@ type, public :: VarMix_CS
     KH_v_QG               !< QG Leith GM coefficient at v-points (m2 s-1)
 
   ! Parameters
+  logical :: use_Visbeck  !< Use Visbeck formulation for thickness diffusivity
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
   real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula
   real :: Res_coef_khth   !< A non-dimensional number that determines the function
@@ -928,6 +929,9 @@ subroutine VarMix_init(Time, G, GV, param_file, diag, CS)
                  "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, \n"//&
                  "this is set to true regardless of what is in the \n"//&
                  "parameter file.", default=.false.)
+  call get_param(param_file, mdl, "USE_VISBECK", CS%use_Visbeck,&
+                 "If true, use the Visbeck et al. (1997) formulation for \n"//&
+                 "thickness diffusivity.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KH", CS%Resoln_scaled_Kh, &
                  "If true, the Laplacian lateral viscosity is scaled away \n"//&
                  "when the first baroclinic deformation radius is well \n"//&
