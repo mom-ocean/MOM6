@@ -22,6 +22,7 @@ use MOM_io, only : get_period_value
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
 use MOM_io, only : MOM_register_variable_attribute
+use MOM_io, only : MOM_open_file
 use MOM_io, only : MOM_write_data
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
@@ -381,20 +382,9 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
      base_file_name(1:name_length) = trim(restart_file_name)
   endif
 
-  ! check if restart file already exists and can be appended
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not.(file_open_success) then
-     nc_action = "write" 
-     ! open the restart file for domain-decomposed write
-     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-     endif
-  endif          
-
+  ! open the restart file
+  file_open_success=MOM_open_file(CS%fileObjWrite, base_file_name, & 
+                                   G, is_restart = .true.)
   ! get the axis (dimension) names and lengths                                   
   ! 4d variables are lon x lat x vertical level x time
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &

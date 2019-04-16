@@ -67,6 +67,7 @@ public :: get_horizontal_grid_position
 public :: get_period_value
 public :: get_time_units
 public :: MOM_write_data
+public :: MOM_open_file
 public :: MOM_register_field
 public :: MOM_register_variable_attribute
 
@@ -89,6 +90,11 @@ end type vardesc
 !> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
   module procedure MOM_file_exists
+end interface
+!> Open a netCDF file 
+interface MOM_open_file
+  module procedure MOM_open_file_for_read_DD
+  module procedure MOM_open_file_for_write_DD
 end interface
 
 !> Read a data field from a file
@@ -1225,6 +1231,31 @@ function MOM_file_exists(filename)
   logical :: MOM_file_exists
   MOM_file_exists = fms2_file_exists(filename)
 end function MOM_file_exists
+
+!> Open domain-decomposed file(s) with the base file name
+!! 'filename' in append mode for files that exist, or write mode
+!! for files that do not exist
+function MOM_open_file_for_write_DD(fileObj, filename, G, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file being inquired about
+  type(ocean_grid_type),      intent(in) :: G !< The ocean's grid structure
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+
+  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
+
+  ! check if file(s) already exists and can be appended
+  file_open_success=fms2_open_file(fileObj, filename, "append", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+  if (.not.(file_open_success) then
+     ! create and open new file(s) for domain-decomposed write
+     file_open_success=fms2_open_file(fileObj, filename, "write", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+     if (.not. file_open_success) then 
+        write(mesg,'( "ERROR, unable to open the file ",A) ') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_for_write_DD: "//mesg)
+     endif
+  endif          
+end function MOM_open_file_for_write_DD
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
