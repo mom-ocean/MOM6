@@ -40,6 +40,7 @@ use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_register_field => register_field, &
                                 fms2_register_variable_attribute => register_variable_attribute, &
                                 fms2_open_file => open_file, &
+                                fms2_close_file => close_file, &
                                 fms2_write_data => write_data, &
                                 fms2_attribute_exists => variable_att_exists, &
                                 fms2_variable_exists => variable_exists, &
@@ -68,6 +69,8 @@ public :: get_time_values
 public :: get_time_units
 public :: MOM_get_axis_data
 public :: MOM_open_file
+public :: MOM_close_file
+public :: MOM_register_axis
 public :: MOM_register_field
 public :: MOM_register_variable_attribute
 public :: MOM_write_data
@@ -500,6 +503,44 @@ subroutine MOM_register_field(fileObjWrite, field_name, dimension_names, &
   endif
     
 end subroutine MOM_register_field
+
+!> register an axis to a restart file
+subroutine MOM_register_axis(fileObj, axis_name, axis_length)
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to fms2_open_file
+   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
+   integer, optional, intent(in) :: axis_length !< length of axis/dimension
+                                                !! (only needed for z-grid and Time)
+   select case (trim(axis_name))
+         case ('latq'); call fms2_register_axis(fileObj,'latq','y')
+         case ('lath'); call fms2_register_axis(fileObj,'lath','y') 
+         case ('lonq'); call fms2_register_axis(fileObj,'lonq','x') 
+         case ('lonh'); call fms2_register_axis(fileObj,'lonh','x')
+         case ('Layer')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Layer axis")
+            endif 
+            call fms2_register_axis(fileObj,'Layer',axis_length)
+         case ('Interface')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Interface axis")
+            endif 
+            call fms2_register_axis(fileObj,'Interface',axis_length)
+         case ('Time')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Time axis")
+            endif 
+            call fms2_register_axis(fileObj,'Time', axis_length)
+         case ('Period')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                     "axis_length argument required to register the Period axis")
+            endif 
+            call fms2_register_axis(fileObj,'Period',axis_length)
+   end select
+end subroutine MOM_register_axis
 
 !> register a string variable attribute to a netCDF file
 subroutine register_variable_attribute_string(fileObjWrite, var_name, att_name, att_value)
@@ -1313,6 +1354,100 @@ function ensembler(name, ens_no_in) result(en_nm)
 
 end function ensembler
 
+!> write and initial conditions file
+subroutine write_IC_data_4d(filename,variable_name, field_data, variable_required, G, GV, time, &
+                         hor_grid, z_grid, t_grid, longname, units)
+  character(len=*), intent(in) :: filename !< name of the IC file
+  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
+  real, dimension(:,:,:,:), intent(in) :: field_data     !< A pointer to the field to be read or written
+  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
+                                                      !! successfully read from the IC file.
+  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
+  type(time_type),          intent(in) :: time        !< model time                        
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+ 
+  ! local
+  type(vardesc) :: vd
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite
+  type(axis_data_type) :: axis_data_CS
+  integer :: horgrid_position = 1
+  integer :: substring_index = 0
+  integer :: name_length = 0
+  integer :: num_axes = 0
+  integer :: i
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
+  character(len=200) :: base_file_name = ''
+  character(len=200) :: dim_names(4)
+  character(len=10) :: time_units = ''
+  real :: ic_time
+  real, dimension(:), allocatable :: time_vals
+
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(filename))
+  if (substring_index <= 0) then
+      base_file_name = append_substring(trim(filename),'.nc')
+  else
+      name_length = len_trim(filename)
+      base_file_name(1:name_length) = trim(filename)
+  endif
+
+
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
+
+  file_open_success = MOM_open_file(fileObjWrite, filename, "write", .false.)
+  ! register the axes, and write the axis variables to the file if they do not exist
+  if (num_axes> 0) then
+     do i=1,num_axes
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if (.not.(axis_exists)) then
+           ! get the time units
+           ic_time = time_type_to_real(time) / 86400.0
+           time_units = get_time_units(ic_time)
+           ! get an array of time values
+           if (.not.(allocated(time_vals))) then
+              if (adjustl(t_grid(1:1)) /= 'p') then
+                 time_vals = get_time_values(t_grid, 1)
+                 time_vals(1) = ic_time
+              else
+                 time_vals = get_time_values(t_grid)
+              endif
+           endif
+ 
+           call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+                                        time_vals, time_units)
+           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
+                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
+                domain_position=axis_data_CS%horgrid_position)
+
+           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'long_name',axis_data_CS%longname)
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'units',axis_data_CS%units)
+        endif
+     enddo
+  endif
+   
+  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_write_data(fileObjWrite, variable_name, field_data)
+  call MOM_close_file(fileObjWrite)
+
+  if(allocated(time_vals) deallocate(time_vals))
+
+end subroutine write_IC_data_4d
 
 !> Returns true if the named file exists.
 function MOM_file_exists(filename)
@@ -1354,6 +1489,12 @@ function MOM_open_file_DD(fileObj, filename, mode, G, is_restart) result(file_op
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD: "//mesg)
   end select     
 end function MOM_open_file_DD
+
+!> wrapper for fms2_close_file that closes a netcdf file
+subroutine MOM_close_file(fileObj)
+   type(FmsNetcdfDomainFile_t), intent(in) :: fileObj !< netCDF file object 
+   call fms2_close_file(fileObj)
+end subroutine MOM_close_file
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
