@@ -384,7 +384,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   if (CS%use_GME) then
     ! GME tapers off above this depth
     H0 = 1000.0
-    FWfrac = 0.1
+    FWfrac = 1.0
     ! initialize diag. array with zeros
     GME_coeff_h(:,:,:) = 0.0
     GME_coeff_q(:,:,:) = 0.0
@@ -447,10 +447,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
     ! Calculate horizontal tension
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      sh_xx(i,j) = (CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u(I,j,k) - &
-                                    G%IdyCu(I-1,j) * u(I-1,j,k)) - &
-                    CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
-                                    G%IdxCv(i,J-1)*v(i,J-1,k)))
+          dudx(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u(I,j,k) - &
+                                     G%IdyCu(I-1,j) * u(I-1,j,k))
+          dvdy(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
+                                     G%IdxCv(i,J-1) * v(i,J-1,k))
+          sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
     enddo ; enddo
 
     ! Components for the shearing strain
@@ -458,6 +459,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
+
 
     ! Interpolate the thicknesses to velocity points.
     ! The extra wide halos are to accommodate the cross-corner-point projections
@@ -676,12 +678,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
                         G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
                         (h(i,j,k) + GV%H_subroundoff)
-          dudx(i,j) = 0.5*(G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
-                        G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) )*G%IareaT(i,j)/ &
-                        (h(i,j,k) + GV%H_subroundoff) * G%mask2dcu(I,j)
-          dvdy(i,j) = 0.5*(G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k)))*G%IareaT(i,j)/ &
-                        (h(i,j,k) + GV%H_subroundoff) * G%mask2dcv(i,J)
         enddo ; enddo
 
         call pass_var(div_xx, G%Domain, complete=.true.)
@@ -1031,17 +1027,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
     if (find_FrictWork) then 
       if (CS%biharmonic) call pass_vector(u0, v0, G%Domain)
+      call pass_var(dudx, G%Domain, complete=.true.)
+      call pass_var(dvdy, G%Domain, complete=.true.)
+      call pass_var(dvdx, G%Domain, position=CORNER, complete=.true.)
+      call pass_var(dudy, G%Domain, position=CORNER, complete=.true.)
 
       do j=js,je ; do i=is,ie
         ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
-        FrictWork_diss(i,j,k) = Kh_h(i,j,k) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
+        FrictWork_diss(i,j,k) = -Kh_h(i,j,k) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
              (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
-             (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2) + &
+             (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2) - &
                               Ah_h(i,j,k) * ((0.5*(u0(I,j) + u0(I-1,j)))**2 + &
                                              (0.5*(v0(i,J) + v0(i,J-1)))**2)
  
         if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
-          FrictWorkMax(i,j,k) = MEKE%MEKE(i,j) * sqrt(dudx(i,j)**2 + dvdy(i,j)**2 + &
+          FrictWorkMax(i,j,k) = 2.0*MEKE%MEKE(i,j) * sqrt(dudx(i,j)**2 + dvdy(i,j)**2 + &
              (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
              (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2)
 
@@ -1050,7 +1050,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         ! we need to add the FrictWork done by the dissipation operators, since this work
         ! is done only for numerical stability and is therefore spurious  
           if (CS%use_GME) then
-            target_FrictWork_GME(i,j,k) = FWfrac * FrictWorkMax(i,j,k) - FrictWork(i,j,k)
+            target_FrictWork_GME(i,j,k) = FWfrac * FrictWorkMax(i,j,k) - FrictWork_diss(i,j,k)
           endif
 
         endif ; endif

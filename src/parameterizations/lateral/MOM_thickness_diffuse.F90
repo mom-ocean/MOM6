@@ -329,16 +329,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   do K=1,nz+1 ; do J=js-1,je ; do i=is,ie ; int_slope_v(i,J,K) = 0.0 ; enddo ; enddo ; enddo
 !$OMP end parallel
 
-!  if (associated(MEKE)) then  
-!  do j=js,je ; do i=is,ie
-!       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + 0.25*(Kh_u(I,j,k) + KH_u(I-1,j,k) + &
-!                     KH_v(i,J,k) + KH_v(i,J-1,k)) 
-!!                     0.25*MAX(VarMix%N2_u(I,j,k)+VarMix%N2_u(I-1,j,k)+VarMix%N2_v(i,J,k)+VarMix%N2_v(i,J-1,k),0.0) * &
-!!                     ( (0.5*(VarMix%slope_x(I,j,k)+VarMix%slope_x(I-1,j,k)) )**2 + &
-!!                      (0.5*(VarMix%slope_y(i,J,k)+VarMix%slope_y(i,J-1,k)) )**2 )
-!  enddo; enddo
-!  endif
-
   if (CS%detangle_interfaces) then
     call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, &
                            CS, int_slope_u, int_slope_v)
@@ -362,8 +352,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
   if (use_stored_slopes) then
     call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, CS, &
-                                int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y, &
-                                VarMix%N2_u, VarMix%N2_v)
+                                int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
   else
     call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, CS, &
                                 int_slope_u, int_slope_v)
@@ -457,7 +446,7 @@ end subroutine thickness_diffuse
 !! Fluxes are limited to give positive definite thicknesses.
 !! Called by thickness_diffuse().
 subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, &
-                                  CS, int_slope_u, int_slope_v, slope_x, slope_y, N2_x, N2_y)
+                                  CS, int_slope_u, int_slope_v, slope_x, slope_y)
   type(ocean_grid_type),                       intent(in)  :: G      !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)  :: GV     !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h      !< Layer thickness in H (m or kg/m2)
@@ -483,10 +472,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                                                      !! density gradients.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: slope_x !< Isopycnal slope at u-points
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), optional, intent(in)  :: slope_y !< Isopycnal slope at v-points
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1),  optional, intent(in)  :: N2_x !< Brunt-Vaisala frequency at
-                                                              !! u points (s-2)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), optional, intent(in)  :: N2_y !< Brunt-Vaisala frequency at
-                                                              !! v points (s-2)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -571,7 +556,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: diag_sfn_y, diag_sfn_unlim_y ! Diagnostics
   logical :: present_int_slope_u, present_int_slope_v
   logical :: present_slope_x, present_slope_y, calc_derivatives
-  logical :: present_N2_x, present_N2_y
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
@@ -589,8 +573,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   present_int_slope_v = PRESENT(int_slope_v)
   present_slope_x = PRESENT(slope_x)
   present_slope_y = PRESENT(slope_y)
-  present_N2_x = PRESENT(N2_x)
-  present_N2_y = PRESENT(N2_y)
 
   nk_linear = max(GV%nkml, 1)
 
@@ -1198,14 +1180,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
     if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
     if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
-      MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
-!       if (present_N2_x .and. present_N2_y) &
-!       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + 0.25*(Kh_u(I,j,k) + KH_u(I-1,j,k) + &
-!                     KH_v(i,J,k) + KH_v(i,J-1,k)) * &
-!                     0.25*MAX(N2_x(I,j,k)+N2_x(I-1,j,k)+N2_y(i,J,k)+N2_y(i,J-1,k),0.0) * &
-!                    ( (0.5*(slope_x(I,j,k)+slope_x(I-1,j,k)) )**2 + &
-!                      (0.5*(slope_y(i,J,k)+slope_y(i,J-1,k)) )**2 )
-
+      MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + MIN(0.0,Work_h)
     endif ; endif
   enddo ; enddo ; endif
 
