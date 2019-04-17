@@ -1136,19 +1136,29 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         ! get the axis (dimension) names and lengths                                   
         ! note: 4d variables are lon x lat x vertical level x time
         call get_dimension_features(hor_grid, z_grid, t_grid, G, GV, &
-                                    dim_names, dim_lengths, num_axes)
-        ! register the axes, and write the axis variables to the file if they do not exist
-        if (num_axes> 0) then
-           do i=1,num_axes
-              axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
-              if (.not.(axis_exists)) then
-                 call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
-                                        time_vals, restart_time_units)
-                 call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
-                 call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, &
-                    axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
-                    domain_position=axis_data_CS%horgrid_position)
+                                     dim_names, dim_lengths, num_axes)
+        ! register the axes to the file if they do not exist
+        if (num_axes <= 0) then
+           call MOM_error(FATAL,"MOM_restart::save_restart: num_axes is an invalid value.")
+        endif
 
+        do i=1,num_axes
+           axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+           if (.not.(axis_exists)) then
+              call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+                                     time_vals, restart_time_units)
+              call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           endif
+        enddo
+        ! write the axis data and associated metadata to the file
+        do i=1,num_axes
+           variable_exists = fms2_variable_exists(CS%fileObjWrite, dim_names(i))
+           if (.not.(variable_exists)) then
+              call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+                                     time_vals, restart_time_units)
+              if ( associated(axis_data_CS%data)) then
+                 call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, axis_data_CS%data, &
+                                               dimensions=(/axis_data_CS%name/), domain_position=axis_data_CS%horgrid_position)
                  call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 
                  call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
@@ -1156,10 +1166,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                  call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
                                                       'units',axis_data_CS%units)
               endif
-              WRITE(mpp_pe()+2000,*) "save_restart: dim name ", trim(axis_data_CS%name)
-              call flush(mpp_pe()+2000)
-           enddo
-        endif  
+           endif
+        enddo
         
         ! register and write the restart variables to the file
         if (associated(CS%var_ptr3d(m)%p)) then
