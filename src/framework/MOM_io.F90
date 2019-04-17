@@ -74,6 +74,7 @@ public :: MOM_register_axis
 public :: MOM_register_field
 public :: MOM_register_variable_attribute
 public :: MOM_write_data
+public :: MOM_write_IC
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -129,6 +130,14 @@ interface MOM_write_data
   module procedure MOM_write_data_2d
   module procedure MOM_write_data_1d
   module procedure MOM_write_data_0d
+end interface
+
+!> Write initial conditions to a netCDF file
+interface MOM_write_IC
+  module procedure MOM_write_IC_4d
+  module procedure MOM_write_IC_3d
+  module procedure MOM_write_IC_2d
+  module procedure MOM_write_IC_1d
 end interface
 
 interface MOM_register_variable_attribute
@@ -1354,12 +1363,13 @@ function ensembler(name, ens_no_in) result(en_nm)
 
 end function ensembler
 
-!> write and initial conditions file
-subroutine write_IC_data_4d(filename,variable_name, field_data, variable_required, G, GV, time, &
-                         hor_grid, z_grid, t_grid, longname, units)
+!> write a 4d initial condition field to a netCDF file
+subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variable_required, &
+                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
+  character(len=*), intent(in) :: directory !< location of the IC file
   character(len=*), intent(in) :: filename !< name of the IC file
   character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
-  real, dimension(:,:,:,:), intent(in) :: field_data     !< A pointer to the field to be read or written
+  real, dimension(:,:,:,:), intent(in) :: field_data     !< Field to write
   logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
                                                       !! successfully read from the IC file.
   type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
@@ -1392,20 +1402,26 @@ subroutine write_IC_data_4d(filename,variable_name, field_data, variable_require
   ! append '.nc' to the restart file name if it is missing
   substring_index = index('.nc', trim(filename))
   if (substring_index <= 0) then
-      base_file_name = append_substring(trim(filename),'.nc')
+      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
   else
-      name_length = len_trim(filename)
-      base_file_name(1:name_length) = trim(filename)
+      name_length = len(trim(directory)//trim(filename))
+      base_file_name(1:name_length) = trim(directory)//trim(filename)
   endif
-
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
+
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+
+  num_axes=0
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
 
-  file_open_success = MOM_open_file(fileObjWrite, filename, "write", .false.)
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  
+  if (.not. (file_open_success)) then
+     call MOM_error(FATAL,"MOM_io::write_IC_data_4d: Failed to open file "//trim(base_file_name))
+  endif
   ! register the axes, and write the axis variables to the file if they do not exist
   if (num_axes> 0) then
      do i=1,num_axes
@@ -1443,11 +1459,328 @@ subroutine write_IC_data_4d(filename,variable_name, field_data, variable_require
    
   call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
+        
   call MOM_close_file(fileObjWrite)
 
   if(allocated(time_vals) deallocate(time_vals))
 
-end subroutine write_IC_data_4d
+end subroutine MOM_write_IC_4d
+
+!> Write a 3d initial condition field to a netCDF file
+subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variable_required, &
+                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
+  character(len=*), intent(in) :: directory !< location of the IC file
+  character(len=*), intent(in) :: filename !< name of the IC file
+  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
+  real, dimension(:,:,:), intent(in) :: field_data     !< Field to write
+  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
+                                                      !! successfully read from the IC file.
+  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
+  type(time_type),          intent(in) :: time        !< model time                        
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+ 
+  ! local
+  type(vardesc) :: vd
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite
+  type(axis_data_type) :: axis_data_CS
+  integer :: horgrid_position = 1
+  integer :: substring_index = 0
+  integer :: name_length = 0
+  integer :: num_axes = 0
+  integer :: i
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
+  character(len=200) :: base_file_name = ''
+  character(len=200) :: dim_names(4)
+  character(len=10) :: time_units = ''
+  real :: ic_time
+  real, dimension(:), allocatable :: time_vals
+
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(filename))
+  if (substring_index <= 0) then
+      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
+  else
+      name_length = len(trim(directory)//trim(filename))
+      base_file_name(1:name_length) = trim(directory)//trim(filename)
+  endif
+
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+
+  num_axes=0
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
+
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  
+  if (.not. (file_open_success)) then
+     call MOM_error(FATAL,"MOM_io::write_IC_data_3d: Failed to open file "//trim(base_file_name))
+  endif
+  ! register the axes, and write the axis variables to the file if they do not exist
+  if (num_axes> 0) then
+     do i=1,num_axes
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if (.not.(axis_exists)) then
+           ! get the time units
+           ic_time = time_type_to_real(time) / 86400.0
+           time_units = get_time_units(ic_time)
+           ! get an array of time values
+           if (.not.(allocated(time_vals))) then
+              if (adjustl(t_grid(1:1)) /= 'p') then
+                 time_vals = get_time_values(t_grid, 1)
+                 time_vals(1) = ic_time
+              else
+                 time_vals = get_time_values(t_grid)
+              endif
+           endif
+ 
+           call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+                                        time_vals, time_units)
+           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
+                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
+                domain_position=axis_data_CS%horgrid_position)
+
+           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'long_name',axis_data_CS%longname)
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'units',axis_data_CS%units)
+        endif
+     enddo
+  endif
+   
+  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_write_data(fileObjWrite, variable_name, field_data)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
+        
+  call MOM_close_file(fileObjWrite)
+
+  if(allocated(time_vals) deallocate(time_vals))
+
+end subroutine MOM_write_IC_3d
+
+!> Write a 2d initial condition field to a netCDF file
+subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variable_required, &
+                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
+  character(len=*), intent(in) :: directory !< location of the IC file
+  character(len=*), intent(in) :: filename !< name of the IC file
+  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
+  real, dimension(:,:), intent(in) :: field_data     !< Field to write
+  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
+                                                      !! successfully read from the IC file.
+  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
+  type(time_type),          intent(in) :: time        !< model time                        
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+ 
+  ! local
+  type(vardesc) :: vd
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite
+  type(axis_data_type) :: axis_data_CS
+  integer :: horgrid_position = 1
+  integer :: substring_index = 0
+  integer :: name_length = 0
+  integer :: num_axes
+  integer :: i
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
+  character(len=200) :: base_file_name = ''
+  character(len=200) :: dim_names(3)
+  character(len=10) :: time_units = ''
+  real :: ic_time
+  real, dimension(:), allocatable :: time_vals
+
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(filename))
+  if (substring_index <= 0) then
+      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
+  else
+      name_length = len(trim(directory)//trim(filename))
+      base_file_name(1:name_length) = trim(directory)//trim(filename)
+  endif
+
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+
+  num_axes=0
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
+
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  
+  if (.not. (file_open_success)) then
+     call MOM_error(FATAL,"MOM_io::write_IC_data_2d: Failed to open file "//trim(base_file_name))
+  endif
+  ! register the axes, and write the axis variables to the file if they do not exist
+  if (num_axes> 0) then
+     do i=1,num_axes
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if (.not.(axis_exists)) then
+           ! get the time units
+           ic_time = time_type_to_real(time) / 86400.0
+           time_units = get_time_units(ic_time)
+           ! get an array of time values
+           if (.not.(allocated(time_vals))) then
+              if (adjustl(t_grid(1:1)) /= 'p') then
+                 time_vals = get_time_values(t_grid, 1)
+                 time_vals(1) = ic_time
+              else
+                 time_vals = get_time_values(t_grid)
+              endif
+           endif
+ 
+           call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+                                        time_vals, time_units)
+           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
+                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
+                domain_position=axis_data_CS%horgrid_position)
+
+           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'long_name',axis_data_CS%longname)
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'units',axis_data_CS%units)
+        endif
+     enddo
+  endif
+   
+  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_write_data(fileObjWrite, variable_name, field_data)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
+        
+  call MOM_close_file(fileObjWrite)
+
+  if(allocated(time_vals) deallocate(time_vals))
+
+end subroutine MOM_write_IC_2d
+
+!> Write a 1d initial condition field to a netCDF file
+subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variable_required, &
+                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
+  character(len=*), intent(in) :: directory !< location of the IC file
+  character(len=*), intent(in) :: filename !< name of the IC file
+  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
+  real, dimension(:), intent(in) :: field_data     !< Field to write
+  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
+                                                      !! successfully read from the IC file.
+  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
+  type(time_type),          intent(in) :: time        !< model time                        
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+ 
+  ! local
+  type(vardesc) :: vd
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite
+  type(axis_data_type) :: axis_data_CS
+  integer :: horgrid_position = 1
+  integer :: substring_index = 0
+  integer :: name_length = 0
+  integer :: num_axes = 0
+  integer :: i
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
+  character(len=200) :: base_file_name = ''
+  character(len=200) :: dim_names(2)
+  character(len=10) :: time_units = ''
+  real :: ic_time
+  real, dimension(:), allocatable :: time_vals
+
+  ! append '.nc' to the restart file name if it is missing
+  substring_index = index('.nc', trim(filename))
+  if (substring_index <= 0) then
+      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
+  else
+      name_length = len(trim(directory)//trim(filename))
+      base_file_name(1:name_length) = trim(directory)//trim(filename)
+  endif
+
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
+
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
+                              dim_names, dim_lengths, num_axes)
+
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  
+  if (.not. (file_open_success)) then
+     call MOM_error(FATAL,"MOM_io::write_IC_data_1d: Failed to open file "//trim(base_file_name))
+  endif
+  ! register the axes, and write the axis variables to the file if they do not exist
+  if (num_axes> 0) then
+     do i=1,num_axes
+        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        if (.not.(axis_exists)) then
+           ! get the time units
+           ic_time = time_type_to_real(time) / 86400.0
+           time_units = get_time_units(ic_time)
+           ! get an array of time values
+           if (.not.(allocated(time_vals))) then
+              if (adjustl(t_grid(1:1)) /= 'p') then
+                 time_vals = get_time_values(t_grid, 1)
+                 time_vals(1) = ic_time
+              else
+                 time_vals = get_time_values(t_grid)
+              endif
+           endif
+ 
+           call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+                                        time_vals, time_units)
+           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
+                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
+                domain_position=axis_data_CS%horgrid_position)
+
+           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'long_name',axis_data_CS%longname)
+           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                                                      'units',axis_data_CS%units)
+        endif
+     enddo
+  endif
+   
+  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_write_data(fileObjWrite, variable_name, field_data)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
+  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
+        
+  call MOM_close_file(fileObjWrite)
+
+  if(allocated(time_vals) deallocate(time_vals))
+
+end subroutine MOM_write_IC_1d
 
 !> Returns true if the named file exists.
 function MOM_file_exists(filename)
