@@ -11,6 +11,8 @@ use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_string_functions, only : lowercase, slasher
+use MOM_string_functions, only : append_substring
+use MOM_time_manager,     only : time_type, time_type_to_real
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
@@ -943,7 +945,7 @@ function get_time_values(t_grid_in, array_size) result(time_values)
   t_grid = ''
   t_grid_read = ''
   var_periods = -9999999
-  t_grid = adjustl(t_grid_in)
+  t_grid(1:len_trim(adjustl(t_grid_in))) = trim(adjustl(t_grid_in))
 
   select case (t_grid(1:1))
      case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
@@ -951,7 +953,7 @@ function get_time_values(t_grid_in, array_size) result(time_values)
      case ('p')
         if (len_trim(t_grid(2:8)) <= 0) then
              call MOM_error(FATAL, &
-             "MOM_io::get_period_value: No periodic axis length was specified in "//&
+             "MOM_io::get_time_values: No periodic axis length was specified in "//&
           trim(t_grid_in) // " in the periodic axis argument")
         endif
         var_periods = -9999999
@@ -965,7 +967,7 @@ function get_time_values(t_grid_in, array_size) result(time_values)
         endif
 
         if (var_periods < 1) then 
-            call MOM_error(FATAL, "MOM_io::get_period_value: "//&
+            call MOM_error(FATAL, "MOM_io::get_time_values: "//&
            "Period value must be positive.")
         endif
         ! Define a periodic axis array
@@ -975,7 +977,7 @@ function get_time_values(t_grid_in, array_size) result(time_values)
         enddo
      case ('1') ! Do nothing.
      case default
-        call MOM_error(WARNING, "MOM_io::get_period_value:"//trim(t_grid_in)//&
+        call MOM_error(WARNING, "MOM_io::get_time_values:"//trim(t_grid_in)//&
                        " is an unrecognized t_grid value.")
   end select
 
@@ -1395,7 +1397,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   logical :: axis_exists = .false.
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(4)
-  character(len=10) :: time_units = ''
+  character(len=20) :: time_units = ''
+  character(len=20) :: t_grid_read = ''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
 
@@ -1408,7 +1411,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
       base_file_name(1:name_length) = trim(directory)//trim(filename)
   endif
 
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
@@ -1417,7 +1420,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
 
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
   
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_4d: Failed to open file "//trim(base_file_name))
@@ -1425,46 +1428,46 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   ! register the axes, and write the axis variables to the file if they do not exist
   if (num_axes> 0) then
      do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
         if (.not.(axis_exists)) then
            ! get the time units
            ic_time = time_type_to_real(time) / 86400.0
            time_units = get_time_units(ic_time)
            ! get an array of time values
            if (.not.(allocated(time_vals))) then
-              if (adjustl(t_grid(1:1)) /= 'p') then
-                 time_vals = get_time_values(t_grid, 1)
+              t_grid_read = adjustl(vd%t_grid)
+              if (t_grid_read(1:1) /= 'p') then
+                 time_vals = get_time_values(vd%t_grid, 1)
                  time_vals(1) = ic_time
               else
-                 time_vals = get_time_values(t_grid)
+                 time_vals = get_time_values(vd%t_grid)
               endif
            endif
  
            call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
-           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
-           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
-                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
-                domain_position=axis_data_CS%horgrid_position)
+           call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+                                   (/axis_data_CS%name/), domain_position=axis_data_CS%horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'units',axis_data_CS%units)
         endif
      enddo
   endif
    
-  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_register_field(fileObjWrite, variable_name, dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
         
   call MOM_close_file(fileObjWrite)
 
-  if(allocated(time_vals) deallocate(time_vals))
+  if(allocated(time_vals)) deallocate(time_vals)
 
 end subroutine MOM_write_IC_4d
 
@@ -1500,7 +1503,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   logical :: axis_exists = .false.
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(4)
-  character(len=10) :: time_units = ''
+  character(len=20) :: time_units = ''
+  character(len=20) :: t_grid_read = ''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
 
@@ -1513,7 +1517,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
       base_file_name(1:name_length) = trim(directory)//trim(filename)
   endif
 
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
@@ -1522,7 +1526,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
 
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
   
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_3d: Failed to open file "//trim(base_file_name))
@@ -1530,46 +1534,46 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   ! register the axes, and write the axis variables to the file if they do not exist
   if (num_axes> 0) then
      do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
         if (.not.(axis_exists)) then
            ! get the time units
            ic_time = time_type_to_real(time) / 86400.0
            time_units = get_time_units(ic_time)
            ! get an array of time values
            if (.not.(allocated(time_vals))) then
-              if (adjustl(t_grid(1:1)) /= 'p') then
-                 time_vals = get_time_values(t_grid, 1)
+              t_grid_read = adjustl(vd%t_grid)
+              if (t_grid_read(1:1) /= 'p') then
+                 time_vals = get_time_values(vd%t_grid, 1)
                  time_vals(1) = ic_time
               else
-                 time_vals = get_time_values(t_grid)
+                 time_vals = get_time_values(vd%t_grid)
               endif
            endif
  
            call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
-           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
-           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
-                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
-                domain_position=axis_data_CS%horgrid_position)
+           call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+                                   (/axis_data_CS%name/), domain_position=axis_data_CS%horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'units',axis_data_CS%units)
         endif
      enddo
   endif
    
-  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_register_field(fileObjWrite, variable_name, dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
         
   call MOM_close_file(fileObjWrite)
 
-  if(allocated(time_vals) deallocate(time_vals))
+  if(allocated(time_vals)) deallocate(time_vals)
 
 end subroutine MOM_write_IC_3d
 
@@ -1605,7 +1609,8 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   logical :: axis_exists = .false.
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(3)
-  character(len=10) :: time_units = ''
+  character(len=20) :: time_units = ''
+  character(len=20) :: t_grid_read =''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
 
@@ -1618,7 +1623,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
       base_file_name(1:name_length) = trim(directory)//trim(filename)
   endif
 
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
@@ -1627,7 +1632,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
 
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
   
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_2d: Failed to open file "//trim(base_file_name))
@@ -1635,46 +1640,47 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   ! register the axes, and write the axis variables to the file if they do not exist
   if (num_axes> 0) then
      do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
         if (.not.(axis_exists)) then
            ! get the time units
            ic_time = time_type_to_real(time) / 86400.0
            time_units = get_time_units(ic_time)
            ! get an array of time values
            if (.not.(allocated(time_vals))) then
-              if (adjustl(t_grid(1:1)) /= 'p') then
-                 time_vals = get_time_values(t_grid, 1)
+              t_grid_read = adjustl(vd%t_grid)
+              if (t_grid_read(1:1) /= 'p') then
+                 time_vals = get_time_values(vd%t_grid, 1)
                  time_vals(1) = ic_time
               else
-                 time_vals = get_time_values(t_grid)
+                 time_vals = get_time_values(vd%t_grid)
               endif
            endif
  
            call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
-           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
-           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
-                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
-                domain_position=axis_data_CS%horgrid_position)
+           call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+                (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'units',axis_data_CS%units)
         endif
      enddo
   endif
    
-  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_register_field(fileObjWrite, variable_name,&
+                          dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
         
   call MOM_close_file(fileObjWrite)
 
-  if(allocated(time_vals) deallocate(time_vals))
+  if(allocated(time_vals)) deallocate(time_vals)
 
 end subroutine MOM_write_IC_2d
 
@@ -1711,6 +1717,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(2)
   character(len=10) :: time_units = ''
+  character(len=20) :: t_grid_read = ''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
 
@@ -1723,7 +1730,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
       base_file_name(1:name_length) = trim(directory)//trim(filename)
   endif
 
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
@@ -1731,7 +1738,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
                               dim_names, dim_lengths, num_axes)
 
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", .false.)
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
   
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_1d: Failed to open file "//trim(base_file_name))
@@ -1739,46 +1746,47 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   ! register the axes, and write the axis variables to the file if they do not exist
   if (num_axes> 0) then
      do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
+        axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
         if (.not.(axis_exists)) then
            ! get the time units
            ic_time = time_type_to_real(time) / 86400.0
            time_units = get_time_units(ic_time)
            ! get an array of time values
            if (.not.(allocated(time_vals))) then
-              if (adjustl(t_grid(1:1)) /= 'p') then
-                 time_vals = get_time_values(t_grid, 1)
+              t_grid_read = adjustl(vd%t_grid)
+              if (t_grid_read(1:1) /= 'p') then
+                 time_vals = get_time_values(vd%t_grid, 1)
                  time_vals(1) = ic_time
               else
-                 time_vals = get_time_values(t_grid)
+                 time_vals = get_time_values(vd%t_grid)
               endif
            endif
  
            call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
-           call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
-           call fms2_register_field(CS%fileObjWrite, axis_data_CS%name, &
-                axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
-                domain_position=axis_data_CS%horgrid_position)
+           call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+                (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
-           call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+           call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'units',axis_data_CS%units)
         endif
      enddo
   endif
    
-  call MOM_register_field(fileObjWrite, dim_names(1:numaxes), horgrid_position) 
+  call MOM_register_field(fileObjWrite, variable_name, &
+                          dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
         
   call MOM_close_file(fileObjWrite)
 
-  if(allocated(time_vals) deallocate(time_vals))
+  if(allocated(time_vals)) deallocate(time_vals)
 
 end subroutine MOM_write_IC_1d
 
@@ -1825,7 +1833,7 @@ end function MOM_open_file_DD
 
 !> wrapper for fms2_close_file that closes a netcdf file
 subroutine MOM_close_file(fileObj)
-   type(FmsNetcdfDomainFile_t), intent(in) :: fileObj !< netCDF file object 
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
    call fms2_close_file(fileObj)
 end subroutine MOM_close_file
 

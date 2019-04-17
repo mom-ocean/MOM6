@@ -390,7 +390,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
 !     do i=1,num_axes
 !        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
 !        if(.not.(axis_exists)) then 
-!           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
+!           call MOM_register_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
 !        endif
 !        WRITE(mpp_pe()+2000,*) "register_restart_field_4d: dim name ", trim(dim_names(i))
 !        call flush(mpp_pe()+2000)
@@ -947,7 +947,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: m, nz, i, num_files, pos
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
-  character(len=8) :: t_grid_read
   character(len=64) :: var_name         ! A variable's name.
   character(len=512) :: restartpath_temp ! temporary location for the restart file path (dir/file).
   character(len=256) :: restartname_temp ! temporary location for restart name
@@ -969,6 +968,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=64) :: checksum_char = ''
   character(len=40) :: units
   character(len=200) :: longname
+  character(len=20) :: t_grid_read = ''
   real, dimension(:), allocatable :: time_vals
   type(axis_data_type) :: axis_data_CS
 
@@ -1125,7 +1125,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         horgrid_position = get_horizontal_grid_position(hor_grid)  
 
         if (.not.(allocated(time_vals))) then
-           if (adjustl(t_grid(1:1)) /= 'p') then
+           t_grid_read = adjustl(t_grid)
+              if (t_grid_read(1:1) /= 'p') then
               time_vals = get_time_values(t_grid, 1)
               time_vals(1) = restart_time
            else
@@ -1380,7 +1381,7 @@ subroutine restore_state(filename, directory, day, G, CS)
      do i=1,size(axis_names)
         axis_exists = fms2_dimension_exists(CS%fileObjRead, axis_names(i))
         if (axis_exists) then 
-           call register_restart_axis(CS%fileObjWrite, axis_names(i))
+           call MOM_register_axis(CS%fileObjWrite, axis_names(i))
         endif
      enddo
      ! get number of variables in the file
