@@ -498,19 +498,21 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 end subroutine reopen_file
 
 !> Register a field to a non-restart netCDF file (e.g., history or initial conditions)
-subroutine MOM_register_field(fileObjWrite, field_name, dimension_names, &
-                              domain_position)
+subroutine MOM_register_field(fileObjWrite, field_name, num_dimensions, &
+                              dimension_names, domain_position)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
   character(len=*), intent(in) :: field_name  !< Name of the field to register to the file
+  integer,          intent(in)  :: num_dimensions !< number of dimesions
   character(len=*), dimension(:), intent(in)  :: dimension_names !< array of the dimension names for the field
   integer, optional, intent(in) ::domain_position !< position value for domain-decomposed data
  
   if (present(domain_position)) then
      call fms2_register_field(fileObjWrite, field_name, "double", & 
-                              dimensions=dimension_names, domain_position=domain_position)
+                               dimensions=dimension_names(1:num_dimensions), & 
+                               domain_position=domain_position)
   else
      call fms2_register_field(fileObjWrite, field_name, "double", & 
-                              dimensions=dimension_names)
+                              dimensions=dimension_names(1:num_dimensions))
   endif
     
 end subroutine MOM_register_field
@@ -1447,7 +1449,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   ! register the axes, and write the axis variables to the file if they do not exist
   do i=1,num_axes
      axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
-     if (.not.(axis_exists)) then  
+     if (.not.(axis_exists)) then    
         call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
@@ -1460,7 +1462,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
         call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
-           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, 1, &
                                    (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
 
            call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
@@ -1473,7 +1475,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
      endif
   enddo
    
-  call MOM_register_field(fileObjWrite, variable_name, dim_names(1:num_axes), horgrid_position) 
+  call MOM_register_field(fileObjWrite, variable_name, num_axes, &
+                          dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
@@ -1578,7 +1581,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
         call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
-           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, 1, &
                                    (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
 
            call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
@@ -1591,7 +1594,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
      endif
   enddo
 
-  call MOM_register_field(fileObjWrite, variable_name, dim_names(1:num_axes), horgrid_position) 
+  call MOM_register_field(fileObjWrite, variable_name, num_axes, &
+                          dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
@@ -1695,7 +1699,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
         call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
-           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, 1, &
                                    (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
 
            call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
@@ -1708,7 +1712,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
      endif
   enddo
    
-  call MOM_register_field(fileObjWrite, variable_name,&
+  call MOM_register_field(fileObjWrite, variable_name, num_axes, &
                           dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
@@ -1813,7 +1817,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
         call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
-           call MOM_register_field(fileObjWrite, axis_data_CS%name, &
+           call MOM_register_field(fileObjWrite, axis_data_CS%name, 1, &
                                    (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
 
            call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
@@ -1826,7 +1830,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
      endif
   enddo
    
-  call MOM_register_field(fileObjWrite, variable_name, &
+  call MOM_register_field(fileObjWrite, variable_name, num_axes, &
                           dim_names(1:num_axes), horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
