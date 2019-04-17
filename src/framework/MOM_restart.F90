@@ -16,7 +16,6 @@ use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : file_exists
-use MOM_io, only : get_axis_data
 use MOM_io, only : get_dimension_features
 use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_values
@@ -26,6 +25,7 @@ use MOM_io, only : MOM_register_variable_attribute
 use MOM_io, only : MOM_open_file
 use MOM_io, only : MOM_write_data
 use MOM_io, only : axis_data_type
+use MOM_io, only : MOM_get_axis_data
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
@@ -943,7 +943,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
   integer :: unit                       ! The mpp unit of the open file.
-  integer :: m, nz, i, num_files
+  integer :: m, nz, i, num_files, pos
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   character(len=8) :: t_grid_read
@@ -969,6 +969,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=40) :: units
   character(len=200) :: longname
   real, dimension(:), allocatable :: time_vals
+  type(axis_data_type) :: axis_data_CS
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -1081,7 +1082,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         call MOM_error(FATAL,"MOM_restart::save_restart: Failed to open file "//trim(restartpath))
      endif
 
-     ! get variable sizes in bytes, and register axes
+     ! get variable sizes in bytes
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
      
      do m=start_var,CS%novars
@@ -1122,8 +1123,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
         horgrid_position = get_horizontal_grid_position(hor_grid)  
 
-        if (.not.(allocated(time_vals))
-           time_vals = get_time_value(t_grid, size(restart_time))
+        if (.not.(allocated(time_vals))) then
+           time_vals = get_time_values(t_grid, 1)
            if(adjustl(t_grid(1:1)) /= 'p') then
              time_vals = restart_time
            endif
@@ -1132,7 +1133,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         ! note: 4d variables are lon x lat x vertical level x time
         call get_dimension_features(hor_grid, z_grid, t_grid, G, GV, &
                                     dim_names, dim_lengths, num_axes)
-       
+        ! register the axes, and write the axis variables to the file if they do not exist
         if (num_axes> 0) then
            do i=1,num_axes
               axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
@@ -1192,9 +1193,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         checksum_char = ''
         checksum_char = convert_checksum_to_string(check_val(1,m))
         ! write the checksum, register attributes
-        call MOM_register_variable_attribute(CS%fileObjWrite,vars(m)%name,'checksum',checksum_char)
-        call MOM_register_variable_attribute(CS%fileObjWrite,name,'units',units)
-        call MOM_register_variable_attribute(CS%fileObjWrite,name,'long_name',longname) 
+        call MOM_register_variable_attribute(CS%fileObjWrite, vars(m)%name, 'checksum', checksum_char)
+        call MOM_register_variable_attribute(CS%fileObjWrite, vars(m)%name, 'units', units)
+        call MOM_register_variable_attribute(CS%fileObjWrite, vars(m)%name, 'long_name', longname) 
         
         if(allocated(time_vals)) deallocate(time_vals)     
      enddo
@@ -1292,7 +1293,7 @@ subroutine restore_state(filename, directory, day, G, CS)
      file_open_success=MOM_open_file(CS%fileObjRead, trim(file_path_2),"read", &
                     G, is_restart = .true.)
      
-     if (.not.(file_open_success) then  
+     if (.not.(file_open_success)) then  
         write(mesg,'( "ERROR, unable to open the file ",A) ') trim(filename)
         call MOM_error(FATAL,"MOM_restart::MOM_open_file: "//mesg)
      endif      

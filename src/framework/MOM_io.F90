@@ -39,6 +39,7 @@ use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_register_axis => register_axis, &
                                 fms2_register_field => register_field, &
                                 fms2_register_variable_attribute => register_variable_attribute, &
+                                fms2_open_file => open_file, &
                                 fms2_write_data => write_data, &
                                 fms2_attribute_exists => variable_att_exists, &
                                 fms2_variable_exists => variable_exists, &
@@ -60,16 +61,16 @@ public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
-public :: get_axis_data
 public :: get_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
 public :: get_time_values
 public :: get_time_units
-public :: MOM_write_data
+public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_field
 public :: MOM_register_variable_attribute
+public :: MOM_write_data
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -742,13 +743,13 @@ end function get_horizontal_grid_position
 !  real, pointer :: data => NULL()         !< pointer to the axis data
 !end type axis_data
 
-subroutine get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
+subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
   type(axis_data_type), intent(inout) :: axis_data_CS !< control structure with axis data
   character(len=*), intent(in) :: axis_name
-  type(ocean_grid_type), intent(in) :: G !< ocean horizontal grid structure; G or dG
-  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
-  real,dimension(:),optional, intent(in) :: time_val :: !< time value
-  character(len=*), optional,intent(in) :: time_units :: !< tim
+  type(ocean_grid_type), target, intent(in) :: G !< ocean horizontal grid structure; G or dG
+  type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
+  real,dimension(:), target, optional, intent(in) :: time_val !< time value
+  character(len=*), optional,intent(in) :: time_units!< units for non-periodic time axis
 
   axis_data_CS%name(1:len_trim(axis_name))=trim(axis_name)
   axis_data_CS%data => NULL()
@@ -780,34 +781,42 @@ subroutine get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
         axis_data_CS%data=>GV%sLayer(1:GV%ke)
         axis_data_CS%longname = 'Layer'
         axis_data_CS%units = GV%zAxisUnits
-        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+        axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Interface')
         axis_data_CS%data=>GV%sInterface(1:GV%ke+1)
         axis_data_CS%longname = 'Interface'
         axis_data_CS%units = GV%zAxisUnits
-        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+        axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Time')
-        if (.not.(present(time_val)) .or. .not.(present(time_units))) then
+        if (.not.(present(time_val))) then
            call MOM_error(FATAL, "MOM_io::get_axis_data: requires time_val"//&
                           " and time_units arguments for "//trim(axis_name))
+        endif
         axis_data_CS%data=>time_val
         axis_data_CS%longname = 'Time'
-        axis_data_CS%units = time_units
-        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+        if (present(time_units)) then
+           axis_data_CS%units = 'days'
+        else
+           axis_data_CS%units = time_units
+        endif
+        axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Period')
         if (.not.(present(time_val))) then
            call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//&
                           " for "//trim(axis_name))
+        endif
         axis_data_CS%data=>time_val
         axis_data_CS%longname = 'Periods for cyclical variables'
-        axis_data_CS%horgrid_position = CENTER ! this is a dummy value for the domain decomposed write
+        axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
          
      case default
         call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
                        " is an unrecognized axis")
   end select
 
-end subroutine get_axis_data
+end subroutine MOM_get_axis_data
+
+!> get the size of a variable in bytes
 function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
   character(len=*), intent(in) :: hor_grid !< horizontal grid string
   character(len=*), intent(in) :: z_grid !< vertical grid string
@@ -843,7 +852,7 @@ function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result
 
 end function get_variable_byte_size
 
-!> Define the time units from the real time value
+!> Define the time units for the input time value
 function get_time_units(time_value) result(time_units_out)
    real, intent(in) :: time_value !< numerical time value
    ! local
@@ -887,7 +896,7 @@ function get_time_values(t_grid_in, array_size) result(time_values)
   t_grid = adjustl(t_grid_in)
 
   select case (t_grid(1:1))
-     case ('s', 'a', 'm') ! allocate an empty array of desired size to populate after function call
+     case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
         allocate(time_values(array_size))
      case ('p')
         if (len_trim(t_grid(2:8)) <= 0) then
@@ -1317,8 +1326,7 @@ end function MOM_file_exists
 
 !> Open domain-decomposed file(s) with the base file name
 !! 'filename' to read from or write/append to
-!! 
-function MOM_open_file__DD(fileObj, filename, mode, G, is_restart) result(file_open_success)
+function MOM_open_file_DD(fileObj, filename, mode, G, is_restart) result(file_open_success)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
@@ -1326,7 +1334,7 @@ function MOM_open_file__DD(fileObj, filename, mode, G, is_restart) result(file_o
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
 
   logical :: file_open_success !< returns .true. if the file(s) is(are) opened
-  character(len=10) :: nc_action
+  character(len=512) :: mesg      ! A message for warnings.
    
   select case (trim(mode))
      case("read")
@@ -1336,13 +1344,13 @@ function MOM_open_file__DD(fileObj, filename, mode, G, is_restart) result(file_o
         ! check if file(s) already exists and can be appended
         file_open_success=fms2_open_file(fileObj, filename, "append", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success) then
+        if (.not.(file_open_success)) then
            ! create and open new file(s) for domain-decomposed write
            file_open_success=fms2_open_file(fileObj, filename, "write", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case default
-        write(mesg,'( "ERROR, file mode must be "read" or "write to open " ",A) ') trim(filename)
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD: "//mesg)
   end select     
 end function MOM_open_file_DD
