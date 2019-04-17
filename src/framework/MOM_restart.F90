@@ -342,37 +342,35 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
  
   ! local
   type(vardesc) :: vd
-  type(MOM_restart_CS) :: fileObjWrite
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  character(len=200) :: base_file_name
-  character(len=200) :: restart_file_name
-  character(len=200) :: dim_names(4)
-  character(len=16)  :: nc_action
   character(len=200) :: mesg
-  integer, dimension(4) :: dim_lengths
-  integer :: num_axes, i
-  integer :: substring_index = 0
-  integer :: horgrid_position = 1
-  integer :: name_length = 0
+!  type(MOM_restart_CS) :: fileObjWrite
+!  logical :: file_open_success = .false.
+!  logical :: axis_exists = .false.
+!  character(len=200) :: base_file_name
+!  character(len=200) :: restart_file_name
+!  character(len=200) :: dim_names(4)
+!  integer, dimension(4) :: dim_lengths
+!  integer :: num_axes, i
+!  integer :: substring_index = 0
+!  integer :: horgrid_position = 1
+!  integer :: name_length = 0
  
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_4d: Module must be initialized before "//&
       "it is used to register "//trim(name))
 
-  WRITE(mpp_pe()+2000,*) "register_restart_field_4d: registering restart variable ", trim(name)
-  call flush(mpp_pe()+2000)
+!  WRITE(mpp_pe()+2000,*) "register_restart_field_4d: registering restart variable ", trim(name)
+!  call flush(mpp_pe()+2000)
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  base_file_name = ''
-  restart_file_name = ''
-  nc_action = 'append'
+!  base_file_name = ''
+!  restart_file_name = ''
 
-  restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
+!  restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
 
-  ! append '.nc' to the restart file name if it is missing
+!  ! append '.nc' to the restart file name if it is missing
 !  substring_index = index('.nc', trim(restart_file_name))
 !  if (substring_index <= 0) then
 !     base_file_name = append_substring(trim(restart_file_name),'.nc')
@@ -437,21 +435,8 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
 
   ! local
   type(vardesc) :: vd
-  type(MOM_restart_CS) :: fileObjWrite
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  character(len=200) :: base_file_name 
-  character(len=200) :: restart_file_name
-  character(len=200) :: dim_names(4) ! size is ndims+1 to allow for a record dimension
-  character(len=16) :: nc_action
   character(len=200) :: mesg
-  integer :: horgrid_position = 1
-  integer :: num_axes
-  integer, dimension(4) :: dim_lengths ! size is ndims+1 to allow for a record dimension
-  integer :: substring_index = 0
-  integer :: i
-  integer :: name_length
-          
+        
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_3d: Module must be initialized before "//&
       "it is used to register "//trim(name))
@@ -487,27 +472,11 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
   ! local
   type(vardesc) :: vd
   character(len=8) :: Zgrid
-  type(MOM_restart_CS) :: fileObjWrite
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  character(len=200) :: base_file_name
-  character(len=200) :: restart_file_name
-  character(len=200) :: dim_names(3) ! size is ndims+1 to allow for a record dimension
-  character(len=16) ::  nc_action
   character(len=200) :: mesg
-  integer :: horgrid_position = 1
-  integer :: num_axes
-  integer :: substring_index = 0
-  integer, dimension(3) :: dim_lengths ! size is ndims+1 to allow for a record dimension
-  integer :: name_length=0
-  integer :: i
           
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: "//&
       "register_restart_field_2d: Module must be initialized before "//&
       "it is used to register "//trim(name))
-
-  WRITE(mpp_pe()+2000,*) "register_restart_field_2d: registering restart variable ", trim(Name)
-  call flush(mpp_pe()+2000)
 
   if (present(z_grid)) then 
      Zgrid = z_grid
@@ -518,63 +487,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=Zgrid, t_grid=t_grid)
 
-  base_file_name = ''
-  restart_file_name = ''
-  nc_action = 'append'
-
-  restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
-
-  ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(restart_file_name))
-  if (substring_index <= 0) then
-     base_file_name = append_substring(trim(restart_file_name),'.nc')
-  else
-     name_length = len_trim(restart_file_name)
-     base_file_name(1:name_length) = trim(restart_file_name)
-  endif
-
-  ! check if restart file already exists and can be appended
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not.(file_open_success) then
-     nc_action = "write" 
-     ! open the restart file for domain-decomposed write
-     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-     endif
-  endif          
-  ! get the axis (dimension) names and lengths                                   
-   call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
-  ! check if axes (dimensions) are registered in the restart file, 
-  ! and register them if they are not
-  if (num_axes> 0) then
-     do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
-        if(.not.(axis_exists)) then 
-           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
-        endif
-        WRITE(mpp_pe()+2000,*) "register_restart_field_2d: dim name ", trim(dim_names(i))
-        call flush(mpp_pe()+2000)
-     enddo
-  endif
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
-
-  ! register the restart field
   call register_restart_field_ptr2d(f_ptr, vd, mandatory, CS)
-
-  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
-       dimensions=dim_names(1:num_axes), domain_position=horgrid_position)
-  
-  ! register variable attributes
-  if (present(units)) call MOM_register_variable_attribute(CS%fileObjWrite,name, &
-                                                            'units',vd%units)
-  if (present(longname)) call MOM_register_variable_attribute(CS%fileObjWrite,name, &
-                                                               'long_name',vd%longname)
-  call fms2_close_file(CS%fileObjWrite)
 
 end subroutine register_restart_field_2d
 
@@ -599,26 +512,10 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
   ! local 
   type(vardesc) :: vd
   character(len=8) :: hgrid
-  type(MOM_restart_CS) :: fileObjWrite
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  character(len=200) :: dim_names(2) ! size is ndims+1 to allow for a record dimension
-  character(len=200) :: base_file_name
-  character(len=200) :: restart_file_name
-  character(len=16) :: nc_action
   character(len=200) :: mesg
-  integer :: horgrid_position = 1
-  integer :: num_axes, i
-  integer :: substring_index = 0
-  integer :: dim_lengths(2) ! size is ndims+1 to allow for a record dimension
-  integer :: name_length = 0
-
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
       "it is used to register "//trim(name))
-
-  WRITE(mpp_pe()+2000,*) "register_restart_field_1d: registering restart variable ", trim(Name)
-  call flush(mpp_pe()+2000)
 
   if (present(hor_grid)) then 
      hgrid = hor_grid
@@ -628,64 +525,8 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hgrid, &
                 z_grid=z_grid, t_grid=t_grid)
-  base_file_name = ''
-  restart_file_name = ''
-  nc_action = 'append'
-
-  restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
-
-  ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(restart_file_name))
-  if (substring_index <= 0) then
-     base_file_name = append_substring(trim(restart_file_name),'.nc')
-  else
-     name_length = len_trim(restart_file_name)
-     base_file_name(1:name_length) = trim(restart_file_name)
-  endif
-
-  ! check if restart file already exists and can be appended
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not.(file_open_success) then
-     nc_action = "write" 
-     ! open the restart file for domain-decomposed write
-     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-     endif
-  endif          
-
-  ! get the axis (dimension) names and lengths                                   
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
-  ! check if axes (dimensions) are registered in the restart file, 
-  ! and register them if they are not
-  if (num_axes> 0) then
-     do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
-        if(.not.(axis_exists)) then 
-           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
-        endif
-        WRITE(mpp_pe()+2000,*) "register_restart_field_1d: dim name ", trim(dim_names(i))
-        call flush(mpp_pe()+2000)
-     enddo
-  endif
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
-  ! register the restart field
+ 
   call register_restart_field_ptr1d(f_ptr, vd, mandatory, CS)
-
-  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
-       dimensions=dim_names, domain_position=horgrid_position)
-
-  ! register variable attributes
-  if (present(units)) call MOM_register_variable_attribute(CS%fileObjWrite, name, &
-                                                           'units',vd%units)
-  if (present(longname)) call MOM_register_variable_attribute(CS%fileObjWrite, name, &
-                                                              'long_name',vd%longname)
-
-  call fms2_close_file(CS%fileObjWrite)
 
 end subroutine register_restart_field_1d
 
@@ -706,87 +547,17 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
 
   !local
   type(vardesc) :: vd
-  type(MOM_restart_CS) :: fileObjWrite
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  character(len=200) :: dim_names(1)
-  character(len=16) :: nc_action
-  character(len=200) :: base_file_name
-  character(len=200) :: restart_file_name
   character(len=200) :: mesg
-  integer :: horgrid_position = 1
-  integer :: num_axes, i
-  integer :: substring_index = 0
-  integer :: dim_lengths(1)
-  integer :: name_length = 0
-          
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_0d: Module must be initialized before "//&
       "it is used to register "//trim(name))
 
-  WRITE(mpp_pe()+2000,*) "register_restart_field_0d: registering restart variable ", trim(Name)
-  call flush(mpp_pe()+2000)
-  
   vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
                 z_grid='1', t_grid=t_grid)
 
-  base_file_name = ''
-  restart_file_name = ''
-  nc_action = 'append'
-
-  restart_file_name(1:len_trim(CS%restartfile))=trim(CS%restartfile)
-
-  ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(restart_file_name))
-  if (substring_index <= 0) then
-     base_file_name = append_substring(trim(restart_file_name),'.nc')
-  else
-     name_length = len_trim(restart_file_name)
-     base_file_name(1:name_length) = trim(restart_file_name)
-  endif
-
-  ! check if restart file already exists and can be appended
-  file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-  if (.not.(file_open_success) then
-     nc_action = "write" 
-     ! open the restart file for domain-decomposed write
-     file_open_success=fms2_open_file(CS%fileObjWrite, base_file_name, nc_action, & 
-                                   G%Domain%mpp_domain, is_restart = .true.)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file ",A) ') trim(base_file_name)
-        call MOM_error(FATAL,"MOM_restart:register_restart_field_4d: "//mesg)
-     endif
-  endif          
-                 
-  ! get the axis (dimension) names and lengths                                   
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
-  ! check if axes (dimensions) are registered in the restart file, 
-  ! and register them if they are not
-  if (num_axes> 0) then
-     do i=1,num_axes
-        axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
-        if(.not.(axis_exists)) then 
-           call register_restart_axis(CS%fileObjWrite, dim_names(i), dim_lengths(i))
-        endif
-        WRITE(mpp_pe()+2000,*) "register_restart_field_0d: dim name ", trim(dim_names(i))
-        call flush(mpp_pe()+2000)
-     enddo
-  endif
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
-  ! register the restart field
   call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
        
-  call fms2_register_restart_field(CS%fileObjWrite, name, f_ptr, & 
-                                   dimensions=dim_names, domain_position=horgrid_position)
-  ! register variable attributes
-  if (present(units)) call MOM_register_variable_attribute(CS%fileObjWrite, name, &
-                                                           'units',vd%units)
-  if (present(longname)) call MOM_register_variable_attribute(CS%fileObjWrite, name,&
-                                                              'long_name',vd%longname)
-  call fms2_close_file(CS%fileObjWrite)
-
 end subroutine register_restart_field_0d
 
 !> query_initialized_name determines whether a named field has been successfully
