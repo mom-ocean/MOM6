@@ -36,6 +36,7 @@ use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
+use MOM_io,                   only : MOM_write_IC
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -2518,14 +2519,14 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
-    !call MOM_save_IC(CS%IC_file,"eta",z_interface,G,GV, longname="Interface heights", &
-     !                           units="meter", z_grid='i')
+    call MOM_write_IC(dirs%output_directory, CS%IC_file, "eta", z_interface, .true., G, GV, & 
+                       z_grid='i', longname="Interface heights", units="meter")
     !call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, G, GV, &
     !                            filename=CS%IC_file, longname="Interface heights", &
     !                            units="meter", z_grid='i')
 
     !call save_restart(dirs%output_directory, Time, G, restart_CSp_tmp, filename=CS%IC_file, GV=GV)
-
+    
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
   endif
