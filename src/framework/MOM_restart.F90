@@ -21,6 +21,7 @@ use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_values
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
+use MOM_io, only : MOM_register_axis
 use MOM_io, only : MOM_register_variable_attribute
 use MOM_io, only : MOM_open_file
 use MOM_io, only : MOM_write_data
@@ -1124,9 +1125,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         horgrid_position = get_horizontal_grid_position(hor_grid)  
 
         if (.not.(allocated(time_vals))) then
-           time_vals = get_time_values(t_grid, 1)
-           if(adjustl(t_grid(1:1)) /= 'p') then
-             time_vals = restart_time
+           if (adjustl(t_grid(1:1)) /= 'p') then
+              time_vals = get_time_values(t_grid, 1)
+              time_vals(1) = restart_time
+           else
+              time_vals = get_time_values(t_grid)
            endif
         endif
         ! get the axis (dimension) names and lengths                                   
@@ -1140,7 +1143,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
               if (.not.(axis_exists)) then
                  call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, restart_time_units)
-                 call register_restart_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
+                 call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
                  call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, &
                     axis_data_CS%data, dimensions=(/axis_data_CS%name/), &
                     domain_position=axis_data_CS%horgrid_position)
@@ -1856,44 +1859,6 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
   endif
 
 end subroutine get_checksum_loop_ranges
-
-!> register an axis to a restart file
-subroutine register_restart_axis(fileObj, axis_name, axis_length)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to fms2_open_file
-   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
-   integer, optional, intent(in) :: axis_length !< length of axis/dimension
-                                                !! (only needed for z-grid and Time)
-   select case (trim(axis_name))
-         case ('latq'); call fms2_register_axis(fileObj,'latq','y')
-         case ('lath'); call fms2_register_axis(fileObj,'lath','y') 
-         case ('lonq'); call fms2_register_axis(fileObj,'lonq','x') 
-         case ('lonh'); call fms2_register_axis(fileObj,'lonh','x')
-         case ('Layer')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
-                     "axis_length argument required to register the Layer axis")
-            endif 
-            call fms2_register_axis(fileObj,'Layer',axis_length)
-         case ('Interface')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
-                     "axis_length argument required to register the Interface axis")
-            endif 
-            call fms2_register_axis(fileObj,'Interface',axis_length)
-         case ('Time')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
-                     "axis_length argument required to register the Time axis")
-            endif 
-            call fms2_register_axis(fileObj,'Time', axis_length)
-         case ('Period')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
-                     "axis_length argument required to register the Period axis")
-            endif 
-            call fms2_register_axis(fileObj,'Period',axis_length)
-   end select
-end subroutine register_restart_axis
 
 !> convert the checksum integer(s) to a single string
 !> If there is more than 1 checksum, commas are inserted between 
