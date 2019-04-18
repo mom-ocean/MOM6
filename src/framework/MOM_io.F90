@@ -805,9 +805,11 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
   real,dimension(:), target, optional, intent(in) :: time_val !< time value
   character(len=*), optional,intent(in) :: time_units!< units for non-periodic time axis
 
+  axis_data_CS%name = ''
   axis_data_CS%name(1:len_trim(axis_name))=trim(axis_name)
   axis_data_CS%data => NULL()
-  axis_data_CS%units = ""
+  axis_data_CS%longname = ''
+  axis_data_CS%units = ''
   axis_data_CS%horgrid_position = 0
   
   select case(trim(axis_name))
@@ -1582,7 +1584,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call MOM_register_field(fileObjWrite, axis_data_CS%name, 1, &
-                                   (/axis_data_CS%name/),domain_position=axis_data_CS%horgrid_position)
+                                   (/trim(dim_names(i))/), domain_position=axis_data_CS%horgrid_position)
 
            call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 

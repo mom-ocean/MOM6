@@ -1158,7 +1158,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                      time_vals, restart_time_units)
               if ( associated(axis_data_CS%data)) then
                  call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, axis_data_CS%data, &
-                                               dimensions=(/axis_data_CS%name/), domain_position=axis_data_CS%horgrid_position)
+                                               dimensions=(/dim_names(i)/), domain_position=axis_data_CS%horgrid_position)
                  call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
 
                  call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
