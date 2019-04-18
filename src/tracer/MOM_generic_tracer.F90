@@ -304,7 +304,7 @@ contains
          enddo ; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
-         if (trim(g_tracer_name) == 'cased') then
+         if ( (trim(g_tracer_name) == 'cased') .or. (trim(g_tracer_name) == 'ca13csed') ) then
             do k=2,nk ; do j=jsc,jec ; do i=isc,iec
                if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
                  tr_ptr(i,j,k) = 0.0
