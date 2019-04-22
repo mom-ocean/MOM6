@@ -246,9 +246,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
   real :: h_neglect, h_neglect_edge
-  real :: pa_to_H
-
-  pa_to_H = 1. / GV%H_to_pa
 
   !### Try replacing both of these with GV%H_subroundoff
   if (GV%Boussinesq) then
@@ -304,13 +301,15 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
-        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
-                                      CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
+        if (CS%stable_cell(i,j,k)) &
+          call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
+                                        CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, CS%EOS)
         if (CS%ref_pres<0) then
           ref_pres(:) = CS%Pint(:,j,k+1)
         endif
-        call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
-                                      CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
+        if (CS%stable_cell(i,j,k)) &
+          call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
+                                        CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, CS%EOS)
       enddo
     endif
   enddo
