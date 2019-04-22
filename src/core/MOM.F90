@@ -40,7 +40,7 @@ use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
-use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
+use MOM_time_manager,         only : time_type, real_to_time, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : operator(>=), increment_date
 use MOM_unit_tests,           only : unit_tests
@@ -615,12 +615,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   rel_time = 0.0
   do n=1,n_max
-    rel_time = rel_time + dt ! The relative time at the end of the step.
-    ! Set the universally visible time to the middle of the time step.
-    CS%Time = Time_start + real_to_time(rel_time - 0.5*dt)
-    ! Set the local time to the end of the time step.
-    Time_local = Time_start + real_to_time(rel_time)
 
+    nt_debug = nt_debug + 1
+
+    ! Set the universally visible time to the middle of the time step
+    CS%Time = Time_start + set_time(int(floor(CS%rel_time+0.5*dt+0.5)))
+    CS%rel_time = CS%rel_time + dt
+
+    ! Set the local time to the end of the time step.
+    Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
     !===========================================================================
