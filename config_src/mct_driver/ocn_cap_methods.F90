@@ -167,7 +167,7 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
   real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: sshy!< Meridional SSH gradient, local coordinate.
   integer :: i, j, n, ig, jg  !< Grid indices
   real    :: slp_L, slp_R, slp_C, slope, u_min, u_max
-  real :: I_time_int  !< The inverse of coupling time interval in s-1.
+  real :: I_time_int  !< The inverse of coupling time interval [s-1].
 
   !-----------------------------------------------------------------------
 

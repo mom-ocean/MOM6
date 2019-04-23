@@ -10,8 +10,8 @@ module ocn_cpl_indices
   type cpl_indices_type
     ! ocean to coupler
     integer :: o2x_So_t          !< Surface potential temperature (deg C)
-    integer :: o2x_So_u          !< Surface zonal velocity (m/s)
-    integer :: o2x_So_v          !< Surface meridional velocity (m/s)
+    integer :: o2x_So_u          !< Surface zonal velocity [m s-1]
+    integer :: o2x_So_v          !< Surface meridional velocity [m s-1]
     integer :: o2x_So_s          !< Surface salinity (PSU)
     integer :: o2x_So_dhdx       !< Zonal slope in the sea surface height
     integer :: o2x_So_dhdy       !< Meridional lope in the sea surface height

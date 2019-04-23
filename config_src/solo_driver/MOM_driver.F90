@@ -56,6 +56,7 @@ program MOM_main
   use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
   use MOM_time_manager,    only : NO_CALENDAR
   use MOM_tracer_flow_control, only : tracer_flow_control_CS
+  use MOM_unit_scaling,    only : unit_scale_type
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
@@ -89,6 +90,8 @@ program MOM_main
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid
   type(verticalGrid_type), pointer :: GV
+  ! A pointer to a structure containing dimensional unit scaling factors.
+  type(unit_scale_type), pointer :: US
 
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
@@ -124,14 +127,14 @@ program MOM_main
   type(time_type) :: restart_time       ! The next time to write restart files.
   type(time_type) :: Time_step_ocean    ! A time_type version of dt_forcing.
 
-  real    :: elapsed_time = 0.0   ! Elapsed time in this run in seconds.
+  real    :: elapsed_time = 0.0   ! Elapsed time in this run  [s].
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
                                   ! model's master clock (Time).  This is needed
                                   ! if Time_step_ocean is not an exact
                                   ! representation of dt_forcing.
-  real :: dt_forcing              ! The coupling time step in seconds.
-  real :: dt                      ! The baroclinic dynamics time step, in seconds.
-  real :: dt_off                  ! Offline time step in seconds
+  real :: dt_forcing              ! The coupling time step [s].
+  real :: dt                      ! The baroclinic dynamics time step [s].
+  real :: dt_off                  ! Offline time step [s].
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within dt_forcing.
   real :: dt_therm
@@ -147,7 +150,7 @@ program MOM_main
                                 ! restart file is saved at the end of a run segment
                                 ! unless Restart_control is negative.
 
-  real            :: Time_unit       ! The time unit in seconds for the following input fields.
+  real            :: Time_unit       ! The time unit for the following input fields [s].
   type(time_type) :: restint         ! The time between saves of the restart file.
   type(time_type) :: daymax          ! The final day of the simulation.
 
@@ -312,14 +315,14 @@ program MOM_main
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
 
-  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, C_p=fluxes%C_p)
+  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p=fluxes%C_p)
   Master_Time = Time
 
   call callTree_waypoint("done initialize_MOM")
 
   call extract_surface_state(MOM_CSp, sfc_state)
 
-  call surface_forcing_init(Time, grid, param_file, diag, &
+  call surface_forcing_init(Time, grid, US, param_file, diag, &
                             surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
@@ -335,7 +338,7 @@ program MOM_main
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
-    call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
+    call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
@@ -475,12 +478,12 @@ program MOM_main
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
-        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, &
+        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, US, &
                      surface_forcing_CSp)
     endif
     if (debug) then
-      call MOM_mech_forcing_chksum("After set forcing", forces, grid, haloshift=0)
-      call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
+      call MOM_mech_forcing_chksum("After set forcing", forces, grid, US, haloshift=0)
+      call MOM_forcing_chksum("After set forcing", fluxes, grid, US, haloshift=0)
     endif
 
     if (use_ice_shelf) then
@@ -491,7 +494,7 @@ program MOM_main
     fluxes%dt_buoy_accum = dt_forcing
 
     if (use_waves) then
-      call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
+      call Update_Surface_Waves(grid, GV, US, time, time_step_ocean, waves_csp)
     endif
 
     if (ns==1) then

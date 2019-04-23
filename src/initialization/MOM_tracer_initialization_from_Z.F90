@@ -15,17 +15,17 @@ use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
-use MOM_string_functions, only : uppercase
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : setVerticalGridAxes
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_remap_scalar
+use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
-use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
+use MOM_string_functions, only : uppercase
+use MOM_unit_scaling, only : unit_scale_type
+use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : int_specific_vol_dp
+use MOM_ALE, only : ALE_remap_scalar
 
 implicit none ; private
 
@@ -33,18 +33,24 @@ implicit none ; private
 
 public :: MOM_initialize_tracer_from_Z
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" !< This module's name.
 
 contains
 
 !> Initializes a tracer from a z-space data file.
-subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam, &
+subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_nam, &
                           src_var_unit_conversion, src_var_record, homogenize, &
                           useALEremapping, remappingScheme, src_var_gridspec )
   type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
+  type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(in)    :: h   !< Layer thickness, in H (often m or kg m-2).
+                              intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
   real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
   type(param_file_type),      intent(in)    :: PF  !< parameter file
   character(len=*),           intent(in)    :: src_file !< source filename
@@ -76,9 +82,9 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   real, allocatable, dimension(:), target :: z_edges_in, z_in
 
   ! Local variables for ALE remapping
-  real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses in H units.
-  real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses in Z.
-  real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights in Z.
+  real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses [H ~> m or kg m-2].
+  real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses [Z ~> m].
+  real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights [Z ~> m].
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   real :: missing_value
@@ -120,10 +126,10 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   if (PRESENT(src_var_unit_conversion)) convert = src_var_unit_conversion
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
-       G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, homog)
+       G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
+       homog, m_to_Z=US%m_to_Z)
 
   kd = size(z_edges_in,1)-1
-  do k=1,kd+1 ; z_edges_in(k) = GV%m_to_Z*z_edges_in(k) ; enddo
   call pass_var(tr_z,G%Domain)
   call pass_var(mask_z,G%Domain)
 
