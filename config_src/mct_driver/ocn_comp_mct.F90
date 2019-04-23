@@ -765,7 +765,7 @@ end subroutine ocean_model_init_sfc
 !! x2o_Foxx_rof
 !!
 !! Variables in MOM6 fluxes that are **NOT** filled by the coupler:
-!! ustar_berg, frictional velocity beneath icebergs (m/s)
+!! ustar_berg, frictional velocity beneath icebergs [m s-1]
 !! area_berg, area covered by icebergs(m2/m2)
 !! mass_berg, mass of icebergs(kg/m2)
 !! runoff_hflx, heat content of liquid runoff (W/m2)
@@ -802,8 +802,8 @@ end subroutine ocean_model_init_sfc
 !!
 !! Surface temperature (Kelvin)
 !! Surface salinity (psu)
-!! Surface eastward velocity (m/s)
-!! Surface northward velocity (m/s)
+!! Surface eastward velocity [m s-1]
+!! Surface northward velocity [m s-1]
 !! Zonal slope in the sea surface height
 !! Meridional slope in the sea surface height
 !!

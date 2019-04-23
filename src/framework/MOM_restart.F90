@@ -25,6 +25,7 @@ implicit none ; private
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
+public register_restart_field_as_obsolete
 
 !> A type for making arrays of pointers to 4-d arrays
 type p4d
@@ -61,11 +62,18 @@ type field_restart
   character(len=32) :: var_name !< A name by which a variable may be queried.
 end type field_restart
 
+!> A structure to store information about restart fields that are no longer used
+type obsolete_restart
+   character(len=32) :: field_name       !< Name of restart field that is no longer in use
+   character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
+end type obsolete_restart
+
 !> A restart registry and the control structure for restarts
 type, public :: MOM_restart_CS ; private
   logical :: restart    !< restart is set to .true. if the run has been started from a full restart
                         !! file.  Otherwise some fields must be initialized approximately.
   integer :: novars = 0 !< The number of restart fields that have been registered.
+  integer :: num_obsolete_vars = 0  !< The number of obsolete restart fields that have been registered.
   logical :: parallel_restartfiles  !< If true, each PE writes its own restart file,
                                     !! otherwise they are combined internally.
   logical :: large_file_support     !< If true, NetCDF 3.6 or later is being used
@@ -81,6 +89,9 @@ type, public :: MOM_restart_CS ; private
 
   !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
+
+  !> An array of obsolete restart fields
+  type(obsolete_restart), pointer :: restart_obsolete(:) => NULL()
 
   !>@{ Pointers to the fields that have been registered for restarts
   type(p0d), pointer :: var_ptr0d(:) => NULL()
@@ -112,6 +123,16 @@ interface query_initialized
 end interface
 
 contains
+!!> Register a restart field as obsolete
+subroutine register_restart_field_as_obsolete(field_name, replacement_name, CS)
+  character(*), intent(in) :: field_name       !< Name of restart field that is no longer in use
+  character(*), intent(in) :: replacement_name !< Name of replacement restart field, if applicable
+  type(MOM_restart_CS), pointer :: CS          !< A pointer to a MOM_restart_CS object (intent in/out)
+
+  CS%num_obsolete_vars = CS%num_obsolete_vars+1
+  CS%restart_obsolete(CS%num_obsolete_vars)%field_name = field_name
+  CS%restart_obsolete(CS%num_obsolete_vars)%replacement_name = replacement_name
+end subroutine register_restart_field_as_obsolete
 
 !> Register a 3-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
@@ -1062,6 +1083,17 @@ subroutine restore_state(filename, directory, day, G, CS)
     allocate(fields(nvar))
     call get_file_fields(unit(n),fields(1:nvar))
 
+    do m=1, nvar
+      call get_file_atts(fields(m),name=varname)
+      do i=1,CS%num_obsolete_vars
+        if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
+            call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
+                           trim(varname)//" - the new corresponding restart field is "//&
+                           trim(CS%restart_obsolete(i)%replacement_name))
+        endif
+      enddo
+    enddo
+
     missing_fields = 0
 
     do m=1,CS%novars
@@ -1433,6 +1465,7 @@ subroutine restart_init(param_file, CS, restart_root)
                  default=.true.)
 
   allocate(CS%restart_field(CS%max_fields))
+  allocate(CS%restart_obsolete(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))
   allocate(CS%var_ptr1d(CS%max_fields))
   allocate(CS%var_ptr2d(CS%max_fields))
@@ -1456,6 +1489,7 @@ subroutine restart_end(CS)
   type(MOM_restart_CS),  pointer    :: CS !< A pointer to a MOM_restart_CS object
 
   if (associated(CS%restart_field)) deallocate(CS%restart_field)
+  if (associated(CS%restart_obsolete)) deallocate(CS%restart_obsolete)
   if (associated(CS%var_ptr0d)) deallocate(CS%var_ptr0d)
   if (associated(CS%var_ptr1d)) deallocate(CS%var_ptr1d)
   if (associated(CS%var_ptr2d)) deallocate(CS%var_ptr2d)

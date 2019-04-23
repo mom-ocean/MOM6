@@ -11,6 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_sponge,        only : sponge_CS
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -24,18 +25,20 @@ public dense_water_initialize_sponges
 
 character(len=40) :: mdl = "dense_water_initialization" !< Module name
 
-real, parameter :: default_sill  = 0.2 !< Default depth of the sill [nondim]
-real, parameter :: default_shelf = 0.4 !< Default depth of the shelf [nondim]
+real, parameter :: default_sill  = 0.2  !< Default depth of the sill [nondim]
+real, parameter :: default_shelf = 0.4  !< Default depth of the shelf [nondim]
 real, parameter :: default_mld   = 0.25 !< Default depth of the mixed layer [nondim]
 
 contains
 
 !> Initialize the topography field for the dense water experiment
 subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),           intent(in)  :: G !< Grid control structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Output topography field
-  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
-  real,                             intent(in)  :: max_depth !< Maximum depth of the model
+  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+
   ! Local variables
   real, dimension(5) :: domain_params ! nondimensional widths of all domain sections
   real :: sill_frac, shelf_frac
@@ -63,8 +66,8 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
     domain_params(i) = domain_params(i-1) + domain_params(i)
   enddo
 
-  do i = G%isc,G%iec
-    do j = G%jsc,G%jec
+  do j = G%jsc,G%jec
+    do i = G%isc,G%iec
       ! compute normalised zonal coordinate
       x = (G%geoLonT(i,j) - G%west_lon) / G%len_lon
 
@@ -88,6 +91,7 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
       endif
     enddo
   enddo
+
 end subroutine dense_water_initialize_topography
 
 !> Initialize the temperature and salinity for the dense water experiment
@@ -96,9 +100,9 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< EOS structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature (degC)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
