@@ -36,6 +36,7 @@ use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
+                                fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
                                 fms2_get_num_variables => get_num_variables, &
                                 fms2_register_restart_field => register_restart_field, &
                                 fms2_register_axis => register_axis, &
@@ -98,7 +99,7 @@ type, public :: axis_data_type
   character(len=48)  :: units = ''              !< Physical dimensions of the axis
   character(len=240) :: longname = ''           !< Long name of the axis
   integer   :: horgrid_position = 0             !< Horizontal grid position
-  real, dimension(:), pointer :: data => NULL() !< pointer to the axis data
+  real, pointer,dimension(:)  :: data => NULL() !< pointer to the axis data
 end type axis_data_type
 
 !> Indicate whether a file exists, perhaps with domain decomposition
@@ -779,10 +780,30 @@ end function get_horizontal_grid_position
 subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
   type(axis_data_type), intent(inout) :: axis_data_CS !< control structure with axis data
   character(len=*), intent(in) :: axis_name
-  type(ocean_grid_type), target, intent(in) :: G !< ocean horizontal grid structure; G or dG
+  type(ocean_grid_type), intent(in) :: G !< ocean horizontal grid structure; G or dG
   type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
   real,dimension(:), target, optional, intent(in) :: time_val !< time value
   character(len=*), optional,intent(in) :: time_units!< units for non-periodic time axis
+  ! local
+  integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
+  real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+     gridLatB => NULL(), & ! the purpose of labeling the output axes.
+     gridLonT => NULL(), &
+     gridLonB => NULL()
+
+  ! set the ocean grid coordinates
+  gridLatT => G%gridLatT
+  gridLatB => G%gridLatB
+  gridLonT => G%gridLonT
+  gridLonB => G%gridLonB
+  isg = G%isg
+  ieg = G%ieg 
+  jsg = G%jsg
+  jeg = G%jeg
+  IsgB = G%IsgB
+  IegB = G%IegB
+  JsgB = G%JsgB
+  JegB = G%JegB
 
   axis_data_CS%name = ''
   axis_data_CS%name(1:len_trim(axis_name))=trim(axis_name)
@@ -793,22 +814,22 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
   
   select case(trim(axis_name))
      case('lath')
-        axis_data_CS%data=>G%gridLatT(G%jsg:G%jeg)
+        axis_data_CS%data=>gridLatT(jsg:jeg)
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CENTER
      case('lonh')
-        axis_data_CS%data=>G%gridLonT(G%isg:G%ieg)
+        axis_data_CS%data=>gridLonT(isg:ieg)
         axis_data_CS%horgrid_position = CENTER
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
      case('latq')
-        axis_data_CS%data=>G%gridLatB(G%JsgB:G%JegB)
+        axis_data_CS%data=>gridLatB(JsgB:JegB)
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CORNER
      case('lonq')
-        axis_data_CS%data=>G%gridLonB(G%IsgB:G%IegB)
+        axis_data_CS%data=>gridLonB(IsgB:IegB)
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
         axis_data_CS%horgrid_position = CORNER
@@ -1374,7 +1395,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0
-  integer :: i
+  integer :: i, is, ie
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1385,6 +1406,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   character(len=20) :: t_grid_read = ''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
+  real, dimension(:), allocatable :: data_temp
 
   ! append '.nc' to the restart file name if it is missing
   substring_index = index('.nc', trim(filename))
@@ -1445,8 +1467,15 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
                                    dimensions=(/trim(dim_names(i))/))
+           ! get the compute domain indices of the global data field
+           is = 0
+           ie = 0
+           call fms2_get_global_io_domain_indices(fileObjWrite, axis_data_CS%name, is, ie)
+           allocate(data_temp(size(axis_data_CS%data)))
+           data_temp = axis_data_CS%data
 
-           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           call MOM_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
+           deallocate(data_temp)
 
            call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
@@ -1474,7 +1503,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   character(len=*), intent(in) :: directory !< location of the IC file
   character(len=*), intent(in) :: filename !< name of the IC file
   character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
-  real, dimension(:,:,:), intent(in) :: field_data     !< Field to write
+  real, dimension(:,:,:),   intent(in) :: field_data     !< Field to write
   logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
                                                       !! successfully read from the IC file.
   type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
@@ -1494,7 +1523,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0
-  integer :: i
+  integer :: i, is, ie
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1505,6 +1534,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   character(len=20) :: t_grid_read = ''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
+  real, dimension(:), allocatable :: data_temp
 
   ! append '.nc' to the restart file name if it is missing
   substring_index = index('.nc', trim(filename))
@@ -1561,11 +1591,21 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
      if (.not.(variable_exists)) then
         call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
+      
         if (associated(axis_data_CS%data)) then
+
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
                                    dimensions=(/trim(dim_names(i))/))
 
-           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+          ! get the compute domain indices of the global data field
+           is = 0
+           ie = 0
+           call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name), is, ie)
+           allocate(data_temp(size(axis_data_CS%data)))
+           data_temp = axis_data_CS%data
+
+           call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
+           deallocate(data_temp)
 
            call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
@@ -1613,7 +1653,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes
-  integer :: i
+  integer :: i, is, ie
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1624,6 +1664,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   character(len=20) :: t_grid_read =''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
+  real, dimension(:), allocatable :: data_temp
 
   ! append '.nc' to the restart file name if it is missing
   substring_index = index('.nc', trim(filename))
@@ -1683,7 +1724,15 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
                                    dimensions=(/trim(dim_names(i))/))
 
-           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           ! get the compute domain indices of the global data field
+           is = 0
+           ie = 0
+           call fms2_get_global_io_domain_indices(fileObjWrite, axis_data_CS%name, is, ie)
+           allocate(data_temp(size(axis_data_CS%data)))
+           data_temp = axis_data_CS%data
+
+           call MOM_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
+           deallocate(data_temp)
 
            call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
@@ -1731,7 +1780,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0
-  integer :: i
+  integer :: i, is, ie
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1742,6 +1791,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   character(len=20) :: t_grid_read = ''
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
+  real, dimension(:), allocatable :: data_temp
 
   ! append '.nc' to the restart file name if it is missing
   substring_index = index('.nc', trim(filename))
@@ -1801,7 +1851,15 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
                                    dimensions=(/trim(dim_names(i))/))
 
-           call MOM_write_data(fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+           ! get the compute domain indices of the global data field
+           is = 0
+           ie = 0
+           call fms2_get_global_io_domain_indices(fileObjWrite, axis_data_CS%name, is, ie)
+           allocate(data_temp(size(axis_data_CS%data)))
+           data_temp = axis_data_CS%data
+
+           call MOM_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
+           deallocate(data_temp)
 
            call MOM_register_variable_attribute(fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)

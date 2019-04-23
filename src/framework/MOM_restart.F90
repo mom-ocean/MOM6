@@ -1062,8 +1062,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      restartpath_temp(1:length) = trim(directory)//trim(restartname)
      !endif
 
-     WRITE(mpp_pe()+2000,*) "save_restart: restartpath_temp is ", trim(restartpath_temp)
-     call flush(mpp_pe()+2000)
+    
 
      if (num_files < 10) then
         write(suffix,'("_",I1)') num_files
