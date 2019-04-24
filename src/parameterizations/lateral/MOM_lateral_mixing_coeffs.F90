@@ -873,6 +873,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
          'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
   endif
 
+  oneOrTwo = 1.0
   if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
     CS%calculate_Rd_dx = .true.
     CS%calculate_res_fns = .true.
@@ -941,8 +942,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "is the more appropriate definition.\n", default=.false.)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0
-    else
-      oneOrTwo = 1.0
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
