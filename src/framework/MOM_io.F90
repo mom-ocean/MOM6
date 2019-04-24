@@ -770,8 +770,7 @@ end function get_horizontal_grid_position
 
 !> get the axis data from the name and return the 
 !! structure with data and meta data
-subroutine MOM_get_axis_data(fileObj, axis_data_CS, axis_name, G, GV, time_val, time_units)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object
+subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
   type(axis_data_type), intent(inout) :: axis_data_CS   !< control structure with axis data
   character(len=*), intent(in) :: axis_name !< name of the axis
   type(ocean_grid_type), intent(in) :: G !< ocean horizontal grid structure; G or dG
@@ -811,37 +810,34 @@ subroutine MOM_get_axis_data(fileObj, axis_data_CS, axis_name, G, GV, time_val, 
   
   select case(trim(axis_name))
      case('lath')
-        call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
         axis_data_CS%data=>gridLatT(jsg:jeg)
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CENTER
-        axis_data_CS%is = is
-        axis_data_CS%is = ie
+        axis_data_CS%is = 1
+        axis_data_CS%ie = 1
      case('lonh')
-        call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
+
         axis_data_CS%data=>gridLonT(isg:ieg)
         axis_data_CS%horgrid_position = CENTER
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
-        axis_data_CS%is = is
-        axis_data_CS%is = ie
+        axis_data_CS%is = 1
+        axis_data_CS%ie = 1
      case('latq')
-        call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
         axis_data_CS%data=>gridLatB(JsgB:JegB)
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CORNER
-        axis_data_CS%is = is
-        axis_data_CS%is = ie
+        axis_data_CS%is = 1
+        axis_data_CS%ie = 1
      case('lonq')
-        call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
         axis_data_CS%data=>gridLonB(IsgB:IegB)
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
         axis_data_CS%horgrid_position = CORNER
-        axis_data_CS%is = is
-        axis_data_CS%is = ie
+        axis_data_CS%is = 1
+        axis_data_CS%ie = 1
      case('Layer')
         axis_data_CS%data=>GV%sLayer(1:GV%ke)
         axis_data_CS%longname = 'Layer'
@@ -1462,7 +1458,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
      if (.not.(axis_exists)) then    
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
      endif
@@ -1471,7 +1467,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      variable_exists = fms2_variable_exists(fileObjWrite, dim_names(i))
      if (.not.(variable_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, trim(axis_data_CS%name), "double", &
@@ -1481,7 +1477,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
            data_temp = axis_data_CS%data
 
            if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(axis_data_CS%is:axis_data_CS%ie))
+               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
+               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
            else
                call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
            endif
@@ -1591,7 +1588,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
      if (.not.(axis_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
      endif
@@ -1600,7 +1597,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      variable_exists = fms2_variable_exists(fileObjWrite, dim_names(i))
      if (.not.(variable_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
       
         if (associated(axis_data_CS%data)) then
@@ -1612,7 +1609,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
            data_temp = axis_data_CS%data
 
            if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(axis_data_CS%is:axis_data_CS%ie))
+               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
+               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
            else
                call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
            endif
@@ -1721,7 +1719,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
      if (.not.(axis_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
      endif
@@ -1730,14 +1728,15 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      variable_exists = fms2_variable_exists(fileObjWrite, dim_names(i))
      if (.not.(variable_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
                                    dimensions=(/trim(dim_names(i))/))
 
           if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(axis_data_CS%is:axis_data_CS%ie))
+               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
+               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
            else
                call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
            endif
@@ -1850,7 +1849,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
      if (.not.(axis_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         call MOM_register_axis(fileObjWrite, axis_data_CS%name, dim_lengths(i))
      endif
@@ -1859,7 +1858,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   do i=1,num_axes
      variable_exists = fms2_variable_exists(fileObjWrite, dim_names(i))
      if (.not.(variable_exists)) then
-        call MOM_get_axis_data(fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
@@ -1869,7 +1868,8 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
            data_temp = axis_data_CS%data
 
            if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(axis_data_CS%is:axis_data_CS%ie))
+               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
+               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
            else
                call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
            endif

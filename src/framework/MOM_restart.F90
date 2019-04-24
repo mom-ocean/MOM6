@@ -957,6 +957,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL
+  integer :: is, ie
   integer :: substring_index = 0
   integer :: horgrid_position = 1
   integer :: num_axes = 0
@@ -970,6 +971,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=200) :: longname
   character(len=20) :: t_grid_read = ''
   real, dimension(:), allocatable :: time_vals
+  real, dimension(:), allocatable :: data_temp
   type(axis_data_type) :: axis_data_CS
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -1024,6 +1026,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   substring_index = index('.nc', trim(restartname_temp))
   if (substring_index <= 0) then
      restartname = append_substring(restartname_temp,'.nc')
+  else 
+     restartname = restartname_temp
   endif
 
   WRITE(mpp_pe()+2000,*) "save_restart: the restart name after appending .nc is ", trim(restartname)
@@ -1153,12 +1157,22 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_axes
            variable_exists = fms2_variable_exists(CS%fileObjWrite, dim_names(i))
            if (.not.(variable_exists)) then
-              call MOM_get_axis_data(CS%fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+              call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                      time_vals, restart_time_units)
               if ( associated(axis_data_CS%data)) then
                  call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, axis_data_CS%data, &
                                                dimensions=(/dim_names(i)/), domain_position=axis_data_CS%horgrid_position)
-                 call MOM_write_data(CS%fileObjWrite,axis_data_CS%name, axis_data_CS%data)
+                 allocate(data_temp(size(axis_data_CS%data)))
+                 data_temp = axis_data_CS%data
+
+                 if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
+                    call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
+                    call MOM_write_data(CS%fileObjWrite, dim_names(i), data_temp(is:ie))
+                 else
+                    call MOM_write_data(CS%fileObjWrite, dim_names(i), data_temp) 
+                 endif
+ 
+                 deallocate(data_temp)
 
                  call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
                                                       'long_name',axis_data_CS%longname)
@@ -1265,7 +1279,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
   integer(LONG_KIND) :: checksumh
-  integer :: num_checksumh, last, is, k
+  integer :: num_checksumh, last, iw, is, ie, k
   logical :: var_exists = .false.
   logical :: axis_exists = .false.
   character(len=16) :: axis_names(4) 
@@ -1430,22 +1444,22 @@ subroutine restore_state(filename, directory, day, G, CS)
                     call fms2_get_variable_attribute(CS%fileObjRead,varname,"checksum",checksum_char)
 
                     last = len_trim(checksum_char)
-                    is = index(trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
+                    iw = index(trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
                     ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
                     ! has multiple time levels.
                     checksumh = 0
                     num_checksumh = 1
-                    do while ((is > 0) .and. (is < (last-15)))
-                       is = is + scan(checksum_char(is:last), "," ) ! move starting pointer after ","
+                    do while ((iw > 0) .and. (iw < (last-15)))
+                       iw = iw + scan(checksum_char(iw:last), "," ) ! move starting pointer after ","
                        num_checksumh = num_checksumh + 1
                     enddo
            
-                    is = 1
+                    iw = 1
   
                     do k = 1, num_checksumh
                        read(checksum_char(is:is+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
                        checksum_file(k) = checksumh 
-                       is = is + 17 ! Move index past the ',' in checksum_char
+                       iw = iw + 17 ! Move index past the ',' in checksum_char
                     enddo
 
                     is_there_a_checksum = .true.
