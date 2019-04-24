@@ -650,7 +650,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     endif
   endif
 
-  if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, haloshift=0)
+  if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
 
   call add_shelf_flux(G, CS, state, fluxes)
 
@@ -692,7 +692,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   call cpu_clock_end(id_clock_shelf)
 
-  if (CS%debug) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, haloshift=0)
+  if (CS%debug) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, CS%US, haloshift=0)
 
 end subroutine shelf_calc_flux
 
