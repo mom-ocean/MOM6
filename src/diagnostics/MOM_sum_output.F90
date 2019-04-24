@@ -245,12 +245,12 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
 
       call get_param(param_file, mdl, "REQUIRE_DEPTH_LIST_CHECKSUMS", &
                      CS%require_depth_list_chksum, &
-                 "Require that matching checksums be in Depth_list.nc\n" \\ &
+                 "Require that matching checksums be in Depth_list.nc\n" // &
                  "when reading the file.", default=.true.)
       if (.not. CS%require_depth_list_chksum) &
         call get_param(param_file, mdl, "UPDATE_DEPTH_LIST_CHECKSUMS", &
                      CS%update_depth_list_chksum, &
-                 "Automatically update the Depth_list.nc file if the\n" \\ &
+                 "Automatically update the Depth_list.nc file if the\n" // &
                  "checksums are missing or do not match current values.", &
                  default=.false.)
     endif
