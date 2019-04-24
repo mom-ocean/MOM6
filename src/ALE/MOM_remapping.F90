@@ -71,7 +71,7 @@ character(len=3), public :: remappingDefaultScheme = "PLM" !< Default remapping 
 ! outside of the range 0 to 1.
 #define __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
 
-real, parameter :: hNeglect_dflt = 1.E-30 !< A dimensional (H units) number that can be
+real, parameter :: hNeglect_dflt = 1.E-30 !< A thickness [H ~> m or kg m-2] that can be
                                       !! added to thicknesses in a denominator without
                                       !! changing the numerical result, except where
                                       !! a division by zero would otherwise occur.

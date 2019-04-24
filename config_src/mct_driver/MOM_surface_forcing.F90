@@ -28,6 +28,7 @@ use MOM_restart,          only : register_restart_field, restart_init, MOM_resta
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
 use MOM_spatial_means,    only : adjust_area_mean_to_zero
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
@@ -93,10 +94,10 @@ type, public :: surface_forcing_CS ;
     gust => NULL(), &           !< spatially varying unresolved background
                                 !! gustiness that contributes to ustar (Pa).
                                 !! gust is used when read_gust_2d is true.
-    ustar_tidal => NULL()     !< tidal contribution to the bottom friction velocity (m/s)
+    ustar_tidal => NULL()     !< tidal contribution to the bottom friction velocity [m s-1]
   real :: cd_tides            !< drag coefficient that applies to the tides (nondimensional)
   real :: utide               !< constant tidal velocity to use if read_tideamp
-                              !! is false, in m s-1.
+                              !! is false [m s-1].
   logical :: read_tideamp     !< If true, spatially varying tidal amplitude read from a file.
   logical :: rigid_sea_ice    !< If true, sea-ice exerts a rigidity that acts
                               !! to damp surface deflections (especially surface
@@ -109,7 +110,7 @@ type, public :: surface_forcing_CS ;
                                 !! sea-ice viscosity becomes effective, in kg m-2,
                                 !! typically of order 1000 kg m-2.
   logical :: allow_flux_adjustments !< If true, use data_override to obtain flux adjustments
-  real    :: Flux_const             !< piston velocity for surface restoring (m/s)
+  real    :: Flux_const             !< piston velocity for surface restoring [m s-1]
   logical :: salt_restore_as_sflux  !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero !< adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< adjust srestore w/o moving zero contour
@@ -152,8 +153,8 @@ end type surface_forcing_CS
 ! MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: latent_flux      =>NULL() !< latent flux (W/m2)
-  real, pointer, dimension(:,:) :: rofl_flux        =>NULL() !< liquid runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: rofi_flux        =>NULL() !< ice runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: rofl_flux        =>NULL() !< liquid runoff (W/m2)
+  real, pointer, dimension(:,:) :: rofi_flux        =>NULL() !< ice runoff (W/m2)
   real, pointer, dimension(:,:) :: u_flux           =>NULL() !< i-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: v_flux           =>NULL() !< j-direction wind stress (Pa)
   real, pointer, dimension(:,:) :: t_flux           =>NULL() !< sensible heat flux (W/m2)
@@ -168,14 +169,15 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: sw_flux_nir_dif  =>NULL() !< diffuse Near InfraRed sw radiation (W/m2)
   real, pointer, dimension(:,:) :: lprec            =>NULL() !< mass flux of liquid precip (kg/m2/s)
   real, pointer, dimension(:,:) :: fprec            =>NULL() !< mass flux of frozen precip (kg/m2/s)
+  real, pointer, dimension(:,:) :: runoff           =>NULL() !< mass flux of liquid runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: calving          =>NULL() !< mass flux of frozen runoff (kg/m2/s)
-  real, pointer, dimension(:,:) :: ustar_berg       =>NULL() !< frictional velocity beneath icebergs (m/s)
+  real, pointer, dimension(:,:) :: ustar_berg       =>NULL() !< frictional velocity beneath icebergs [m s-1]
   real, pointer, dimension(:,:) :: area_berg        =>NULL() !< area covered by icebergs(m2/m2)
   real, pointer, dimension(:,:) :: mass_berg        =>NULL() !< mass of icebergs(kg/m2)
   real, pointer, dimension(:,:) :: runoff_hflx      =>NULL() !< heat content of liquid runoff (W/m2)
   real, pointer, dimension(:,:) :: calving_hflx     =>NULL() !< heat content of frozen runoff (W/m2)
   real, pointer, dimension(:,:) :: p                =>NULL() !< pressure of overlying ice and atmosphere
-                                                            !< on ocean surface (Pa)
+                                                             !< on ocean surface (Pa)
   real, pointer, dimension(:,:) :: mi               =>NULL() !< mass of ice (kg/m2)
   real, pointer, dimension(:,:) :: ice_rigidity     =>NULL() !< rigidity of the sea ice, sea-ice and
                                                             !! ice-shelves, expressed as a coefficient
@@ -203,8 +205,8 @@ contains
 !! See \ref section_ocn_import for a summary of the surface fluxes that are
 !! passed from MCT to MOM6, including fluxes that need to be included in
 !! the future.
-subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, sfc_state, &
-                                 restore_salt, restore_temp)
+subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
+                                 sfc_state, restore_salt, restore_temp)
 
   type(ice_ocean_boundary_type), &
                  target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
@@ -216,6 +218,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, sfc_state, &
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
   type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
@@ -419,7 +422,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, CS, sfc_state, &
     !  .or. (associated(IOB%mass_berg) .and. (.not. associated(fluxes%mass_berg)))) &
     !  call allocate_forcing_type(G, fluxes, iceberg=.true.)
     !if (associated(IOB%ustar_berg)) &
-    !  fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    !  fluxes%ustar_berg(i,j) = US%m_to_Z * IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
     !if (associated(IOB%area_berg)) &
     !  fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
     !if (associated(IOB%mass_berg)) &
@@ -547,7 +550,7 @@ end subroutine convert_IOB_to_fluxes
 !> This subroutine translates the Ice_ocean_boundary_type into a MOM
 !! mechanical forcing type, including changes of units, sign conventions,
 !! and putting the fields into arrays with MOM-standard halos.
-subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
+subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -556,6 +559,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
 
@@ -701,7 +705,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
              ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
-      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
+      forces%ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0*tau_mag)
     enddo; enddo
 
   elseif (wind_stagger == AGRID) then
@@ -726,7 +730,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
     do j=js,je ; do i=is,ie
       gustiness = CS%gust_const
       if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
+      forces%ustar(i,j) = US%m_to_Z * sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo; enddo
 
@@ -747,9 +751,9 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, CS)
                  G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
-        forces%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = US%m_to_Z * sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
       else
-        forces%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = US%m_to_Z * sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
       endif
     enddo; enddo
 
@@ -999,9 +1003,10 @@ end subroutine forcing_save_restart
 !=======================================================================
 
 !> Initializes surface forcing: get relevant parameters and allocate arrays.
-subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, restore_temp)
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt, restore_temp)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,  intent(inout) :: diag !< A structure that is used to regulate diagnostic output
   type(surface_forcing_CS), pointer       :: CS !< A pointer that is set to point to the
@@ -1010,7 +1015,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                                              !! temp/salt restoring will be applied
 
   ! local variables
-  real :: utide  !< The RMS tidal velocity, in m s-1.
+  real :: utide  !< The RMS tidal velocity [m s-1].
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
   type(time_type)    :: Time_frc
@@ -1186,7 +1191,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
   endif
 
-! Optionally read tidal amplitude from input file (m s-1) on model grid.
+! Optionally read tidal amplitude from input file [m s-1] on model grid.
 ! Otherwise use default tidal amplitude for bottom frictionally-generated
 ! dissipation. Default cd_tides is chosen to yield approx 1 TWatt of
 ! work done against tides globally using OSU tidal amplitude.
@@ -1271,7 +1276,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
                  "If true, makes available diagnostics of fluxes from icebergs\n"//&
                  "as seen by MOM6.", default=.false.)
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles, &
+  call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
                                    use_berg_fluxes=iceberg_flux_diags)
 
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
