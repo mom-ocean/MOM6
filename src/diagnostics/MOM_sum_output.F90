@@ -42,7 +42,7 @@ public write_energy, accumulate_net_input, MOM_sum_output_init
 
 integer, parameter :: NUM_FIELDS = 17 !< Number of diagnostic fields
 character (*), parameter :: depth_chksum_attr = "bathyT_checksum"
-                                      !< Checksum of G%bathyT ove the compute
+                                      !< Checksum of G%bathyT over the compute
                                       !! domain
 character (*), parameter :: area_chksum_attr = "mask2dT_areaT_checksum"
                                       !< Checksum of G%mask2dT * G%areaT over
