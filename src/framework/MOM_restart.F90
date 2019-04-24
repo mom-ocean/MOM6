@@ -1144,7 +1144,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_axes
            axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
            if (.not.(axis_exists)) then
-              call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+              call MOM_get_axis_data(CS%fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
                                      time_vals, restart_time_units)
               call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
            endif
@@ -1153,7 +1153,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_axes
            variable_exists = fms2_variable_exists(CS%fileObjWrite, dim_names(i))
            if (.not.(variable_exists)) then
-              call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
+              call MOM_get_axis_data(CS%fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
                                      time_vals, restart_time_units)
               if ( associated(axis_data_CS%data)) then
                  call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, axis_data_CS%data, &
