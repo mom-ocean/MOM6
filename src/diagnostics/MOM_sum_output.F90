@@ -41,12 +41,14 @@ public write_energy, accumulate_net_input, MOM_sum_output_init
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 integer, parameter :: NUM_FIELDS = 17 !< Number of diagnostic fields
-character (*), parameter :: depth_chksum_attr = "bathyT_checksum"
-                                      !< Checksum of G%bathyT over the compute
+character (*), parameter :: depth_chksum_attr = "mask2dT_bathyT_checksum"
+                                      !< Checksum attribute name of
+                                      !! G%mask2dT * G%bathyT over the compute
                                       !! domain
 character (*), parameter :: area_chksum_attr = "mask2dT_areaT_checksum"
-                                      !< Checksum of G%mask2dT * G%areaT over
-                                      !! the compute domain
+                                      !< Checksum attribute of name of
+                                      !! G%mask2dT * G%areaT over the compute
+                                      !! domain
 
 !> A list of depths and corresponding globally integrated ocean area at each
 !! depth and the ocean volume below each depth.
@@ -242,18 +244,15 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
 
       call get_param(param_file, mdl, "REQUIRE_DEPTH_LIST_CHECKSUMS", &
-        CS%require_depth_list_chksum, &
-        desc="Require matching checksums in Depth_list.nc when reading\n" &
-          // "the file.", &
-        default=.true. &
-      )
+                     CS%require_depth_list_chksum, &
+                 "Require that matching checksums be in Depth_list.nc\n" \\ &
+                 "when reading the file.", default=.true.)
       if (.not. CS%require_depth_list_chksum) &
         call get_param(param_file, mdl, "UPDATE_DEPTH_LIST_CHECKSUMS", &
-          CS%update_depth_list_chksum, &
-          desc="Automatically update the Depth_list.nc file if the\n" &
-            // "checksums are missing or do not match current values.", &
-          default=.false. &
-        )
+                     CS%update_depth_list_chksum, &
+                 "Automatically update the Depth_list.nc file if the\n" \\ &
+                 "checksums are missing or do not match current values.", &
+                 default=.false.)
     endif
 
     allocate(CS%lH(G%ke))
@@ -1129,8 +1128,8 @@ subroutine create_depth_list(G, CS)
     i_global = i + G%idg_offset - (G%isg-1)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
-    Dlist(list_pos) = G%bathyT(i,j)
-    Arealist(list_pos) = G%mask2dT(i,j)*G%areaT(i,j)
+    Dlist(list_pos) = G%mask2dT(i,j) * G%bathyT(i,j)
+    Arealist(list_pos) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
 
   ! These sums reproduce across PEs because the arrays are only nonzero on one PE.
@@ -1350,31 +1349,30 @@ subroutine read_depth_list(G, US, CS, filename)
     var_msg = trim(CS%depth_list_file) // " checksums are missing;"
     if (CS%require_depth_list_chksum) then
       call MOM_error(FATAL, trim(var_msg) // " aborting.")
-    else if (CS%update_depth_list_chksum) then
+    elseif (CS%update_depth_list_chksum) then
       call MOM_error(WARNING, trim(var_msg) // " updating file.")
       call create_depth_list(G, CS)
       call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
       return
     else
       call MOM_error(WARNING, &
-        trim(var_msg) // " some diagnostics may not be reproducible." &
-      )
-    end if
+        trim(var_msg) // " some diagnostics may not be reproducible.")
+    endif
   else
     ! Validate netCDF call
     if (depth_attr_status /= NF90_NOERR) then
       var_msg = mdl // "Failed to read " // trim(filename) // ":" &
                 // depth_chksum_attr
-      call MOM_error(FATAL, trim(var_msg) // " - " &
-                     // NF90_STRERROR(depth_attr_status))
-    end if
+      call MOM_error(FATAL, &
+        trim(var_msg) // " - " // NF90_STRERROR(depth_attr_status))
+    endif
 
     if (area_attr_status /= NF90_NOERR) then
       var_msg = mdl // "Failed to read " // trim(filename) // ":" &
                 // area_chksum_attr
-      call MOM_error(FATAL, trim(var_msg) // " - " &
-                     // NF90_STRERROR(area_attr_status))
-    end if
+      call MOM_error(FATAL, &
+        trim(var_msg) // " - " // NF90_STRERROR(area_attr_status))
+    endif
 
     call get_depth_list_checksums(G, depth_grid_chksum, area_grid_chksum)
 
@@ -1383,17 +1381,16 @@ subroutine read_depth_list(G, US, CS, filename)
       var_msg = trim(CS%depth_list_file) // " checksums do not match;"
       if (CS%require_depth_list_chksum) then
         call MOM_error(FATAL, trim(var_msg) // " aborting.")
-      else if (CS%update_depth_list_chksum) then
+      elseif (CS%update_depth_list_chksum) then
         call MOM_error(WARNING, trim(var_msg) // " updating file.")
         call create_depth_list(G, CS)
         call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
         return
       else
         call MOM_error(WARNING, &
-          trim(var_msg) // " some diagnostics may not be reproducible." &
-        )
-      end if
-    end if
+          trim(var_msg) // " some diagnostics may not be reproducible.")
+      endif
+    endif
   endif
 
   var_name = "depth"
@@ -1486,7 +1483,7 @@ subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
 
   ! Depth checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%bathyT(i,j)
+    field(i,j) = G%mask2dT(i,j) * G%bathyT(i,j)
   enddo ; enddo
   write(depth_chksum, '(Z16)') mpp_chksum(field(:,:))
 
