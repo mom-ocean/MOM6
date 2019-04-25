@@ -17,6 +17,7 @@ use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : file_exists
 use MOM_io, only : get_dimension_features
+use MOM_io, only : get_dimension_features
 use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_values
 use MOM_io, only : get_time_units
@@ -37,11 +38,11 @@ use mpp_mod,         only:  mpp_chksum, mpp_pe
 !use mpp_io_mod,      only: axistype
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_axis => register_axis, &
-                           fms2_write_data => write_data, &
                            fms2_read_data => read_data, &
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_attribute_exists => variable_att_exists, &
+                           fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
                            fms2_get_variable_attribute => get_variable_attribute, &
                            fms2_get_variable_names => get_variable_names, &
                            fms2_get_dimension_size => get_dimension_size, &
@@ -1066,8 +1067,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      restartpath_temp(1:length) = trim(directory)//trim(restartname)
      !endif
 
-    
-
      if (num_files < 10) then
         write(suffix,'("_",I1)') num_files
      else
@@ -1148,7 +1147,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_axes
            axis_exists = fms2_dimension_exists(CS%fileObjWrite, dim_names(i))
            if (.not.(axis_exists)) then
-              call MOM_get_axis_data(CS%fileObjWrite, axis_data_CS, dim_names(i), G, GV, &
+              call MOM_get_axis_data(axis_data_CS, dim_names(i), G, GV, &
                                      time_vals, restart_time_units)
               call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, dim_lengths(i))
            endif
@@ -1161,22 +1160,22 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                      time_vals, restart_time_units)
               if ( associated(axis_data_CS%data)) then
                  call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, axis_data_CS%data, &
-                                               dimensions=(/dim_names(i)/), domain_position=axis_data_CS%horgrid_position)
+                                               dimensions=(/trim(axis_data_CS%name)/), domain_position=axis_data_CS%horgrid_position)
                  allocate(data_temp(size(axis_data_CS%data)))
                  data_temp = axis_data_CS%data
 
-                 if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-                    call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
-                    call MOM_write_data(CS%fileObjWrite, dim_names(i), data_temp(is:ie))
+                 if (axis_data_CS%is_domain_decomposed) then
+                    call fms2_get_global_io_domain_indices(CS%fileObjWrite, trim(axis_data_CS%name), is, ie)
+                    call MOM_write_data(CS%fileObjWrite, trim(axis_data_CS%name), data_temp(is:ie))
                  else
-                    call MOM_write_data(CS%fileObjWrite, dim_names(i), data_temp) 
+                    call MOM_write_data(CS%fileObjWrite, trim(axis_data_CS%name), data_temp) 
                  endif
  
                  deallocate(data_temp)
 
-                 call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                 call MOM_register_variable_attribute(CS%fileObjWrite, trim(axis_data_CS%name), &
                                                       'long_name',axis_data_CS%longname)
-                 call MOM_register_variable_attribute(CS%fileObjWrite, axis_data_CS%name, &
+                 call MOM_register_variable_attribute(CS%fileObjWrite, trim(axis_data_CS%name), &
                                                       'units',axis_data_CS%units)
               endif
            endif

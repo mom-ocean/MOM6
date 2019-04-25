@@ -65,6 +65,7 @@ public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
+
 public :: get_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
@@ -99,8 +100,9 @@ type, public :: axis_data_type
   character(len=48)  :: units = ''              !< Physical dimensions of the axis
   character(len=240) :: longname = ''           !< Long name of the axis
   integer   :: horgrid_position = 0             !< Horizontal grid position
-  integer :: is = 0                             !< compute domain start index of the global data field
-  integer :: ie = 0                             !< compute domain end index of the global data field
+  logical :: is_domain_decomposed = .false.     !< if .true. the axis data are domain-decomposed
+                                                !! and need to be indexed by the compute domain
+                                                !! before passing to fms2_write_data
   real, pointer,dimension(:) :: data => NULL()  !< pointer to the axis data
 end type axis_data_type
 
@@ -771,7 +773,7 @@ end function get_horizontal_grid_position
 !> get the axis data from the name and return the 
 !! structure with data and meta data
 subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_units)
-  type(axis_data_type), intent(inout) :: axis_data_CS   !< control structure with axis data
+  type(axis_data_type), intent(inout) :: axis_data_CS !< structure containing the axis data and metadata
   character(len=*), intent(in) :: axis_name !< name of the axis
   type(ocean_grid_type), intent(in) :: G !< ocean horizontal grid structure; G or dG
   type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
@@ -779,7 +781,6 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
   character(len=*), optional,intent(in) :: time_units!< units for non-periodic time axis
   ! local
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
-  integer :: is, ie
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
      gridLonT => NULL(), &
@@ -800,13 +801,12 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
   JegB = G%JegB
 
   axis_data_CS%name = ''
-  axis_data_CS%name=trim(axis_name)
+  axis_data_CS%name = trim(axis_name)
   axis_data_CS%data => NULL()
   axis_data_CS%longname = ''
   axis_data_CS%units = ''
   axis_data_CS%horgrid_position = 0
-  axis_data_CS%is = 0
-  axis_data_CS%ie = 0
+  axis_data_CS%is_domain_decomposed = .false.
   
   select case(trim(axis_name))
      case('lath')
@@ -814,30 +814,25 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CENTER
-        axis_data_CS%is = 1
-        axis_data_CS%ie = 1
+        axis_data_CS%is_domain_decomposed = .true.
      case('lonh')
-
         axis_data_CS%data=>gridLonT(isg:ieg)
         axis_data_CS%horgrid_position = CENTER
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
-        axis_data_CS%is = 1
-        axis_data_CS%ie = 1
+        axis_data_CS%is_domain_decomposed = .true.
      case('latq')
         axis_data_CS%data=>gridLatB(JsgB:JegB)
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CORNER
-        axis_data_CS%is = 1
-        axis_data_CS%ie = 1
+        axis_data_CS%is_domain_decomposed = .true.
      case('lonq')
         axis_data_CS%data=>gridLonB(IsgB:IegB)
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
         axis_data_CS%horgrid_position = CORNER
-        axis_data_CS%is = 1
-        axis_data_CS%ie = 1
+        axis_data_CS%is_domain_decomposed = .true.
      case('Layer')
         axis_data_CS%data=>GV%sLayer(1:GV%ke)
         axis_data_CS%longname = 'Layer'
@@ -1471,16 +1466,16 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, trim(axis_data_CS%name), "double", &
-                                   dimensions=(/trim(dim_names(i))/))
+                                   dimensions=(/trim(axis_data_CS%name)/))
          
            allocate(data_temp(size(axis_data_CS%data)))
            data_temp = axis_data_CS%data
 
-           if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
+           if (axis_data_CS%is_domain_decomposed) then
+               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name), is, ie)
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
            else
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp) 
            endif
 
            deallocate(data_temp)
@@ -1602,17 +1597,17 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
       
         if (associated(axis_data_CS%data)) then
 
-           call fms2_register_field(fileObjWrite, dim_names(i), "double", &
-                                   dimensions=(/trim(dim_names(i))/))
+           call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
+                                   dimensions=(/trim(axis_data_CS%name)/))
 
            allocate(data_temp(size(axis_data_CS%data)))
            data_temp = axis_data_CS%data
 
-           if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
+           if (axis_data_CS%is_domain_decomposed) then
+               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name), is, ie)
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
            else
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp) 
            endif
 
            deallocate(data_temp)
@@ -1732,13 +1727,13 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
-                                   dimensions=(/trim(dim_names(i))/))
+                                   dimensions=(/trim(axis_data_CS%name)/))
 
-          if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
+          if (axis_data_CS%is_domain_decomposed) then
+               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name), is, ie)
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
            else
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp) 
            endif
 
            allocate(data_temp(size(axis_data_CS%data)))
@@ -1862,16 +1857,16 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
                                         time_vals, time_units)
         if (associated(axis_data_CS%data)) then
            call fms2_register_field(fileObjWrite, axis_data_CS%name, "double", &
-                                   dimensions=(/trim(dim_names(i))/))
+                                   dimensions=(/trim(axis_data_CS%name)/))
 
            allocate(data_temp(size(axis_data_CS%data)))
            data_temp = axis_data_CS%data
 
-           if ((axis_data_CS%is > 0) .and. (axis_data_CS%ie > 0)) then
-               call fms2_get_global_io_domain_indices(fileObj, trim(axis_name), is, ie)
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp(is:ie))
+           if (axis_data_CS%is_domain_decomposed) then
+               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name), is, ie)
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp(is:ie))
            else
-               call fms2_write_data(fileObjWrite, dim_names(i), data_temp) 
+               call fms2_write_data(fileObjWrite, axis_data_CS%name, data_temp) 
            endif
            deallocate(data_temp)
 
