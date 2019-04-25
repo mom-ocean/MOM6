@@ -422,7 +422,7 @@ function append_substring(string_in, substring) result(string_out)
    integer :: substring_length
    
    string_out = ''
-   string_holder = ''
+   string_joined = ''
    string_in_length = 0
    substring_length = 0
   
