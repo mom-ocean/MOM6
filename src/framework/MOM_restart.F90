@@ -932,8 +932,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
   type(MOM_restart_CS) :: fileObjWrite  ! file object returned by a call to fms2_open_file
-  character(len=512) :: restartpath     ! The restart file path (dir/file).
-  character(len=256) :: restartname     ! The restart file name (no dir).
+  character(len=1024) :: restartpath     ! The restart file path (dir/file).
+  character(len=1024) :: restartname     ! The restart file name (no dir).
+  character(len=1024) :: restartpath_temp ! temporary location for the restart file path (dir/file).
+  character(len=1024) :: restartname_temp ! temporary location for restart name
   character(len=256) :: base_file_name  ! Temporary location for restart file name (no dir)
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
                                         ! to the name of files after the first.
@@ -949,8 +951,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   character(len=64) :: var_name         ! A variable's name.
-  character(len=512) :: restartpath_temp ! temporary location for the restart file path (dir/file).
-  character(len=256) :: restartname_temp ! temporary location for restart name
   character(len=256) :: date_appendix ! date string to append to a file name if desired
   !character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
   character(len=200) :: dim_names(4)
@@ -1073,7 +1073,13 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         write(suffix,'("_",I2)') num_files
      endif
 
-     if (num_files > 0) restartpath = trim(restartpath_temp) // trim(suffix)
+     if (num_files > 0) then
+        length = len_trim(trim(restartpath_temp) // trim(suffix))
+        restartpath(1:length) = trim(restartpath_temp) // trim(suffix)
+     else
+        length = len_trim(restartpath_temp)
+        restartpath(1:length) = trim(restartpath_temp)
+     endif 
      
      WRITE(mpp_pe()+2000,*) "save_restart: the restart path is ", trim(restartpath)
      call flush(mpp_pe()+2000)
