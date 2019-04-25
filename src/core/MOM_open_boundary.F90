@@ -19,12 +19,13 @@ use MOM_restart,              only : register_restart_field, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
-use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
+use MOM_unit_scaling,         only : unit_scale_type
+use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
 
 implicit none ; private
@@ -72,9 +73,9 @@ type, public :: OBC_segment_data_type
   real, pointer, dimension(:,:,:) :: buffer_src=>NULL() !< buffer for segment data located at cell faces
                                                 !! and on the original vertical grid
   integer                         :: nk_src     !< Number of vertical levels in the source data
-  real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data (m)
+  real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data [m]
   real, dimension(:,:,:), pointer :: buffer_dst=>NULL() !< buffer src data remapped to the target vertical grid
-  real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity (m s-1)
+  real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity [m s-1]
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
 
@@ -134,32 +135,32 @@ type, public :: OBC_segment_type
   integer :: Ie_obc         !< i-indices of boundary segment.
   integer :: Js_obc         !< j-indices of boundary segment.
   integer :: Je_obc         !< j-indices of boundary segment.
-  real :: Velocity_nudging_timescale_in  !< Nudging timescale on inflow (s).
-  real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow (s).
+  real :: Velocity_nudging_timescale_in  !< Nudging timescale on inflow [s].
+  real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow [s].
   logical :: on_pe          !< true if segment is located in the computational domain
   logical :: temp_segment_data_exists !< true if temperature data arrays are present
   logical :: salt_segment_data_exists !< true if salinity data arrays are present
-  real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity
-                                                    !! wave speed (m -s) at OBC-points.
-  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness (m) at OBC-points.
-  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness (m) at OBC-points.
+  real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity wave speed [m s-1]
+                                                    !! at OBC-points.
+  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness [m] at OBC-points.
+  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness [m] at OBC-points.
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
-                                                            !! segment (m s-1).
+                                                            !! segment [m s-1].
   real, pointer, dimension(:,:,:) :: tangential_vel=>NULL() !< The layer velocity tangential to the
-                                                            !! OB segment (m s-1).
+                                                            !! OB segment [m s-1].
   real, pointer, dimension(:,:,:) :: tangential_grad=>NULL() !< The gradient of the velocity tangential
-                                                            !! to the OB segment (m s-1).
+                                                            !! to the OB segment [m s-1].
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
-                                                            !! segment (m3 s-1).
+                                                            !! segment [m3 s-1].
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
-                                                            !! the OB segment (m s-1).
-  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment (m).
+                                                            !! the OB segment [m s-1].
+  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment [m].
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
-                                                            !! segment (s-1)
+                                                            !! segment [s-1]
   real, pointer, dimension(:,:,:) :: grad_tan=>NULL()       !< The gradient of the tangential flow along the
-                                                            !! segment (s-1)
+                                                            !! segment [s-1]
   real, pointer, dimension(:,:,:) :: grad_gradient=>NULL()  !< The gradient of the gradient of tangential flow along the
-                                                            !! segment (m-1 s-1)
+                                                            !! segment [m-1 s-1]
   real, pointer, dimension(:,:,:) :: rx_normal=>NULL()      !< The rx_old_u value for radiation coeff
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: ry_normal=>NULL()      !< The tangential value for radiation coeff
@@ -167,14 +168,14 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: cff_normal=>NULL()     !< The denominator for oblique radiation
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: nudged_normal_vel=>NULL() !< The layer velocity normal to the OB segment
-                                                            !! that values should be nudged towards (m s-1).
+                                                            !! that values should be nudged towards [m s-1].
   real, pointer, dimension(:,:,:) :: nudged_tangential_vel=>NULL() !< The layer velocity tangential to the OB segment
-                                                            !! that values should be nudged towards (m s-1).
+                                                            !! that values should be nudged towards [m s-1].
   real, pointer, dimension(:,:,:) :: nudged_tangential_grad=>NULL() !< The layer dvdx or dudy towards which nudging
-                                                            !! can occur (s-1).
+                                                            !! can occur [s-1].
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
-  real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed (m-3)
+  real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed [m-3]
   real :: Tr_InvLscale3_in                                      !< for restoring the tracer concentration in a
                                                                 !! ficticious reservior towards interior values
                                                                 !! when flow is exiting the domain, or towards
@@ -225,7 +226,7 @@ type, public :: ocean_OBC_type
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
-  real :: g_Earth                                     !< The gravitational acceleration in m s-2.
+  real :: g_Earth                                     !< The gravitational acceleration [m s-2].
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
@@ -240,7 +241,7 @@ type, public :: ocean_OBC_type
                    !! new time level (1) or the running mean (0) for velocities.
                    !! Valid values range from 0 to 1, with a default of 0.3.
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
-                   !! velocity (or speed of characteristics), in m s-1.  The
+                   !! velocity (or speed of characteristics) [m s-1].  The
                    !! default value is 10 m s-1.
   logical :: OBC_pe !< Is there an open boundary on this tile?
   type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
@@ -250,10 +251,10 @@ type, public :: ocean_OBC_type
   real, pointer, dimension(:,:,:) :: cff_normal => NULL()  !< Array storage for restarts
   real :: silly_h  !< A silly value of thickness outside of the domain that
                    !! can be used to test the independence of the OBCs to
-                   !! this external data, in m.
+                   !! this external data [H ~> m or kg m-2].
   real :: silly_u  !< A silly value of velocity outside of the domain that
                    !! can be used to test the independence of the OBCs to
-                   !! this external data, in m/s.
+                   !! this external data [m s-1].
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -290,8 +291,9 @@ contains
 !> here. The remainder of the segment data are initialized in a
 !> later call to update_open_boundary_data
 
-subroutine open_boundary_config(G, param_file, OBC)
+subroutine open_boundary_config(G, US, param_file, OBC)
   type(dyn_horgrid_type),  intent(inout) :: G !< Ocean grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
@@ -473,7 +475,7 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "is entering the domain.", units="m", default=0.0)
     endif
 
-    if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
+    if (mask_outside) call mask_outside_OBCs(G, US, param_file, OBC)
 
     ! All tracers are using the same restoring length scale for now, but we may want to make this
     ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
@@ -1410,8 +1412,8 @@ end subroutine open_boundary_impose_normal_slope
 subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),            intent(inout) :: G !< Ocean grid structure
-  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell (m2)
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell (m2)
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell [m2]
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell [m2]
   ! Local variables
   integer :: i, j, n
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -2834,8 +2836,8 @@ end subroutine deallocate_OBC_segment_data
 subroutine open_boundary_test_extern_uv(G, OBC, u, v)
   type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)),intent(inout) :: u !< Zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity (m/s)
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)),intent(inout) :: u !< Zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity [m s-1]
   ! Local variables
   integer :: i, j, k, n
 
@@ -2877,7 +2879,7 @@ end subroutine open_boundary_test_extern_uv
 subroutine open_boundary_test_extern_h(G, OBC, h)
   type(ocean_grid_type),                    intent(in)    :: G   !< Ocean grid structure
   type(ocean_OBC_type),                     pointer       :: OBC !< Open boundary structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),intent(inout) :: h   !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),intent(inout) :: h   !< Layer thickness [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j, k, n
 
@@ -2919,7 +2921,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   type(verticalGrid_type),                   intent(in)    :: GV   !<  Ocean vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [m]
   type(time_type),                           intent(in)    :: Time !< Model time
   ! Local variables
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed
@@ -2928,7 +2930,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
   type(OBC_segment_type), pointer :: segment => NULL()
   integer, dimension(4) :: siz,siz2
-  real :: sumh ! column sum of thicknesses (m)
+  real :: sumh ! column sum of thicknesses [m]
   integer :: ni_seg, nj_seg  ! number of src gridpoints along the segments
   integer :: i2, j2          ! indices for referencing local domain array
   integer :: is_obc, ie_obc, js_obc, je_obc  ! segment indices within local domain
@@ -3690,17 +3692,18 @@ end subroutine fill_temp_salt_segments
 !> Find the region outside of all open boundary segments and
 !! make sure it is set to land mask. Gonna need to know global land
 !! mask as well to get it right...
-subroutine mask_outside_OBCs(G, param_file, OBC)
-  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
-  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
-  type(ocean_OBC_type),    pointer       :: OBC        !< Open boundary structure
+subroutine mask_outside_OBCs(G, US, param_file, OBC)
+  type(dyn_horgrid_type),       intent(inout) :: G          !< Ocean grid structure
+  type(param_file_type),        intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),         pointer       :: OBC        !< Open boundary structure
+  type(unit_scale_type),        intent(in)    :: US         !< A dimensional unit scaling type
 
-! Local variables
+  ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
   integer :: i, j
   logical :: fatal_error = .False.
   real    :: min_depth
-  integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
+  integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   real, allocatable, dimension(:,:) :: color, color2  ! For sorting inside from outside,
@@ -3709,8 +3712,7 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
   if (.not. associated(OBC)) return
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 default=0.0, do_not_log=.true.)
-  min_depth = min_depth / G%Zd_to_m
+                 units="m", default=0.0, scale=US%m_to_Z, do_not_log=.true.)
 
   allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
   allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0

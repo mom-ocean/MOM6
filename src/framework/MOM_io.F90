@@ -97,7 +97,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   integer,               intent(in)    :: novars     !< number of fields written to filename
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
-  real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
+  real, optional,        intent(in)    :: timeunit   !< length of the units for time [s]. The
                                                      !! default value is 86400.0, for 1 day.
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -357,7 +357,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
   integer,               intent(in)    :: novars     !< number of fields written to filename
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
-  real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
+  real, optional,        intent(in)    :: timeunit   !< length of the units for time [s]. The
                                                      !! default value is 86400.0, for 1 day.
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if a new file uses any

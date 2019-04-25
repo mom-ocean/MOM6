@@ -13,6 +13,7 @@ use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
 use MOM_open_boundary, only : OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -23,6 +24,11 @@ implicit none ; private
 public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
 public USER_initialize_sponges, USER_set_OBC_data, USER_set_rotation
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> A module variable that should not be used.
 !! \todo Move this module variable into a control structure.
@@ -36,7 +42,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface, in m2 Z-1 s-2.
+                                                     !! each interface [m2 Z-1 s-2 ~> m s-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
                                                      !! open file to parse for model
                                                      !! parameter values.
@@ -54,12 +60,13 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 end subroutine USER_set_coord
 
 !> Initialize topography.
-subroutine USER_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_topography: " // &
@@ -76,7 +83,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h  !< The thicknesses being initialized, in H.
+                           intent(out) :: h  !< The thicknesses being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open
                                              !! file to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -92,7 +99,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  h(:,:,1) = 0.0 * GV%m_to_H
+  h(:,:,1) = 0.0 ! h should be set [H ~> m or kg m-2].
 
   if (first_call) call write_user_log(param_file)
 
@@ -101,7 +108,7 @@ end subroutine USER_initialize_thickness
 !> initialize velocities.
 subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m/s]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m s-1]
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [m/s]
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
@@ -130,8 +137,8 @@ end subroutine USER_initialize_velocity
 !! into T(:,:,:) and S(:,:,:).
 subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC).
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC].
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt].
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
@@ -172,7 +179,7 @@ subroutine USER_initialize_sponges(G, GV, use_temp, tv, param_file, CSp, h)
                                                        !! parameter values.
   type(sponge_CS),         pointer    :: CSp           !< A pointer to the sponge control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in) :: h             !< Layer thicknesses, in units of H (m or kg m-2).
+                           intent(in) :: h             !< Layer thicknesses [H ~> m or kg m-2].
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_sponges: " // &
     "Unmodified user routine called - you must edit the routine to use it")
@@ -235,19 +242,18 @@ end subroutine write_user_log
 !!  The one argument passed to initialize, Time, is set to the
 !!  current time of the simulation.  The fields which are initialized
 !!  here are:
-!!  - u - Zonal velocity in m s-1.
-!!  - v - Meridional velocity in m s-1.
-!!  - h - Layer thickness in H.  (Must be positive.)
-!!  - G%bathyT - Basin depth in Z.  (Must be positive.)
-!!  - G%CoriolisBu - The Coriolis parameter, in s-1.
-!!  - GV%g_prime - The reduced gravity at each interface, in m2 Z-1 s-2.
-!!  - GV%Rlay - Layer potential density (coordinate variable), kg m-3.
+!!  - u - Zonal velocity [m s-1].
+!!  - v - Meridional velocity [m s-1].
+!!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
+!!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
+!!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
+!!  - GV%g_prime - The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+!!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!  - T - Temperature in C.
-!!  - S - Salinity in psu.
+!!  - T - Temperature [degC].
+!!  - S - Salinity [psu].
 !!  If BULKMIXEDLAYER is defined:
-!!  - Rml - Mixed layer and buffer layer potential densities in
-!!          units of kg m-3.
+!!  - Rml - Mixed layer and buffer layer potential densities [kg m-3].
 !!  If SPONGE is defined:
 !!  - A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped
