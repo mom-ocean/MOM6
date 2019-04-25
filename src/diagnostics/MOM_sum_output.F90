@@ -41,10 +41,9 @@ public write_energy, accumulate_net_input, MOM_sum_output_init
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 integer, parameter :: NUM_FIELDS = 17 !< Number of diagnostic fields
-character (*), parameter :: depth_chksum_attr = "mask2dT_bathyT_checksum"
-                                      !< Checksum attribute name of
-                                      !! G%mask2dT * G%bathyT over the compute
-                                      !! domain
+character (*), parameter :: depth_chksum_attr = "bathyT_checksum"
+                                      !< Checksum attribute name of G%bathyT
+                                      !! over the compute domain
 character (*), parameter :: area_chksum_attr = "mask2dT_areaT_checksum"
                                       !< Checksum attribute of name of
                                       !! G%mask2dT * G%areaT over the compute
@@ -75,10 +74,10 @@ type, public :: sum_output_CS ; private
   real    :: D_list_min_inc     !<  The minimum increment [Z ~> m], between the depths of the
                                 !! entries in the depth-list file, 0 by default.
   logical :: require_depth_list_chksum
-                                !<   Require matching checksums in Depth_list.nc when reading
+                                !< Require matching checksums in Depth_list.nc when reading
                                 !! the file.
   logical :: update_depth_list_chksum
-                                !<   Automatically update the Depth_list.nc file if the
+                                !< Automatically update the Depth_list.nc file if the
                                 !! checksums are missing or do not match current values.
   logical :: use_temperature    !<   If true, temperature and salinity are state variables.
   real    :: fresh_water_input  !<   The total mass of fresh water added by surface fluxes
@@ -1128,7 +1127,7 @@ subroutine create_depth_list(G, CS)
     i_global = i + G%idg_offset - (G%isg-1)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
-    Dlist(list_pos) = G%mask2dT(i,j) * G%bathyT(i,j)
+    Dlist(list_pos) = G%bathyT(i,j)
     Arealist(list_pos) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
 
