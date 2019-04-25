@@ -417,7 +417,7 @@ function append_substring(string_in, substring) result(string_out)
    character(len=*), intent(in) :: substring !< string to append string_in
    ! local
    character(len=1024) :: string_out
-   character(len=1024) :: string_holder
+   character(len=1024) :: string_joined
    integer :: string_in_length
    integer :: substring_length
    
@@ -431,9 +431,9 @@ function append_substring(string_in, substring) result(string_out)
    substring_length = len_trim(substring)
 
    if ((string_in_length > 0) .and. (substring_length > 0)) then     
-       string_holder = trim(string_in//substring)
+       string_joined = trim(string_in)//trim(substring)
 
-       string_out(1:len_trim(string_holder)) = trim(string_holder)
+       string_out(1:len_trim(string_joined)) = trim(string_joined)
    else
       call MOM_error(WARNING, "MOM_string_functions::append_substring: "//&
                      "the input string or substring has zero length")
