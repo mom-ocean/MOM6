@@ -1482,7 +1482,7 @@ subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
 
   ! Depth checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%mask2dT(i,j) * G%bathyT(i,j)
+    field(i,j) = G%bathyT(i,j)
   enddo ; enddo
   write(depth_chksum, '(Z16)') mpp_chksum(field(:,:))
 
