@@ -851,9 +851,9 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
         axis_data_CS%data=>time_val
         axis_data_CS%longname = 'Time'
         if (present(time_units)) then
-           axis_data_CS%units = 'days'
-        else
            axis_data_CS%units = time_units
+        else
+           axis_data_CS%units = 'days'
         endif
         axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Period')

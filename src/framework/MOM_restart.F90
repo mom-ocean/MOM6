@@ -965,7 +965,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
   logical :: variable_exists = .false.
-  real :: restart_time
+  real(DOUBLE_KIND):: restart_time
   character(len=10) :: restart_time_units
   character(len=64) :: checksum_char = ''
   character(len=40) :: units
@@ -991,6 +991,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   restartname_temp = ''
   date_appendix = ''
   restart_time_units = ''
+  restart_time = -1.0
 
   ! get the number of vertical levels
   nz = 1 ; if (present(GV)) nz = GV%ke
@@ -1134,7 +1135,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
         if (.not.(allocated(time_vals))) then
            t_grid_read = adjustl(t_grid)
-              if (t_grid_read(1:1) /= 'p') then
+           if (t_grid_read(1:1) /= 'p') then
               time_vals = get_time_values(t_grid, 1)
               time_vals(1) = restart_time
            else
