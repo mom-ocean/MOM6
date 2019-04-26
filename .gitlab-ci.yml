@@ -32,8 +32,9 @@ setup:
     - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea-stats-MOM6-examples.git tests && cd tests
     # Install / update testing scripts
     - git clone https://github.com/adcroft/MRS.git MRS
+    - (cd MRS ; git checkout 9badc63acefbf038)
     # Update MOM6-examples and submodules
-    - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
+    - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git checkout cf73a9ad63f8ccf7 && git submodule init && git submodule update)
     - (cd MOM6-examples/src/MOM6 && git submodule update)
     - test -d MOM6-examples/src/LM3 || make -f MRS/Makefile.clone clone_gfdl -s
     - make -f MRS/Makefile.clone MOM6-examples/.datasets -s
@@ -73,7 +74,7 @@ gnu:ice-ocean-nolibs:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build build/gnu/env && cd build/gnu
     # mkdir -p build/gnu/repro/symmetric_dynamic/ocean_only && cd build/gnu/repro/symmetric_dynamic/ocean_only
-    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_ocean_extras,land_null,atmos_null}
+    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_param,land_null,atmos_null}
     - ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/ncrc-gnu.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
     - time (source ./env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
 
