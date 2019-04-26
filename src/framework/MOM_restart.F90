@@ -965,7 +965,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
   logical :: variable_exists = .false.
-  real(DOUBLE_KIND):: restart_time
+  real(DOUBLE_KIND) :: restart_time
   character(len=10) :: restart_time_units
   character(len=64) :: checksum_char = ''
   character(len=40) :: units
@@ -991,7 +991,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   restartname_temp = ''
   date_appendix = ''
   restart_time_units = ''
-  restart_time = -1.0
 
   ! get the number of vertical levels
   nz = 1 ; if (present(GV)) nz = GV%ke
@@ -1032,11 +1031,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      restartname = restartname_temp
   endif
 
-  WRITE(mpp_pe()+2000,*) "save_restart: the restart name after appending .nc is ", trim(restartname)
-     call flush(mpp_pe()+2000)
+ ! WRITE(mpp_pe()+2000,* "save_restart: the restart filename after appending .nc is ", trim(restartname)
+ ! call flush(mpp_pe()+2000)
 
-  ! get the restart time units
-  restart_time = time_type_to_real(time) / 86400.0
+ ! get the restart time units
+  restart_time = (time_type_to_real(time)) / 86400.0
+
+  WRITE(mpp_pe()+2000, '(A,f1.5)') "save_restart: the restart_time is ", restart_time
+  call flush(mpp_pe()+2000)
+
   restart_time_units = get_time_units(restart_time)
  
   next_var = 1
