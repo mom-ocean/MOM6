@@ -631,14 +631,11 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, GV, &
   integer, intent(out) ::  num_axes !< number of axes to register in the restart file
   
   ! local
-  logical :: use_lath = .false.
-  logical :: use_lonh = .false.
-  logical :: use_latq = .false.
-  logical :: use_lonq = .false.
-  logical :: use_layer = .false.
-  logical :: use_int = .false.
-  logical :: use_time = .false.
-  logical :: use_periodic = .false.
+  logical :: use_lath
+  logical :: use_lonh
+  logical :: use_latq
+  logical :: use_lonq
+ 
   character(len=8) :: t_grid
   character(len=8) :: t_grid_read
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
@@ -662,6 +659,11 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, GV, &
   IegB = G%IegB
   JsgB = G%JsgB
   JegB = G%JegB
+
+  use_lath = .false.
+  use_lonh = .false.
+  use_latq = .false.
+  use_lonq = .false.
   
   select case (trim(hor_grid))
      case ('h') ; use_lath = .true. ; use_lonh = .true.
@@ -910,7 +912,8 @@ end function get_variable_byte_size
 
 !> Define the time units for the input time value
 function get_time_units(time_value) result(time_units_out)
-   real, intent(in) :: time_value !< numerical time value
+   real, intent(in) :: time_value !< numerical time value in seconds
+                                  !! i.e., before dividing by 86400.
    ! local
    character(len=10) :: time_units !< time units
    character(len=10) :: time_units_out !< time units trimmed
