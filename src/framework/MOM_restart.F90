@@ -130,8 +130,6 @@ type, public :: MOM_restart_CS ; private
   type(p4d), pointer :: var_ptr4d(:) => NULL()
   !!@}
   integer :: max_fields !< The maximum number of restart fields
-  type(FmsNetcdfDomainFile_t) :: fileObjRead
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite
   
 end type MOM_restart_CS
 
@@ -865,7 +863,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
-  type(MOM_restart_CS) :: fileObjWrite  ! file object returned by a call to fms2_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! file object returned by a call to fms2_open_file
   character(len=1024) :: restartpath     ! The restart file path (dir/file).
   character(len=1024) :: restartname     ! The restart file name (no dir).
   character(len=1024) :: restartpath_temp ! temporary location for the restart file path (dir/file).
@@ -1031,7 +1029,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            endif
      endif
      
-     file_open_success = MOM_open_file(CS%fileObjWrite, trim(restartpath),"write", &
+     file_open_success = MOM_open_file(fileObjWrite, trim(restartpath),"write", &
                     G, is_restart = .true.)
    
      if (.not. (file_open_success)) then
@@ -1068,11 +1066,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         endif
         
         do i=1,num_axes
-           axis_exists = fms2_dimension_exists(CS%fileObjWrite, axis_names(i))
+           axis_exists = fms2_dimension_exists(fileObjWrite, axis_names(i))
            if (.not.(axis_exists)) then
               call MOM_get_axis_data(axis_data_CS, axis_names(i), G, GV, &
                                      time_vals, restart_time_units)
-              call MOM_register_axis(CS%fileObjWrite, axis_data_CS%name, axis_lengths(i))
+              call MOM_register_axis(fileObjWrite, axis_data_CS%name, axis_lengths(i))
            endif
         enddo
      enddo
@@ -1108,7 +1106,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                     axis_names, axis_lengths, num_axes)
         ! write the axis data and associated metadata to the file
         do i=1,num_axes
-           variable_exists = fms2_variable_exists(CS%fileObjWrite, axis_names(i))
+           variable_exists = fms2_variable_exists(fileObjWrite, axis_names(i))
            if (.not.(variable_exists)) then
               call MOM_get_axis_data(axis_data_CS, axis_names(i), G, GV, &
                                      time_vals, restart_time_units)
@@ -1118,25 +1116,25 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                  data_temp = axis_data_CS%data
                  
                  if (axis_data_CS%is_domain_decomposed) then
-                    call fms2_get_global_io_domain_indices(CS%fileObjWrite, trim(axis_data_CS%name), is, ie)
-                    call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, data_temp(is:ie), &
+                    call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name), is, ie)
+                    call fms2_register_restart_field(fileObjWrite, axis_data_CS%name, data_temp(is:ie), &
                                                      dimensions=(/trim(axis_data_CS%name)/), &
                                                      domain_position=axis_data_CS%horgrid_position)
 
-                    call MOM_write_data(CS%fileObjWrite, trim(axis_data_CS%name), data_temp(is:ie))
+                    call MOM_write_data(fileObjWrite, trim(axis_data_CS%name), data_temp(is:ie))
                  else
-                    call fms2_register_restart_field(CS%fileObjWrite, axis_data_CS%name, data_temp, &
+                    call fms2_register_restart_field(fileObjWrite, axis_data_CS%name, data_temp, &
                                                      dimensions=(/trim(axis_data_CS%name)/), &
                                                      domain_position=axis_data_CS%horgrid_position)
 
-                    call MOM_write_data(CS%fileObjWrite, trim(axis_data_CS%name), data_temp) 
+                    call MOM_write_data(fileObjWrite, trim(axis_data_CS%name), data_temp) 
                  endif
  
                  deallocate(data_temp)
 
-                 call MOM_register_variable_attribute(CS%fileObjWrite, trim(axis_data_CS%name), &
+                 call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name), &
                                                       'long_name',axis_data_CS%longname)
-                 call MOM_register_variable_attribute(CS%fileObjWrite, trim(axis_data_CS%name), &
+                 call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name), &
                                                       'units',axis_data_CS%units)
               endif
            endif
@@ -1144,48 +1142,48 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         
         ! register and write the restart variables to the file
         if (associated(CS%var_ptr3d(m)%p)) then
-           call fms2_register_restart_field(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
+           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
+           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
         elseif (associated(CS%var_ptr2d(m)%p)) then
 
-           call fms2_register_restart_field(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
+           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
+           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
         elseif (associated(CS%var_ptr4d(m)%p)) then
 
-           call fms2_register_restart_field(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
+           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
+           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
         elseif (associated(CS%var_ptr1d(m)%p)) then
            ! need to explicitly define axis_names array for 1-D variable
-           call fms2_register_restart_field(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
+           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
+           call MOM_write_data(fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
         elseif (associated(CS%var_ptr0d(m)%p)) then
            ! need to explicitly define axis_names array for scalar variable
-           call fms2_register_restart_field(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
+           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
-           call MOM_write_data(CS%fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
+           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
         endif
         ! convert the checksum
         checksum_char = ''
         checksum_char = convert_checksum_to_string(check_val(m,1))
         ! write the checksum, register attributes
 
-        call MOM_register_variable_attribute(CS%fileObjWrite, CS%restart_field(m)%var_name, 'checksum', checksum_char)
-        call MOM_register_variable_attribute(CS%fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
-        call MOM_register_variable_attribute(CS%fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', checksum_char)
+        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
+        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
         
         if(allocated(time_vals)) deallocate(time_vals)     
      enddo
 
-     call fms2_close_file(CS%fileObjWrite)
+     call fms2_close_file(fileObjWrite)
      num_files = num_files+1
   enddo
 
@@ -1233,7 +1231,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer(LONG_KIND),dimension(3)  :: checksum_file
   integer(kind=8)                  :: checksum_data
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
-  type(MOM_restart_CS) :: fileObjRead  ! fms2 data structure
+  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! fms2 data structure
   integer :: str_index = 0
   character(len=200) :: file_path_1,file_path_2
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
@@ -1274,25 +1272,25 @@ subroutine restore_state(filename, directory, day, G, CS)
      else 
         file_path_2 = trim(file_path_1)
      endif
-     file_open_success=MOM_open_file(CS%fileObjRead, trim(file_path_2),"read", &
+     file_open_success=MOM_open_file(fileObjRead, trim(file_path_2),"read", &
                     G, is_restart = .true.)
      
      if (.not.(file_open_success)) then  
         write(mesg,'( "ERROR, unable to open the file ",A) ') trim(filename)
         call MOM_error(FATAL,"MOM_restart::MOM_open_file: "//mesg)
      endif      
-     call fms2_get_dimension_size(CS%fileObjRead, "Time", ntime)
+     call fms2_get_dimension_size(fileObjRead, "Time", ntime)
 
      if (ntime < 1) cycle
 
      allocate(time_vals(ntime))
-     call fms2_register_restart_field(CS%fileObjRead, "Time","double")
-     call fms2_read_data(CS%fileObjRead,"Time", time_vals)
+     call fms2_register_restart_field(fileObjRead, "Time","double")
+     call fms2_read_data(fileObjRead,"Time", time_vals)
      t1 = time_vals(1)
      deallocate(time_vals)
      day = real_to_time(t1*86400.0)
 
-     call fms2_close_file(CS%fileObjRead)
+     call fms2_close_file(fileObjRead)
      exit
   enddo
 
@@ -1309,7 +1307,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         else 
            file_path_2 = trim(file_path_1)
         endif
-        file_open_success=MOM_open_file(CS%fileObjRead, file_path_2, "read", &
+        file_open_success=MOM_open_file(fileObjRead, file_path_2, "read", &
                                        G, is_restart = .true.)
                                                 
         if(.not. file_open_success) then 
@@ -1317,13 +1315,13 @@ subroutine restore_state(filename, directory, day, G, CS)
            call MOM_error(FATAL,"MOM_restart: "//mesg)
         endif
         
-        call fms2_get_dimension_size(CS%fileObjRead, "Time", ntime)
+        call fms2_get_dimension_size(fileObjRead, "Time", ntime)
 
         if (ntime < 1) cycle
 
         allocate(time_vals(ntime))
-        call fms2_register_restart_field(CS%fileObjRead, "Time","double")
-        call fms2_read_data(CS%fileObjRead,"Time", time_vals)
+        call fms2_register_restart_field(fileObjRead, "Time","double")
+        call fms2_read_data(fileObjRead,"Time", time_vals)
         t2 = time_vals(1)
         deallocate(time_vals)
 
@@ -1333,7 +1331,7 @@ subroutine restore_state(filename, directory, day, G, CS)
            call MOM_error(WARNING, "MOM_restart: "//mesg)
 
         endif
-        call fms2_close_file(CS%fileObjRead)
+        call fms2_close_file(fileObjRead)
      enddo
   endif
 
@@ -1351,7 +1349,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         file_path_2 = trim(file_path_1)
      endif
 
-     file_open_success=MOM_open_file(CS%fileObjRead, trim(file_path_2),"read", &
+     file_open_success=MOM_open_file(fileObjRead, trim(file_path_2),"read", &
                     G, is_restart = .true.)
      if (.not. file_open_success) then 
         write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
@@ -1359,16 +1357,16 @@ subroutine restore_state(filename, directory, day, G, CS)
      endif
      ! register the horizontal axes
      do i=1,size(axis_names)
-        axis_exists = fms2_dimension_exists(CS%fileObjRead, axis_names(i))
+        axis_exists = fms2_dimension_exists(fileObjRead, axis_names(i))
         if (axis_exists) then 
-           call MOM_register_axis(CS%fileObjWrite, axis_names(i))
+           call MOM_register_axis(fileObjRead, axis_names(i))
         endif
      enddo
      ! get number of variables in the file
-     nvar=fms2_get_num_variables(CS%fileObjRead)
+     nvar=fms2_get_num_variables(fileObjRead)
      ! get the names of the variables in the file
      allocate(variable_names(nvar))
-     call fms2_get_variable_names(CS%fileObjRead, variable_names)
+     call fms2_get_variable_names(fileObjRead, variable_names)
      ! allocate the fields to hold the variable data
      allocate(fields(nvar))
     
@@ -1388,7 +1386,7 @@ subroutine restore_state(filename, directory, day, G, CS)
            var_exists = .false.
            varname(1:len_trim(CS%restart_field(m)%var_name)) = trim(CS%restart_field(m)%var_name)
            ! check if variable is in the restart file
-           var_exists = fms2_variable_exists(CS%fileObjRead, varname)
+           var_exists = fms2_variable_exists(fileObjRead, varname)
 
            if (var_exists) then
               if (.NOT. CS%checksum_required) then
@@ -1396,11 +1394,11 @@ subroutine restore_state(filename, directory, day, G, CS)
               else
                  checksum_data = -1
                  is_there_a_checksum = .false.
-                 check_exist = fms2_attribute_exists(CS%fileObjRead, varname, "checksum")
+                 check_exist = fms2_attribute_exists(fileObjRead, varname, "checksum")
                
                  if ( check_exist ) then
                     checksum_file(:) = -1
-                    call fms2_get_variable_attribute(CS%fileObjRead, varname, "checksum", checksum_char)
+                    call fms2_get_variable_attribute(fileObjRead, varname, "checksum", checksum_char)
                     ! The following checksum conversion proceure is adapted from mpp_get_atts 
                     checksum_file = convert_checksum_string_to_int(checksum_char)
                     is_there_a_checksum = .true.
@@ -1408,19 +1406,19 @@ subroutine restore_state(filename, directory, day, G, CS)
               endif
 
               ! register the restart variable
-              call fms2_register_restart_field(CS%fileObjRead,varname,'real')
+              call fms2_register_restart_field(fileObjRead,varname,'real')
 
               if (associated(CS%var_ptr1d(m)%p))  then
-                 call fms2_read_data(CS%fileObjRead, varname, CS%var_ptr1d(m)%p)
+                 call fms2_read_data(fileObjRead, varname, CS%var_ptr1d(m)%p)
 
                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
               elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar
-                 call fms2_read_data(CS%fileObjRead,varname,  CS%var_ptr0d(m)%p)
+                 call fms2_read_data(fileObjRead,varname,  CS%var_ptr0d(m)%p)
                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
                    
               elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array
                  if (pos /= 0) then
-                    call fms2_read_data(CS%fileObjRead, varname, CS%var_ptr2d(m)%p) ! domain-decomposed read
+                    call fms2_read_data(fileObjRead, varname, CS%var_ptr2d(m)%p) ! domain-decomposed read
                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
                  !   call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
                  !          no_domain=.true., timelevel=1)
@@ -1428,7 +1426,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
               elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
                  if (pos /= 0) then
-                    call fms2_read_data(CS%fileObjRead, varname,  CS%var_ptr3d(m)%p) ! domain-decomposed read
+                    call fms2_read_data(fileObjRead, varname,  CS%var_ptr3d(m)%p) ! domain-decomposed read
 
                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
                  !   call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
@@ -1437,7 +1435,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                  if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
               elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
                  if (pos /= 0) then
-                     call fms2_read_data(CS%fileObjRead, varname, CS%var_ptr4d(m)%p) ! domain-decomposed read
+                     call fms2_read_data(fileObjRead, varname, CS%var_ptr4d(m)%p) ! domain-decomposed read
                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
                  !    call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                  !           no_domain=.true., timelevel=1)
@@ -1468,7 +1466,7 @@ subroutine restore_state(filename, directory, day, G, CS)
      deallocate(fields)
      deallocate(variable_names)
 
-     call fms2_close_file(CS%fileObjRead)
+     call fms2_close_file(fileObjRead)
 
      if (missing_fields == 0) exit   
   enddo
