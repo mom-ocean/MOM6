@@ -967,8 +967,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   restart_time = time_type_to_real(time) / 86400.0
   restart_time_units = get_time_units(restart_time*86400.0)
 
-  WRITE(mpp_pe()+2000, '(A,F8.2)') "save_restart: the restart_time is ", restart_time
-  call flush(mpp_pe()+2000)
+  !WRITE(mpp_pe()+2000, '(A,F8.2)') "save_restart: the restart_time is ", restart_time
+  !call flush(mpp_pe()+2000)
 
   next_var = 1
   do while (next_var <= CS%novars )
@@ -1040,8 +1040,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
      
      do m=start_var,CS%novars
-        WRITE(mpp_pe()+2000,*) "save_restart: getting axis stuff for ", trim(CS%restart_field(m)%var_name)
-        call flush(mpp_pe()+2000)
+        !WRITE(mpp_pe()+2000,*) "save_restart: getting axis stuff for ", trim(CS%restart_field(m)%var_name)
+        !call flush(mpp_pe()+2000)
    
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
@@ -1224,9 +1224,10 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: ndim, nvar, natt, ntime, pos
 
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
-  character(len=200) :: unit_path(CS%max_fields) ! The file names.
+  !character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
-
+  character(len=200) :: base_file_name
+  character(len=1024) :: temp_file_name
   character(len=8)   :: hor_grid ! Variable grid info.
   real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
@@ -1236,9 +1237,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer(kind=8)                  :: checksum_data
   logical :: file_open_success = .false. ! returned by call to fms2_open_file 
   type(FmsNetcdfDomainFile_t) :: fileObjRead  ! fms2 data structure
-  integer :: str_index = 0
-  character(len=200) :: file_path_1,file_path_2
-  character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
+  integer :: str_index
+  character(len=96), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
   integer :: is, ie, k
   logical :: var_exists = .false.
@@ -1248,35 +1248,51 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
-    
-! Get number of restart files and full paths to files 
-  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
-     num_file = open_restart_units('r', directory, G, CS, &
-                     file_paths=unit_path, global_files=unit_is_global)
+
+  axis_names(:)(1:4) = (/'lath','lonh','latq','lonq'/)
+  str_index = 0
+  ! get the base restart file name
+  temp_file_name=''
+  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then then
+     temp_file_name = trim(CS%restartfile)
   else
-     num_file = open_restart_units(filename, directory, G, CS, &
-                     file_paths=unit_path, global_files=unit_is_global)
+     temp_file_name = trim(filename)
   endif
+
+  ! append '.nc.' to the file name if it is missing
+  base_file_name = ''
+
+  str_index = INDEX(temp_file_name,'.nc') 
+  if (str_index <=0) then
+     base_file_name = trim(append_substring(temp_file_name, '.nc'))                         
+  else 
+     base_file_name = trim(temp_file_name)
+  endif
+
+  ! determine the number of restart files in the directory with the base_file_name
+  num_file = count_restart_files_in_directory(directory, trim(base_file_name))
 
   if (num_file == 0) then
      write(mesg,'("Unable to find any restart files specified by  ",A,"  in directory ",A,".")') &
-                  trim(filename), trim(directory)
+                  trim(base_file_name), trim(directory)
      call MOM_error(FATAL,"MOM_restart: "//mesg)
   endif
   
-  file_path_1 = ''
-  file_path_2 = ''
-  axis_names(:)(1:4) = (/'lath','lonh','latq','lonq'/)
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
-     file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
-     str_index = INDEX(file_path_1,'.nc') 
-     if (str_index <=0) then
-        file_path_2 = append_substring(file_path_1, '.nc')                         
+     filepath = ''
+     if (num_file > 1) then
+         suffix = ''
+         write(suffix,'(,I4.4)') n
+         filepath = trim(directory)//trim(base_file_name)//trim(suffix)
      else 
-        file_path_2 = trim(file_path_1)
+         filepath = trim(directory)//trim(base_file_name)
      endif
-     file_open_success=MOM_open_file(fileObjRead, trim(file_path_2),"read", &
+     
+     WRITE(mpp_pe()+2000,*) "restort_state: the file path is ", trim(filepath)
+     call flush(mpp_pe()+2000)
+     
+     file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
                     G, is_restart = .true.)
      
      if (.not.(file_open_success)) then  
@@ -1304,18 +1320,19 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! if they differ from the first time.
   if (is_root_pe()) then
      do m = n+1,num_file
-        file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
-        str_index = INDEX(file_path_1,'.nc')
-        if (str_index <=0) then
-           file_path_2 = append_substring(file_path_1, '.nc')                         
-        else 
-           file_path_2 = trim(file_path_1)
+        filepath = ''
+        if (num_file > 1) then
+           suffix = ''
+           write(suffix,'(,I4.4)') m
+           filepath = trim(directory)//trim(base_file_name)//trim(suffix)
+        else
+           filepath = trim(directory)//trim(base_file_name)
         endif
-        file_open_success=MOM_open_file(fileObjRead, file_path_2, "read", &
+        file_open_success=MOM_open_file(fileObjRead, filepath, "read", &
                                        G, is_restart = .true.)
                                                 
         if(.not. file_open_success) then 
-           write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(unit_path(n))
+           write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(filepath)
            call MOM_error(FATAL,"MOM_restart: "//mesg)
         endif
         
@@ -1343,20 +1360,22 @@ subroutine restore_state(filename, directory, day, G, CS)
                             "No times found in restart files.")
 
 ! Read each variable from the first file in which it is found.
-  do n=1,num_file
-     !call get_file_info(unit(n), ndim, nvar, natt, ntime)
-     file_path_1(1:len_trim(unit_path(n))) = trim(unit_path(n))
-     str_index = INDEX(file_path_1,'.nc')
-     if (str_index <=0) then
-        file_path_2 = append_substring(file_path_1, '.nc')                         
-     else 
-        file_path_2 = trim(file_path_1)
-     endif
-
-     file_open_success=MOM_open_file(fileObjRead, trim(file_path_2),"read", &
+! no need to explicitly loop through files, as new fms IO routines automatically
+! check for uncombined files
+!  do n=1,num_file
+     filepath = ''
+ !    if (num_file > 1) then
+!        suffix = ''
+!        write(suffix,'(,I4.4)') n
+!        filepath = trim(directory)//trim(base_file_name)//trim(suffix)
+ !    else 
+        filepath = trim(directory)//trim(base_file_name)
+ !    endif
+    
+     file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
                     G, is_restart = .true.)
      if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(unit_path(n))
+        write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(filepath)
         call MOM_error(FATAL,"MOM_restart: "//mesg)
      endif
      ! register the horizontal axes
@@ -1366,13 +1385,14 @@ subroutine restore_state(filename, directory, day, G, CS)
            call MOM_register_axis(fileObjRead, axis_names(i))
         endif
      enddo
+
      ! get number of variables in the file
      nvar=fms2_get_num_variables(fileObjRead)
      ! get the names of the variables in the file
      allocate(variable_names(nvar))
      call fms2_get_variable_names(fileObjRead, variable_names)
      ! allocate the fields to hold the variable data
-     allocate(fields(nvar))
+ !    allocate(fields(nvar))
     
      missing_fields = 0
 
@@ -1455,7 +1475,7 @@ subroutine restore_state(filename, directory, day, G, CS)
               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
                  write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                         " does not match value ", checksum_file(1), &
-                        " stored in "//trim(unit_path(n)//"." )
+                        " stored in "//trim(filepath))//"." )
                  call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
               endif
 
@@ -1467,13 +1487,13 @@ subroutine restore_state(filename, directory, day, G, CS)
         if (i>nvar) missing_fields = missing_fields+1
      enddo
 
-     deallocate(fields)
+!     deallocate(fields)
      deallocate(variable_names)
 
      call fms2_close_file(fileObjRead)
 
      if (missing_fields == 0) exit   
-  enddo
+!  enddo
 
 ! Check whether any mandatory fields have not been found.
   CS%restart = .true.
@@ -1876,5 +1896,48 @@ function convert_checksum_string_to_int(checksum_char) result(checksum_file)
   enddo
 
 end function convert_checksum_string_to_int
+
+!< count the number of restart files in a directory with the desired base file name 
+!! First, check for combined restart file (i.e., '.000N' is not appended to the file name)
+!! If a combined file is found, the function returns num_file = 1 and stops
+!! If no combined file is found, the function iterates from 0 to the default or user-specified
+!! maximum file count and searches for uncombined restarts with the corresponding suffix.
+!! The function stops the first time that fms2_file_exists returns false in the combined file
+!! loop.
+function count_restart_files_in_directory(directory, base_name, stop_count) result(num_files)
+   character(len=*), intent(in) :: directory !< directory to search for files matching the desired file name
+   character(len=*), intent(in) :: base_name !< base_file_mae to search for
+   integer, optional, intent(in) :: stop_count !< maximum number of files to search for
+   
+   ! local
+   integer :: num_files
+   integer :: i, en
+   character(len=8) :: suffix
+   character(len=512) :: file_path   
+   suffix = ''
+   file_path = ''
+   en = 100
+   num_files = 0
+   ! check for combined files
+   file_path = trim(directory)//trim(base_name)
+
+   if (fms2_file_exists(trim(file_path))) then
+      num_files = 1
+   endif
+
+   if (num_files < 1) then
+      if (present(stop_count)) en=stop_count
+   
+      do while (num_files <= en)
+         file_path = ''
+         write(suffix,'(,I4.4)') num_files
+         file_path = trim(directory)//trim(base_name)//trim(suffix)
+         if (.not.(fms2_file_exists(trim(file_path))) exit ! assume that file suffix integers form continuous set
+          
+         num_files=num_files+1
+      end do
+   endif
+
+end function count_restart_files_in_directory
 
 end module MOM_restart
