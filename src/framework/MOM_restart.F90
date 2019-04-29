@@ -1238,8 +1238,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=200) :: file_path_1,file_path_2
   character(len=80), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
-  integer(LONG_KIND) :: checksumh
-  integer :: num_checksumh, last, iw, is, ie, k
+  integer :: is, ie, k
   logical :: var_exists = .false.
   logical :: axis_exists = .false.
   character(len=16) :: axis_names(4) 
@@ -1395,36 +1394,19 @@ subroutine restore_state(filename, directory, day, G, CS)
               if (.NOT. CS%checksum_required) then
                  is_there_a_checksum = .false. ! Do not need to do data checksumming.
               else
-                 check_exist = fms2_attribute_exists(CS%fileObjRead, varname, "checksum")
-                 checksum_file(:) = -1
                  checksum_data = -1
                  is_there_a_checksum = .false.
+                 check_exist = fms2_attribute_exists(CS%fileObjRead, varname, "checksum")
+               
                  if ( check_exist ) then
+                    checksum_file(:) = -1
+                    call fms2_get_variable_attribute(CS%fileObjRead, varname, "checksum", checksum_char)
                     ! The following checksum conversion proceure is adapted from mpp_get_atts 
-                    call fms2_get_variable_attribute(CS%fileObjRead,varname,"checksum",checksum_char)
-
-                    last = len_trim(checksum_char)
-                    iw = index(trim(checksum_char),",") ! A value of 0 implies only 1 checksum value
-                    ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
-                    ! has multiple time levels.
-                    checksumh = 0
-                    num_checksumh = 1
-                    do while ((iw > 0) .and. (iw < (last-15)))
-                       iw = iw + scan(checksum_char(iw:last), "," ) ! move starting pointer after ","
-                       num_checksumh = num_checksumh + 1
-                    enddo
-           
-                    iw = 1
-  
-                    do k = 1, num_checksumh
-                       read(checksum_char(is:is+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
-                       checksum_file(k) = checksumh 
-                       iw = iw + 17 ! Move index past the ',' in checksum_char
-                    enddo
-
+                    checksum_file = convert_checksum_string_to_int(checksum_char)
                     is_there_a_checksum = .true.
                  endif
               endif
+
               ! register the restart variable
               call fms2_register_restart_field(CS%fileObjRead,varname,'real')
 
@@ -1842,7 +1824,7 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
 end subroutine get_checksum_loop_ranges
 
-!> convert the checksum integer(s) to a single string
+!> convert the variable checksum integer(s) to a single string
 !! If there is more than 1 checksum, commas are inserted between 
 !! each checksum value in the output string
 function convert_checksum_to_string(checksum_int) result (checksum_string)
@@ -1856,5 +1838,41 @@ function convert_checksum_to_string(checksum_int) result (checksum_string)
   write (checksum_string,'(Z16)') checksum_int ! Z16 is the hexadecimal format code
 
 end function convert_checksum_to_string
+
+!> convert the variable checksum string read in from a restart file
+!! to integer value(s)
+function convert_checksum_string_to_int(checksum_char) result(checksum_file)
+  character(len=*), intent(in) :: checksum_char !< checksum character array
+  ! local
+  integer(LONG_KIND),dimension(3) :: checksum_file !< checksum string corresponds to
+                                                   !< values from up to 3 times 
+  integer :: last
+  integer :: start
+  integer(LONG_KIND) :: checksumh
+  integer :: num_checksumh
+  integer :: k
+
+  start =0
+  last = 0
+  checksumh = 0
+  num_checksumh = 1
+  last = len_trim(checksum_char)
+  start = index(trim(checksum_char),",") ! A start value of 0 implies only 1 checksum value
+  ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
+  ! has multiple time levels.
+  do while ((start > 0) .and. (start < (last-15)))
+     start = start + scan(checksum_char(start:last), "," ) ! move starting pointer after ","
+     num_checksumh = num_checksumh + 1
+  enddo
+           
+  start = 1
+  
+  do k = 1, num_checksumh
+     read(checksum_char(start:start+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
+     checksum_file(k) = checksumh 
+     start = start+ 17 ! Move start index past the ',' in checksum_char
+  enddo
+
+end function convert_checksum_string_to_int
 
 end module MOM_restart
