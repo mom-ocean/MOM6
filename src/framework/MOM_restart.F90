@@ -46,6 +46,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_num_variables => get_num_variables, &
                            fms2_variable_exists => variable_exists, &
                            fms2_dimension_exists => dimension_exists, &
+                           fms2_file_exists => file_exists, &
                            FmsNetcdfDomainFile_t, unlimited
 #include <fms_platform.h>
 !!                           
@@ -1253,7 +1254,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   str_index = 0
   ! get the base restart file name
   temp_file_name=''
-  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then then
+  if ((LEN_TRIM(filename) == 1 .and. filename(1:1) == 'F') & 
+     .or. trim(filename)=='r') then
      temp_file_name = trim(CS%restartfile)
   else
      temp_file_name = trim(filename)
@@ -1283,13 +1285,13 @@ subroutine restore_state(filename, directory, day, G, CS)
      filepath = ''
      if (num_file > 1) then
          suffix = ''
-         write(suffix,'(,I4.4)') n
+         write(suffix,'(A,I4.4)') '.', n
          filepath = trim(directory)//trim(base_file_name)//trim(suffix)
      else 
          filepath = trim(directory)//trim(base_file_name)
      endif
      
-     WRITE(mpp_pe()+2000,*) "restort_state: the file path is ", trim(filepath)
+     WRITE(mpp_pe()+2000,*) "restore_state: the file path is ", trim(filepath)
      call flush(mpp_pe()+2000)
      
      file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
@@ -1323,7 +1325,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         filepath = ''
         if (num_file > 1) then
            suffix = ''
-           write(suffix,'(,I4.4)') m
+            write(suffix,'(A,I4.4)') '.', m
            filepath = trim(directory)//trim(base_file_name)//trim(suffix)
         else
            filepath = trim(directory)//trim(base_file_name)
@@ -1366,7 +1368,7 @@ subroutine restore_state(filename, directory, day, G, CS)
      filepath = ''
  !    if (num_file > 1) then
 !        suffix = ''
-!        write(suffix,'(,I4.4)') n
+!        write(suffix,'(A,I4.4)') '.', n
 !        filepath = trim(directory)//trim(base_file_name)//trim(suffix)
  !    else 
         filepath = trim(directory)//trim(base_file_name)
@@ -1475,7 +1477,7 @@ subroutine restore_state(filename, directory, day, G, CS)
               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
                  write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                         " does not match value ", checksum_file(1), &
-                        " stored in "//trim(filepath))//"." )
+                        " stored in "//trim(filepath)//"." 
                  call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
               endif
 
@@ -1492,7 +1494,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
      call fms2_close_file(fileObjRead)
 
-     if (missing_fields == 0) exit   
+ !    if (missing_fields == 0) exit   
 !  enddo
 
 ! Check whether any mandatory fields have not been found.
@@ -1930,9 +1932,14 @@ function count_restart_files_in_directory(directory, base_name, stop_count) resu
    
       do while (num_files <= en)
          file_path = ''
-         write(suffix,'(,I4.4)') num_files
+         suffix = ''
+         write(suffix,'(A,I4.4)') '.', num_files
+
+         !WRITE(mpp_pe()+2000, '(A)') "count_restart_files: the suffix is ", suffix
+         !call flush(mpp_pe()+2000)
+
          file_path = trim(directory)//trim(base_name)//trim(suffix)
-         if (.not.(fms2_file_exists(trim(file_path))) exit ! assume that file suffix integers form continuous set
+         if (.not.(fms2_file_exists(trim(file_path)))) exit ! assume that file suffix integers form continuous set
           
          num_files=num_files+1
       end do
