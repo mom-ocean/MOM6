@@ -996,8 +996,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      !   length = len_trim(trim(directory)//trim(restartname))
      !   restartpath_temp(1:length) = trim(directory)//trim(restartname)
      !endif
-     length = len_trim(trim(directory)//trim(restartname))
-     restartpath_temp(1:length) = trim(directory)//trim(restartname)
+     name_length = len_trim(trim(directory)//trim(restartname))
+     restartpath_temp(1:name_length) = trim(directory)//trim(restartname)
      if (num_files < 10) then
         write(suffix,'("_",I1)') num_files
      else
@@ -1086,20 +1086,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         horgrid_position = get_horizontal_grid_position(hor_grid)  
         
         call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
-        ! Prepare the checksum of the restart fields to be written to restart files
-        if (associated(CS%var_ptr3d(m)%p)) then
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-        elseif (associated(CS%var_ptr2d(m)%p)) then
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-        elseif (associated(CS%var_ptr4d(m)%p)) then
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-        elseif (associated(CS%var_ptr1d(m)%p)) then
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
-        elseif (associated(CS%var_ptr0d(m)%p)) then
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
-        endif
-
-     
+        
         num_axes = 0
 
         call get_dimension_features(hor_grid, z_grid, t_grid, G, GV, &
@@ -1136,6 +1123,13 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                                       'long_name',axis_data_CS%longname)
                  call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name), &
                                                       'units',axis_data_CS%units)
+                 call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name), &
+                                                      'cartesian_axis',axis_data_CS%cartesian_axis)
+                 if (len_trim(axis_data_CS%positive)>1) then
+                    call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name), &
+                                                      'positive',axis_data_CS%positive)
+                 endif
+                 
               endif
            endif
         enddo   
@@ -1146,39 +1140,49 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
+           ! prepare the restart field checksum
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
         elseif (associated(CS%var_ptr2d(m)%p)) then
 
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
+           ! prepare the restart field checksum
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
         elseif (associated(CS%var_ptr4d(m)%p)) then
 
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
+           ! prepare the restart field checksum
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
         elseif (associated(CS%var_ptr1d(m)%p)) then
            ! need to explicitly define axis_names array for 1-D variable
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
            call MOM_write_data(fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
+           ! prepare the restart field checksum
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
         elseif (associated(CS%var_ptr0d(m)%p)) then
            ! need to explicitly define axis_names array for scalar variable
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
+           ! prepare the restart field checksum
+           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
         endif
-        ! convert the checksum
+        ! convert the checksum to a string
         checksum_char = ''
         checksum_char = convert_checksum_to_string(check_val(m,1))
-        ! write the checksum, register attributes
+        ! register the variable attributes
 
-        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', checksum_char)
         call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
         call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
         
         if(allocated(time_vals)) deallocate(time_vals)     
      enddo
