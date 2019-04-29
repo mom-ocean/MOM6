@@ -99,6 +99,8 @@ type, public :: axis_data_type
   character(len=64)  :: name = ''               !< Name of the axis
   character(len=48)  :: units = ''              !< Physical dimensions of the axis
   character(len=240) :: longname = ''           !< Long name of the axis
+  character(len=8) :: cartesian_axis = ''       !< Name of the cartesian axis: X,Y,Z,T
+  character(len=8) :: positive = ''             !< Positive-definite direction: up, down, east, west, north, south
   integer   :: horgrid_position = 0             !< Horizontal grid position
   logical :: is_domain_decomposed = .false.     !< if .true. the axis data are domain-decomposed
                                                 !! and need to be indexed by the compute domain
@@ -816,34 +818,42 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
         axis_data_CS%horgrid_position = CENTER
+        axis_data_CS%cartesian_axis = 'Y'
         axis_data_CS%is_domain_decomposed = .true.
      case('lonh')
         axis_data_CS%data=>gridLonT(isg:ieg)
         axis_data_CS%horgrid_position = CENTER
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
+         axis_data_CS%cartesian_axis = 'X'
         axis_data_CS%is_domain_decomposed = .true.
      case('latq')
         axis_data_CS%data=>gridLatB(JsgB:JegB)
         axis_data_CS%longname = 'Latitude'
         axis_data_CS%units = G%y_axis_units
+         axis_data_CS%cartesian_axis = 'Y'
         axis_data_CS%horgrid_position = CORNER
         axis_data_CS%is_domain_decomposed = .true.
      case('lonq')
         axis_data_CS%data=>gridLonB(IsgB:IegB)
         axis_data_CS%longname = 'Longitude'
         axis_data_CS%units = G%x_axis_units
+        axis_data_CS%cartesian_axis = 'X'
         axis_data_CS%horgrid_position = CORNER
         axis_data_CS%is_domain_decomposed = .true.
      case('Layer')
         axis_data_CS%data=>GV%sLayer(1:GV%ke)
-        axis_data_CS%longname = 'Layer'
+        axis_data_CS%longname = 'Layer pseudo-depth, -z*'
         axis_data_CS%units = GV%zAxisUnits
+        axis_data_CS%cartesian_axis = 'Z'
+        axis_data_CS%positive = 'up'
         axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Interface')
         axis_data_CS%data=>GV%sInterface(1:GV%ke+1)
-        axis_data_CS%longname = 'Interface'
+        axis_data_CS%longname = 'Interface pseudo-depth, -z*'
         axis_data_CS%units = GV%zAxisUnits
+        axis_data_CS%cartesian_axis = 'Z'
+        axis_data_CS%positive = 'up'
         axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Time')
         if (.not.(present(time_val))) then
@@ -857,6 +867,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
         else
            axis_data_CS%units = 'days'
         endif
+        axis_data_CS%cartesian_axis = 'T'
         axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Period')
         if (.not.(present(time_val))) then
@@ -866,7 +877,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
         axis_data_CS%data=>time_val
         axis_data_CS%longname = 'Periods for cyclical variables'
         axis_data_CS%horgrid_position = CENTER ! dummy value for the domain-decomposed write
-         
+        axis_data_CS%cartesian_axis = 'T'
      case default
         call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
                        " is an unrecognized axis")
