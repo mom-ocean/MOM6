@@ -1033,7 +1033,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       call pass_var(dudy, G%Domain, position=CORNER, complete=.true.)
 
       do j=js,je ; do i=is,ie
-        ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
+        ! Diagnose  -Kh * |del u|^2 - Ah * |del^2 u|^2
         FrictWork_diss(i,j,k) = -Kh_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * &
              (dudx(i,j)**2 + dvdy(i,j)**2 + &
              (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
@@ -1042,6 +1042,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                                              (0.5*(v0(i,J) + v0(i,J-1)))**2)
  
         if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+          ! This is the maximum possible amount of energy that can be converted
+          ! per unit time, according to theory (multiplied by h)
           FrictWorkMax(i,j,k) = 2.0*MEKE%MEKE(i,j) * h(i,j,k) * GV%H_to_kg_m2 * &
               sqrt(dudx(i,j)**2 + dvdy(i,j)**2 + &
              (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
@@ -1244,24 +1246,25 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       enddo
     endif
 
-!    if (find_FrictWork) then ; do j=js,je ; do i=is,ie
-!      ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
-!      FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
-!              (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
-!              -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
-!       +0.25*((str_xy(I,J)*(                                     &
-!                   (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)            &
-!                  +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )          &
-!              +str_xy(I-1,J-1)*(                                 &
-!                   (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)    &
-!                  +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) )) &
-!             +(str_xy(I-1,J)*(                                   &
-!                   (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
-!                  +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )        &
-!              +str_xy(I,J-1)*(                                   &
-!                   (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
-!                  +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
-!    enddo ; enddo ; endif
+    if (find_FrictWork) then ; do j=js,je ; do i=is,ie
+      ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
+      ! This is the old formulation that includes energy diffusion
+      FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
+              (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
+              -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
+       +0.25*((str_xy(I,J)*(                                     &
+                   (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)            &
+                  +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )          &
+              +str_xy(I-1,J-1)*(                                 &
+                   (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)    &
+                  +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) )) &
+             +(str_xy(I-1,J)*(                                   &
+                   (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
+                  +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )        &
+              +str_xy(I,J-1)*(                                   &
+                   (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
+                  +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+    enddo ; enddo ; endif
 
     ! Make a similar calculation as for FrictWork above but accumulating into
     ! the vertically integrated MEKE source term, and adjusting for any
@@ -1303,6 +1306,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
+         ! MEKE%mom_src now is sign definite because it only uses the dissipation 
          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork_diss(i,j,k)
         enddo ; enddo
       endif
