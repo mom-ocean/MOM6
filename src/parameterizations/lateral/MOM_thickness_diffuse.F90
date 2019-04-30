@@ -55,6 +55,8 @@ type, public :: thickness_diffuse_CS ; private
   logical :: debug               !< write verbose checksums for debugging purposes
   logical :: use_GME_thickness_diffuse !< If true, passes GM coefficients to MOM_hor_visc for use
                                  !! with GME closure.
+  logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
+                                 !! than the streamfunction for the GM source term.
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
@@ -145,7 +147,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
-  khth_use_ebt_struct = .false.
+  khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
 
   if (associated(VarMix)) then
     use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
@@ -595,7 +597,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   find_work = .false.
   if (associated(MEKE)) find_work = associated(MEKE%GM_src)
   find_work = (associated(CS%GMwork) .or. find_work)
-
+ 
   if (use_EOS) then
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, GV, 1)
   endif
@@ -1207,7 +1209,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       Kh_v(i,J-1,k)*(Slope_y_PE(i,J-1,k)**2) * hN2_y_PE(i,J-1,k))
     if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
     if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
-      if (MEKE%GM_src_alt) then
+      if (CS%GM_src_alt) then
         MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + PE_release_h
       else
         MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
@@ -1856,7 +1858,9 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
-
+  call get_param(param_file, mdl, "MEKE_GM_SRC_ALT", CS%GM_src_alt, &
+                 "If true, use the GM energy conversion form S^2*N^2*kappa rather \n"//&
+                 "than the streamfunction for the GM source term.", default=.false.)
   if (CS%use_GME_thickness_diffuse) then
     call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)
     call safe_alloc_ptr(CS%KH_v_GME,G%isd,G%ied,G%JsdB,G%JedB,G%ke+1)
