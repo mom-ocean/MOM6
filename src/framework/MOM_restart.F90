@@ -36,6 +36,7 @@ use mpp_mod,         only:  mpp_chksum, mpp_pe
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_axis => register_axis, &
                            fms2_read_data => read_data, &
+                           fms2_read_restart => read_restart, &
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_attribute_exists => variable_att_exists, &
@@ -1219,6 +1220,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
+  character(len=200), dimension(:), allocatable :: file_list ! list of restart file names in the directory 
   integer :: i, n, m, missing_fields, ic
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
@@ -1272,7 +1274,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   endif
 
   ! determine the number of restart files in the directory with the base_file_name
-  num_file = count_restart_files_in_directory(directory, trim(base_file_name))
+  call get_restart_file_list(trim(directory), trim(base_file_name), num_file, file_list)
 
   if (num_file == 0) then
      write(mesg,'("Unable to find any restart files specified by  ",A,"  in directory ",A,".")') &
@@ -1283,14 +1285,8 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! Get the time from the first file in the list that has one.
   do n=1,num_file
      filepath = ''
-     if (num_file > 1) then
-         suffix = ''
-         write(suffix,'(A,I4.4)') '.', n
-         filepath = trim(directory)//trim(base_file_name)//trim(suffix)
-     else 
-         filepath = trim(directory)//trim(base_file_name)
-     endif
-     
+     filepath = trim(directory)//trim(file_list(n))
+    
      WRITE(mpp_pe()+2000,*) "restore_state: the file path is ", trim(filepath)
      call flush(mpp_pe()+2000)
      
@@ -1323,13 +1319,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (is_root_pe()) then
      do m = n+1,num_file
         filepath = ''
-        if (num_file > 1) then
-           suffix = ''
-            write(suffix,'(A,I4.4)') '.', m
-           filepath = trim(directory)//trim(base_file_name)//trim(suffix)
-        else
-           filepath = trim(directory)//trim(base_file_name)
-        endif
+        filepath = trim(directory)//trim(file_list(m))
+    
         file_open_success=MOM_open_file(fileObjRead, filepath, "read", &
                                        G, is_restart = .true.)
                                                 
@@ -1366,14 +1357,8 @@ subroutine restore_state(filename, directory, day, G, CS)
 ! check for uncombined files
 !  do n=1,num_file
      filepath = ''
- !    if (num_file > 1) then
-!        suffix = ''
-!        write(suffix,'(A,I4.4)') '.', n
-!        filepath = trim(directory)//trim(base_file_name)//trim(suffix)
- !    else 
-        filepath = trim(directory)//trim(base_file_name)
- !    endif
-    
+     filepath = trim(directory)//trim(base_file_name)
+ 
      file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
                     G, is_restart = .true.)
      if (.not. file_open_success) then 
@@ -1431,9 +1416,13 @@ subroutine restore_state(filename, directory, day, G, CS)
                  endif
               endif
 
-              ! register the restart variable
-              call fms2_register_restart_field(fileObjRead,varname,'real')
-
+              ! register the restart variables
+              call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name),'real')
+           endif
+        enddo
+        ! read in all of the registered restart fields   
+        call fms2_read_restart(fileObjRead)
+        
               if (associated(CS%var_ptr1d(m)%p))  then
                  call fms2_read_data(fileObjRead, varname, CS%var_ptr1d(m)%p)
 
@@ -1491,6 +1480,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 !     deallocate(fields)
      deallocate(variable_names)
+     deallocate(file_list)
 
      call fms2_close_file(fileObjRead)
 
@@ -1899,23 +1889,26 @@ function convert_checksum_string_to_int(checksum_char) result(checksum_file)
 
 end function convert_checksum_string_to_int
 
-!< count the number of restart files in a directory with the desired base file name 
+!> count the number of restart files in a directory with the desired base file name 
 !! First, check for combined restart file (i.e., '.000N' is not appended to the file name)
 !! If a combined file is found, the function returns num_file = 1 and stops
 !! If no combined file is found, the function iterates from 0 to the default or user-specified
 !! maximum file count and searches for uncombined restarts with the corresponding suffix.
-!! The function stops the first time that fms2_file_exists returns false in the combined file
-!! loop.
-function count_restart_files_in_directory(directory, base_name, stop_count) result(num_files)
+!! The subroutine stops the first time that fms2_file_exists returns false in the combined file
+!! loop. Next, allocate and populate an array of file names
+!>@warning: User must deallocate the file_list array in the routine that calls get_restart_file_list
+subroutine get_restart_file_list(directory, base_name, num_files, file_list, max_count)
    character(len=*), intent(in) :: directory !< directory to search for files matching the desired file name
-   character(len=*), intent(in) :: base_name !< base_file_mae to search for
-   integer, optional, intent(in) :: stop_count !< maximum number of files to search for
-   
+   character(len=*), intent(in) :: base_name !< base_file_name to search for
+   integer, intent(out) :: num_files !< number of restart files with the base file name 
+   character(len=*), dimension(:), allocatable, intent(out) :: file_list !< list of restart files in directory
+   integer, optional, intent(in) :: max_count !< maximum number of files to search for
    ! local
-   integer :: num_files
+  
    integer :: i, en
    character(len=8) :: suffix
-   character(len=512) :: file_path   
+   character(len=512) :: file_path
+  
    suffix = ''
    file_path = ''
    en = 100
@@ -1928,23 +1921,32 @@ function count_restart_files_in_directory(directory, base_name, stop_count) resu
    endif
 
    if (num_files < 1) then
-      if (present(stop_count)) en=stop_count
+      if (present(max_count)) en=max_count
    
       do while (num_files <= en)
          file_path = ''
          suffix = ''
          write(suffix,'(A,I4.4)') '.', num_files
 
-         !WRITE(mpp_pe()+2000, '(A)') "count_restart_files: the suffix is ", suffix
-         !call flush(mpp_pe()+2000)
-
          file_path = trim(directory)//trim(base_name)//trim(suffix)
          if (.not.(fms2_file_exists(trim(file_path)))) exit ! assume that file suffix integers form continuous set
           
          num_files=num_files+1
-      end do
+      enddo
    endif
+   
+   if (.not.(allocated(file_list))) allocate(file_list(num_files))
+   do i=1,num_files
+      file_list(i) = ''
+      suffix = ''
+      write(suffix,'(A,I4.4)') '.', i
+      file_list(i) = trim(base_name)//trim(suffix)
+      
+      WRITE(mpp_pe()+2000, '(A)') "get_restart_file_list: added file to file_list ", trim file_list(i)
+      call flush(mpp_pe()+2000)
 
-end function count_restart_files_in_directory
+   enddo
+
+end subroutine get_restart_file_list
 
 end module MOM_restart
