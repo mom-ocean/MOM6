@@ -322,7 +322,7 @@ end subroutine register_restart_field_ptr0d
 ! The following provide alternate interfaces to register restarts.
 
 !> Register a 4-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, & 
+subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, & 
                                      longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -331,8 +331,6 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure; required
-                                                      !! to register the vertical grid axis (z-grid).
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
@@ -355,7 +353,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, GV, &
 end subroutine register_restart_field_4d
 
 !> Register a 3-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, & 
+subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, & 
                                      longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -364,8 +362,6 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure; required
-                                                      !! to register the vertical grid axis (z-grid).
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
@@ -389,7 +385,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, G, GV, &
 end subroutine register_restart_field_3d
 
 !> Register a 2-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, & 
+subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, & 
                                      longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -398,8 +394,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure; required
-                                                      !! to register the vertical grid axis (z-grid).
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
@@ -428,7 +422,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, G, GV, &
 end subroutine register_restart_field_2d
 
 !> Register a 1-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, & 
+subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, & 
                                      longname, units, hor_grid, z_grid, t_grid)
   real, dimension(:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
@@ -437,8 +431,6 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure; required
-                                                      !! to register the vertical grid axis (z-grid).
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
@@ -467,7 +459,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, G, GV, &
 end subroutine register_restart_field_1d
 
 !> Register a 0-d field for restarts, providing the metadata as individual arguments
-subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, & 
+subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, & 
                                      longname, units, t_grid)
   real,               target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
@@ -475,8 +467,6 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, G, GV, &
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
   type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure; required
-                                                      !! to register the vertical grid axis (z-grid).
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
@@ -1246,7 +1236,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: is, ie, k
   logical :: var_exists = .false.
   logical :: axis_exists = .false.
-  character(len=16) :: axis_names(4) 
+  logical :: is_required =.false.
+  character(len=16) :: axis_names(4)
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1353,8 +1344,8 @@ subroutine restore_state(filename, directory, day, G, CS)
                             "No times found in restart files.")
 
 ! Read each variable from the first file in which it is found.
-! no need to explicitly loop through files, as new fms IO routines automatically
-! check for uncombined files
+!NOTE: There is no need to explicitly loop through files, as new fms IO routines automatically
+! read in data from combined or uncombined restart files
 !  do n=1,num_file
      filepath = ''
      filepath = trim(directory)//trim(base_file_name)
@@ -1365,6 +1356,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(filepath)
         call MOM_error(FATAL,"MOM_restart: "//mesg)
      endif
+
      ! register the horizontal axes
      do i=1,size(axis_names)
         axis_exists = fms2_dimension_exists(fileObjRead, axis_names(i))
@@ -1378,9 +1370,7 @@ subroutine restore_state(filename, directory, day, G, CS)
      ! get the names of the variables in the file
      allocate(variable_names(nvar))
      call fms2_get_variable_names(fileObjRead, variable_names)
-     ! allocate the fields to hold the variable data
- !    allocate(fields(nvar))
-    
+   
      missing_fields = 0
 
      do m=1,CS%novars
@@ -1392,12 +1382,11 @@ subroutine restore_state(filename, directory, day, G, CS)
 
         call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
         do i=1, nvar
-           varname = ''
+
            checksum_char = ''
            var_exists = .false.
-           varname(1:len_trim(CS%restart_field(m)%var_name)) = trim(CS%restart_field(m)%var_name)
            ! check if variable is in the restart file
-           var_exists = fms2_variable_exists(fileObjRead, varname)
+           var_exists = fms2_variable_exists(fileObjRead, trim(CS%restart_field(m)%var_name))
 
            if (var_exists) then
               if (.NOT. CS%checksum_required) then
@@ -1405,11 +1394,11 @@ subroutine restore_state(filename, directory, day, G, CS)
               else
                  checksum_data = -1
                  is_there_a_checksum = .false.
-                 check_exist = fms2_attribute_exists(fileObjRead, varname, "checksum")
+                 check_exist = fms2_attribute_exists(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum")
                
                  if ( check_exist ) then
                     checksum_file(:) = -1
-                    call fms2_get_variable_attribute(fileObjRead, varname, "checksum", checksum_char)
+                    call fms2_get_variable_attribute(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum", checksum_char)
                     ! The following checksum conversion proceure is adapted from mpp_get_atts 
                     checksum_file = convert_checksum_string_to_int(checksum_char)
                     is_there_a_checksum = .true.
@@ -1420,52 +1409,62 @@ subroutine restore_state(filename, directory, day, G, CS)
               call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name),'real')
            endif
         enddo
-        ! read in all of the registered restart fields   
+        ! read in all of the registered restart fields to fileObjRead%restart_vars(m)%data(1-4)d  
         call fms2_read_restart(fileObjRead)
-        
-              if (associated(CS%var_ptr1d(m)%p))  then
-                 call fms2_read_data(fileObjRead, varname, CS%var_ptr1d(m)%p)
+        ! call the MOM register_restart_field routines to assign the restart fields to the CS%var_ptr(1-4)d 
+        do i=1, nvar
+           is_required = CS%restart_field(m)%mand_var
+           CS%var_ptr4d(m)%p => NULL()
+           CS%var_ptr3d(m)%p => NULL()
+           CS%var_ptr2d(m)%p => NULL()
+           CS%var_ptr1d(m)%p => NULL()
+           CS%var_ptr0d(m)%p => NULL() 
+           if (associated(fileObjRead%restart_vars(m)%data1d)) then ! assign a 1d array
+              !call fms2_read_data(fileObjRead, varname, CS%var_ptr1d(m)%p)
+              CS%var_ptr0d(m)%p => fileObjRead%restart_vars(m)%dat
+              if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
+           elseif (associated(fileObjRead%restart_vars(m)%data0d)) then ! assign a scalar
+              CS%var_ptr1d(m)%p =>fileObjRead%restart_vars(m)%data0d
 
-                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
-              elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar
-                 call fms2_read_data(fileObjRead,varname,  CS%var_ptr0d(m)%p)
-                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
-                   
-              elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array
-                 if (pos /= 0) then
-                    call fms2_read_data(fileObjRead, varname, CS%var_ptr2d(m)%p) ! domain-decomposed read
+              if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))       
+           elseif (associated(fileObjRead%restart_vars(m)%data2d)) then ! assign a 2d array
+              if (pos /= 0) then ! domain-decomposed read
+                 CS%var_ptr2d(m)%p => fileObjRead%restart_vars(m)%data2d
+                 
+                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))          
                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
                  !   call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                 !          no_domain=.true., timelevel=1)
-                 endif
-                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-              elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
-                 if (pos /= 0) then
-                    call fms2_read_data(fileObjRead, varname,  CS%var_ptr3d(m)%p) ! domain-decomposed read
-
+                 !          no_domain=.true., timelevel=1
+              endif
+           elseif (associated(fileObjRead%restart_vars(m)%data3d)) then ! assign a 3d array.
+              if (pos /= 0) then ! domain-decomposed read
+                 CS%var_ptr3d(m)%p =>fileObjRead%restart_vars(m)%data3d
+                 
+                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
                  !   call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
                  !                  no_domain=.true., timelevel=1)
-                 endif
-                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-              elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
-                 if (pos /= 0) then
-                     call fms2_read_data(fileObjRead, varname, CS%var_ptr4d(m)%p) ! domain-decomposed read
+              endif            
+           elseif (associated(fileObjRead%restart_vars(m)%data4d)) then ! Read a 4d array.
+              if (pos /= 0) then ! domain-decomposed read
+                 CS%var_ptr4d(m)%p =>fileObjRead%restart_vars(m)%data4d
+                 
                  !else ! This array is not domain-decomposed.  This variant may be under-tested.
                  !    call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
                  !           no_domain=.true., timelevel=1)
-                 endif
-
-                 if (is_there_a_checksum) then 
-                    checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-                 endif                 
-              else
-                 call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
               endif
 
+              if (is_there_a_checksum) then 
+                    checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+              endif                 
+           else
+              call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//&
+                             trim(CS%restart_field(m)%var_name))
+           endif
+
               if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
-                 write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
-                        " does not match value ", checksum_file(1), &
+                 write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(CS%restart_field(m)%var_name)//&
+                        " ",checksum_data, " does not match value ", checksum_file(1), &
                         " stored in "//trim(filepath)//"." 
                  call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
               endif
@@ -1478,7 +1477,6 @@ subroutine restore_state(filename, directory, day, G, CS)
         if (i>nvar) missing_fields = missing_fields+1
      enddo
 
-!     deallocate(fields)
      deallocate(variable_names)
      deallocate(file_list)
 
