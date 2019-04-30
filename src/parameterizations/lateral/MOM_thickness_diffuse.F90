@@ -7,6 +7,7 @@ use MOM_debugging,             only : hchksum, uvchksum
 use MOM_diag_mediator,         only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator,         only : diag_update_remap_grids
+use MOM_domains,               only : pass_var, CORNER, pass_vector
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_EOS,                   only : calculate_density, calculate_density_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
@@ -244,7 +245,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
 !$OMP do
   if (CS%use_GME_thickness_diffuse) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
+    do k=1,nz+1 ; do j=js,je ; do I=is-1,ie
         CS%KH_u_GME(I,j,k) = KH_u(I,j,k)
     enddo ; enddo ; enddo
   endif
@@ -318,7 +319,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
 !$OMP do
   if (CS%use_GME_thickness_diffuse) then
-    do k=1,nz ; do j=js-1,je ; do I=is,ie
+    do k=1,nz+1 ; do j=js-1,je ; do I=is,ie
       CS%KH_v_GME(I,j,k) = KH_v(I,j,k)
     enddo ; enddo ; enddo
   endif
@@ -484,6 +485,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                   ! by dt, in H m2 s-1.
     h_frac        ! The fraction of the mass in the column above the bottom
                   ! interface of a layer that is within a layer, ND. 0<h_frac<=1
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: &
+    Slope_y_PE, &  ! 3D array of neutral slopes at v-points, set equal to Slope (below, nondim)
+    hN2_y_PE       ! thickness in m times Brunt-Vaisala freqeuncy at v-points (m s-2),
+                   ! used for calculating PE release
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: &
+    Slope_x_PE, &  ! 3D array of neutral slopes at u-points, set equal to Slope (below, nondim)
+    hN2_x_PE       ! thickness in m times Brunt-Vaisala freqeuncy at u-points (m s-2)
+                   ! used for calculating PE release
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     pres, &       ! The pressure at an interface, in Pa.
     h_avail_rsum  ! The running sum of h_avail above an interface, in H m2 s-1.
@@ -504,6 +513,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: Work_u(SZIB_(G), SZJ_(G)) ! The work being done by the thickness
   real :: Work_v(SZI_(G), SZJB_(G)) ! diffusion integrated over a cell, in W.
   real :: Work_h        ! The work averaged over an h-cell in W m-2.
+  real :: PE_release_h  ! The amount of potential energy released by GM, averaged over an h-cell in m3 s-3. 
+                        ! The calculation is equal to h * S^2 * N^2 * kappa_GM.
   real :: I4dt          ! 1 / 4 dt in s-1.
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
@@ -575,6 +586,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   present_slope_y = PRESENT(slope_y)
 
   nk_linear = max(GV%nkml, 1)
+
+  Slope_x_PE(:,:,:) = 0.0
+  Slope_y_PE(:,:,:) = 0.0
+  hN2_x_PE(:,:,:) = 0.0
+  hN2_y_PE(:,:,:) = 0.0
 
   find_work = .false.
   if (associated(MEKE)) find_work = associated(MEKE%GM_src)
@@ -682,7 +698,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
         if (k > nk_linear) then
           if (use_EOS) then
-            if (CS%use_FGNV_streamfn .or. .not.present_slope_x) then
+            if (CS%use_FGNV_streamfn .or. find_work .or. .not.present_slope_x) then
               hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
               hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
               haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
@@ -740,6 +756,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                       int_slope_u(I,j,K) * GV%Z_to_m*((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
               slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
             endif
+             
+            Slope_x_PE(I,j,k) = MIN(Slope,CS%slope_max)
+            hN2_x_PE(I,j,k) = hN2_u(I,K) * GV%m_to_Z
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface (m3 s-1).
@@ -928,7 +947,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
         if (k > nk_linear) then
           if (use_EOS) then
-            if (CS%use_FGNV_streamfn .or. .not.present_slope_y) then
+            if (CS%use_FGNV_streamfn .or. find_work .or. .not. present_slope_y) then
               hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
               hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
               haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
@@ -986,6 +1005,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                       int_slope_v(i,J,K) * GV%Z_to_m*((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
               slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
             endif
+ 
+            Slope_y_PE(i,J,k) = MIN(Slope,CS%slope_max)
+            hN2_y_PE(i,J,k) = hN2_v(i,K) * GV%m_to_Z
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface (m3 s-1).
@@ -1174,15 +1196,24 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     enddo
   endif
 
-  if (find_work) then ; do j=js,je ; do i=is,ie
+
+  if (find_work) then ; do j=js,je ; do i=is,ie ; do k=nz,1,-1
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
+    PE_release_h = -0.25*(Kh_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
+      Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &
+      Kh_v(i,J,k)*(Slope_y_PE(i,J,k)**2) * hN2_y_PE(i,J,k) + &
+      Kh_v(i,J-1,k)*(Slope_y_PE(i,J-1,k)**2) * hN2_y_PE(i,J-1,k))
     if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
     if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
-      MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + MIN(0.0,Work_h)
+      if (MEKE%GM_src_alt) then
+        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + PE_release_h
+      else
+        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
+      endif
     endif ; endif
-  enddo ; enddo ; endif
+  enddo ; enddo ; enddo ; endif
 
   if (CS%id_slope_x > 0) call post_data(CS%id_slope_x, CS%diagSlopeX, CS%diag)
   if (CS%id_slope_y > 0) call post_data(CS%id_slope_y, CS%diagSlopeY, CS%diag)
@@ -1899,11 +1930,11 @@ subroutine thickness_diffuse_get_KH(CS, KH_u_GME, KH_v_GME, G)
   ! Local variables
   integer :: i,j,k
 
-  do k=1,G%ke ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
+  do k=1,G%ke+1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
     KH_u_GME(I,j,k) = CS%KH_u_GME(I,j,k)
   enddo ; enddo ; enddo
 
-  do k=1,G%ke ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
+  do k=1,G%ke+1 ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
     KH_v_GME(i,J,k) = CS%KH_v_GME(i,J,k)
   enddo ; enddo ; enddo
 
