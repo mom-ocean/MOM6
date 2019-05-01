@@ -330,7 +330,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, G, &
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
-  type(ocean_grid_type),      intent(in) :: G         !< The ocean's grid structure
+  type(ocean_grid_type), optional,     intent(in) :: G         !< The ocean's grid structure
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
@@ -969,25 +969,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      restartpath_temp = ''
      suffix = ''
 
-     !filename_appendix = ''
-     !restartnameapp = ''
-    
-     !query fms_io if there is a filename_appendix (for ensemble runs)
-     !call get_filename_appendix(filename_appendix) ! note: all this function does is trim the string
-     ! so I'm commenting it out b/c it is pointless. Will remove with Bob's approval
-     !if (len_trim(filename_appendix) > 0 .and. (trim(filename_appendix) /= '')) then
-     !   length = len_trim(restartname)
-     !   if (restartname(length-2:length) == '.nc') then
-     !      restartnameapp = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-     !   else
-     !      restartnameapp = restartname(1:length)  //'.'//trim(filename_appendix)
-     !   endif
-     !   length = len_trim(trim(directory)//trim(restartnameapp))
-     !   restartpath_temp(1:length) = trim(directory)//trim(restartnameapp)
-     !else
-     !   length = len_trim(trim(directory)//trim(restartname))
-     !   restartpath_temp(1:length) = trim(directory)//trim(restartname)
-     !endif
      name_length = len_trim(trim(directory)//trim(restartname))
      restartpath_temp(1:name_length) = trim(directory)//trim(restartname)
      if (num_files < 10) then
@@ -1207,17 +1188,15 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
   character(len=512) :: mesg      ! A message for warnings.
-  character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
   character(len=200), dimension(:), allocatable :: file_list ! list of restart file names in the directory 
-  integer :: i, n, m, missing_fields, ic
+  integer :: i, n, m
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
 
-  integer :: unit(CS%max_fields) ! The mpp unit of all open files.
-  !character(len=200) :: unit_path(CS%max_fields) ! The file names.
+  integer :: unit(CS%max_fields) ! The mpp unit of all open files..
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
   character(len=200) :: base_file_name
   character(len=1024) :: temp_file_name
@@ -1233,17 +1212,14 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: str_index
   character(len=96), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
-  integer :: is, ie, k
   logical :: var_exists = .false.
   logical :: axis_exists = .false.
-  logical :: is_required =.false.
   character(len=16) :: axis_names(4)
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
-  axis_names(:)(1:4) = (/'lath','lonh','latq','lonq'/)
   str_index = 0
   ! get the base restart file name
   temp_file_name=''
@@ -1265,6 +1241,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   endif
 
   ! determine the number of restart files in the directory with the base_file_name
+  ! e.g., (base_file_name).nc., OR uncombined files of the form (base_file_name).0000, (base_file_name).0001,...
+  ! note: be sure to deallocate file_list before the end of restore_state
   call get_restart_file_list(trim(directory), trim(base_file_name), num_file, file_list)
 
   if (num_file == 0) then
@@ -1343,159 +1321,120 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
                             "No times found in restart files.")
 
-! Read each variable from the first file in which it is found.
-!NOTE: There is no need to explicitly loop through files, as new fms IO routines automatically
-! read in data from combined or uncombined restart files
-!  do n=1,num_file
-     filepath = ''
-     filepath = trim(directory)//trim(base_file_name)
+! Read each variable from either combined or uncombined restart files
+! NOTE: There is no need to explicitly loop through uncombined restart files.
+! The new fms IO routines automatically
+! read in uncombined files whose names contain the base_file_name
+  filepath = ''
+  filepath = trim(directory)//trim(base_file_name)
  
-     file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
+  file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
                     G, is_restart = .true.)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(filepath)
-        call MOM_error(FATAL,"MOM_restart: "//mesg)
-     endif
+  if (.not. file_open_success) then 
+      write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(filepath)
+      call MOM_error(FATAL,"MOM_restart: "//mesg)
+  endif
 
-     ! register the horizontal axes
-     do i=1,size(axis_names)
-        axis_exists = fms2_dimension_exists(fileObjRead, axis_names(i))
-        if (axis_exists) then 
-           call MOM_register_axis(fileObjRead, axis_names(i))
-        endif
-     enddo
-
-     ! get number of variables in the file
-     nvar=fms2_get_num_variables(fileObjRead)
-     ! get the names of the variables in the file
-     allocate(variable_names(nvar))
-     call fms2_get_variable_names(fileObjRead, variable_names)
-   
-     missing_fields = 0
-
-     do m=1,CS%novars
-        if (CS%restart_field(m)%initialized) cycle
-        call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                             caller="restore_state")
-        
-        pos = get_horizontal_grid_position(hor_grid)
-
-        call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
-        do i=1, nvar
-
-           checksum_char = ''
-           var_exists = .false.
-           ! check if variable is in the restart file
-           var_exists = fms2_variable_exists(fileObjRead, trim(CS%restart_field(m)%var_name))
-
-           if (var_exists) then
-              if (.NOT. CS%checksum_required) then
-                 is_there_a_checksum = .false. ! Do not need to do data checksumming.
-              else
-                 checksum_data = -1
-                 is_there_a_checksum = .false.
-                 check_exist = fms2_attribute_exists(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum")
-               
-                 if ( check_exist ) then
-                    checksum_file(:) = -1
-                    call fms2_get_variable_attribute(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum", checksum_char)
-                    ! The following checksum conversion proceure is adapted from mpp_get_atts 
-                    checksum_file = convert_checksum_string_to_int(checksum_char)
-                    is_there_a_checksum = .true.
-                 endif
-              endif
-
-              ! register the restart variables
-              call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name),'real')
-           endif
-        enddo
-        ! read in all of the registered restart fields to fileObjRead%restart_vars(m)%data(1-4)d  
-        call fms2_read_restart(fileObjRead)
-        ! call the MOM register_restart_field routines to assign the restart fields to the CS%var_ptr(1-4)d 
-        do i=1, nvar
-           is_required = CS%restart_field(m)%mand_var
-           CS%var_ptr4d(m)%p => NULL()
-           CS%var_ptr3d(m)%p => NULL()
-           CS%var_ptr2d(m)%p => NULL()
-           CS%var_ptr1d(m)%p => NULL()
-           CS%var_ptr0d(m)%p => NULL() 
-           if (associated(fileObjRead%restart_vars(m)%data1d)) then ! assign a 1d array
-              !call fms2_read_data(fileObjRead, varname, CS%var_ptr1d(m)%p)
-              CS%var_ptr0d(m)%p => fileObjRead%restart_vars(m)%dat
-              if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
-           elseif (associated(fileObjRead%restart_vars(m)%data0d)) then ! assign a scalar
-              CS%var_ptr1d(m)%p =>fileObjRead%restart_vars(m)%data0d
-
-              if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))       
-           elseif (associated(fileObjRead%restart_vars(m)%data2d)) then ! assign a 2d array
-              if (pos /= 0) then ! domain-decomposed read
-                 CS%var_ptr2d(m)%p => fileObjRead%restart_vars(m)%data2d
-                 
-                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))          
-                 !else ! This array is not domain-decomposed.  This variant may be under-tested.
-                 !   call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                 !          no_domain=.true., timelevel=1
-              endif
-           elseif (associated(fileObjRead%restart_vars(m)%data3d)) then ! assign a 3d array.
-              if (pos /= 0) then ! domain-decomposed read
-                 CS%var_ptr3d(m)%p =>fileObjRead%restart_vars(m)%data3d
-                 
-                 if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-                 !else ! This array is not domain-decomposed.  This variant may be under-tested.
-                 !   call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                 !                  no_domain=.true., timelevel=1)
-              endif            
-           elseif (associated(fileObjRead%restart_vars(m)%data4d)) then ! Read a 4d array.
-              if (pos /= 0) then ! domain-decomposed read
-                 CS%var_ptr4d(m)%p =>fileObjRead%restart_vars(m)%data4d
-                 
-                 !else ! This array is not domain-decomposed.  This variant may be under-tested.
-                 !    call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                 !           no_domain=.true., timelevel=1)
-              endif
-
-              if (is_there_a_checksum) then 
-                    checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-              endif                 
-           else
-              call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//&
-                             trim(CS%restart_field(m)%var_name))
-           endif
-
-              if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
-                 write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(CS%restart_field(m)%var_name)//&
-                        " ",checksum_data, " does not match value ", checksum_file(1), &
-                        " stored in "//trim(filepath)//"." 
-                 call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
-              endif
-
-              CS%restart_field(m)%initialized = .true.
-               
-              exit ! Start search for next restart variable.
-           endif
-        enddo
-        if (i>nvar) missing_fields = missing_fields+1
-     enddo
-
-     deallocate(variable_names)
-     deallocate(file_list)
-
-     call fms2_close_file(fileObjRead)
-
- !    if (missing_fields == 0) exit   
-!  enddo
-
-! Check whether any mandatory fields have not been found.
-  CS%restart = .true.
-  do m=1,CS%novars
-     if (.not.(CS%restart_field(m)%initialized)) then
-        CS%restart = .false.
-        if (CS%restart_field(m)%mand_var) then
-           call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
-                       //trim(CS%restart_field(m)%var_name)//" in restart files.")
-        endif
+  ! register the horizontal axes
+  axis_names(:)(1:4) = (/'lath','lonh','latq','lonq'/)
+  do i=1,size(axis_names)
+     axis_exists = fms2_dimension_exists(fileObjRead, axis_names(i))
+     if (axis_exists) then 
+        call MOM_register_axis(fileObjRead, axis_names(i))
      endif
   enddo
+   
+  do m=1,CS%novars ! loop through all of the restart variables you want to read in
+     if (CS%restart_field(m)%initialized) then
+        cycle
+     else
+        CS%restart = .false.
+     endif
+     
+     ! check if the variable is mandatory and present in the restart file(s)
+     var_exists = fms2_variable_exists(fileObjRead, trim(CS%restart_field(m)%var_name))
+     if ((CS%restart_field(m)%mand_var) .and. (.not.(var_exists))) then
+        call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
+                        //trim(CS%restart_field(m)%var_name)//" in restart files.")
+     endif
+       
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                             caller="restore_state")
+     pos = get_horizontal_grid_position(hor_grid)
+
+     call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+
+     is_there_a_checksum = .false.
+     ! get the variable checksum if it is required, and convert the checksum string to an integer
+     if ((var_exists) .and. (CS%checksum_required)) then
+        checksum_data = -1
+        check_exist = fms2_attribute_exists(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum")            
+        if (check_exist) then
+           checksum_char = ''
+           is_there_a_checksum = .true.
+           checksum_file(:) = -1
+           call fms2_get_variable_attribute(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum", checksum_char)
+           ! The following checksum conversion proceure is adapted from mpp_get_atts 
+           checksum_file = convert_checksum_string_to_int(checksum_char)
+        else
+           call MOM_error(FATAL,"MOM_restart: Unable to find a checksum for the variable " &
+                        //trim(CS%restart_field(m)%var_name)//" in restart file "//trim(base_file_name))
+        endif
+     endif
+
+     ! register the restart fields 
+     if (associated(CS%var_ptr1d(m)%p)) then ! register a 1d array
+         call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name), CS%var_ptr1d(m)%p)
+
+         if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
+     elseif (associated(CS%var_ptr0d(m)%p)) then ! register a scalar
+         call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name), CS%var_ptr0d(m)%p)
+
+         if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+     elseif (associated(CS%var_ptr2d(m)%p)) then ! Register a 2d array
+        if (pos /= 0) then ! domain-decomposed read
+           call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name), CS%var_ptr2d(m)%p)
+                 
+           if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))          
+        !else ! This array is not domain-decomposed.  This variant may be under-tested.
+              ! need a MOM_open_file interface routine that calls fms2_io for non-decomposed variables
+        endif
+     elseif (associated(CS%var_ptr3d(m)%p)) then ! Register a 3d array.
+        if (pos /= 0) then ! domain-decomposed read
+           call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name), CS%var_ptr3d(m)%p)
+              
+           if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+        !else ! This array is not domain-decomposed.  This variant may be under-tested.
+            !need a MOM_open_file interface routine that calls fms2_io for non-decomposed variables
+        endif            
+     elseif (associated(CS%var_ptr4d(m)%p)) then ! Register a 4d array.
+        if (pos /= 0) then ! domain-decomposed read
+           call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name), CS%var_ptr4d(m)%p)
+                if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+        !else ! This array is not domain-decomposed.  This variant may be under-tested.
+           !         need a MOM_open_file interface routine that calls fms2_io for non-decomposed variables
+        endif
+     else
+       call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//&
+                      trim(CS%restart_field(m)%var_name))
+     endif
+     if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
+        write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(CS%restart_field(m)%var_name)//&
+               " ",checksum_data, " does not match value ", checksum_file(1), &
+               " stored in "//trim(filepath)//"." 
+        call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
+     endif
+
+     CS%restart = .true.
+     CS%restart_field(m)%initialized = .true.   
+  enddo ! end m loop
+      
+  ! read in all of the registered restart fields
+  call fms2_read_restart(fileObjRead)           
+
+  call fms2_close_file(fileObjRead)
+          
+  deallocate(file_list)
 
 end subroutine restore_state
 
@@ -1940,7 +1879,7 @@ subroutine get_restart_file_list(directory, base_name, num_files, file_list, max
       write(suffix,'(A,I4.4)') '.', i
       file_list(i) = trim(base_name)//trim(suffix)
       
-      WRITE(mpp_pe()+2000, '(A)') "get_restart_file_list: added file to file_list ", trim file_list(i)
+      WRITE(mpp_pe()+2000, '(A)') "get_restart_file_list: added file to file_list ", trim(file_list(i))
       call flush(mpp_pe()+2000)
 
    enddo
