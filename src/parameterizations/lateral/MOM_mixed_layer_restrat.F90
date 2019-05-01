@@ -962,7 +962,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, G, GV, param_file, CS, resta
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
-    call register_restart_field(CS%MLD_filtered, vd%name, .false., restart_CS, G, GV=GV, &
+    call register_restart_field(CS%MLD_filtered, vd%name, .false., restart_CS, G, &
                               longname=vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif
@@ -971,7 +971,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, G, GV, param_file, CS, resta
     allocate(CS%MLD_filtered_slow(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered_slow(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered_slow","m","c Slower time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
-    call register_restart_field(CS%MLD_filtered_slow, vd%name, .false., restart_CS, G, GV=GV, &
+    call register_restart_field(CS%MLD_filtered_slow, vd%name, .false., restart_CS, G, &
                               longname=vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif

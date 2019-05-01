@@ -1405,16 +1405,16 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, GV, diag, forces
 
   ! Set up the restarts.
   call restart_init(param_file, CS%restart_CSp,  "Shelf.res")
-  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, G, GV=GV, &
+  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, G, &
                               longname="Ice shelf mass", units="kg m-2")
-  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, G, GV=GV, &
+  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, G,  &
                               longname="Ice shelf area in cell", units="m2")
-  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, G, GV=GV, &
+  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, G, &
                               longname="ice sheet/shelf thickness", units="m")
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, G, GV=GV, &
+  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, G, &
                               longname="Height unit conversion factor", units="Z meter-1")
   if (CS%active_shelf_dynamics) then
-    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, G, GV=GV, &
+    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, G, &
                                 longname="ice sheet/shelf thickness mask" ,units="none")
   endif
 

@@ -2521,11 +2521,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
     call MOM_write_IC(dirs%output_directory, CS%IC_file, "eta", z_interface, .true., G, GV, & 
                       Time, z_grid='i', longname="Interface heights", units="meter")
-    !call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, G, GV, &
-    !                            filename=CS%IC_file, longname="Interface heights", &
-    !                            units="meter", z_grid='i')
-
-    !call save_restart(dirs%output_directory, Time, G, restart_CSp_tmp, filename=CS%IC_file, GV=GV)
     
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
@@ -2625,45 +2620,45 @@ subroutine set_restart_fields(GV, G, US, param_file, CS, restart_CSp)
   flux_units = get_flux_units(GV)
 
   if (associated(CS%tv%T)) &
-    call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, G, GV, &
+    call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, G, &
                                 longname="Potential Temperature", units="degC")
   if (associated(CS%tv%S)) &
-    call register_restart_field(CS%tv%S, "Salt", .true., restart_CSp, G, GV, &
+    call register_restart_field(CS%tv%S, "Salt", .true., restart_CSp, G, &
                                 longname="Salinity", units="PPT")
 
-  call register_restart_field(CS%h, "h", .true., restart_CSp, G, GV, &
+  call register_restart_field(CS%h, "h", .true., restart_CSp, G, &
                               longname="Layer Thickness", units=thickness_units)
 
-  call register_restart_field(CS%u, "u", .true., restart_CSp, G, GV, &
+  call register_restart_field(CS%u, "u", .true., restart_CSp, G,  &
                               longname="Zonal velocity", units="m s-1", hor_grid='Cu')
 
-  call register_restart_field(CS%v, "v", .true., restart_CSp, G, GV, &
+  call register_restart_field(CS%v, "v", .true., restart_CSp, G,  &
                               longname="Meridional velocity", units="m s-1", hor_grid='Cv')
 
   if (associated(CS%tv%frazil)) &
-    call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, G, GV, &
+    call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, G, &
                                 longname="Frazil heat flux into ocean", units="J m-2")
 
   if (CS%interp_p_surf) then
-    call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, G, GV, &
+    call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, G, &
                                 longname="Previous ocean surface pressure", units="Pa")
   endif
 
-  call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, G,GV=GV, &
+  call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, G, &
                               longname="Time average sea surface height", units="meter")
 
   ! hML is needed when using the ice shelf module
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
-    call register_restart_field(CS%Hml, "hML", .false., restart_CSp, G, GV, &
+    call register_restart_field(CS%Hml, "hML", .false., restart_CSp, G,  &
                                 longname="Mixed layer thickness", units="meter")
   endif
 
   ! Register scalar unit conversion factors.
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, G, GV=GV, &
+  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, G,  &
                               longname="Height unit conversion factor", units="Z meter-1")
-  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, G, GV=GV, &
+  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, G, &
                               longname="Thickness unit conversion factor", units="Z meter-1")
 
 end subroutine set_restart_fields

@@ -301,7 +301,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, G, HI, GV, name, longname, u
     ! Register this tracer to be read from and written to restart files.
     mand = .true. ; if (present(mandatory)) mand = mandatory
 
-    call register_restart_field(tr_ptr, Tr%name, mand, restart_CS, G, GV, &
+    call register_restart_field(tr_ptr, Tr%name, mand, restart_CS, G, &
                                 longname=Tr%longname, units=Tr%units)
   endif ; endif
 
