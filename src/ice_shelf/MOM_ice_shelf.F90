@@ -50,7 +50,6 @@ use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use time_manager_mod, only : print_time
-use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -1069,12 +1068,11 @@ end subroutine add_shelf_flux
 
 
 !> Initializes shelf model data, parameters and diagnostics
-subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, GV, diag, forces, fluxes, Time_in, solo_ice_sheet_in)
+subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, fluxes, Time_in, solo_ice_sheet_in)
   type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
-  type(verticalGrid_type),      intent(in)    :: GV   !< ocean vertical grid structure
   type(diag_ctrl),    target,   intent(in)    :: diag !< A structure that is used to regulate the diagnostic output.
   type(forcing),      optional, intent(inout) :: fluxes !< A structure containing pointers to any possible
                                                    !! thermodynamic or mass-flux forcing fields.
@@ -1420,7 +1418,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, GV, diag, forces
 
   ! if (CS%active_shelf_dynamics) then  !### Consider adding an ice shelf dynamics switch.
     ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
-    call register_ice_shelf_dyn_restarts(G, GV, param_file, CS%dCS, CS%restart_CSp)
+    call register_ice_shelf_dyn_restarts(G, param_file, CS%dCS, CS%restart_CSp)
   ! endif
 
   !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file

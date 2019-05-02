@@ -23,7 +23,6 @@ use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
 use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_checksums, only : hchksum, qchksum
-use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -200,9 +199,8 @@ end function quad_area
 
 !> This subroutine is used to register any fields related to the ice shelf
 !! dynamics that should be written to or read from the restart file.
-subroutine register_ice_shelf_dyn_restarts(G, GV, param_file, CS, restart_CS)
+subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
   type(ocean_grid_type),  intent(inout) :: G    !< The grid type describing the ice shelf grid.
-  type(verticalGrid_type),intent(in)    :: GV !< ocean vertical grid structure
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ice_shelf_dyn_CS), pointer       :: CS !< A pointer to the ice shelf dynamics control structure
   type(MOM_restart_CS),   pointer       :: restart_CS !< A pointer to the restart control structure.
