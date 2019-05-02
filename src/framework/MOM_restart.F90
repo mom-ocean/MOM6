@@ -1341,6 +1341,8 @@ subroutine restore_state(filename, directory, day, G, CS)
         call MOM_register_axis(fileObjRead, axis_names(i))
      endif
   enddo
+  call fms2_close_file(fileObjRead)
+          
    
   do m=1,CS%novars ! loop through all of the restart variables you want to read in
 
@@ -1356,13 +1358,21 @@ subroutine restore_state(filename, directory, day, G, CS)
         CS%restart = .false.
      endif
 
-     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="restore_state")
+     is_there_a_checksum =.false.
+     if (CS%checksum_required) then
 
-     pos = get_horizontal_grid_position(hor_grid)
+        call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="restore_state")
 
-     call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+        pos = get_horizontal_grid_position(hor_grid)
 
-     checksum_data = -1
+        call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+
+        checksum_data = -1
+        is_there_a_checksum =.true.
+     endif
+    
+     file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
+                    G, is_restart = .true.)
      
      ! register the restart fields and compute the checksums
      if (associated(CS%var_ptr1d(m)%p)) then ! register a 1d array
@@ -1406,7 +1416,6 @@ subroutine restore_state(filename, directory, day, G, CS)
      !WRITE(mpp_pe()+2000,'(A,L1)') "restore_state: variable exists result ", var_exists
      !call flush(mpp_pe()+2000)
       
-     is_there_a_checksum = .false.
      if ((CS%restart_field(m)%mand_var) .and. (.not.(var_exists))) then
         call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
                         //trim(CS%restart_field(m)%var_name)//" in restart files.")
@@ -1421,9 +1430,11 @@ subroutine restore_state(filename, directory, day, G, CS)
            call fms2_get_variable_attribute(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum", checksum_char)
            ! The following checksum conversion proceure is adapted from mpp_get_atts 
            checksum_file = convert_checksum_string_to_int(checksum_char)
-           is_there_a_checksum = .true.
+          
         endif
      endif
+
+     call fms2_close_file(fileObjRead)
 
      if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
         write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(CS%restart_field(m)%var_name)//&
@@ -1437,6 +1448,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo ! end m loop
       
   ! read in all of the registered restart fields
+  file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
+                    G, is_restart = .true.)
   call fms2_read_restart(fileObjRead)           
 
   call fms2_close_file(fileObjRead)
