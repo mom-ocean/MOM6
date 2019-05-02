@@ -1212,7 +1212,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: str_index
   character(len=96), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
-  logical :: var_exists = .false.
+  logical :: var_exists
   logical :: axis_exists = .false.
   character(len=16) :: axis_names(4)
 
@@ -1281,8 +1281,6 @@ subroutine restore_state(filename, directory, day, G, CS)
      exit
   enddo
 
-  if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
-                                 "No times found in restart files.")
 ! Check the remaining files, if any, for different times and issue a warning
 ! if they differ from the first time.
   if (is_root_pe()) then
@@ -1318,9 +1316,6 @@ subroutine restore_state(filename, directory, day, G, CS)
      enddo
   endif
 
-  if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
-                            "No times found in restart files.")
-
 ! Read each variable from either combined or uncombined restart files
 ! NOTE: There is no need to explicitly loop through uncombined restart files.
 ! The new fms IO routines automatically
@@ -1333,6 +1328,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (.not. file_open_success) then 
       write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(filepath)
       call MOM_error(FATAL,"MOM_restart: "//mesg)
+  else
+     if (is_root_pe()) &
+        call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
   endif
 
   ! register the horizontal axes
@@ -1345,44 +1343,28 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo
    
   do m=1,CS%novars ! loop through all of the restart variables you want to read in
+
+     WRITE(mpp_pe()+2000,*) "restore_state: getting info for variable ", trim(CS%restart_field(m)%var_name)
+     call flush(mpp_pe()+2000)
+
+     if (is_root_pe()) &
+         call MOM_error(NOTE,"MOM_restart: getting info for variable "//trim(CS%restart_field(m)%var_name))
+
      if (CS%restart_field(m)%initialized) then
         cycle
      else
         CS%restart = .false.
      endif
-     
-     ! check if the variable is mandatory and present in the restart file(s)
-     var_exists = fms2_variable_exists(fileObjRead, trim(CS%restart_field(m)%var_name))
-     if ((CS%restart_field(m)%mand_var) .and. (.not.(var_exists))) then
-        call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
-                        //trim(CS%restart_field(m)%var_name)//" in restart files.")
-     endif
-       
-     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                             caller="restore_state")
+
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="restore_state")
+
      pos = get_horizontal_grid_position(hor_grid)
 
      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
 
-     is_there_a_checksum = .false.
-     ! get the variable checksum if it is required, and convert the checksum string to an integer
-     if ((var_exists) .and. (CS%checksum_required)) then
-        checksum_data = -1
-        check_exist = fms2_attribute_exists(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum")            
-        if (check_exist) then
-           checksum_char = ''
-           is_there_a_checksum = .true.
-           checksum_file(:) = -1
-           call fms2_get_variable_attribute(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum", checksum_char)
-           ! The following checksum conversion proceure is adapted from mpp_get_atts 
-           checksum_file = convert_checksum_string_to_int(checksum_char)
-        else
-           call MOM_error(FATAL,"MOM_restart: Unable to find a checksum for the variable " &
-                        //trim(CS%restart_field(m)%var_name)//" in restart file "//trim(base_file_name))
-        endif
-     endif
-
-     ! register the restart fields 
+     checksum_data = -1
+     
+     ! register the restart fields and compute the checksums
      if (associated(CS%var_ptr1d(m)%p)) then ! register a 1d array
          call fms2_register_restart_field(fileObjRead, trim(CS%restart_field(m)%var_name), CS%var_ptr1d(m)%p)
 
@@ -1418,6 +1400,31 @@ subroutine restore_state(filename, directory, day, G, CS)
        call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//&
                       trim(CS%restart_field(m)%var_name))
      endif
+
+     ! check if the variable is mandatory and present in the restart file(s)
+     var_exists = fms2_variable_exists(fileObjRead, trim(CS%restart_field(m)%var_name))
+     !WRITE(mpp_pe()+2000,'(A,L1)') "restore_state: variable exists result ", var_exists
+     !call flush(mpp_pe()+2000)
+      
+     is_there_a_checksum = .false.
+     if ((CS%restart_field(m)%mand_var) .and. (.not.(var_exists))) then
+        call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
+                        //trim(CS%restart_field(m)%var_name)//" in restart files.")
+     else ! get the variable checksum if it is required, and convert the checksum string to an integer
+        if (CS%checksum_required) then
+          if (is_root_pe()) &
+             call MOM_error(NOTE,"MOM_restart: computing checksums for "//trim(CS%restart_field(m)%var_name))
+
+           checksum_char = ''
+           checksum_file(:) = -1
+
+           call fms2_get_variable_attribute(fileObjRead, trim(CS%restart_field(m)%var_name), "checksum", checksum_char)
+           ! The following checksum conversion proceure is adapted from mpp_get_atts 
+           checksum_file = convert_checksum_string_to_int(checksum_char)
+           is_there_a_checksum = .true.
+        endif
+     endif
+
      if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
         write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(CS%restart_field(m)%var_name)//&
                " ",checksum_data, " does not match value ", checksum_file(1), &
@@ -1876,7 +1883,7 @@ subroutine get_restart_file_list(directory, base_name, num_files, file_list, max
    do i=1,num_files
       file_list(i) = ''
       suffix = ''
-      write(suffix,'(A,I4.4)') '.', i
+      write(suffix,'(A,I4.4)') '.', i-1 ! .0000 is the first potential appendix
       file_list(i) = trim(base_name)//trim(suffix)
       
       WRITE(mpp_pe()+2000, '(A)') "get_restart_file_list: added file to file_list ", trim(file_list(i))
