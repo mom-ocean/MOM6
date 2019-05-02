@@ -1044,11 +1044,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 end function MEKE_init
 
 !> Allocates memory and register restart fields for the MOM_MEKE module.
-subroutine MEKE_alloc_register_restart(HI, G, GV, param_file, MEKE, restart_CS)
+subroutine MEKE_alloc_register_restart(HI, G, param_file, MEKE, restart_CS)
 ! Arguments
   type(hor_index_type),  intent(in)    :: HI         !< Horizontal index structure
   type(ocean_grid_type), intent(in)    :: G          !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in) :: GV         !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file parser structure.
   type(MEKE_type),       pointer       :: MEKE       !< A structure with MEKE-related fields.
   type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.

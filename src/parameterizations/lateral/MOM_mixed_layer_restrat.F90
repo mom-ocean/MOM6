@@ -931,11 +931,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 end function mixedlayer_restrat_init
 
 !> Allocate and register fields in the mixed layer restratification structure for restarts
-subroutine mixedlayer_restrat_register_restarts(HI, G, GV, param_file, CS, restart_CS)
+subroutine mixedlayer_restrat_register_restarts(HI, G, param_file, CS, restart_CS)
   ! Arguments
   type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
-  type(ocean_grid_type),       intent(in)    :: G          !< The ocean's grid structure
-  type(verticalGrid_type),     intent(in)    :: GV         !< ocean vertical grid structure                                               
+  type(ocean_grid_type),       intent(in)    :: G          !< The ocean's grid structure                                
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
   type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure
