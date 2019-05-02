@@ -17,6 +17,7 @@ type, public :: MEKE_type
   real, dimension(:,:), pointer :: Ku => NULL() !< The MEKE-derived lateral viscosity coefficient in m2 s-1.
                         !! This viscosity can be negative when representing backscatter
                         !! from unresolved eddies (see Jansen and Held, 2014).
+  real, dimension(:,:), pointer :: Au => NULL() !< The MEKE-derived lateral biharmonic viscosity coefficient in m4 s-1.
   ! Parameters
   real :: KhTh_fac = 1.0 !< Multiplier to map Kh(MEKE) to KhTh, nondim
   real :: KhTr_fac = 1.0 !< Multiplier to map Kh(MEKE) to KhTr, nondim.
