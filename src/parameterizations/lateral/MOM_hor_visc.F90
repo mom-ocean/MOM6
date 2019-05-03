@@ -1269,6 +1269,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       if (k==1) then
         do j=js,je ; do i=is,ie
           MEKE%mom_src(i,j) = 0.
+          MEKE%GME_snk(i,j) = 0.
         enddo ; enddo
       endif
       if (MEKE%backscatter_Ro_c /= 0.) then
@@ -1310,7 +1311,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         if (CS%use_GME) then
           if (associated(MEKE%GME_snk)) then
             do j=js,je ; do i=is,ie
-              ! MEKE%mom_src now is sign definite because it only uses the dissipation
               MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
             enddo ; enddo
           endif
