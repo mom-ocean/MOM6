@@ -123,10 +123,10 @@ subroutine ocn_import(x2o, ind, grid, ice_ocean_boundary, ocean_public, logunit,
         write(logunit,F01)'import: day, secs, j, i, lwrad            = ',day,secs,j,i,ice_ocean_boundary%lw_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, q_flux           = ',day,secs,j,i,ice_ocean_boundary%q_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, t_flux           = ',day,secs,j,i,ice_ocean_boundary%t_flux(i,j)
-        write(logunit,F01)'import: day, secs, j, i, seaice_melt_heat = ',day,secs,j,i, &
-                                                                         ice_ocean_boundary%seaice_melt_heat(i,j)
-        write(logunit,F01)'import: day, secs, j, i, seaice_melt      = ',day,secs,j,i, &
-                                                                         ice_ocean_boundary%seaice_melt(i,j)
+        write(logunit,F01)'import: day, secs, j, i, seaice_melt_heat = ',&
+                          day,secs,j,i,ice_ocean_boundary%seaice_melt_heat(i,j)
+        write(logunit,F01)'import: day, secs, j, i, seaice_melt      = ',&
+                          day,secs,j,i,ice_ocean_boundary%seaice_melt(i,j)
         write(logunit,F01)'import: day, secs, j, i, latent_flux     = ',&
                           day,secs,j,i,ice_ocean_boundary%latent_flux(i,j)
         write(logunit,F01)'import: day, secs, j, i, runoff          = ',&
@@ -167,7 +167,7 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
   real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: sshy!< Meridional SSH gradient, local coordinate.
   integer :: i, j, n, ig, jg  !< Grid indices
   real    :: slp_L, slp_R, slp_C, slope, u_min, u_max
-  real :: I_time_int  !< The inverse of coupling time interval in s-1.
+  real :: I_time_int  !< The inverse of coupling time interval [s-1].
 
   !-----------------------------------------------------------------------
 

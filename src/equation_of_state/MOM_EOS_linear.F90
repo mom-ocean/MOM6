@@ -16,16 +16,21 @@ public calculate_density_scalar_linear, calculate_density_array_linear
 public calculate_density_second_derivs_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Compute the density of sea water (in kg/m^3), or its anomaly from a reference density,
 !! using a simple linear equation of state from salinity (in psu), potential temperature (in deg C)
-!! and pressure in Pa.
+!! and pressure [Pa].
 interface calculate_density_linear
   module procedure calculate_density_scalar_linear, calculate_density_array_linear
 end interface calculate_density_linear
 
 !> Compute the specific volume of sea water (in m^3/kg), or its anomaly from a reference value,
 !! using a simple linear equation of state from salinity (in psu), potential temperature (in deg C)
-!! and pressure in Pa.
+!! and pressure [Pa].
 interface calculate_spec_vol_linear
   module procedure calculate_spec_vol_scalar_linear, calculate_spec_vol_array_linear
 end interface calculate_spec_vol_linear
@@ -46,20 +51,20 @@ end interface calculate_density_second_derivs_linear
 contains
 
 !> This subroutine computes the density of sea water with a trivial
-!! linear equation of state (in kg m-3) from salinity (sal in PSU),
-!! potential temperature (T in deg C), and pressure in Pa.
+!! linear equation of state (in [kg m-3]) from salinity (sal [PSU]),
+!! potential temperature (T [degC]), and pressure [Pa].
 subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
                                            Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
-  real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
-  real,           intent(in)  :: S        !< Salinity in PSU.
-  real,           intent(in)  :: pressure !< Pressure in Pa.
-  real,           intent(out) :: rho      !< In situ density in kg m-3.
-  real,           intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC].
+  real,           intent(in)  :: S        !< Salinity [PSU].
+  real,           intent(in)  :: pressure !< pressure [Pa].
+  real,           intent(out) :: rho      !< In situ density [kg m-3].
+  real,           intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,           intent(in)  :: dRho_dT  !< The derivatives of density with temperature
-                                          !! in kg m-3 C-1.
+                                          !! [kg m-3 degC-1].
   real,           intent(in)  :: dRho_dS  !< The derivatives of density with salinity
-                                          !! in kg m-3 psu-1.
-  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
+                                          !! in [kg m-3 ppt-1].
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
   if (present(rho_ref)) then
     rho = (Rho_T0_S0 - rho_ref) + (dRho_dT*T + dRho_dS*S)
@@ -71,21 +76,21 @@ end subroutine calculate_density_scalar_linear
 
 !> This subroutine computes the density of sea water with a trivial
 !! linear equation of state (in kg/m^3) from salinity (sal in psu),
-!! potential temperature (T in deg C), and pressure in Pa.
+!! potential temperature (T [degC]), and pressure [Pa].
 subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
                                           Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
-  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
-  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
-  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
-  real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface [degC].
+  real, dimension(:), intent(in)  :: S        !< salinity [PSU].
+  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
+  real, dimension(:), intent(out) :: rho      !< in situ density [kg m-3].
   integer,            intent(in)  :: start    !< the starting point in the arrays.
   integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,               intent(in)  :: dRho_dT  !< The derivatives of density with temperature
-                                              !! in kg m-3 C-1.
+                                              !! [kg m-3 degC-1].
   real,               intent(in)  :: dRho_dS  !< The derivatives of density with salinity
-                                              !! in kg m-3 psu-1.
-  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
+                                              !! in [kg m-3 ppt-1].
+  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
   ! Local variables
   integer :: j
 
@@ -98,20 +103,20 @@ subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
 end subroutine calculate_density_array_linear
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
-!! and pressure in Pa, using a trivial linear equation of state for density.
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
+!! and pressure [Pa], using a trivial linear equation of state for density.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
                                             Rho_T0_S0, dRho_dT, dRho_dS, spv_ref)
   real,    intent(in)  :: T        !< potential temperature relative to the surface
-                                   !! in C.
-  real,    intent(in)  :: S        !< salinity in PSU.
-  real,    intent(in)  :: pressure !< pressure in Pa.
-  real,    intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
-  real,    intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
-  real,    intent(in)  :: dRho_dT  !< The derivatives of density with temperature in kg m-3 C-1.
-  real,    intent(in)  :: dRho_dS  !< The derivatives of density with salinity in kg m-3 psu-1.
-  real, optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+                                   !! [degC].
+  real,    intent(in)  :: S        !< Salinity [PSU].
+  real,    intent(in)  :: pressure !< Pressure [Pa].
+  real,    intent(out) :: specvol  !< In situ specific volume [m3 kg-1].
+  real,    intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+  real,    intent(in)  :: dRho_dT  !< The derivatives of density with temperature [kg m-3 degC-1].
+  real,    intent(in)  :: dRho_dS  !< The derivatives of density with salinity [kg m-3 ppt-1].
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
   ! Local variables
   integer :: j
 
@@ -125,22 +130,22 @@ subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
 end subroutine calculate_spec_vol_scalar_linear
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
-!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
-!! and pressure in Pa, using a trivial linear equation of state for density.
+!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
+!! and pressure [Pa], using a trivial linear equation of state for density.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_linear(T, S, pressure, specvol, start, npts, &
                                            Rho_T0_S0, dRho_dT, dRho_dS, spv_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
-                                              !! in C.
-  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
-  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
-  real, dimension(:), intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
+                                              !! [degC].
+  real, dimension(:), intent(in)  :: S        !< Salinity [PSU].
+  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa].
+  real, dimension(:), intent(out) :: specvol  !< in situ specific volume [m3 kg-1].
   integer,            intent(in)  :: start    !< the starting point in the arrays.
   integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
-  real,               intent(in)  :: dRho_dT  !< The derivatives of density with temperature in kg m-3 C-1.
-  real,               intent(in)  :: dRho_dS  !< The derivatives of density with salinity in kg m-3 psu-1.
-  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+  real,               intent(in)  :: dRho_dT  !< The derivatives of density with temperature [kg m-3 degC-1].
+  real,               intent(in)  :: dRho_dS  !< The derivatives of density with salinity [kg m-3 ppt-1].
+  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
   ! Local variables
   integer :: j
 
@@ -158,16 +163,16 @@ end subroutine calculate_spec_vol_array_linear
 subroutine calculate_density_derivs_array_linear(T, S, pressure, drho_dT_out, &
                        drho_dS_out, Rho_T0_S0, dRho_dT, dRho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T           !< Potential temperature relative to the surface
-                                                    !! in C.
-  real,    intent(in),  dimension(:) :: S           !< Salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure    !< Pressure in Pa.
+                                                    !! [degC].
+  real,    intent(in),  dimension(:) :: S           !< Salinity [PSU].
+  real,    intent(in),  dimension(:) :: pressure    !< Pressure [Pa].
   real,    intent(out), dimension(:) :: drho_dT_out !< The partial derivative of density with
-                                                    !! potential temperature, in kg m-3 K-1.
+                                                    !! potential temperature [kg m-3 degC-1].
   real,    intent(out), dimension(:) :: drho_dS_out !< The partial derivative of density with
-                                                    !! salinity, in kg m-3 psu-1.
-  real,    intent(in)                :: Rho_T0_S0   !< The density at T=0, S=0, in kg m-3.
-  real,    intent(in)                :: dRho_dT     !< The derivatives of density with temperature in kg m-3 C-1.
-  real,    intent(in)                :: dRho_dS     !< The derivatives of density with salinity in kg m-3 psu-1.
+                                                    !! salinity [kg m-3 ppt-1].
+  real,    intent(in)                :: Rho_T0_S0   !< The density at T=0, S=0 [kg m-3].
+  real,    intent(in)                :: dRho_dT     !< The derivative of density with temperature [kg m-3 degC-1].
+  real,    intent(in)                :: dRho_dS     !< The derivative of density with salinity [kg m-3 ppt-1].
   integer, intent(in)                :: start       !< The starting point in the arrays.
   integer, intent(in)                :: npts        !< The number of values to calculate.
   ! Local variables
@@ -185,16 +190,16 @@ end subroutine calculate_density_derivs_array_linear
 subroutine calculate_density_derivs_scalar_linear(T, S, pressure, drho_dT_out, &
                        drho_dS_out, Rho_T0_S0, dRho_dT, dRho_dS)
   real,    intent(in)  :: T           !< Potential temperature relative to the surface
-                                      !! in C.
-  real,    intent(in)  :: S           !< Salinity in PSU.
-  real,    intent(in)  :: pressure    !< Pressure in Pa.
+                                      !! [degC].
+  real,    intent(in)  :: S           !< Salinity [PSU].
+  real,    intent(in)  :: pressure    !< pressure [Pa].
   real,    intent(out) :: drho_dT_out !< The partial derivative of density with
-                                      !! potential temperature, in kg m-3 K-1.
+                                      !! potential temperature [kg m-3 degC-1].
   real,    intent(out) :: drho_dS_out !< The partial derivative of density with
-                                      !! salinity, in kg m-3 psu-1.
-  real,    intent(in)  :: Rho_T0_S0   !< The density at T=0, S=0, in kg m-3.
-  real,    intent(in)  :: dRho_dT     !< The derivatives of density with temperature in kg m-3 C-1.
-  real,    intent(in)  :: dRho_dS     !< The derivatives of density with salinity in kg m-3 psu-1.
+                                      !! salinity [kg m-3 ppt-1].
+  real,    intent(in)  :: Rho_T0_S0   !< The density at T=0, S=0 [kg m-3].
+  real,    intent(in)  :: dRho_dT     !< The derivatives of density with temperature [kg m-3 degC-1].
+  real,    intent(in)  :: dRho_dS     !< The derivatives of density with salinity [kg m-3 ppt-1].
   drho_dT_out = dRho_dT
   drho_dS_out = dRho_dS
 
@@ -202,17 +207,21 @@ end subroutine calculate_density_derivs_scalar_linear
 
 !> This subroutine calculates the five, partial second derivatives of density w.r.t.
 !! potential temperature and salinity and pressure which for a linear equation of state should all be 0.
-subroutine calculate_density_second_derivs_scalar_linear(T, S,pressure,  drho_dS_dS, drho_dS_dT, drho_dT_dT,&
-                        drho_dS_dP, drho_dT_dP)
-  real,    intent(in)  :: T           !< Potential temperature relative to the surface
-                                      !! in C.
-  real,    intent(in)  :: S           !< Salinity in PSU.
-  real,    intent(in)  :: pressure    !< Pressure in Pa.
-  real,    intent(out) :: drho_dS_dS  !< The partial derivative of density with
-  real,    intent(out) :: drho_dS_dT  !< The partial derivative of density with
-  real,    intent(out) :: drho_dT_dT  !< The partial derivative of density with
-  real,    intent(out) :: drho_dS_dP  !< The partial derivative of density with
-  real,    intent(out) :: drho_dT_dP  !< The partial derivative of density with
+subroutine calculate_density_second_derivs_scalar_linear(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                         drho_dT_dT, drho_dS_dP, drho_dT_dP)
+  real, intent(in)  :: T           !< Potential temperature relative to the surface [degC].
+  real, intent(in)  :: S           !< Salinity [PSU].
+  real, intent(in)  :: pressure    !< pressure [Pa].
+  real, intent(out) :: drho_dS_dS  !< The second derivative of density with
+                                   !! salinity [kg m-3 PSU-2].
+  real, intent(out) :: drho_dS_dT  !< The second derivative of density with
+                                   !! temperature and salinity [kg m-3 ppt-1 degC-1].
+  real, intent(out) :: drho_dT_dT  !< The second derivative of density with
+                                   !! temperature [kg m-3 degC-2].
+  real, intent(out) :: drho_dS_dP  !< The second derivative of density with
+                                   !! salinity and pressure [kg m-3 PSU-1 Pa-1].
+  real, intent(out) :: drho_dT_dP  !< The second derivative of density with
+                                   !! temperature and pressure [kg m-3 degC-1 Pa-1].
 
   drho_dS_dS = 0.
   drho_dS_dT = 0.
@@ -226,15 +235,19 @@ end subroutine calculate_density_second_derivs_scalar_linear
 !! potential temperature and salinity and pressure which for a linear equation of state should all be 0.
 subroutine calculate_density_second_derivs_array_linear(T, S,pressure,  drho_dS_dS, drho_dS_dT, drho_dT_dT,&
                         drho_dS_dP, drho_dT_dP, start, npts)
-  real, dimension(:), intent(in)  :: T           !< Potential temperature relative to the surface
-                                                 !! in C.
-  real, dimension(:), intent(in)  :: S           !< Salinity in PSU.
-  real, dimension(:), intent(in)  :: pressure    !< Pressure in Pa.
-  real, dimension(:), intent(out) :: drho_dS_dS  !< The partial derivative of density with
-  real, dimension(:), intent(out) :: drho_dS_dT  !< The partial derivative of density with
-  real, dimension(:), intent(out) :: drho_dT_dT  !< The partial derivative of density with
-  real, dimension(:), intent(out) :: drho_dS_dP  !< The partial derivative of density with
-  real, dimension(:), intent(out) :: drho_dT_dP  !< The partial derivative of density with
+  real, dimension(:), intent(in)  :: T           !< Potential temperature relative to the surface [degC].
+  real, dimension(:), intent(in)  :: S           !< Salinity [PSU].
+  real, dimension(:), intent(in)  :: pressure    !< pressure [Pa].
+  real, dimension(:), intent(out) :: drho_dS_dS  !< The second derivative of density with
+                                                 !! salinity [kg m-3 PSU-2].
+  real, dimension(:), intent(out) :: drho_dS_dT  !< The second derivative of density with
+                                                 !! temperature and salinity [kg m-3 ppt-1 degC-1].
+  real, dimension(:), intent(out) :: drho_dT_dT  !< The second derivative of density with
+                                                 !! temperature [kg m-3 degC-2].
+  real, dimension(:), intent(out) :: drho_dS_dP  !< The second derivative of density with
+                                                 !! salinity and pressure [kg m-3 PSU-1 Pa-1].
+  real, dimension(:), intent(out) :: drho_dT_dP  !< The second derivative of density with
+                                                 !! temperature and pressure [kg m-3 degC-1 Pa-1].
   integer, intent(in)  :: start       !< The starting point in the arrays.
   integer, intent(in)  :: npts        !< The number of values to calculate.
   ! Local variables
@@ -253,20 +266,20 @@ end subroutine calculate_density_second_derivs_array_linear
 subroutine calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, &
                              start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
   real,    intent(in),  dimension(:) :: T         !< Potential temperature relative to the surface
-                                                  !! in C.
-  real,    intent(in),  dimension(:) :: S         !< Salinity in g/kg.
-  real,    intent(in),  dimension(:) :: pressure  !< Pressure in Pa.
+                                                  !! [degC].
+  real,    intent(in),  dimension(:) :: S         !< Salinity [PSU].
+  real,    intent(in),  dimension(:) :: pressure  !< pressure [Pa].
   real,    intent(out), dimension(:) :: dSV_dS    !< The partial derivative of specific volume with
-                                                  !! salinity, in m3 kg-1 / (g/kg).
+                                                  !! salinity [m3 kg-1 PSU-1].
   real,    intent(out), dimension(:) :: dSV_dT    !< The partial derivative of specific volume with
-                                                  !! potential temperature, in m3 kg-1 K-1.
+                                                  !! potential temperature [m3 kg-1 degC-1].
   integer, intent(in)                :: start     !< The starting point in the arrays.
   integer, intent(in)                :: npts      !< The number of values to calculate.
-  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)                :: dRho_dT   !< The derivative of density with
-                                                  !! temperature, in kg m-3 C-1.
+                                                  !! temperature, [kg m-3 degC-1].
   real,    intent(in)                :: dRho_dS   !< The derivative of density with
-                                                  !! salinity, in kg m-3 psu-1.
+                                                  !! salinity [kg m-3 ppt-1].
   ! Local variables
   real :: I_rho2
   integer :: j
@@ -286,20 +299,20 @@ end subroutine calculate_specvol_derivs_linear
 subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
                                      Rho_T0_S0, dRho_dT, dRho_dS)
   real,    intent(in),  dimension(:) :: T         !< Potential temperature relative to the surface
-                                                  !! in C.
-  real,    intent(in),  dimension(:) :: S         !< Salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure  !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: rho       !< In situ density in kg m-3.
+                                                  !! [degC].
+  real,    intent(in),  dimension(:) :: S         !< Salinity [PSU].
+  real,    intent(in),  dimension(:) :: pressure  !< pressure [Pa].
+  real,    intent(out), dimension(:) :: rho       !< In situ density [kg m-3].
   real,    intent(out), dimension(:) :: drho_dp   !< The partial derivative of density with pressure
                                                   !! (also the inverse of the square of sound speed)
-                                                  !! in s2 m-2.
+                                                  !! [s2 m-2].
   integer, intent(in)                :: start     !< The starting point in the arrays.
   integer, intent(in)                :: npts      !< The number of values to calculate.
-  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,    intent(in)                :: dRho_dT   !< The derivative of density with
-                                                  !! temperature, in kg m-3 C-1.
+                                                  !! temperature [kg m-3 degC-1].
   real,    intent(in)                :: dRho_dS   !< The derivative of density with
-                                                  !! salinity, in kg m-3 psu-1.
+                                                  !! salinity [kg m-3 ppt-1].
   !  Local variables
   integer :: j
 
@@ -319,59 +332,59 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   type(hor_index_type), intent(in)  :: HIO       !< The horizontal index type for the output arrays.
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
-                                                 !! in C.
+                                                 !! [degC].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: S         !< Salinity in PSU.
+                        intent(in)  :: S         !< Salinity [PSU].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_t       !< Height at the top of the layer in depth units (Z).
+                        intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: z_b       !< Height at the top of the layer in Z.
-  real,                 intent(in)  :: rho_ref   !< A mean density, in kg m-3, that is subtracted
+                        intent(in)  :: z_b       !< Height at the top of the layer [Z ~> m].
+  real,                 intent(in)  :: rho_ref   !< A mean density [kg m-3], that is subtracted
                                                  !! out to reduce the magnitude of each of the
                                                  !! integrals.
-  real,                 intent(in)  :: rho_0_pres !< A density, in kg m-3, that is used to calculate
+  real,                 intent(in)  :: rho_0_pres !< A density [kg m-3], that is used to calculate
                                                  !! the pressure (as p~=-z*rho_0_pres*G_e) used in
                                                  !! the equation of state. rho_0_pres is not used
                                                  !! here.
-  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration, in m2 Z-1 s-2.
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
-                                                 !! in kg m-3 C-1.
+                                                 !! [kg m-3 degC-1].
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in kg m-3 psu-1.
+                                                 !! in [kg m-3 ppt-1].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
-                                                 !! layer, in Pa.
+                                                 !! layer [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
               optional, intent(out) :: intz_dpa  !< The integral through the thickness of the layer
                                                  !! of the pressure anomaly relative to the anomaly
-                                                 !! at the top of the layer, in Pa Z.
+                                                 !! at the top of the layer [Pa Z].
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed),  &
               optional, intent(out) :: intx_dpa  !< The integral in x of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the x grid spacing, in Pa.
+                                                 !! layer divided by the x grid spacing [Pa].
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB),  &
               optional, intent(out) :: inty_dpa  !< The integral in y of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
-                                                 !! layer divided by the y grid spacing, in Pa.
+                                                 !! layer divided by the y grid spacing [Pa].
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-              optional, intent(in)  :: bathyT    !< The depth of the bathymetry in units of Z.
-  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change in Z.
+              optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
+  real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                                  !! interpolate T/S for top and bottom integrals.
   ! Local variables
-  real :: rho_anom      ! The density anomaly from rho_ref, in kg m-3.
-  real :: raL, raR      ! rho_anom to the left and right, in kg m-3.
-  real :: dz, dzL, dzR  ! Layer thicknesses in Z.
-  real :: hWght      ! A pressure-thickness below topography, in Z.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Z.
-  real :: iDenom     ! The inverse of the denominator in the weights, in Z-2.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: rho_anom      ! The density anomaly from rho_ref [kg m-3].
+  real :: raL, raR      ! rho_anom to the left and right [kg m-3].
+  real :: dz, dzL, dzR  ! Layer thicknesses [Z ~> m].
+  real :: hWght      ! A pressure-thickness below topography [Z ~> m].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
+  real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2].
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations, in Pa.
+                     ! 5 sub-column locations [Pa].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
@@ -492,60 +505,60 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: T         !< Potential temperature relative to the surface
-                                                 !! in C.
+                                                 !! [degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: S         !< Salinity in PSU.
+                        intent(in)  :: S         !< Salinity [PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: p_t       !< Pressure at the top of the layer in Pa.
+                        intent(in)  :: p_t       !< Pressure at the top of the layer [Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: p_b       !< Pressure at the top of the layer in Pa.
+                        intent(in)  :: p_b       !< Pressure at the top of the layer [Pa].
   real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
           !! to reduce the magnitude of each of the integrals, m3 kg-1. The calculation is
           !! mathematically identical with different values of alpha_ref, but this reduces the
           !! effects of roundoff.
-  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
-  real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
-                                                 !! in kg m-3 C-1.
+  real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+  real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature
+                                                 !! [kg m-3 degC-1].
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in kg m-3 psu-1.
+                                                 !! in [kg m-3 ppt-1].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
-                                                 !! the layer, in m2 s-2.
+                                                 !! the layer [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of
                                                  !! the geopotential anomaly relative to the anomaly
-                                                 !! at the bottom of the layer, in Pa m2 s-2.
+                                                 !! at the bottom of the layer [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(out) :: intx_dza  !< The integral in x of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
-                                                 !! the layer divided by the x grid spacing,
-                                                 !! in m2 s-2.
+                                                 !! the layer divided by the x grid spacing
+                                                 !! [m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(out) :: inty_dza  !< The integral in y of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
-                                                 !! the layer divided by the y grid spacing,
-                                                 !! in m2 s-2.
+                                                 !! the layer divided by the y grid spacing
+                                                 !! [m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry in Pa
+              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                                 !! the same units as p_t (Pa?)
+                                                 !! the same units as p_t [Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
   ! Local variables
-  real :: dRho_TS       ! The density anomaly due to T and S, in kg m-3.
-  real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref, in m3 kg-1.
-  real :: aaL, aaR      ! rho_anom to the left and right, in kg m-3.
-  real :: dp, dpL, dpR  ! Layer pressure thicknesses in Pa.
-  real :: hWght      ! A pressure-thickness below topography, in Pa.
-  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
-  real :: iDenom     ! The inverse of the denominator in the weights, in Pa-2.
-  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
-  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
-  real :: wt_L, wt_R ! The linear weights of the left and right columns, nonDim.
-  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: dRho_TS       ! The density anomaly due to T and S [kg m-3].
+  real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref [m3 kg-1].
+  real :: aaL, aaR      ! rho_anom to the left and right [kg m-3].
+  real :: dp, dpL, dpR  ! Layer pressure thicknesses [Pa].
+  real :: hWght      ! A pressure-thickness below topography [Pa].
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Pa].
+  real :: iDenom     ! The inverse of the denominator in the weights [Pa-2].
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
+  real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
-                     ! 5 sub-column locations, in m2 s-2.
+                     ! 5 sub-column locations [m2 s-2].
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo

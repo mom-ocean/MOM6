@@ -16,28 +16,28 @@ Horizontal components of velocity are indicated by :math:`u` and :math:`v` and v
 
 :math:`p` is pressure and :math:`\Phi` is geo-potential:
 
-.. math:
-  \Phi = g z
+.. math::
+  \Phi = g z .
 
 The thermodynamic state variables are usually salinity, :math:`S`, and potential temperature, :math:`\theta` or the absolute salinity and conservative temperature, depending on the equation of state. :math:`\rho` is in-situ density.
 
 Vector notation
 ---------------
 
-The three-dimensional velocity vector is denoted :math:`\vec{v}`
+The three-dimensional velocity vector is denoted :math:`\boldsymbol{v}`
 
 .. math::
-  \vec{v} = \vec{u} + \vec{k} w
+  \boldsymbol{v} = \boldsymbol{u} + \widehat{\boldsymbol{k}} w ,
 
-where :math:`\vec{k}` is the unit vector pointed in the upward vertical direction and :math:`\vec{u} = (u,v,0)` is the horizontal
+where :math:`\widehat{\boldsymbol{k}}` is the unit vector pointed in the upward vertical direction and :math:`\boldsymbol{u} = (u, v, 0)` is the horizontal
 component of velocity normal to the vertical.
 
 The gradient operator without a suffix is three dimensional:
 
 .. math::
-  \nabla = ( \nabla_z, \partial_z  ) .
+  \boldsymbol{\nabla} = ( \boldsymbol{\nabla}_z, \partial_z  ) .
 
 but a suffix indicates a lateral gradient along a surface of constant property indicated by the suffix:
 
 .. math::
-  \nabla_z = \left( \left. \partial_x \right|_z, \left. \partial_y \right|_z, 0 \right) .
+  \boldsymbol{\nabla}_z = \left( \left. \partial_x \right|_z, \left. \partial_y \right|_z, 0 \right) .

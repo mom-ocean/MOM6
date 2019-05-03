@@ -12,11 +12,12 @@ use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS, calc_QG_Leith_viscosity
 use MOM_barotropic,            only : barotropic_CS, barotropic_get_tav
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS, thickness_diffuse_get_KH
+use MOM_io,                    only : MOM_read_data, slasher
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
-use MOM_io,                    only : MOM_read_data, slasher
 
 implicit none ; private
 
@@ -65,96 +66,96 @@ type, public :: hor_visc_CS ; private
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
-                             !! viscosity, in m2 s-1. The default is 0.0
+                             !! viscosity [m2 s-1]. The default is 0.0
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
                              !! Default is False to maintain answers with legacy experiments
                              !! but should be changed to True for new experiments.
   logical :: anisotropic     !< If true, allow anisotropic component to the viscosity.
-  real    :: Kh_aniso        !< The anisotropic viscosity in m2 s-1.
+  real    :: Kh_aniso        !< The anisotropic viscosity [m2 s-1].
   logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
                              !! of state. This is set depending on ANISOTROPIC_MODE.
   logical :: use_GME         !< If true, use GME backscatter scheme.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
-                      !< The background Laplacian viscosity at h points, in units
-                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !< The background Laplacian viscosity at h points [m2 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_2d
-                      !< The background Laplacian viscosity at h points, in units
-                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !< The background Laplacian viscosity at h points [m2 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Ah_bg_xx
-                      !< The background biharmonic viscosity at h points, in units
-                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !< The background biharmonic viscosity at h points [m4 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear, in m4 s.  This value is
+                      !! square of the velocity shear [m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
                       !< The amount by which stresses through h points are reduced
                       !! due to partial barriers. Nondimensional.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [m2 s-1].
+    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [m4 s-1].
     n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
     n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
-                      !< The background Laplacian viscosity at q points, in units
-                      !! of m2 s-1. The actual viscosity may be the larger of this
+                      !< The background Laplacian viscosity at q points [m2 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Ah_bg_xy
-                      !< The background biharmonic viscosity at q points, in units
-                      !! of m4 s-1. The actual viscosity may be the larger of this
+                      !< The background biharmonic viscosity at q points [m4 s-1].
+                      !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
                       !< A constant relating the biharmonic viscosity to the
-                      !! square of the velocity shear, in m4 s.  This value is
+                      !! square of the velocity shear [m4 s].  This value is
                       !! set to be the magnitude of the Coriolis terms once the
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
                       !< The amount by which stresses through q points are reduced
-                      !! due to partial barriers. Nondimensional.
+                      !! due to partial barriers [nondim].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity, m2 s-1.
-    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity, m4 s-1.
+    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity [m2 s-1].
+    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity [m4 s-1].
     n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points
     n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dx2h,   & !< Pre-calculated dx^2 at h points, in m2
-    dy2h,   & !< Pre-calculated dy^2 at h points, in m2
-    dx_dyT, & !< Pre-calculated dx/dy at h points, nondim
-    dy_dxT    !< Pre-calculated dy/dx at h points, nondim
+    dx2h,   & !< Pre-calculated dx^2 at h points [m2]
+    dy2h,   & !< Pre-calculated dy^2 at h points [m2]
+    dx_dyT, & !< Pre-calculated dx/dy at h points [nondim]
+    dy_dxT    !< Pre-calculated dy/dx at h points [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    dx2q,    & !< Pre-calculated dx^2 at q points, in m2
-    dy2q,    & !< Pre-calculated dy^2 at q points, in m2
-    dx_dyBu, & !< Pre-calculated dx/dy at q points, nondim
-    dy_dxBu    !< Pre-calculated dy/dx at q points, nondim
+    dx2q,    & !< Pre-calculated dx^2 at q points [m2]
+    dy2q,    & !< Pre-calculated dy^2 at q points [m2]
+    dx_dyBu, & !< Pre-calculated dx/dy at q points [nondim]
+    dy_dxBu    !< Pre-calculated dy/dx at q points [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Idx2dyCu, & !< 1/(dx^2 dy) at u points, in m-3
-    Idxdy2u     !< 1/(dx dy^2) at u points, in m-3
+    Idx2dyCu, & !< 1/(dx^2 dy) at u points [m-3]
+    Idxdy2u     !< 1/(dx dy^2) at u points [m-3]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Idx2dyCv, & !< 1/(dx^2 dy) at v points, in m-3
-    Idxdy2v     !< 1/(dx dy^2) at v points, in m-3
+    Idx2dyCv, & !< 1/(dx^2 dy) at v points [m-3]
+    Idxdy2v     !< 1/(dx dy^2) at v points [m-3]
 
   ! The following variables are precalculated time-invariant combinations of
   ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Laplac2_const_xx,  & !< Laplacian  metric-dependent constants (nondim)
     Biharm5_const_xx,  & !< Biharmonic metric-dependent constants (nondim)
-    Laplac3_const_xx, & !< Laplacian  metric-dependent constants (nondim)
-    Biharm6_const_xx    !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_const_xx, &  !< Laplacian  metric-dependent constants (nondim)
+    Biharm6_const_xx     !< Biharmonic metric-dependent constants (nondim)
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Laplac2_const_xy,  & !< Laplacian  metric-dependent constants (nondim)
     Biharm5_const_xy,  & !< Biharmonic metric-dependent constants (nondim)
-    Laplac3_const_xy, & !< Laplacian  metric-dependent constants (nondim)
-    Biharm6_const_xy    !< Biharmonic metric-dependent constants (nondim)
+    Laplac3_const_xy, &  !< Laplacian  metric-dependent constants (nondim)
+    Biharm6_const_xy     !< Biharmonic metric-dependent constants (nondim)
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
@@ -187,24 +188,23 @@ contains
 !!   u[is-2:ie+2,js-2:je+2]
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
-
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic, &
-                                thickness_diffuse, G, GV, CS, OBC)
+                                thickness_diffuse, G, GV, US, CS, OBC)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                 intent(in)  :: u      !< The zonal velocity, in m s-1.
+                                 intent(in)  :: u      !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                 intent(in)  :: v      !< The meridional velocity, in m s-1.
+                                 intent(in)  :: v      !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                                  intent(inout)  :: h      !< Layer thicknesses, in H
                                                        !! (usually m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
-                                                       !! along-coordinate stress tensor (m/s2)
+                                                       !! along-coordinate stress tensor [m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
-                                                       !! of along-coordinate stress tensor (m/s2).
+                                                       !! of along-coordinate stress tensor [m s-2].
   type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
@@ -214,6 +214,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   type(thickness_diffuse_CS),    pointer     :: thickness_diffuse  !< Pointer to a structure containing
                                                        !! interface height diffusivities
   type(hor_visc_CS),             pointer     :: CS     !< Control structure returned by a previous
+  type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
                                                        !! call to hor_visc_init.
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
 
@@ -284,11 +285,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
     diss_rate, & ! MKE dissipated by parameterized shear production (m2 s-3)
     max_diss_rate, & ! maximum possible energy dissipated by lateral friction (m2 s-3)
-    target_diss_rate_GME, & ! target amount of energy to add via GME (m2 s-3) 
+    target_diss_rate_GME, & ! target amount of energy to add via GME (m2 s-3)
     FrictWork, &     ! work done by MKE dissipation mechanisms (W/m2)
-    FrictWork_diss, &  ! negative definite work done by MKE dissipation mechanisms (W/m2) 
+    FrictWork_diss, &  ! negative definite work done by MKE dissipation mechanisms (W/m2)
     FrictWorkMax, &     ! maximum possible work done by MKE dissipation mechanisms (W/m2)
-    FrictWork_GME, &  ! work done by GME (W/m2) 
+    FrictWork_GME, &  ! work done by GME (W/m2)
     target_FrictWork_GME, & ! target amount of work for GME to do (W/m2)
     div_xx_h         ! horizontal divergence (s-1)
   !real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
@@ -316,9 +317,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: h_neglect3 ! h_neglect^3, in H3
   real :: hrat_min   ! minimum thicknesses at the 4 neighboring
                      ! velocity points divided by the thickness at the stress
-                     ! point (h or q point) (nondimensional)
+                     ! point (h or q point) [nondim]
   real :: visc_bound_rem ! fraction of overall viscous bounds that
-                         ! remain to be applied (nondim)
+                         ! remain to be applied [nondim]
   real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
                     ! Laplacian viscosity is rescaled
   real :: RoScl     ! The scaling function for MEKE source term
@@ -327,7 +328,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real :: epsilon
   real :: GME_coeff ! The GME (negative) viscosity coefficient (m2 s-1)
   real :: GME_coeff_limiter ! Maximum permitted value of the GME coefficient (m2 s-1)
-  real :: FWfrac ! Fraction of maximum theoretical energy transfer to use when scaling GME coefficient 
+  real :: FWfrac ! Fraction of maximum theoretical energy transfer to use when scaling GME coefficient
   real :: DY_dxBu, DX_dyBu
   real :: H0 ! Depth used to scale down GME coefficient in shallow areas (m)
   logical :: rescale_Kh, legacy_bound
@@ -442,7 +443,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       enddo ; enddo
     endif
 
-    ! Get thickness diffusivity for use in GME 
+    ! Get thickness diffusivity for use in GME
 !    call thickness_diffuse_get_KH(thickness_diffuse, KH_u_GME, KH_v_GME, G)
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -493,13 +494,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     enddo ; enddo
 
 
-    if ((find_FrictWork) .or. (CS%use_GME)) then 
+    if ((find_FrictWork) .or. (CS%use_GME)) then
       do j=js,je ; do i=is,ie
         grad_vel_mag_h(i,j) = (dudx(i,j)**2 + dvdy(i,j)**2 + &
              (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
              (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2)
       enddo ; enddo
-    endif       
+    endif
 
     ! Interpolate the thicknesses to velocity points.
     ! The extra wide halos are to accommodate the cross-corner-point projections
@@ -1076,7 +1077,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     enddo ; enddo
 
 
-    if (find_FrictWork) then 
+    if (find_FrictWork) then
       if (CS%biharmonic) call pass_vector(u0, v0, G%Domain)
       call pass_var(dudx, G%Domain, complete=.true.)
       call pass_var(dvdy, G%Domain, complete=.true.)
@@ -1089,7 +1090,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                               Ah_h(i,j,k) * ((0.5*(u0(I,j) + u0(I-1,j)))**2 + &
                                              (0.5*(v0(i,J) + v0(i,J-1)))**2)
         FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
- 
+
         if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
           ! This is the maximum possible amount of energy that can be converted
           ! per unit time, according to theory (multiplied by h)
@@ -1098,13 +1099,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
           FrictWorkMax(i,j,k) = max_diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
 
         ! Determine how much work GME needs to do to reach the "target" ratio between
-        ! the amount of work actually done and the maximum allowed by theory. Note that 
+        ! the amount of work actually done and the maximum allowed by theory. Note that
         ! we need to add the FrictWork done by the dissipation operators, since this work
-        ! is done only for numerical stability and is therefore spurious  
+        ! is done only for numerical stability and is therefore spurious
           if (CS%use_GME) then
             target_diss_rate_GME(i,j,k) = FWfrac * max_diss_rate(i,j,k) - diss_rate(i,j,k)
             target_FrictWork_GME(i,j,k) = target_diss_rate_GME(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
-          endif 
+          endif
 
         endif ; endif
 
@@ -1113,7 +1114,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
 
     if (CS%use_GME) then
-  
+
       if (.not. (associated(MEKE))) call MOM_error(FATAL, &
         "MEKE must be enabled for GME to be used.")
 
@@ -1121,9 +1122,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         "MEKE%mom_src must be enabled for GME to be used.")
 
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
- 
+
         if ((max_diss_rate(i,j,k) > 0) .and. (grad_vel_mag_bt_h(i,j)>0) ) then
-          GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * FWfrac*max_diss_rate(i,j,k) / grad_vel_mag_bt_h(i,j)      
+          GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * FWfrac*max_diss_rate(i,j,k) / grad_vel_mag_bt_h(i,j)
         else
           GME_coeff = 0.0
         endif
@@ -1144,13 +1145,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
         if ((max_diss_rate(i,j,k) > 0) .and. (grad_vel_mag_bt_q(i,j)>0) ) then
           GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * FWfrac*max_diss_rate(i,j,k) / grad_vel_mag_bt_q(I,J)
-        else 
+        else
           GME_coeff = 0.0
         endif
- 
+
         ! apply mask
         GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
- 
+
         GME_coeff = MIN(GME_coeff,GME_coeff_limiter)
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
@@ -1272,12 +1273,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       endif
       if (MEKE%backscatter_Ro_c /= 0.) then
         do j=js,je ; do i=is,ie
-          FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) &
-                       +(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
+          FatH = 0.25*US%s_to_T*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                                  (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
           Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
             0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                   (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
           FatH = FatH ** MEKE%backscatter_Ro_pow ! f^n
+          !### Note the hard-coded dimensional constant in the following line.
           Shear_mag = ( ( Shear_mag ** MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
                       * MEKE%backscatter_Ro_c ! c * D^n
           ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
@@ -1301,14 +1303,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
-         ! MEKE%mom_src now is sign definite because it only uses the dissipation 
+         ! MEKE%mom_src now is sign definite because it only uses the dissipation
          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(-FrictWorkMax(i,j,k),FrictWork_diss(i,j,k))
         enddo ; enddo
 
         if (CS%use_GME) then
           if (associated(MEKE%GME_snk)) then
             do j=js,je ; do i=is,ie
-              ! MEKE%mom_src now is sign definite because it only uses the dissipation 
+              ! MEKE%mom_src now is sign definite because it only uses the dissipation
               MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
             enddo ; enddo
           endif
@@ -1350,9 +1352,10 @@ end subroutine horizontal_viscosity
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
 !! hor_visc_init calculates and stores the values of a number of metric functions that
 !! are used in horizontal_viscosity().
-subroutine hor_visc_init(Time, G, param_file, diag, CS)
+subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure to regulate diagnostic output.
@@ -1361,34 +1364,34 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
                 ! u0v is the Laplacian sensitivities to the v velocities
-                ! at u points, in m-2, with u0u, v0u, and v0v defined similarly.
-  real :: grid_sp_h2       ! Harmonic mean of the squares of the grid
-  real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2)
-  real :: grid_sp_q2       ! spacings at h and q points (m2)
-  real :: grid_sp_q3       ! spacings at h and q points^(3/2) (m3)
-  real :: Kh_Limit         ! A coefficient (1/s) used, along with the
+                ! at u points [m-2], with u0u, v0u, and v0v defined similarly.
+  real :: grid_sp_h2       ! Harmonic mean of the squares of the grid [m2]
+  real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2) [m3]
+  real :: grid_sp_q2       ! spacings at h and q points [m2]
+  real :: grid_sp_q3       ! spacings at h and q points^(3/2) [m3]
+  real :: Kh_Limit         ! A coefficient [s-1] used, along with the
                            ! grid spacing, to limit Laplacian viscosity.
   real :: fmax             ! maximum absolute value of f at the four
-                           ! vorticity points around a thickness point (1/s)
-  real :: BoundCorConst    ! constant (s2/m2)
-  real :: Ah_Limit         ! coefficient (1/s) used, along with the
+                           ! vorticity points around a thickness point [s-1]
+  real :: BoundCorConst    ! A constant used when using viscosity to bound the Coriolis accelerations [s2 m-2]
+  real :: Ah_Limit         ! coefficient [s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
-  real :: Kh               ! Lapacian horizontal viscosity (m2/s)
-  real :: Ah               ! biharmonic horizontal viscosity (m4/s)
-  real :: Kh_vel_scale     ! this speed (m/s) times grid spacing gives Lap visc
-  real :: Ah_vel_scale     ! this speed (m/s) times grid spacing cubed gives bih visc
+  real :: Kh               ! Lapacian horizontal viscosity [m2 s-1]
+  real :: Ah               ! biharmonic horizontal viscosity [m4 s-1]
+  real :: Kh_vel_scale     ! this speed [m s-1] times grid spacing gives Lap visc
+  real :: Ah_vel_scale     ! this speed [m s-1] times grid spacing cubed gives bih visc
   real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
   real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
   real :: Leith_bi_const   ! nondimensional biharmonic Leith constant
-  real :: dt               ! dynamics time step (sec)
-  real :: Idt              ! inverse of dt (1/s)
+  real :: dt               ! dynamics time step [s]
+  real :: Idt              ! inverse of dt [s-1]
   real :: denom            ! work variable; the denominator of a fraction
-  real :: maxvel           ! largest permitted velocity components (m/s)
+  real :: maxvel           ! largest permitted velocity components [m s-1]
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value
                            ! the quadratically varying biharmonic viscosity
-                           ! balances Coriolis acceleration (m/s)
-  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity (m2/s)
+                           ! balances Coriolis acceleration [m s-1]
+  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity [m2 s-1]
   real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat
   logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS
   logical :: get_all       ! If true, read and log all parameters, regardless of
@@ -2018,20 +2021,20 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
       CS%id_GME_coeff_q = register_diag_field('ocean_model', 'GME_coeff_q', diag%axesBL, Time, &
         'GME coefficient at q Points', 'm^2 s-1')
- 
+
       CS%id_target_FrictWork_GME = register_diag_field('ocean_model','target_FrictWork_GME',diag%axesTL,Time,&
       'Target for the amount of integral work done by lateral friction terms in GME', 'W m-2')
- 
+
       CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
       'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', 'W m-2')
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'W m-2')
- 
+
   CS%id_FrictWork_diss = register_diag_field('ocean_model','FrictWork_diss',diag%axesTL,Time,&
       'Integral work done by lateral friction terms (excluding diffusion of energy)', 'W m-2')
-  
+
   CS%id_FrictWorkMax = register_diag_field('ocean_model','FrictWorkMax',diag%axesTL,Time,&
       'Maximum possible integral work done by lateral friction terms', 'W m-2')
 
@@ -2050,8 +2053,8 @@ end subroutine hor_visc_init
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   type(hor_visc_CS), pointer :: CS !< Control structure for horizontal viscosity
-  real,              intent(in) :: n1 !< i-component of direction vector (nondim)
-  real,              intent(in) :: n2 !< j-component of direction vector (nondim)
+  real,              intent(in) :: n1 !< i-component of direction vector [nondim]
+  real,              intent(in) :: n2 !< j-component of direction vector [nondim]
   ! Local variables
   real :: recip_n2_norm
 

@@ -18,6 +18,7 @@ use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables,       only : surface
 use MOM_verticalGrid,    only : verticalGrid_type
 
@@ -30,6 +31,11 @@ implicit none ; private
 
 public register_DOME_tracer, initialize_DOME_tracer
 public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 integer, parameter :: ntr = 11 !< The number of tracers in this module.
 
@@ -134,14 +140,15 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_DOME_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:) and sets up the tracer output.
-subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp, param_file)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                 intent(in) :: US !< A dimensional unit scaling type
   logical,                               intent(in) :: restart !< .true. if the fields have already
                                                                !! been read from a restart file.
   type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl), target,               intent(in) :: diag    !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
   type(DOME_tracer_CS),                  pointer    :: CS      !< The control structure returned by a previous
@@ -167,10 +174,10 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
+  real :: dist2  ! The distance squared from a line [m2].
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in H.
-  real :: e(SZK_(G)+1), e_top, e_bot ! Heights in Z.
+                            ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: e(SZK_(G)+1), e_top, e_bot ! Heights [Z ~> m].
   real :: d_tr   ! A change in tracer concentraions, in tracer units.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -218,8 +225,8 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           do k=nz,1,-1
             e(K) = e(K+1) + h(i,j,k)*GV%H_to_Z
             do m=7,NTR
-              e_top = (-600.0*real(m-1) + 3000.0) * GV%m_to_Z
-              e_bot = (-600.0*real(m-1) + 2700.0) * GV%m_to_Z
+              e_top = (-600.0*real(m-1) + 3000.0) * US%m_to_Z
+              e_bot = (-600.0*real(m-1) + 2700.0) * US%m_to_Z
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then
@@ -278,32 +285,32 @@ end subroutine initialize_DOME_tracer
 !! This is a simple example of a set of advected passive tracers.
 !!
 !! The arguments to this subroutine are redundant in that
-!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(DOME_tracer_CS),    pointer    :: CS   !< The control structure returned by a previous
                                               !! call to DOME_register_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 
 ! Local variables
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
@@ -339,7 +346,7 @@ subroutine DOME_tracer_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(DOME_tracer_CS),   pointer       :: CS !< The control structure returned by a previous
                                               !! call to DOME_register_tracer.
 

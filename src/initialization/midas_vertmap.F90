@@ -13,6 +13,11 @@ public tracer_z_init, determine_temperature, fill_boundaries
 public find_interfaces, meshgrid
 #endif
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> Fill grid edges
 interface fill_boundaries
    module procedure fill_boundaries_real
@@ -25,7 +30,7 @@ end interface
 contains
 
 #ifdef PY_SOLO
-!> Calculate seawater equation of state, given T[degC],S[PSU],p[Pa]
+!> Calculate seawater equation of state, given T[degC], S[PSU], and p[Pa]
 !! Returns density [kg m-3]
 !!
 !! These EOS routines are needed only for the stand-alone version of the code
@@ -33,9 +38,9 @@ contains
 !! sea water using the formulae given by  Wright, 1997, J. Atmos.
 !! Ocean. Tech., 14, 735-740.
 function wright_eos_2d(T,S,p) result(rho)
-  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and Salinity (psu)
-  real, intent(in) :: p  !< pressure (Pa)
-  real(kind=8), dimension(size(T,1),size(T,2)) :: rho !< potential density (kg m-3)
+  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature [degC] and Salinity [psu]
+  real, intent(in) :: p  !< pressure [Pa]
+  real(kind=8), dimension(size(T,1),size(T,2)) :: rho !< potential density [kg m-3]
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom
@@ -63,16 +68,16 @@ function wright_eos_2d(T,S,p) result(rho)
 end function wright_eos_2d
 
 !> Calculate seawater thermal expansion coefficient given T[degC],S[PSU],p[Pa]
-!! Returns density [kg m-3 C-1]
+!! Returns density [kg m-3 degC-1]
 !!
 !! The subroutines in this file implement the equation of state for
 !! sea water using the formulae given by  Wright, 1997, J. Atmos.
 !! Ocean. Tech., 14, 735-740.
 function alpha_wright_eos_2d(T,S,p) result(drho_dT)
-  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and Salinity (psu)
-  real, intent(in) :: p !< pressure (Pa)
+  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature [degC] and Salinity [psu]
+  real, intent(in) :: p !< pressure [Pa]
   real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dT !< partial derivative of density with
-                                                          !! respect to temperature (kg m-3 C-1)
+                                                          !! respect to temperature [kg m-3 degC-1]
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -109,10 +114,10 @@ end function alpha_wright_eos_2d
 !! sea water using the formulae given by  Wright, 1997, J. Atmos.
 !! Ocean. Tech., 14, 735-740.
 function beta_wright_eos_2d(T,S,p) result(drho_dS)
-  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature (degC) and salinity (psu)
-  real, intent(in) :: p !< pressure (Pa)
+  real(kind=8), dimension(:,:), intent(in) :: T,S !< temperature [degC] and salinity [psu]
+  real, intent(in) :: p !< pressure [Pa]
   real(kind=8), dimension(size(T,1),size(T,2)) :: drho_dS !< partial derivative of density with
-                                                          !! respect to salinity (kg m-3 PSU-1)
+                                                          !! respect to salinity [kg m-3 PSU-1]
   ! Local variables
   real(kind=8) :: a0,a1,a2,b0,b1,b2,b3,b4,b5,c0,c1,c2,c3,c4,c5
   real(kind=8) :: al0,lam,p0,I_denom,I_denom2
@@ -146,10 +151,11 @@ end function beta_wright_eos_2d
 function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlevs, &
                        debug, i_debug, j_debug, eps_z) result(tr)
   real, dimension(:,:,:),           intent(in) :: tr_in !< The z-space array of tracer concentrations that is read in.
-  real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data (Z or m)
+  real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input z* data
+                                                       !! [Z ~> m or m]
   integer,                          intent(in) :: nlay !< The number of vertical layers in the target grid
   real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), &
-                                    intent(in) :: e !< The depths of the target layer interfaces (Z or m)
+                                    intent(in) :: e !< The depths of the target layer interfaces [Z ~> m or m]
   integer,                          intent(in) :: nkml !< The number of mixed layers
   integer,                          intent(in) :: nkbl !< The number of buffer layers
   real,                             intent(in) :: land_fill !< fill in data over land (1)
@@ -160,7 +166,7 @@ function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlev
   logical,                optional, intent(in) :: debug !< optional debug flag
   integer,                optional, intent(in) :: i_debug !< i-index of point for debugging
   integer,                optional, intent(in) :: j_debug !< j-index of point for debugging
-  real,                   optional, intent(in) :: eps_z   !< A negligibly small layer thickness in the units of Z.
+  real,                   optional, intent(in) :: eps_z   !< A negligibly small layer thickness [Z ~> m or m].
   real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr !< tracers in layer space
 
   ! Local variables
@@ -170,12 +176,12 @@ function tracer_z_init(tr_in, z_edges, e, nkml, nkbl, land_fill, wet, nlay, nlev
   integer, dimension(size(tr_in,1),size(tr_in,2)) :: nlevs_data !< number of valid levels in the input dataset
   integer :: n,i,j,k,l,nx,ny,nz,nt,kz
   integer :: k_top,k_bot,k_bot_prev,kk,kstart
-  real    :: sl_tr    ! The tracer concentration slope times the layer thickess, in tracer units.
-  real    :: epsln_Z  ! A negligibly thin layer thickness, in Z.
+  real    :: sl_tr    ! The tracer concentration slope times the layer thickness, in tracer units.
+  real    :: epsln_Z  ! A negligibly thin layer thickness [Z ~> m].
   real, dimension(size(tr_in,3)) :: wt !< The fractional weight for each layer in the range between z1 and z2
   real, dimension(size(tr_in,3)) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
                                   ! limits of the part of a z-cell that contributes to a layer, relative
-                                  ! to the cell center and normalized by the cell thickness, nondim.
+                                  ! to the cell center and normalized by the cell thickness [nondim].
                                   ! Note that -1/2 <= z1 <= z2 <= 1/2.
 
   logical :: debug_msg, debug_, debug_pt
@@ -340,10 +346,10 @@ end function bisect_fast
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start)
-  real(kind=8), dimension(:,:,:), intent(inout) :: temp !< potential temperature (degC)
-  real(kind=8), dimension(:,:,:), intent(inout) :: salt !< salinity (PSU)
-  real(kind=8), dimension(size(temp,3)), intent(in) :: R !< desired potential density, in kg m-3.
-  real, intent(in) :: p_ref !< reference pressure, in Pa.
+  real(kind=8), dimension(:,:,:), intent(inout) :: temp !< potential temperature [degC]
+  real(kind=8), dimension(:,:,:), intent(inout) :: salt !< salinity [PSU]
+  real(kind=8), dimension(size(temp,3)), intent(in) :: R !< desired potential density [kg m-3].
+  real, intent(in) :: p_ref !< reference pressure [Pa].
   integer, intent(in) :: niter !< maximum number of iterations
   integer, intent(in) :: k_start !< starting index (i.e. below the buffer layer)
   real, intent(in) :: land_fill !< land fill value
@@ -355,10 +361,10 @@ subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_st
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R, p_ref, niter, land_fill, h, k_start, eos)
-  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature (degC)
-  real, dimension(:,:,:),        intent(inout) :: salt !< salinity (PSU)
-  real, dimension(size(temp,3)), intent(in)    :: R !< desired potential density, in kg m-3.
-  real,                          intent(in)    :: p_ref !< reference pressure, in Pa.
+  real, dimension(:,:,:),        intent(inout) :: temp !< potential temperature [degC]
+  real, dimension(:,:,:),        intent(inout) :: salt !< salinity [PSU]
+  real, dimension(size(temp,3)), intent(in)    :: R !< desired potential density [kg m-3].
+  real,                          intent(in)    :: p_ref !< reference pressure [Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
   real,                          intent(in)    :: land_fill !< land fill value
@@ -459,16 +465,16 @@ end subroutine determine_temperature
 !! of each layer that overlaps that depth range.
 !! Note that by convention, e decreases with increasing k and Z_top > Z_bot.
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
-  real, dimension(:), intent(in)  :: e  !< The interface positions, in m or Z.
-  real,               intent(in)  :: Z_top !< The top of the range being mapped to, in m or Z.
-  real,               intent(in)  :: Z_bot !< The bottom of the range being mapped to, in m or Z.
+  real, dimension(:), intent(in)  :: e  !< The interface positions, [Z ~> m] or other units.
+  real,               intent(in)  :: Z_top !< The top of the range being mapped to, [Z ~> m] or other units.
+  real,               intent(in)  :: Z_bot !< The bottom of the range being mapped to, [Z ~> m] or other units.
   integer,            intent(in)  :: k_max !< The number of valid layers.
   integer,            intent(in)  :: k_start !< The layer at which to start searching.
   integer,            intent(out) :: k_top !< The index of the top layer that overlap with the depth range.
   integer,            intent(out) :: k_bot !< The index of the bottom layer that overlap with the depth range.
-  real, dimension(:), intent(out) :: wt !< The relative weights of each layer from k_top to k_bot, nondim.
-  real, dimension(:), intent(out) :: z1 !< Depth of the top limit of layer that contributes to a level, nondim.
-  real, dimension(:), intent(out) :: z2 !< Depth of the bottom limit of layer that contributes to a level, nondim.
+  real, dimension(:), intent(out) :: wt !< The relative weights of each layer from k_top to k_bot [nondim].
+  real, dimension(:), intent(out) :: z1 !< Depth of the top limit of layer that contributes to a level [nondim].
+  real, dimension(:), intent(out) :: z2 !< Depth of the bottom limit of layer that contributes to a level [nondim].
 
   ! Local variables
   real :: Ih, e_c, tot_wt, I_totwt
@@ -522,7 +528,7 @@ end subroutine find_overlap
 !! a piecewise limited scheme.
 function find_limited_slope(val, e, k) result(slope)
   real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
-  real, dimension(:), intent(in) :: e   !< A column's interface heights, in Z or m.
+  real, dimension(:), intent(in) :: e   !< A column's interface heights [Z ~> m] or other units.
   integer,            intent(in) :: k   !< The layer whose slope is being determined.
   real :: slope !< The normalized slope in the intracell distribution of val.
   ! Local variables
@@ -555,19 +561,19 @@ end function find_limited_slope
 !> Find interface positions corresponding to density profile
 function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps_z) result(zi)
   real, dimension(:,:,:), &
-                      intent(in) :: rho   !< potential density in z-space (kg m-3)
+                      intent(in) :: rho   !< potential density in z-space [kg m-3]
   real, dimension(size(rho,3)), &
-                      intent(in) :: zin   !< Input data levels, in Z (often m).
-  real, dimension(:), intent(in) :: Rb    !< target interface densities (kg m-3)
+                      intent(in) :: zin   !< Input data levels [Z ~> m or m].
+  real, dimension(:), intent(in) :: Rb    !< target interface densities [kg m-3]
   real, dimension(size(rho,1),size(rho,2)), &
-                      intent(in) :: depth !< ocean depth in Z
+                      intent(in) :: depth !< ocean depth [Z ~> m].
   real, dimension(size(rho,1),size(rho,2)), &
             optional, intent(in) :: nlevs !< number of valid points in each column
   logical,  optional, intent(in) :: debug !< optional debug flag
   integer,  optional, intent(in) :: nkml  !< number of mixed layer pieces
   integer,  optional, intent(in) :: nkbl  !< number of buffer layer pieces
-  real,     optional, intent(in) :: hml   !< mixed layer depth, in Z
-  real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness in the units of Z.
+  real,     optional, intent(in) :: hml   !< mixed layer depth [Z ~> m].
+  real,     optional, intent(in) :: eps_z !< A negligibly small layer thickness [Z ~> m or m].
   real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi !< The returned interface, in the same units az zin.
 
   ! Local variables
@@ -583,8 +589,8 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
   integer :: n,i,j,k,l,nx,ny,nz,nt
   integer :: nlay,kk,nkml_,nkbl_
   logical :: debug_ = .false.
-  real    :: epsln_Z    ! A negligibly thin layer thickness, in Z.
-  real    :: epsln_rho  ! A negligibly small density change, in kg m-3.
+  real    :: epsln_Z    ! A negligibly thin layer thickness [Z ~> m].
+  real    :: epsln_rho  ! A negligibly small density change [kg m-3].
   real, parameter :: zoff=0.999
 
   nlay=size(Rb)-1
@@ -708,7 +714,7 @@ end subroutine meshgrid
 !! in each region is an approximation to del2(zi)=0 subject to
 !! boundary conditions along the valid points curve bounding this region.
 subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
-  real, dimension(:,:), intent(inout) :: zi !< interface positions (m)
+  real, dimension(:,:), intent(inout) :: zi !< interface positions [m] or arbitrary
   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill !< points to be smoothed
   integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad !< ignore these points
   real, intent(in)  :: sor !< successive over-relaxation coefficient (typically 0.6)
