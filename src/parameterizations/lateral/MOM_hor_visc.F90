@@ -381,7 +381,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
 !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
 !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
 !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
 !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &

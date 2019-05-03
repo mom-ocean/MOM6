@@ -712,7 +712,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
       EKE = 0.
     endif
 !    MEKE%MEKE(i,j) = EKE
-    MEKE%MEKE(i,j) = (G%Zd_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+    MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
   enddo ; enddo
 
 end subroutine MEKE_equilibrium

@@ -776,7 +776,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
 
             Slope_x_PE(I,j,k) = MIN(Slope,CS%slope_max)
-            hN2_x_PE(I,j,k) = hN2_u(I,K) * GV%m_to_Z
+            hN2_x_PE(I,j,k) = hN2_u(I,K) * US%m_to_Z
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [m3 s-1].
@@ -1025,7 +1025,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
 
             Slope_y_PE(i,J,k) = MIN(Slope,CS%slope_max)
-            hN2_y_PE(i,J,k) = hN2_v(i,K) * GV%m_to_Z
+            hN2_y_PE(i,J,k) = hN2_v(i,K) * US%m_to_Z
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [m3 s-1].
