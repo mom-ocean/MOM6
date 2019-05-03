@@ -30,6 +30,7 @@ type, public :: MEKE_CS ; private
   ! Parameters
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE (non-dim)
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE (non-dim)
+  real :: MEKE_GMECoeff !< Efficiency of conversion of MEKE into ME by GME (non-dim)
   real :: MEKE_damping  !< Local depth-independent MEKE dissipation rate in s-1.
   real :: MEKE_Cd_scale !< The ratio of the bottom eddy velocity to the column mean
                         !! eddy velocity, i.e. sqrt(2*MEKE). This should be less than 1
@@ -73,7 +74,7 @@ type, public :: MEKE_CS ; private
   !>@{ Diagnostic handles
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
   integer :: id_Ub = -1, id_Ut = -1
-  integer :: id_GM_src = -1, id_mom_src = -1, id_decay = -1
+  integer :: id_GM_src = -1, id_mom_src = -1, id_GME_snk = -1, id_decay = -1
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1, id_Au = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
   integer :: id_Lrhines = -1, id_Leady = -1
@@ -113,6 +114,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     MEKE_decay, &   ! The MEKE decay timescale, in s-1.
     MEKE_GM_src, &  ! The MEKE source from thickness mixing, in m2 s-3.
     MEKE_mom_src, & ! The MEKE source from momentum, in m2 s-3.
+    MEKE_GME_snk, & ! The MEKE sink from GME backscatter, in m2 s-3.
     drag_rate_visc, &
     drag_rate, &    ! The MEKE spindown timescale due to bottom drag, in s-1.
     LmixScale, &    ! Square of eddy mixing length, in m2.
@@ -165,6 +167,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 
     if (CS%debug) then
       if (associated(MEKE%mom_src)) call hchksum(MEKE%mom_src, 'MEKE mom_src',G%HI)
+      if (associated(MEKE%GME_snk)) call hchksum(MEKE%GME_snk, 'MEKE GME_snk',G%HI)
       if (associated(MEKE%GM_src)) call hchksum(MEKE%GM_src, 'MEKE GM_src',G%HI)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G%HI)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI)
@@ -289,6 +292,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP do
       do j=js,je ; do i=is,ie
         src(i,j) = src(i,j) - CS%MEKE_FrCoeff*I_mass(i,j)*MEKE%mom_src(i,j)
+      enddo ; enddo
+    endif
+
+    if (associated(MEKE%GME_snk)) then
+!$OMP do
+      do j=js,je ; do i=is,ie
+        src(i,j) = src(i,j) - CS%MEKE_GMECoeff*I_mass(i,j)*MEKE%GME_snk(i,j)
       enddo ; enddo
     endif
 
@@ -578,6 +588,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     if (CS%id_decay>0) call post_data(CS%id_decay, MEKE_decay, CS%diag)
     if (CS%id_GM_src>0) call post_data(CS%id_GM_src, MEKE%GM_src, CS%diag)
     if (CS%id_mom_src>0) call post_data(CS%id_mom_src, MEKE%mom_src, CS%diag)
+    if (CS%id_GME_snk>0) call post_data(CS%id_GME_snk, MEKE%GME_snk, CS%diag)
     if (CS%id_Le>0) call post_data(CS%id_Le, LmixScale, CS%diag)
     if (CS%id_gamma_b>0) then
       do j=js,je ; do i=is,ie
@@ -892,6 +903,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "The efficiency of the conversion of mean energy into \n"//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion \n"//&
                  "is not used or calculated.", units="nondim", default=-1.0)
+  call get_param(param_file, mdl, "MEKE_GMECOEFF", CS%MEKE_GMECoeff, &
+                 "The efficiency of the conversion of MEKE into mean energy \n"//&
+                 "by GME.  If MEKE_GMECOEFF is negative, this conversion \n"//&
+                 "is not used or calculated.", units="nondim", default=-1.0)
   call get_param(param_file, mdl, "MEKE_BGSRC", CS%MEKE_BGsrc, &
                  "A background energy source for MEKE.", units="W kg-1", &
                  default=0.0)
@@ -1065,6 +1080,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
      'MEKE energy available from momentum', 'W m-2')
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
+  CS%id_GME_snk = register_diag_field('ocean_model', 'MEKE_GME_snk',diag%axesT1, Time, &
+     'MEKE energy lost to GME backscatter', 'W m-2')
+  if (.not. associated(MEKE%GME_snk)) CS%id_GME_snk = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm')
   CS%id_Lrhines = register_diag_field('ocean_model', 'MEKE_Lrhines', diag%axesT1, Time, &
@@ -1097,7 +1115,7 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 ! Local variables
   type(vardesc) :: vd
-  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_KHCoeff, MEKE_viscCoeff
+  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_GMECoeff, MEKE_KHCoeff, MEKE_viscCoeff
   logical :: useMEKE
   integer :: isd, ied, jsd, jed
 
@@ -1107,6 +1125,7 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 ! Read these parameters to determine what should be in the restarts
   MEKE_GMcoeff =-1.; call read_param(param_file,"MEKE_GMCOEFF",MEKE_GMcoeff)
   MEKE_FrCoeff =-1.; call read_param(param_file,"MEKE_FRCOEFF",MEKE_FrCoeff)
+  MEKE_GMEcoeff =-1.; call read_param(param_file,"MEKE_GMECOEFF",MEKE_GMEcoeff)
   MEKE_KhCoeff =1.; call read_param(param_file,"MEKE_KHCOEFF",MEKE_KhCoeff)
   MEKE_viscCoeff =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF",MEKE_viscCoeff)
 
@@ -1131,6 +1150,9 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   endif
   if (MEKE_FrCoeff>=0.) then
     allocate(MEKE%mom_src(isd:ied,jsd:jed)) ; MEKE%mom_src(:,:) = 0.0
+  endif
+  if (MEKE_GMECoeff>=0.) then
+    allocate(MEKE%GME_snk(isd:ied,jsd:jed)) ; MEKE%GME_snk(:,:) = 0.0
   endif
   if (MEKE_KhCoeff>=0.) then
     allocate(MEKE%Kh(isd:ied,jsd:jed)) ; MEKE%Kh(:,:) = 0.0
@@ -1166,6 +1188,7 @@ subroutine MEKE_end(MEKE, CS)
   if (associated(MEKE%MEKE)) deallocate(MEKE%MEKE)
   if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
   if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
+  if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
   if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
   if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
   if (associated(MEKE%Au)) deallocate(MEKE%Au)

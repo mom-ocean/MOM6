@@ -11,6 +11,7 @@ type, public :: MEKE_type
     MEKE => NULL(), &   !< Vertically averaged eddy kinetic energy, in m2 s-2.
     GM_src => NULL(), & !< MEKE source due to thickness mixing (GM), in W m-2.
     mom_src => NULL(),& !< MEKE source from lateral friction in the momentum equations, in W m-2.
+    GME_snk => NULL(),& !< MEKE sink from GME backscatter in the momentum equations, in W m-2.
     Kh => NULL(), &     !< The MEKE-derived lateral mixing coefficient in m2 s-1.
     Rd_dx_h => NULL()   !< The deformation radius compared with the grid spacing, nondim.
                         !! Rd_dx_h is copied from VarMix_CS.
