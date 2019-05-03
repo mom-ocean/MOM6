@@ -442,7 +442,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       enddo ; enddo
     endif
 
-    call thickness_diffuse_get_KH(thickness_diffuse, KH_u_GME, KH_v_GME, G)
+    ! Get thickness diffusivity for use in GME 
+!    call thickness_diffuse_get_KH(thickness_diffuse, KH_u_GME, KH_v_GME, G)
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       grad_vel_mag_bt_h(i,j) = dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
@@ -463,10 +464,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     enddo ; enddo
 
 
-    ! halo updates
-    call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
-    call pass_vector(VarMix%slope_x, VarMix%slope_y, G%Domain)
-    call pass_vector(VarMix%N2_u, VarMix%N2_v, G%Domain)
+    ! halo updates (presently not used since GME is now hooked to MEKE)
+!    call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
+!    call pass_vector(VarMix%slope_x, VarMix%slope_y, G%Domain)
+!    call pass_vector(VarMix%N2_u, VarMix%N2_v, G%Domain)
 
   endif ! use_GME
 
