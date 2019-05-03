@@ -163,7 +163,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: q_flux            =>NULL() !< specific humidity flux [kg/m2/s]
   real, pointer, dimension(:,:) :: salt_flux         =>NULL() !< salt flux [kg/m2/s]
   real, pointer, dimension(:,:) :: seaice_melt_heat  =>NULL() !< sea ice and snow melt heat flux [W/m2]
-  real, pointer, dimension(:,:) :: seaice_melt_water =>NULL() !< water flux due to sea ice and snow melting [kg/m2/s]
+  real, pointer, dimension(:,:) :: seaice_melt       =>NULL() !< water flux due to sea ice and snow melting [kg/m2/s]
   real, pointer, dimension(:,:) :: lw_flux           =>NULL() !< long wave radiation [W/m2]
   real, pointer, dimension(:,:) :: sw_flux_vis_dir   =>NULL() !< direct visible sw radiation [W/m2]
   real, pointer, dimension(:,:) :: sw_flux_vis_dif   =>NULL() !< diffuse visible sw radiation [W/m2]
@@ -457,18 +457,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
          fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%lw_flux)) &
-      fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
+         fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%t_flux)) &
-      fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
+         fluxes%sens(i,j) = IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    ! ! sea ice and snow melt heat flux [W/m2]
-    ! if (associated(fluxes%seaice_melt_heat)) &
-    !   fluxes%seaice_melt_heat(i,j) = G%mask2dT(i,j) * IOB%seaice_melt_heat(i-i0,j-j0)
+    ! sea ice and snow melt heat flux [W/m2]
+    if (associated(IOB%seaice_melt_heat)) &
+         fluxes%seaice_melt_heat(i,j) = G%mask2dT(i,j) * IOB%seaice_melt_heat(i-i0,j-j0)
 
-    ! ! water flux due to sea ice and snow melt [kg/m2/s]
-    ! if (associated(fluxes%seaice_melt)) &
-    !   fluxes%seaice_melt(i,j) = G%mask2dT(i,j) * IOB%seaice_melt_water(i-i0,j-j0)
+    ! water flux due to sea ice and snow melt [kg/m2/s]
+    if (associated(IOB%seaice_melt)) &
+         fluxes%seaice_melt(i,j) = G%mask2dT(i,j) * IOB%seaice_melt(i-i0,j-j0)
 
     fluxes%latent(i,j) = 0.0
     if (associated(IOB%fprec)) then
@@ -540,10 +540,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
     sign_for_net_FW_bug = 1.
     if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
-      net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
+      net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j) + fluxes%seaice_melt(i,j)) + &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
                       (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
-      ! net_FW(i,j) = netFW(i,j) + fluxes%seaice_melt(i,j) * G%areaT(i,j)
 
       !   The following contribution appears to be calculating the volume flux of sea-ice
       ! melt. This calculation is clearly WRONG if either sea-ice has variable
@@ -1368,8 +1367,8 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   write(outunit,100) 'iobt%t_flux         '   , mpp_chksum( iobt%t_flux         )
   write(outunit,100) 'iobt%q_flux         '   , mpp_chksum( iobt%q_flux         )
   write(outunit,100) 'iobt%salt_flux      '   , mpp_chksum( iobt%salt_flux      )
- !write(outunit,100) 'iobt%seaice_melt_heat'  , mpp_chksum( iobt%seaice_melt_heat)
- !write(outunit,100) 'iobt%seaice_melt_water' , mpp_chksum( iobt%seaice_melt_water)
+  write(outunit,100) 'iobt%seaice_melt_heat'  , mpp_chksum( iobt%seaice_melt_heat)
+  write(outunit,100) 'iobt%seaice_melt    '   , mpp_chksum( iobt%seaice_melt    )
   write(outunit,100) 'iobt%lw_flux        '   , mpp_chksum( iobt%lw_flux        )
   write(outunit,100) 'iobt%sw_flux_vis_dir'   , mpp_chksum( iobt%sw_flux_vis_dir)
   write(outunit,100) 'iobt%sw_flux_vis_dif'   , mpp_chksum( iobt%sw_flux_vis_dif)

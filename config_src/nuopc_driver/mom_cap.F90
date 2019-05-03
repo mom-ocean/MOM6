@@ -204,6 +204,8 @@
 !! --------------------------|------------|-----------------|---------------------------------------|-------------------
 !! inst_pres_height_surface  | Pa         | p               | pressure of overlying sea ice and atmosphere
 !! mass_of_overlying_sea_ice | kg         | mi              | mass of overlying sea ice          | |
+!! seaice_melt_heat          | W m-2      | seaice_melt_heat| sea ice and snow melt heat flux    | |
+!! seaice_melt               | kg m-2 s-1 | seaice_melt     | water flux due to sea ice and snow melting    | |
 !! mean_calving_heat_flx     | W m-2      | calving_hflx    | heat flux, relative to 0C, of frozen land water into ocean
 !! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff         | |
 !! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux             |
@@ -961,6 +963,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% sw_flux_nir_dif (isc:iec,jsc:jec), &
              Ice_ocean_boundary% lprec (isc:iec,jsc:jec),           &
              Ice_ocean_boundary% fprec (isc:iec,jsc:jec),           &
+             Ice_ocean_boundary% seaice_melt_heat (isc:iec,jsc:jec),&
+             Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
              Ice_ocean_boundary% runoff (isc:iec,jsc:jec),          &
@@ -982,6 +986,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%sw_flux_nir_dif = 0.0
   Ice_ocean_boundary%lprec           = 0.0
   Ice_ocean_boundary%fprec           = 0.0
+  Ice_ocean_boundary%seaice_melt     = 0.0
+  Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
   Ice_ocean_boundary%p               = 0.0
   Ice_ocean_boundary%runoff          = 0.0
@@ -1031,8 +1037,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"                  , "will provide") !-> liquid runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
-  !call fld_list_add(fldsToOcn_num, fldsToOcn, "seaice_melt_water"          , "will provide")
-  !call fld_list_add(fldsToOcn_num, fldsToOcn, "seaice_melt_heat"           , "will provide")
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
 
  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide")
  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide")
