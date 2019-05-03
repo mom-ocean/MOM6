@@ -621,16 +621,16 @@ end subroutine MOM_write_data_0d
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! from the grid ids returned by a prior call to query_vardesc
-subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, GV, &
-                                  dim_names, dim_length, num_axes)
+subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, &
+                                  dim_names, dim_length, num_axes, GV)
   character(len=*), intent(in) :: hor_grid !< horizontal grid
   character(len=*), intent(in) :: z_grid !< vertical grid
   character(len=*), intent(in) :: t_grid_in !< time grid
   type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
-  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
   character(len=*), dimension(:), intent(out) :: dim_names !< array of dimension names
   integer, dimension(:), intent(out) :: dim_length !< array of dimension sizes
   integer, intent(out) ::  num_axes !< number of axes to register in the restart file
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure
   
   ! local
   logical :: use_lath
@@ -646,8 +646,6 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, GV, &
      gridLonT => NULL(), &
      gridLonB => NULL()
   
-  num_axes = 0
- 
   ! set the ocean grid coordinates
   gridLatT => G%gridLatT
   gridLatB => G%gridLatB
@@ -780,7 +778,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
   type(axis_data_type), intent(inout) :: axis_data_CS !< structure containing the axis data and metadata
   character(len=*), intent(in) :: axis_name !< name of the axis
   type(ocean_grid_type), intent(in) :: G !< ocean horizontal grid structure; G or dG
-  type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
+  type(verticalGrid_type), target, optional, intent(in) :: GV !< ocean vertical grid structure
   real,dimension(:), target, optional, intent(in) :: time_val !< time value
   character(len=*), optional,intent(in) :: time_units!< units for non-periodic time axis
   ! local
@@ -811,6 +809,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, G, GV, time_val, time_unit
   axis_data_CS%units = ''
   axis_data_CS%horgrid_position = 0
   axis_data_CS%is_domain_decomposed = .false.
+  axis_data_CS%positive = ''
   
   select case(trim(axis_name))
      case('lath')
@@ -1437,8 +1436,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G,&
+                              dim_names, dim_lengths, num_axes, GV)
 
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_4d: num_axes is an invalid value.")
@@ -1568,8 +1567,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
+                              dim_names, dim_lengths, num_axes, GV)
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_3d: num_axes is an invalid value.")
   endif
@@ -1700,8 +1699,8 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
+                              dim_names, dim_lengths, num_axes, GV)
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_2d: num_axes is an invalid value.")
   endif
@@ -1829,8 +1828,8 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
 
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, GV, &
-                              dim_names, dim_lengths, num_axes)
+  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
+                              dim_names, dim_lengths, num_axes, GV)
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_1d: num_axes is an invalid value.")
   endif
