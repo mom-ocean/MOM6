@@ -18,7 +18,7 @@ else
 EXPERIMENTS ?= unit_tests double_gyre flow_downslope/z CVmix_SCM_tests/cooling_only/EPBL
 endif
 
-FMS_PACKAGES ?= platform,include,memutils,constants,mpp,fms,time_manager,diag_manager,data_override,coupler/ensemble_manager.F90,axis_utils,horiz_interp,time_interp,astronomy,mosaic,random_numbers
+FMS_PACKAGES ?= platform,include,memutils,constants,mpp,fms,time_manager,diag_manager,data_override,coupler/coupler_types.F90,coupler/ensemble_manager.F90,axis_utils,horiz_interp,time_interp,astronomy,mosaic,random_numbers
 TEMPLATE ?= .testing/linux-ubuntu-xenial-gnu.mk
 MPIRUN ?= mpirun
 
