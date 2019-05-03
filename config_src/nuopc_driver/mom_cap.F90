@@ -756,6 +756,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   integer                                :: userRc
   character(len=512)                     :: restartfile          ! Path/Name of restart file
   character(len=*), parameter            :: subname='(mom_cap:InitializeAdvertise)'
+  character(len=32)                      :: calendar
 !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -807,7 +808,35 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fms_init(mpi_comm_mom)
   call constants_init
   call field_manager_init
-  call set_calendar_type (JULIAN)
+
+  ! determine the calendar
+  if (cesm_coupled) then
+     call NUOPC_CompAttributeGet(gcomp, name="calendar", value=cvalue, &
+          isPresent=isPresent, isSet=isSet, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+     if (isPresent .and. isSet) then
+        read(cvalue,*) calendar
+        select case (trim(calendar))
+           case ("NO_LEAP")
+              call set_calendar_type (NOLEAP)
+           case ("GREGORIAN")
+              call set_calendar_type (GREGORIAN)
+           case default
+              call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+                 msg=subname//": Calendar not supported in MOM6: "//trim(calendar), &
+                 line=__LINE__, file=__FILE__, rcToReturn=rc)
+           end select
+     else
+        call set_calendar_type (NOLEAP)
+     endif
+
+  else
+     call set_calendar_type (JULIAN)
+  endif
+
   call diag_manager_init
 
   ! this ocean connector will be driven at set interval
