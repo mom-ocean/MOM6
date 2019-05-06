@@ -85,6 +85,7 @@ type, public :: MEKE_CS ; private
   type(group_pass_type) :: pass_MEKE !< Type for group halo pass calls
   type(group_pass_type) :: pass_Kh   !< Type for group halo pass calls
   type(group_pass_type) :: pass_Ku   !< Type for group halo pass calls
+  type(group_pass_type) :: pass_Au   !< Type for group halo pass calls
   type(group_pass_type) :: pass_del2MEKE !< Type for group halo pass calls
 end type MEKE_CS
 
@@ -565,9 +566,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     if (CS%viscosity_coeff/=0.) then
       do j=js,je ; do i=is,ie
         MEKE%Ku(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)
+        MEKE%Au(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)**3
       enddo ; enddo
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_Ku, G%Domain)
+      call do_group_pass(CS%pass_Au, G%Domain)
       call cpu_clock_end(CS%id_clock_pass)
     endif
 
@@ -578,6 +581,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     if (CS%id_Ut>0) call post_data(CS%id_Ut, sqrt(max(0.,2.0*MEKE%MEKE*barotrFac2)), CS%diag)
     if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
     if (CS%id_Ku>0) call post_data(CS%id_Ku, MEKE%Ku, CS%diag)
+    if (CS%id_Au>0) call post_data(CS%id_Au, MEKE%Au, CS%diag)
     if (CS%id_KhMEKE_u>0) call post_data(CS%id_KhMEKE_u, Kh_u, CS%diag)
     if (CS%id_KhMEKE_v>0) call post_data(CS%id_KhMEKE_v, Kh_v, CS%diag)
     if (CS%id_src>0) call post_data(CS%id_src, src, CS%diag)
@@ -719,7 +723,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
     else
       EKE = 0.
     endif
-    MEKE%MEKE(i,j) = EKE
+!    MEKE%MEKE(i,j) = EKE
+    MEKE%MEKE(i,j) = (G%Zd_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
   enddo ; enddo
 
 end subroutine MEKE_equilibrium
@@ -839,7 +844,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   type(MOM_restart_CS),    pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 ! Local variables
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz
-  logical :: laplacian, useVarMix, coldStart
+  logical :: laplacian, biharmonic, useVarMix, coldStart
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_MEKE" ! This module's name.
@@ -1004,8 +1009,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
-  if (CS%viscosity_coeff/=0. .and. .not. laplacian) call MOM_error(FATAL, &
-                 "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF is true.")
+  call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
+
+  if (CS%viscosity_coeff/=0. .and. .not. laplacian .and. .not. biharmonic) call MOM_error(FATAL, &
+                 "Either LAPLACIAN or BIHARMONIC must be true if MEKE_VISCOSITY_COEFF is true.")
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
@@ -1027,6 +1034,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
     call create_group_pass(CS%pass_Ku, MEKE%Ku, G%Domain)
     call do_group_pass(CS%pass_Ku, G%Domain)
   endif
+  if (associated(MEKE%Au)) then
+    call create_group_pass(CS%pass_Au, MEKE%Au, G%Domain)
+    call do_group_pass(CS%pass_Au, G%Domain)
+  endif
   if (allocated(CS%del2MEKE)) then
     call create_group_pass(CS%pass_del2MEKE, CS%del2MEKE, G%Domain)
     call do_group_pass(CS%pass_del2MEKE, G%Domain)
@@ -1043,6 +1054,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   CS%id_Ku = register_diag_field('ocean_model', 'MEKE_KU', diag%axesT1, Time, &
      'MEKE derived lateral viscosity', 'm2 s-1')
   if (.not. associated(MEKE%Ku)) CS%id_Ku = -1
+  CS%id_Au = register_diag_field('ocean_model', 'MEKE_AU', diag%axesT1, Time, &
+     'MEKE derived lateral biharmonic viscosity', 'm4 s-1')
+  if (.not. associated(MEKE%Au)) CS%id_Au = -1
   CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
      'MEKE derived eddy-velocity scale', 'm s-1')
   if (.not. associated(MEKE%MEKE)) CS%id_Ue = -1
@@ -1149,9 +1163,14 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
   if (MEKE_viscCoeff/=0.) then
     allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
-    vd = var_desc("MEKE_Ah", "m2 s-1", hor_grid='h', z_grid='1', &
+    vd = var_desc("MEKE_Ku", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
+ 
+    allocate(MEKE%Au(isd:ied,jsd:jed)) ; MEKE%Au(:,:) = 0.0
+    vd = var_desc("MEKE_Au", "m4 s-1", hor_grid='h', z_grid='1', &
+             longname="Lateral biharmonic viscosity from Mesoscale Eddy Kinetic Energy")
+    call register_restart_field(MEKE%Au, vd, .false., restart_CS)
   endif
 
 end subroutine MEKE_alloc_register_restart
@@ -1172,6 +1191,7 @@ subroutine MEKE_end(MEKE, CS)
   if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
   if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
   if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
+  if (associated(MEKE%Au)) deallocate(MEKE%Au)
   if (allocated(CS%del2MEKE)) deallocate(CS%del2MEKE)
   deallocate(MEKE)
 
