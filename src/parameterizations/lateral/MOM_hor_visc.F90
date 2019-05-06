@@ -249,7 +249,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     dudx, dvdy, &    ! components in the horizontal tension (s-1)
     grad_vel_mag_h, & ! Magnitude of the velocity gradient tensor squared at h-points (s-2)
     grad_vel_mag_bt_h, & ! Magnitude of the barotropic velocity gradient tensor squared at h-points (s-2)
-    max_diss_rate_bt ! maximum possible energy dissipated by barotropic lateral friction (m2 s-3)
+    grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared (m-2 s-2)
+    max_diss_rate_bt, & ! maximum possible energy dissipated by barotropic lateral friction (m2 s-3)
+    boundary_mask ! A mask that zeroes out cells with at least one land edge
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain (s-1)
@@ -404,8 +406,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     str_xx_GME(:,:) = 0.0
     str_xy_GME(:,:) = 0.0
 
-    call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
+    do j=js,je ; do i=is,ie
+      boundary_mask(i,j) = (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
+    enddo ; enddo
 
+    call pass_var(boundary_mask, G%Domain, complete=.true.)
+
+    ! Get barotropic velocities and their gradients
+    call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
     call pass_vector(ubtav, vbtav, G%Domain)
 
     do j=js,je ; do i=is,ie
@@ -447,9 +455,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !    call thickness_diffuse_get_KH(thickness_diffuse, KH_u_GME, KH_v_GME, G)
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      grad_vel_mag_bt_h(i,j) = dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
+      grad_vel_mag_bt_h(i,j) = boundary_mask(i,j) * (dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
             (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
-            (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2
+            (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2)
     enddo ; enddo
 
     if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
@@ -459,9 +467,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
     endif ; endif
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      grad_vel_mag_bt_q(I,J) = dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+      grad_vel_mag_bt_q(I,J) = boundary_mask(i,j) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
             (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
-            (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2
+            (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2)
     enddo ; enddo
 
 
@@ -492,15 +500,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
-
-
-    if ((find_FrictWork) .or. (CS%use_GME)) then
-      do j=js,je ; do i=is,ie
-        grad_vel_mag_h(i,j) = (dudx(i,j)**2 + dvdy(i,j)**2 + &
-             (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
-             (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2)
-      enddo ; enddo
-    endif
 
     ! Interpolate the thicknesses to velocity points.
     ! The extra wide halos are to accommodate the cross-corner-point projections
@@ -1084,11 +1083,33 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
       call pass_var(dvdx, G%Domain, position=CORNER, complete=.true.)
       call pass_var(dudy, G%Domain, position=CORNER, complete=.true.)
 
+      if (CS%Laplacian) then
+        do j=js,je ; do i=is,ie
+          grad_vel_mag_h(i,j) = boundary_mask(i,j) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
+             (0.25*(dvdx(I,J)+dvdx(I-1,J)+dvdx(I,J-1)+dvdx(I-1,J-1)) )**2 + &
+             (0.25*(dudy(I,J)+dudy(I-1,J)+dudy(I,J-1)+dudy(I-1,J-1)) )**2)
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+          grad_vel_mag_h(i,j) = 0.0
+        enddo ; enddo
+      endif
+
+      if (CS%biharmonic) then
+        do j=js,je ; do i=is,ie
+          grad_d2vel_mag_h(i,j) = boundary_mask(i,j) * ((0.5*(u0(I,j) + u0(I-1,j)))**2 + &
+             (0.5*(v0(i,J) + v0(i,J-1)))**2)
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+          grad_d2vel_mag_h(i,j) = 0.0
+        enddo ; enddo
+      endif
+
       do j=js,je ; do i=is,ie
         ! Diagnose  -Kh * |del u|^2 - Ah * |del^2 u|^2
         diss_rate(i,j,k) = -Kh_h(i,j,k) * grad_vel_mag_h(i,j) - &
-                              Ah_h(i,j,k) * ((0.5*(u0(I,j) + u0(I-1,j)))**2 + &
-                                             (0.5*(v0(i,J) + v0(i,J-1)))**2)
+                              Ah_h(i,j,k) * grad_d2vel_mag_h(i,j)
         FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
 
         if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
@@ -1130,7 +1151,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         endif
 
         ! apply mask
-        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
+        GME_coeff = GME_coeff * boundary_mask(i,j)
 
         GME_coeff = MIN(GME_coeff,GME_coeff_limiter)
 
@@ -1150,7 +1171,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
         endif
 
         ! apply mask
-        GME_coeff = GME_coeff * (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
+        GME_coeff = GME_coeff * boundary_mask(i,j)
 
         GME_coeff = MIN(GME_coeff,GME_coeff_limiter)
 
@@ -1315,6 +1336,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
             enddo ; enddo
           endif
         endif
+
+!        do j=js,je ; do i=is,ie
+!         ! MEKE%mom_src now is sign definite because it only uses the dissipation
+!         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(-FrictWorkMax(i,j,k),FrictWork_diss(i,j,k))
+!        enddo ; enddo
+!        if (CS%use_GME) then
+!          do j=js,je ; do i=is,ie
+!            ! MEKE%mom_src now is sign definite because it only uses the dissipation
+!            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork_GME(i,j,k)
+!          enddo ; enddo
+!        endif
+
       endif
     endif ; endif
 
