@@ -97,7 +97,7 @@ type, public :: set_diffusivity_CS ; private
 
   real :: TKE_itide_max !< maximum internal tide conversion [W m-2]
                         !! available to mix above the BBL
-  real :: omega         !< Earth's rotation frequency [s-1]
+  real :: omega         !< Earth's rotation frequency [T-1]
   logical :: ML_radiation !< allow a fraction of TKE available from wind work
                           !! to penetrate below mixed layer base with a vertical
                           !! decay scale determined by the minimum of
@@ -284,7 +284,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   I_Rho0     = 1.0/GV%Rho0
   kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant [m2 s-1].
   dt_fill    = 7200.              !### Dimensionalconstant [s].
-  Omega2     = CS%Omega*CS%Omega
+  Omega2     = (US%s_to_T**2) * CS%omega * CS%omega
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -721,7 +721,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   I_dt      = 1.0/dt
-  Omega2    = CS%Omega**2
+  Omega2    = (US%s_to_T**2) * CS%omega**2
   G_Rho0    = (GV%g_Earth*US%m_to_Z**2) / GV%Rho0
   H_neglect = GV%H_subroundoff
   I_Rho0    = 1.0/GV%Rho0
@@ -855,7 +855,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
           (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K), 0.0))) * &
                    ((GV%H_to_Z*h(i,j,k) + dh_max) * maxEnt(i,k))
       TKE_to_Kd(i,k) = US%m_to_Z**3 / (G_Rho0 * dRho_lay + &
-                              CS%Omega**2 * GV%H_to_Z*(h(i,j,k) + H_neglect))
+                              (US%s_to_T**2 * CS%omega**2) * GV%H_to_Z*(h(i,j,k) + H_neglect))
     endif
   enddo ; enddo
 
@@ -1421,7 +1421,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   do_diag_Kd_BBL = associated(Kd_BBL)
 
   N2_min = 0.
-  if (CS%LOTW_BBL_use_omega) N2_min = (CS%omega**2)
+  if (CS%LOTW_BBL_use_omega) N2_min = (US%s_to_T**2 * CS%omega**2)
 
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
@@ -1569,7 +1569,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   integer :: i, k, is, ie, nz, kml
   is = G%isc ; ie = G%iec ; nz = G%ke
 
-  Omega2    = CS%Omega**2
+  Omega2    = US%s_to_T**2 * CS%omega**2
   C1_6      = 1.0 / 6.0
   kml       = GV%nkml
   h_neglect = GV%H_subroundoff*GV%H_to_Z
@@ -1951,7 +1951,6 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0
   CS%bulkmixedlayer = (GV%nkml > 0)
 
-
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 
@@ -1964,7 +1963,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "FLUX_RI_MAX*N2/(N2+OMEGA2).", default=0.2)
   call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5)
+                 default=7.2921e-5, scale=US%T_to_s)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind \n"//&
@@ -1974,7 +1973,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "length scale.", default=.false.)
   if (CS%ML_radiation) then
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_subroundoff*GV%H_to_Z)
+    CS%ustar_min = 2e-4*(US%s_to_T * CS%omega)*(GV%Angstrom_Z + GV%H_subroundoff*GV%H_to_Z)
 
     call get_param(param_file, mdl, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&
