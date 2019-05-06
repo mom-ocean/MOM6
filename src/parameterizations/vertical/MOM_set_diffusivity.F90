@@ -92,7 +92,7 @@ type, public :: set_diffusivity_CS ; private
   real :: dissip_min    !< Minimum dissipation [Z2 m-2 W m-3 ~> W m-3]
   real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N [Z2 m-2 W m-3 ~> W m-3]
   real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N [Z2 m-2 W m-3 T ~> J m-3]
-  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [Z2 m-2 W m-3 s2 ~> J s m-3]
+  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [Z2 m-2 W m-3 T2 ~> J s m-3]
   real :: dissip_Kd_min !< Minimum Kd [Z2 T-1 ~> m2 s-1], with dissipation Rho0*Kd_min*N^2
 
   real :: TKE_itide_max !< maximum internal tide conversion [W m-2]
