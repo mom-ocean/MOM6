@@ -91,9 +91,9 @@ type, public :: set_diffusivity_CS ; private
                                !! than the following:
   real :: dissip_min    !< Minimum dissipation [Z2 m-2 W m-3 ~> W m-3]
   real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N [Z2 m-2 W m-3 ~> W m-3]
-  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N [Z2 m-2 W m-3 s ~> J m-3]
+  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N [Z2 m-2 W m-3 T ~> J m-3]
   real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [Z2 m-2 W m-3 s2 ~> J s m-3]
-  real :: dissip_Kd_min !< Minimum Kd [Z2 s-1 ~> m2 s-1], with dissipation Rho0*Kd_min*N^2
+  real :: dissip_Kd_min !< Minimum Kd [Z2 T-1 ~> m2 s-1], with dissipation Rho0*Kd_min*N^2
 
   real :: TKE_itide_max !< maximum internal tide conversion [W m-2]
                         !! available to mix above the BBL
@@ -231,7 +231,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! local variables
   real, dimension(SZI_(G)) :: &
-    N2_bot        ! bottom squared buoyancy frequency [s-2]
+    N2_bot        ! bottom squared buoyancy frequency [T-2 ~> s-2]
 
   type(diffusivity_diags)  :: dd ! structure w/ arrays of pointers to avail diags
 
@@ -243,14 +243,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                   ! after full convective adjustment.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
-    N2_lay, &     !< squared buoyancy frequency associated with layers [s-2]
+    N2_lay, &     !< squared buoyancy frequency associated with layers [T-2 ~> s-2]
     maxTKE, &     !< energy required to entrain to h_max [m3 s-3]
     TKE_to_Kd     !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   !< TKE dissipated within a layer and Kd in that layer, in
                   !< m2 s-1 / m3 s-3 = [s2 m-1].
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    N2_int,   &   !< squared buoyancy frequency associated at interfaces [s-2]
+    N2_int,   &   !< squared buoyancy frequency associated at interfaces [T-2 ~> s-2]
     dRho_int, &   !< locally ref potential density difference across interfaces [kg m-3]
     KT_extra, &   !< double difusion diffusivity of temperature [Z2 s-1 ~> m2 s-1]
     KS_extra      !< double difusion diffusivity of salinity [Z2 s-1 ~> m2 s-1]
@@ -401,11 +401,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot)
 
     if (associated(dd%N2_3d)) then
-      do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
+      do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = US%s_to_T**2 * N2_int(i,K) ; enddo ; enddo
     endif
 
     ! Add background mixing
-    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
+    call calculate_bkgnd_mixing(h, tv, US%s_to_T**2 * N2_lay, Kd_lay, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
 
     ! Double-diffusion (old method)
     if (CS%double_diffusion) then
@@ -482,8 +482,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd, Kd_int)
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
-    call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tm_csp, &
-                                N2_lay, N2_int, Kd_lay, Kd_int, CS%Kd_max, visc%Kv_slow)
+    call calculate_tidal_mixing(h, US%s_to_T**2 * N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tm_csp, &
+                                US%s_to_T**2 * N2_lay, US%s_to_T**2 * N2_int, Kd_lay, Kd_int, CS%Kd_max, visc%Kv_slow)
 
     ! This adds the diffusion sustained by the energy extracted from the flow
     ! by the bottom drag.
@@ -506,23 +506,23 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       do k=2,nz-1 ; do i=is,ie
         dissip = max( CS%dissip_min, &   ! Const. floor on dissip.
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
-                      CS%dissip_N2 * N2_lay(i,k) ) ! Floor of Kd_min*rho0/F_Ri
+                      CS%dissip_N2 * N2_lay(i,k)) ! Floor of Kd_min*rho0/F_Ri
         Kd_lay(i,j,k) = max( Kd_lay(i,j,k) , &  ! Apply floor to Kd
-                            dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + (US%s_to_T**2 * Omega2)))) )
+                            dissip * (CS%FluxRi_max / (GV%Rho0 * ((US%s_to_T**2 * N2_lay(i,k)) + (US%s_to_T**2 * Omega2)))) )
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
         dissip = max( CS%dissip_min, &   ! Const. floor on dissip.
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
-                      CS%dissip_N2 * N2_int(i,K) ) ! Floor of Kd_min*rho0/F_Ri
+                      CS%dissip_N2 * N2_int(i,K)) ! Floor of Kd_min*rho0/F_Ri
         Kd_int(i,j,K) = max( Kd_int(i,j,K) , &  ! Apply floor to Kd
-                             dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + (US%s_to_T**2 * Omega2)))) )
+                             dissip * (CS%FluxRi_max / (GV%Rho0 * ((US%s_to_T**2 * N2_int(i,K)) + (US%s_to_T**2 * Omega2)))) )
       enddo ; enddo ; endif
     endif
 
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
-        dd%Kd_Work(i,j,k) = GV%Rho0 * US%Z_to_m**3*Kd_lay(i,j,k) * N2_lay(i,k) * &
+        dd%Kd_Work(i,j,k) = GV%Rho0 * (US%Z_to_m**3 * Kd_lay(i,j,k)) * (US%s_to_T**2 * N2_lay(i,k)) * &
                             GV%H_to_Z*h(i,j,k)  ! Watt m-2 s = kg s-3
       enddo ; enddo
     endif
@@ -670,7 +670,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real, dimension(SZI_(G),SZK_(G)+1), intent(in)  :: dRho_int !< Change in locally referenced potential density
                                                           !! across each interface [kg m-3].
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: N2_lay !< The squared buoyancy frequency of the
-                                                          !! layers [s-2].
+                                                          !! layers [T-2 ~> s-2].
   integer,                          intent(in)    :: j    !< j-index of row to work on
   real,                             intent(in)    :: dt   !< Time increment [s].
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
@@ -729,7 +729,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ( N2_lay(i,k) + (US%s_to_T**2 * Omega2) ) ! Units of m3 Z-2 s-2.
+      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ((US%s_to_T**2 * N2_lay(i,k)) + (US%s_to_T**2 * Omega2)) ! Units of m3 Z-2 s-2.
       if (hN2pO2>0.) then
         TKE_to_Kd(i,k) = 1.0 / hN2pO2 ! Units of Z2 s2 m-3.
       else; TKE_to_Kd(i,k) = 0.; endif
@@ -830,7 +830,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   enddo
   do k=2,kmb ; do i=is,ie
     maxTKE(i,k) = 0.0
-    TKE_to_Kd(i,k) = US%m_to_Z**3 / ((N2_lay(i,k) + (US%s_to_T**2 * Omega2)) * &
+    TKE_to_Kd(i,k) = US%m_to_Z**3 / (((US%s_to_T**2 * N2_lay(i,k)) + (US%s_to_T**2 * Omega2)) * &
                             (GV%H_to_Z*(h(i,j,k) + H_neglect)))
   enddo ; enddo
   do k=kmb+1,kb_min-1 ; do i=is,ie
@@ -884,10 +884,10 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
                             intent(out) :: dRho_int !< Change in locally referenced potential density
                                                 !! across each interface [kg m-3].
   real, dimension(SZI_(G),SZK_(G)+1), &
-                            intent(out) :: N2_int !< The squared buoyancy frequency at the interfaces [s-2].
+                            intent(out) :: N2_int !< The squared buoyancy frequency at the interfaces [T-2 ~> s-2].
   real, dimension(SZI_(G),SZK_(G)), &
-                            intent(out) :: N2_lay !< The squared buoyancy frequency of the layers [s-2].
-  real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency [s-2].
+                            intent(out) :: N2_lay !< The squared buoyancy frequency of the layers [T-2 ~> s-2].
+  real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency [T-2 ~> s-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces
@@ -950,12 +950,12 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
 
   ! Set the buoyancy frequencies.
   do k=1,nz ; do i=is,ie
-    N2_lay(i,k) = (US%s_to_T**2 * G_Rho0) * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
+    N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
                   (GV%H_to_Z*(h(i,j,k) + H_neglect))
   enddo ; enddo
   do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
   do K=2,nz ; do i=is,ie
-    N2_int(i,K) = (US%s_to_T**2 * G_Rho0) * dRho_int(i,K) / &
+    N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
                   (0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k) + H_neglect))
   enddo ; enddo
 
@@ -998,7 +998,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
 
   do i=is,ie
     if (hb(i) > 0.0) then
-      N2_bot(i) = ((US%s_to_T **2 * G_Rho0) * dRho_bot(i)) / hb(i)
+      N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
@@ -1382,7 +1382,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                                                   !! boundary layer properies, and related fields.
   integer,                  intent(in)    :: j  !< j-index of row to work on
   real, dimension(SZI_(G),SZK_(G)+1), &
-                            intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces [s-2]
+                            intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces [T-2 ~> s-2]
   type(set_diffusivity_CS), pointer       :: CS !< Diffusivity control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(inout) :: Kd_lay !< Layer net diffusivity [Z2 s-1 ~> m2 s-1]
@@ -1496,7 +1496,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! TKE associated with Kd_wall [m3 s-2].
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = US%Z_to_m**3*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), (US%s_to_T**2 * N2_min))
+      TKE_Kd_wall = US%Z_to_m**3 * US%s_to_T**2 * Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall > 0.) then
@@ -2135,16 +2135,16 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "The coefficient multiplying N, following Gargett, used to \n"//&
                  "set a minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
-                 units="J m-3", default=0.0, scale=US%m_to_Z**2)
+                 units="J m-3", default=0.0, scale=(US%m_to_Z**2)*US%s_to_T)
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
-                 units="m2 s-1", default=0.0, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=0.0, scale=(US%m_to_Z**2)*US%T_to_s)
 
   CS%limit_dissipation = (CS%dissip_min>0.) .or. (CS%dissip_N1>0.) .or. &
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
   CS%dissip_N2 = 0.0
   if (CS%FluxRi_max > 0.0) &
-    CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
+    CS%dissip_N2 = US%s_to_T**3 * CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=US%Z_to_m**2)
