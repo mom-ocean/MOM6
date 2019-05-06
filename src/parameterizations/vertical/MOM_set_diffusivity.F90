@@ -97,7 +97,7 @@ type, public :: set_diffusivity_CS ; private
 
   real :: TKE_itide_max !< maximum internal tide conversion [W m-2]
                         !! available to mix above the BBL
-  real :: omega         !< Earth's rotation frequency [T-1]
+  real :: omega         !< Earth's rotation frequency [T-1 ~> s-1]
   logical :: ML_radiation !< allow a fraction of TKE available from wind work
                           !! to penetrate below mixed layer base with a vertical
                           !! decay scale determined by the minimum of
@@ -121,7 +121,7 @@ type, public :: set_diffusivity_CS ; private
                               !! to ML_rad as applied to the other surface
                               !! sources of TKE in the mixed layer code.
   real    :: ustar_min        !< A minimum value of ustar to avoid numerical
-                              !! problems [Z s-1 ~> m s-1].  If the value is small enough,
+                              !! problems [Z T-1 ~> m s-1].  If the value is small enough,
                               !! this parameter should not affect the solution.
   real    :: TKE_decay        !< ratio of natural Ekman depth to TKE decay scale [nondim]
   real    :: mstar            !< ratio of friction velocity cubed to
@@ -257,7 +257,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   real :: I_Rho0        ! inverse of Boussinesq density [m3 kg-1]
   real :: dissip        ! local variable for dissipation calculations [Z2 W m-5 ~> W m-3]
-  real :: Omega2        ! squared absolute rotation rate [s-2]
+  real :: Omega2        ! squared absolute rotation rate [T-2 ~> s-2]
 
   logical   :: use_EOS      ! If true, compute density from T/S using equation of state.
   type(p3d) :: z_ptrs(6)    ! pointers to diagns to be interpolated into depth space
@@ -284,7 +284,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   I_Rho0     = 1.0/GV%Rho0
   kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant [m2 s-1].
   dt_fill    = 7200.              !### Dimensionalconstant [s].
-  Omega2     = (US%s_to_T**2) * CS%omega * CS%omega
+  Omega2     = CS%omega * CS%omega
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -508,7 +508,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_lay(i,k) ) ! Floor of Kd_min*rho0/F_Ri
         Kd_lay(i,j,k) = max( Kd_lay(i,j,k) , &  ! Apply floor to Kd
-                            dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + Omega2))) )
+                            dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + (US%s_to_T**2 * Omega2)))) )
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
@@ -516,7 +516,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_int(i,K) ) ! Floor of Kd_min*rho0/F_Ri
         Kd_int(i,j,K) = max( Kd_int(i,j,K) , &  ! Apply floor to Kd
-                             dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + Omega2))) )
+                             dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + (US%s_to_T**2 * Omega2)))) )
       enddo ; enddo ; endif
     endif
 
@@ -709,8 +709,8 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
                       ! undergo before entraining all fluid in the layers
                       ! above or below [Z ~> m].
   real :: dRho_lay    ! density change across a layer [kg m-3]
-  real :: Omega2      ! rotation rate squared [s-2]
-  real :: G_Rho0      ! gravitation accel divided by Bouss ref density [m4 s-2 kg-1]
+  real :: Omega2      ! rotation rate squared [T-2 ~> s-2]
+  real :: G_Rho0      ! gravitation accel divided by Bouss ref density [m4 T-2 kg-1 -> m4 s-2 kg-1]
   real :: I_Rho0      ! inverse of Boussinesq reference density [m3 kg-1]
   real :: I_dt        ! 1/dt [s-1]
   real :: H_neglect   ! negligibly small thickness [H ~> m or kg m-2]
@@ -721,15 +721,15 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   I_dt      = 1.0/dt
-  Omega2    = (US%s_to_T**2) * CS%omega**2
-  G_Rho0    = (GV%g_Earth*US%m_to_Z**2) / GV%Rho0
+  Omega2    = CS%omega**2
+  G_Rho0    = (GV%g_Earth*US%m_to_Z**2 * US%T_to_s**2) / GV%Rho0
   H_neglect = GV%H_subroundoff
   I_Rho0    = 1.0/GV%Rho0
 
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m3 Z-2 s-2.
+      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ( N2_lay(i,k) + (US%s_to_T**2 * Omega2) ) ! Units of m3 Z-2 s-2.
       if (hN2pO2>0.) then
         TKE_to_Kd(i,k) = 1.0 / hN2pO2 ! Units of Z2 s2 m-3.
       else; TKE_to_Kd(i,k) = 0.; endif
@@ -830,7 +830,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   enddo
   do k=2,kmb ; do i=is,ie
     maxTKE(i,k) = 0.0
-    TKE_to_Kd(i,k) = US%m_to_Z**3 / ((N2_lay(i,k) + Omega2) * &
+    TKE_to_Kd(i,k) = US%m_to_Z**3 / ((N2_lay(i,k) + (US%s_to_T**2 * Omega2)) * &
                             (GV%H_to_Z*(h(i,j,k) + H_neglect)))
   enddo ; enddo
   do k=kmb+1,kb_min-1 ; do i=is,ie
@@ -854,7 +854,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
       maxTKE(i,k) = I_dt*US%Z_to_m * ((GV%g_Earth * I_Rho0) * &
           (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K), 0.0))) * &
                    ((GV%H_to_Z*h(i,j,k) + dh_max) * maxEnt(i,k))
-      TKE_to_Kd(i,k) = US%m_to_Z**3 / (G_Rho0 * dRho_lay + &
+      TKE_to_Kd(i,k) = US%m_to_Z**3 / ((US%s_to_T**2 * G_Rho0) * dRho_lay + &
                               (US%s_to_T**2 * CS%omega**2) * GV%H_to_Z*(h(i,j,k) + H_neglect))
     endif
   enddo ; enddo
@@ -906,14 +906,14 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   real :: Rml_base  ! density of the deepest variable density layer
   real :: dz_int    ! thickness associated with an interface [Z ~> m].
   real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density
-                    ! times some unit conversion factors [Z m3 s-2 kg-1 ~> m4 s-2 kg-1].
+                    ! times some unit conversion factors [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
   real :: H_neglect ! negligibly small thickness, in the same units as h.
 
   logical :: do_i(SZI_(G)), do_any
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = (GV%g_Earth*US%m_to_Z**2) / GV%Rho0
+  G_Rho0    = (GV%g_Earth*US%m_to_Z**2 * US%T_to_s**2) / GV%Rho0
   H_neglect = GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -950,12 +950,12 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
 
   ! Set the buoyancy frequencies.
   do k=1,nz ; do i=is,ie
-    N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
+    N2_lay(i,k) = (US%s_to_T**2 * G_Rho0) * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
                   (GV%H_to_Z*(h(i,j,k) + H_neglect))
   enddo ; enddo
   do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
   do K=2,nz ; do i=is,ie
-    N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
+    N2_int(i,K) = (US%s_to_T**2 * G_Rho0) * dRho_int(i,K) / &
                   (0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k) + H_neglect))
   enddo ; enddo
 
@@ -998,7 +998,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
 
   do i=is,ie
     if (hb(i) > 0.0) then
-      N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
+      N2_bot(i) = ((US%s_to_T **2 * G_Rho0) * dRho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
@@ -1410,7 +1410,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real :: Kd_lower         ! diffusivity for lower interface [Z2 s-1 ~> m2 s-1]
   real :: ustar_D          ! u* x D  [Z2 s-1 ~> m2 s-1].
   real :: I_Rho0           ! 1 / rho0
-  real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall [s-2]
+  real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall [T-2 ~> s-2]
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
                            ! the assumption that this extracted energy also drives diapycnal mixing.
   integer :: i, k, km1
@@ -1421,7 +1421,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   do_diag_Kd_BBL = associated(Kd_BBL)
 
   N2_min = 0.
-  if (CS%LOTW_BBL_use_omega) N2_min = (US%s_to_T**2 * CS%omega**2)
+  if (CS%LOTW_BBL_use_omega) N2_min = CS%omega**2
 
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
@@ -1496,7 +1496,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! TKE associated with Kd_wall [m3 s-2].
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = US%Z_to_m**3*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
+      TKE_Kd_wall = US%Z_to_m**3*Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), (US%s_to_T**2 * N2_min))
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall > 0.) then
@@ -1558,7 +1558,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   real :: ustar_sq          ! ustar squared [Z2 s-2 ~> m2 s-2]
   real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation [Z2 s-1 ~> m2 s-1].
   real :: C1_6              ! 1/6
-  real :: Omega2            ! rotation rate squared [s-2].
+  real :: Omega2            ! rotation rate squared [T-2 ~> s-2].
   real :: z1                ! layer thickness times I_decay [nondim]
   real :: dzL               ! thickness converted to heights [Z ~> m].
   real :: I_decay_len2_TKE  ! squared inverse decay lengthscale for
@@ -1569,7 +1569,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
   integer :: i, k, is, ie, nz, kml
   is = G%isc ; ie = G%iec ; nz = G%ke
 
-  Omega2    = US%s_to_T**2 * CS%omega**2
+  Omega2    = CS%omega**2
   C1_6      = 1.0 / 6.0
   kml       = GV%nkml
   h_neglect = GV%H_subroundoff*GV%H_to_Z
@@ -1581,15 +1581,15 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
 
   do i=is,ie ; if (do_i(i)) then
     if (CS%ML_omega_frac >= 1.0) then
-      f_sq = 4.0*Omega2
+      f_sq = 4.0*(US%s_to_T**2 * Omega2)
     else
       f_sq = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%ML_omega_frac > 0.0) &
-        f_sq = CS%ML_omega_frac*4.0*Omega2 + (1.0-CS%ML_omega_frac)*f_sq
+        f_sq = CS%ML_omega_frac*4.0*(US%s_to_T**2 * Omega2) + (1.0-CS%ML_omega_frac)*f_sq
     endif
 
-    ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2
+    ustar_sq = max(fluxes%ustar(i,j), US%s_to_T * CS%ustar_min)**2
 
     TKE_ml_flux(i) = (CS%mstar*CS%ML_rad_coeff)*(US%Z_to_m**3*ustar_sq*fluxes%ustar(i,j))
     I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / ustar_sq)
@@ -1646,7 +1646,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
       endif
 
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-z1)
-      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*US%Z_to_m**3*Omega2) then
+      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*US%Z_to_m**3*(US%s_to_T**2 * Omega2)) then
         do_i(i) = .false.
       else ; do_any = .true. ; endif
     endif ; enddo
@@ -1973,7 +1973,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "length scale.", default=.false.)
   if (CS%ML_radiation) then
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*(US%s_to_T * CS%omega)*(GV%Angstrom_Z + GV%H_subroundoff*GV%H_to_Z)
+    CS%ustar_min = 2e-4 * CS%omega * (GV%Angstrom_Z + GV%H_subroundoff*GV%H_to_Z)
 
     call get_param(param_file, mdl, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&
