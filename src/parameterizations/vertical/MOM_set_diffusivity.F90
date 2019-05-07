@@ -170,10 +170,10 @@ end type set_diffusivity_CS
 !> This structure has memory for used in calculating diagnostics of diffusivity
 type diffusivity_diags
   real, pointer, dimension(:,:,:) :: &
-    N2_3d    => NULL(), & !< squared buoyancy frequency at interfaces [s-2]
+    N2_3d    => NULL(), & !< squared buoyancy frequency at interfaces [T-2 ~> s-2]
     Kd_user  => NULL(), & !< user-added diffusivity at interfaces [Z2 s-1 ~> m2 s-1]
     Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces [Z2 s-1 ~> m2 s-1]
-    Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing [W m-2]
+    Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing [kg T-3 ~> W m-2]
     maxTKE   => NULL(), & !< energy required to entrain to h_max [m3 s-3]
     KT_extra => NULL(), & !< double diffusion diffusivity for temp [Z2 s-1 ~> m2 s-1].
     KS_extra => NULL()    !< double diffusion diffusivity for saln [Z2 s-1 ~> m2 s-1].
@@ -401,7 +401,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot)
 
     if (associated(dd%N2_3d)) then
-      do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = US%s_to_T**2 * N2_int(i,K) ; enddo ; enddo
+      do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
     endif
 
     ! Add background mixing
@@ -522,7 +522,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
-        dd%Kd_Work(i,j,k) = GV%Rho0 * (US%Z_to_m**3 * Kd_lay(i,j,k)) * (US%s_to_T**2 * N2_lay(i,k)) * &
+        dd%Kd_Work(i,j,k) = GV%Rho0 * (US%Z_to_m**3 * US%T_to_s * Kd_lay(i,j,k)) * N2_lay(i,k) * &
                             GV%H_to_Z*h(i,j,k)  ! Watt m-2 s = kg s-3
       enddo ; enddo
     endif
@@ -714,7 +714,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   real :: I_Rho0      ! inverse of Boussinesq reference density [m3 kg-1]
   real :: I_dt        ! 1/dt [s-1]
   real :: H_neglect   ! negligibly small thickness [H ~> m or kg m-2]
-  real :: hN2pO2      ! h (N^2 + Omega^2), in [m3 s-2 Z-2 ~> m s-2].
+  real :: hN2pO2      ! h (N^2 + Omega^2), in [m3 T-2 Z-2 ~> m s-2].
   logical :: do_i(SZI_(G))
 
   integer :: i, k, is, ie, nz, i_rem, kmb, kb_min
@@ -729,13 +729,13 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * ((US%s_to_T**2 * N2_lay(i,k)) + (US%s_to_T**2 * Omega2)) ! Units of m3 Z-2 s-2.
+      hN2pO2 = US%Z_to_m**3 * ( GV%H_to_Z * h(i,j,k) ) * (N2_lay(i,k) + Omega2) ! Units of m3 Z-2 T-2.
       if (hN2pO2>0.) then
-        TKE_to_Kd(i,k) = 1.0 / hN2pO2 ! Units of Z2 s2 m-3.
+        TKE_to_Kd(i,k) = 1.0 / (US%s_to_T**2 * hN2pO2) ! Units of Z2 s2 m-3.
       else; TKE_to_Kd(i,k) = 0.; endif
       ! The maximum TKE conversion we allow is really a statement
       ! about the upper diffusivity we allow. Kd_max must be set.
-      maxTKE(i,k) = hN2pO2 * CS%Kd_max ! Units of m3 s-3.
+      maxTKE(i,k) = (US%s_to_T**2 * hN2pO2) * CS%Kd_max ! Units of m3 s-3.
     enddo ; enddo
     kb(is:ie) = -1 ! kb should not be used by any code in non-layered mode -AJA
     return
@@ -2156,7 +2156,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
       CS%tm_csp%Lowmode_itidal_dissipation) then
 
     CS%id_Kd_Work = register_diag_field('ocean_model', 'Kd_Work', diag%axesTL, Time, &
-         'Work done by Diapycnal Mixing', 'W m-2')
+         'Work done by Diapycnal Mixing', 'W m-2', conversion=US%s_to_T**3)
     CS%id_maxTKE = register_diag_field('ocean_model', 'maxTKE', diag%axesTL, Time, &
            'Maximum layer TKE', 'm3 s-3')
     CS%id_TKE_to_Kd = register_diag_field('ocean_model', 'TKE_to_Kd', diag%axesTL, Time, &
@@ -2164,7 +2164,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     CS%id_N2 = register_diag_field('ocean_model', 'N2', diag%axesTi, Time, &
          'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq', &
           cmor_long_name='Square of seawater buoyancy frequency', &
-          cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
+          cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water', &
+          conversion=US%s_to_T**2)
 
     if (CS%user_change_diff) &
       CS%id_Kd_user = register_diag_field('ocean_model', 'Kd_user', diag%axesTi, Time, &
