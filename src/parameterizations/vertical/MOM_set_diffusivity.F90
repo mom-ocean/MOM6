@@ -89,10 +89,10 @@ type, public :: set_diffusivity_CS ; private
 
   logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
                                !! than the following:
-  real :: dissip_min    !< Minimum dissipation [Z2 m-2 W m-3 ~> W m-3]
-  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N [Z2 m-2 W m-3 ~> W m-3]
-  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N [Z2 m-2 W m-3 T ~> J m-3]
-  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [Z2 m-2 W m-3 T2 ~> J s m-3]
+  real :: dissip_min    !< Minimum dissipation [kg Z2 m-3 T-3 ~> W m-3]
+  real :: dissip_N0     !< Coefficient a in minimum dissipation = a+b*N [kg Z2 m-3 T-3 ~> W m-3]
+  real :: dissip_N1     !< Coefficient b in minimum dissipation = a+b*N [kg Z2 m-3 T-2 ~> J m-3]
+  real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [kg Z2 m-3 T-1 ~> J s m-3]
   real :: dissip_Kd_min !< Minimum Kd [Z2 T-1 ~> m2 s-1], with dissipation Rho0*Kd_min*N^2
 
   real :: TKE_itide_max !< maximum internal tide conversion [W m-2]
@@ -256,7 +256,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     KS_extra      !< double difusion diffusivity of salinity [Z2 s-1 ~> m2 s-1]
 
   real :: I_Rho0        ! inverse of Boussinesq density [m3 kg-1]
-  real :: dissip        ! local variable for dissipation calculations [Z2 W m-5 ~> W m-3]
+  real :: dissip        ! local variable for dissipation calculations [Z2 kg m-3 T-3 ~> W m-3]
   real :: Omega2        ! squared absolute rotation rate [T-2 ~> s-2]
 
   logical   :: use_EOS      ! If true, compute density from T/S using equation of state.
@@ -507,16 +507,16 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
         dissip = max( CS%dissip_min, &   ! Const. floor on dissip.
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_lay(i,k)) ! Floor of Kd_min*rho0/F_Ri
-        Kd_lay(i,j,k) = max( Kd_lay(i,j,k) , &  ! Apply floor to Kd
-                            dissip * (CS%FluxRi_max / (GV%Rho0 * ((US%s_to_T**2 * N2_lay(i,k)) + (US%s_to_T**2 * Omega2)))) )
+        Kd_lay(i,j,k) = max(Kd_lay(i,j,k) , &  ! Apply floor to Kd
+                            US%s_to_T * dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + Omega2))))
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
         dissip = max( CS%dissip_min, &   ! Const. floor on dissip.
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_int(i,K)) ! Floor of Kd_min*rho0/F_Ri
-        Kd_int(i,j,K) = max( Kd_int(i,j,K) , &  ! Apply floor to Kd
-                             dissip * (CS%FluxRi_max / (GV%Rho0 * ((US%s_to_T**2 * N2_int(i,K)) + (US%s_to_T**2 * Omega2)))) )
+        Kd_int(i,j,K) = max(Kd_int(i,j,K) , &  ! Apply floor to Kd
+                            US%s_to_T * dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + Omega2))))
       enddo ; enddo ; endif
     endif
 
@@ -2125,17 +2125,19 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
 
   call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower \n"//&
-                 "bound of Kd (a floor).", units="W m-3", default=0.0, scale=US%m_to_Z**2)
+                 "bound of Kd (a floor).", units="W m-3", default=0.0, &
+                 scale=(US%m_to_Z**2)*(US%T_to_s**3))
   call get_param(param_file, mdl, "DISSIPATION_N0", CS%dissip_N0, &
                  "The intercept when N=0 of the N-dependent expression \n"//&
                  "used to set a minimum dissipation by which to determine \n"//&
                  "a lower bound of Kd (a floor): A in eps_min = A + B*N.", &
-                 units="W m-3", default=0.0, scale=US%m_to_Z**2)
+                 units="W m-3", default=0.0, &
+                 scale=(US%m_to_Z**2)*(US%T_to_s)**3)
   call get_param(param_file, mdl, "DISSIPATION_N1", CS%dissip_N1, &
                  "The coefficient multiplying N, following Gargett, used to \n"//&
                  "set a minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
-                 units="J m-3", default=0.0, scale=(US%m_to_Z**2)*US%s_to_T)
+                 units="J m-3", default=0.0, scale=(US%m_to_Z**2)*(US%T_to_s**2))
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
                  units="m2 s-1", default=0.0, scale=(US%m_to_Z**2)*US%T_to_s)
@@ -2144,7 +2146,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
   CS%dissip_N2 = 0.0
   if (CS%FluxRi_max > 0.0) &
-    CS%dissip_N2 = US%s_to_T**3 * CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
+    CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', conversion=US%Z_to_m**2)
