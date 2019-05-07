@@ -1808,7 +1808,7 @@ subroutine teleport(En, NAngle, CS, G, LB)
 
 end subroutine teleport
 
-!> Rotates points in the halos where required to accomodate
+!> Rotates points in the halos where required to accommodate
 !! changes in grid orientation, such as at the tripolar fold.
 subroutine correct_halo_rotation(En, test, G, NAngle)
   type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
@@ -2239,7 +2239,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
                  "If true, CONTINUITY_PPM uses a simple 2nd order \n"//&
                  "(arithmetic mean) interpolation of the edge values. \n"//&
-                 "This may give better PV conservation propterties. While \n"//&
+                 "This may give better PV conservation properties. While \n"//&
                  "it formally reduces the accuracy of the continuity \n"//&
                  "solver itself in the strongly advective limit, it does \n"//&
                  "not reduce the overall order of accuracy of the dynamic \n"//&

@@ -140,8 +140,8 @@ public get_zlike_CS, get_sigma_CS, get_rho_CS
 !> Documentation for coordinate options
 character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
-                 " ZSTAR, Z* - stetched geopotential z*\n"//&
-                 " SIGMA_SHELF_ZSTAR - stetched geopotential z* ignoring shelf\n"//&
+                 " ZSTAR, Z* - stretched geopotential z*\n"//&
+                 " SIGMA_SHELF_ZSTAR - stretched geopotential z* ignoring shelf\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
@@ -230,8 +230,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   if (main_parameters) then
     ! Read coordinate units parameter (main model = REGRIDDING_COORDINATE_UNITS)
     call get_param(param_file, mdl, "REGRIDDING_COORDINATE_UNITS", coord_units, &
-                 "Units of the regridding coordinuate.",& !### Spelling error "coordinuate"
-                 default=coordinateUnits(coord_mode))
+                 "Units of the regridding coordinate.", default=coordinateUnits(coord_mode))
   else
     coord_units=coordinateUnits(coord_mode)
   endif
@@ -420,7 +419,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
-               'HYBRID target densities for itnerfaces', units=coordinateUnits(coord_mode))
+               'HYBRID target densities for interfaces', units=coordinateUnits(coord_mode))
     endif
   elseif (index(trim(string),'WOA09')==1) then
     if (len_trim(string)==5) then
@@ -503,7 +502,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   if (main_parameters .and. coord_is_state_dependent) then
     call get_param(param_file, mdl, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
                  "When interpolating potential density profiles we can add\n"//&
-                 "some artificial compressibility solely to make homogenous\n"//&
+                 "some artificial compressibility solely to make homogeneous\n"//&
                  "regions appear stratified.", default=0.)
     call set_regrid_params(CS, compress_fraction=tmpReal)
   endif

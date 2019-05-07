@@ -1742,7 +1742,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
   call get_param(param_file, mdl, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
                  "If defined add 3-d structured enhanced interface height \n"//&
-                 "diffusivities to horizonally smooth jagged layers.", &
+                 "diffusivities to horizontally smooth jagged layers.", &
                  default=.false.)
   CS%detangle_time = 0.0
   if (CS%detangle_interfaces) &

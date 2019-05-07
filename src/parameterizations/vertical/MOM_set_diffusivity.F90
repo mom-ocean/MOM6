@@ -103,7 +103,7 @@ type, public :: set_diffusivity_CS ; private
                           !! decay scale determined by the minimum of
                           !! (1) The depth of the mixed layer, or
                           !! (2) An Ekman length scale.
-                          !! Energy availble to drive mixing below the mixed layer is
+                          !! Energy available to drive mixing below the mixed layer is
                           !! given by E = ML_RAD_COEFF*MSTAR*USTAR**3.  Optionally, if
                           !! ML_rad_TKE_decay is true, this is further reduced by a factor
                           !! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
@@ -2045,7 +2045,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     call get_param(param_file, mdl, "BBL_MIXING_AS_MAX", CS%BBL_mixing_as_max, &
                  "If true, take the maximum of the diffusivity from the \n"//&
                  "BBL mixing and the other diffusivities. Otherwise, \n"//&
-                 "diffusiviy from the BBL_mixing is simply added.", &
+                 "diffusivity from the BBL_mixing is simply added.", &
                  default=.true.)
     call get_param(param_file, mdl, "USE_LOTW_BBL_DIFFUSIVITY", CS%use_LOTW_BBL_diffusivity, &
                  "If true, uses a simple, imprecise but non-coordinate dependent, model\n"//&
@@ -2064,7 +2064,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
                  "work for arbitrary vertical coordinates. If false,\n"//&
-                 "calculates Kd/TKE and bounds based on exact energetics/n"//&
+                 "calculates Kd/TKE and bounds based on exact energetics\n"//&
                  "for an isopycnal layer-formulation.", &
                  default=.false.)
 
@@ -2179,8 +2179,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   endif
 
   call get_param(param_file, mdl, "DOUBLE_DIFFUSION", CS%double_diffusion, &
-                 "If true, increase diffusivitives for temperature or salt \n"//&
-                 "based on double-diffusive paramaterization from MOM4/KPP.", &
+                 "If true, increase diffusivites for temperature or salt \n"//&
+                 "based on double-diffusive parameterization from MOM4/KPP.", &
                  default=.false.)
 
   if (CS%double_diffusion) then

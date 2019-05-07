@@ -2136,7 +2136,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
   call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%USE_MLD_ITERATION,    &
                  "A logical that specifies whether or not to use the \n"//      &
-                 "distance to the bottom of the actively turblent boundary \n"//&
+                 "distance to the bottom of the actively turbulent boundary \n"//&
                  "layer to help set the EPBL length scale.", default=.false.)
   call get_param(param_file, mdl, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION,  &
                  "A logical that specifies whether or not to use the \n"//      &

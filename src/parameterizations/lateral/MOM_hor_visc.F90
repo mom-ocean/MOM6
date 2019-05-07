@@ -417,7 +417,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
       endif
       if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-        ! There are extra wide halos here to accomodate the cross-corner-point
+        ! There are extra wide halos here to accommodate the cross-corner-point
         ! OBC projections, but they might not be necessary if the accelerations
         ! are always zeroed out at OBC points, in which case the i-loop below
         ! becomes do i=is-1,ie+1. -RWH
@@ -1063,12 +1063,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                  "viscosity, the Smagorinsky and Leith viscosities, and KH.", &
                  units="m s-1", default=0.0)
     call get_param(param_file, mdl, "KH_SIN_LAT", Kh_sin_lat, &
-                 "The amplitude of a latidutinally-dependent background\n"//&
+                 "The amplitude of a latitudinally-dependent background\n"//&
                  "viscosity of the form KH_SIN_LAT*(SIN(LAT)**KH_PWR_OF_SINE).", &
                  units = "m2 s-1",  default=0.0)
     if (Kh_sin_lat>0. .or. get_all) &
       call get_param(param_file, mdl, "KH_PWR_OF_SINE", Kh_pwr_of_sine, &
-                 "The power used to raise SIN(LAT) when using a latidutinally-\n"//&
+                 "The power used to raise SIN(LAT) when using a latitudinally-\n"//&
                  "dependent background viscosity.", &
                  units = "nondim",  default=4.0)
 
