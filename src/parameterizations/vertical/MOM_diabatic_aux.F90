@@ -322,10 +322,11 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   integer,       optional, intent(in)    :: halo !< Halo width over which to work
 
   ! local variables
-  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement
-  real :: S_min      !< The minimum salinity
-  real :: mc         !< A layer's mass kg  m-2 .
+  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [gSalt m-2]
+  real :: S_min      !< The minimum salinity [ppt].
+  real :: mc         !< A layer's mass [kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
@@ -333,16 +334,15 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
 
 !  call cpu_clock_begin(id_clock_adjust_salt)
 
-!### MAKE THIS A RUN_TIME PARAMETER.  COULD IT BE 0?
-  S_min = 0.01
+  S_min = tv%min_salinity
 
   salt_add_col(:,:) = 0.0
 
   !$OMP parallel do default(none) private(mc)
   do j=js,je
     do k=nz,1,-1 ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.0) .and. &
-           ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
+      if ( (G%mask2dT(i,j) > 0.0) .and. &
+           ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0)) ) then
         mc = GV%H_to_kg_m2 * h(i,j,k)
         if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
           ! Very thin layers should not be adjusted by the salt flux
@@ -350,14 +350,12 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
             salt_add_col(i,j) = salt_add_col(i,j) +  mc * (S_min - tv%S(i,j,k))
             tv%S(i,j,k) = S_min
           endif
+        elseif (salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k)) <= 0.0) then
+          tv%S(i,j,k) = tv%S(i,j,k) - salt_add_col(i,j) / mc
+          salt_add_col(i,j) = 0.0
         else
-          if (salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k)) <= 0.0) then
-            tv%S(i,j,k) = tv%S(i,j,k) - salt_add_col(i,j)/mc
-            salt_add_col(i,j) = 0.0
-          else
-            salt_add_col(i,j) = salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k))
-            tv%S(i,j,k) = S_min
-          endif
+          salt_add_col(i,j) = salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k))
+          tv%S(i,j,k) = S_min
         endif
       endif
     enddo ; enddo
@@ -1358,7 +1356,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
          "be different than the ocean mask to avoid sea ice formation \n"//&
          "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
     call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
-                 "If true, apply additional mixing whereever there is \n"//&
+                 "If true, apply additional mixing wherever there is \n"//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH \n"//&
                  "if the ocean is that deep.", default=.false.)
     if (CS%do_rivermix) &
