@@ -108,10 +108,6 @@ type, public :: int_tide_CS ; private
                         !< The internal wave energy density as a function of (i,j,angle); temporary for restart
   real, allocatable, dimension(:) :: frequency  !< The frequency of each band [s-1].
 
-  !### Delete later
-  real    :: int_tide_source_x !< X Location of generation site for internal tide testing
-  real    :: int_tide_source_y !< Y Location of generation site for internal tide testing
-
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                         !! timing of diagnostic output.
   type(wave_structure_CS), pointer :: wave_structure_CSp => NULL()
@@ -215,10 +211,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     frac_per_sector = 1.0 / real(CS%nAngle * CS%nMode * CS%nFreq)
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
       f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                              (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-      !### For rotational symmetry this should be
-      ! f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-      !                         (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+                              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
                             dt*frac_per_sector*(1-CS%q_itides)*TKE_itidal_input(i,j)
@@ -228,10 +221,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     a = CS%energized_angle
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
       f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                              (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-      !### For rotational symmetry this should be
-      ! f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-      !                         (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+                              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
                             dt*frac_per_sector**(1-CS%q_itides)*TKE_itidal_input(i,j)
@@ -427,11 +417,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       do j=jsd,jed ; do i=isd,ied
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         ! Calculate horizontal phase velocity magnitudes
-        f2 = 0.25*US%s_to_T**2*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
-                                G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
-        !### For rotational symmetry this should be
-        ! f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-        !                         (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+        f2 = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                                (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
         Kmag2 = (freq2 - f2) / (cn(i,j,m)**2 + cn_subRO**2)
         c_phase = 0.0
         if (Kmag2 > 0.0) then
@@ -2423,12 +2410,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !G%dx_Cv(:,:) = 0.0
   !call MOM_read_data(filename, 'dx_Cv', G%dx_Cv, G%domain, timelevel=1)
   !call pass_var(G%dx_Cv,G%domain)
-
-  ! For debugging - delete later
-  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                "X Location of generation site for internal tide", default=1.)
-  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                "Y Location of generation site for internal tide", default=1.)
 
   ! Register maps of reflection parameters
   CS%id_refl_ang = register_diag_field('ocean_model', 'refl_angle', diag%axesT1, &
