@@ -67,8 +67,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
-!### UNCOMMENT TO FIX THIS "The fractional depth where the stratification is centered.", &
-                 "The maximum depth of the ocean.", &
+                 "The fractional depth where the stratification is centered.", &
                  units="nondim", default = 0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
