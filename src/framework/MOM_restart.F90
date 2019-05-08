@@ -29,7 +29,7 @@ use MOM_io, only : axis_data_type
 use MOM_io, only : MOM_get_axis_data
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
-use MOM_time_manager, only : days_in_month, get_date, set_date
+use MOM_time_manager, only : days_in_month, gt_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum, mpp_pe
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
@@ -1159,11 +1159,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         
         if(allocated(time_vals)) deallocate(time_vals)     
      enddo
+     
 
      call fms2_close_file(fileObjWrite)
      num_files = num_files+1
   enddo
-
 end subroutine save_restart
 
 !> restore_state reads the model state from previously generated files.  All
@@ -1189,14 +1189,9 @@ subroutine restore_state(filename, directory, day, G, CS)
                                   ! additional restart files.
   character(len=512) :: mesg      ! A message for warnings.
   character(len=80) :: varname    ! A variable's name.
-  integer :: num_file        ! The number of files (restart files and others
-                             ! explicitly in filename) that are open.
-  character(len=200), dimension(:), allocatable :: file_list ! list of restart file names in the directory 
-  integer :: i, n, m
+  integer :: i, m
   integer :: isL, ieL, jsL, jeL, is0, js0
-  integer :: sizes(7)
-  integer :: ndim, nvar, natt, ntime, pos
-
+  integer :: ntime, pos
   integer :: unit(CS%max_fields) ! The mpp unit of all open files..
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
   character(len=200) :: base_file_name
@@ -1204,7 +1199,6 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=8)   :: hor_grid ! Variable grid info.
   real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
-  type(fieldtype), allocatable :: fields(:)
   logical                          :: check_exist, is_there_a_checksum
   integer(LONG_KIND),dimension(3)  :: checksum_file
   integer(kind=8)                  :: checksum_data
@@ -1213,13 +1207,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: str_index
   character(len=96), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
-  logical :: var_exists
-  logical :: axis_exists
   character(len=4) :: axis_names(4)
-  integer, dimension(4) :: axis_lengths
-  integer :: num_axes
-  integer :: is, ie, js, je, array_size
-  integer, dimension(:), allocatable :: x_indices, y_indices
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1246,272 +1234,86 @@ subroutine restore_state(filename, directory, day, G, CS)
      base_file_name = trim(temp_file_name)
   endif
 
-  ! determine the number of restart files in the directory with the base_file_name
-  ! e.g., (base_file_name).nc., OR uncombined files of the form (base_file_name).0000, (base_file_name).0001,...
-  ! note: be sure to deallocate file_list before the end of restore_state
-  call get_restart_file_list(trim(directory), trim(base_file_name), num_file, file_list)
+  !Open the restart file.
+  file_open_success = MOM_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", G, is_restart=.true.)
 
-  if (num_file == 0) then
-     write(mesg,'("Unable to find any restart files specified by  ",A,"  in directory ",A,".")') &
-                  trim(base_file_name), trim(directory)
-     call MOM_error(FATAL,"MOM_restart: "//mesg)
+  call fms2_get_dimension_size(fileObjRead, "Time", ntime)
+  if (ntime .lt. 1) then
+    call MOM_error(FATAL, "MOM_restart: less than one time level in restart file.")
   endif
-  
-! Get the time from the first file in the list that has one.
-  do n=1,num_file
-     filepath = ''
-     filepath = trim(directory)//trim(file_list(n))
-     
-     file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
-                    G, is_restart = .true.)
-     
-     if (.not.(file_open_success)) then  
-        write(mesg,'( "ERROR, unable to open the file ",A) ') trim(filename)
-        call MOM_error(FATAL,"MOM_restart::MOM_open_file: "//mesg)
-     endif      
-     call fms2_get_dimension_size(fileObjRead, "Time", ntime)
+  allocate(time_vals(ntime))
+  call fms2_read_data(fileObjRead, "Time", time_vals)
+  t1 = time_vals(1)
+  deallocate(time_vals)
+  t2 = t1
+  call mpp_max(t2)
+  if (t1 .ne. t2) then
+    call MOM_error(FATAL, "times are different in different restart files.")
+  endif
 
-     if (ntime < 1) cycle
-
-     allocate(time_vals(ntime))
-     call fms2_register_restart_field(fileObjRead, "Time","double")
-     call fms2_read_data(fileObjRead,"Time", time_vals)
-     t1 = time_vals(1)
-     deallocate(time_vals)
-     day = real_to_time(t1*86400.0)
-
-     call fms2_close_file(fileObjRead)
-     exit
+ ! Register the horizontal axes that correspond to x and y of the domain.
+  axis_names = (/'lath', 'lonh', 'latq', 'lonq'/)
+  do i = 1,size(axis_names)
+    if (fms2_dimension_exists(fileObjRead, trim(axis_names(i)))) then
+      call MOM_register_axis(fileObjRead, trim(axis_names(i)))
+    endif
   enddo
 
-! Check the remaining files, if any, for different times and issue a warning
-! if they differ from the first time.
-  if (is_root_pe()) then
-     do m = n+1,num_file
-        filepath = ''
-        filepath = trim(directory)//trim(file_list(m))
-    
-        file_open_success=MOM_open_file(fileObjRead, filepath, "read", &
-                                       G, is_restart = .true.)
-                                                
-        if(.not. file_open_success) then 
-           write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(filepath)
-           call MOM_error(FATAL,"MOM_restart: "//mesg)
-        endif
-        
-        call fms2_get_dimension_size(fileObjRead, "Time", ntime)
+ !Read in each variable from the restart files.
+  do m = 1, CS%novars
+    varname = ''
+    varname = trim(CS%restart_field(m)%var_name)
 
-        if (ntime < 1) cycle
+    !Check for obsolete fields
+    do i = 1,CS%num_obsolete_vars
+      if (adjustl(lowercase(trim(varname))) .eq. adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
+        call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
+                               trim(varname)//" - the new corresponding restart field is "//&
+                               trim(CS%restart_obsolete(i)%replacement_name))
+      endif
+    enddo
 
-        allocate(time_vals(ntime))
-        call fms2_register_restart_field(fileObjRead, "Time","double")
-        call fms2_read_data(fileObjRead,"Time", time_vals)
-        t2 = time_vals(1)
-        deallocate(time_vals)
+    !Skip fields that have already been initialized
+    if (CS%restart_field(m)%initialized) then
+      cycle
+    endif
 
-        if (t1 /= t2) then
-           write(mesg,'("WARNING: Restart file ",I2," has time ",F10.4,"whereas simulation is restarted at ",F10.4," (differing by ",F10.4,").")')&
-              m,t1,t2,t1-t2
-           call MOM_error(WARNING, "MOM_restart: "//mesg)
-
-        endif
-        call fms2_close_file(fileObjRead)
-     enddo
-  endif
-
-! Read each variable from either combined or uncombined restart files
-! NOTE: There is no need to explicitly loop through uncombined restart files.
-! The new fms IO routines automatically
-! read in uncombined files whose names contain the base_file_name
- 
-  ! register the horizontal axes
-  ! get the dimension lengths for lath, lonh,latq,lonq
-  
-  axis_names = (/'lath','lonh','latq','lonq'/)
-!  do n=1,num_file
-     filepath = ''
-     !filepath = trim(directory)//trim(file_list(n))
-       filepath = trim(directory)//trim(base_file_name)
-     file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
-                    G, is_restart = .true.)
-     if (.not. file_open_success) then 
-        write(mesg,'( "ERROR, unable to open restart file  ",A )') trim(filepath)
-        call MOM_error(FATAL,"MOM_restart: "//mesg)
-     else
-     
-        WRITE(mpp_pe()+2000,*) "restore_state: opened file ", trim(filepath)
-        call flush(mpp_pe()+2000)
-     endif
-
-     do i=1,size(axis_names)
-        axis_exists = fms2_dimension_exists(fileObjRead, trim(axis_names(i)))
-        if (axis_exists) then
-        
-           !array_size= size((/ (m, m = is,ie) /))
-           call MOM_register_axis(fileObjRead, trim(axis_names(i)))
-        endif
-     enddo
- 
-  do m=1,CS%novars ! loop through all of the restart variables you want to read in
-     varname=''
-     varname=trim(CS%restart_field(m)%var_name)
-     axis_names=(/'','','',''/)
-
-     WRITE(mpp_pe()+2000,*) "restore_state: getting info for variable ", trim(varname)
-     call flush(mpp_pe()+2000)
-     ! check for obsolete fields
-     do i=1,CS%num_obsolete_vars
-        if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
-            call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
-                           trim(varname)//" - the new corresponding restart field is "//&
-                           trim(CS%restart_obsolete(i)%replacement_name))
-        endif
-     enddo
-     ! skip fields that have already been initialized
-     if (CS%restart_field(m)%initialized) then
+    !Check if the variable is mandatory and present in the restart file(s)
+    if (.not. fms2_variable_exists(fileObjRead, trim(varname))) then
+      if (CS%restart_field(m)%mand_var) then
+        call MOM_error(FATAL, "MOM_restart: Unable to find mandatory variable " &
+                              //trim(varname)//" in restart files.")
+      else
+        CS%restart_field(m)%initialized = .false.
         cycle
-     endif
+      endif
+    endif
 
-     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                           caller="restore_state")
+    !Get the variable's "domain position."
+    call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="restore_state")
+    pos = get_horizontal_grid_position(hor_grid)
 
-     pos = get_horizontal_grid_position(hor_grid)
+    !Register the restart fields and compute the checksums.
+    if (associated(CS%var_ptr1d(m)%p)) then
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr1d(m)%p)
+    elseif (associated(CS%var_ptr0d(m)%p)) then
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr0d(m)%p)
+    elseif (associated(CS%var_ptr2d(m)%p)) then
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr2d(m)%p, domain_position=pos)
+    elseif (associated(CS%var_ptr3d(m)%p)) then
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr3d(m)%p, domain_position=pos)
+    elseif (associated(CS%var_ptr4d(m)%p)) then
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr4d(m)%p, domain_position=pos)
+    else
+      call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
+    endif
+    CS%restart_field(m)%initialized = .true.
+  enddo
 
-     num_axes=0
-     is=0;ie=0;js=0;je=0;
-
-     call get_dimension_features(hor_grid,'1','1', G, axis_names, axis_lengths, num_axes)
-
-     do i=1,num_axes
-        select case(trim(axis_names(i)))
-           case ('lath')
-              call fms2_get_compute_domain_dimension_indices(fileObjRead, trim(axis_names(i)), x_indices)
-           case ('latq')
-              call fms2_get_compute_domain_dimension_indices(fileObjRead, trim(axis_names(i)), x_indices)
-           case ('lonh')
-               call fms2_get_compute_domain_dimension_indices(fileObjRead, trim(axis_names(i)), y_indices)
-           case ('lonq')
-              call fms2_get_compute_domain_dimension_indices(fileObjRead, trim(axis_names(i)), y_indices)
-        end select
-     enddo
-     is = x_indices(1)
-     ie = x_indices(2)
-     js = y_indices(1)
-     je = y_indices(2)
-
-     is_there_a_checksum =.false.
-     if (CS%checksum_required) then
-        call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
-
-        checksum_data = -1
-        is_there_a_checksum =.true.
-     endif
-
-  
-     ! register the restart fields and compute the checksums
-     if (associated(CS%var_ptr1d(m)%p)) then ! register a 1d array
-        WRITE(mpp_pe()+2000,*) "restore_state: ptr1d for ", trim(varname)
-        call flush(mpp_pe()+2000)
-
-        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr1d(m)%p)
-
-        if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
-     elseif (associated(CS%var_ptr0d(m)%p)) then ! register a scalar
-        WRITE(mpp_pe()+2000,*) "restore_state: ptr0d for ", trim(varname)
-        call flush(mpp_pe()+2000)
-        call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr0d(m)%p)
-
-        if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
-     elseif (associated(CS%var_ptr2d(m)%p)) then ! Register a 2d array
-        if (pos /= 0) then ! domain-decomposed read
-           WRITE(mpp_pe()+2000,*) "restore_state: ptr2d for ", trim(varname)
-           call flush(mpp_pe()+2000)
-           call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr2d(m)%p)
-                 
-           if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))          
-        !else ! This array is not domain-decomposed.  This variant may be under-tested.
-              ! need a MOM_open_file interface routine that calls fms2_io for non-decomposed variables
-        endif
-     elseif (associated(CS%var_ptr3d(m)%p)) then ! Register a 3d array.
-        if (pos /= 0) then ! domain-decomposed read
-           WRITE(mpp_pe()+2000,*) "restore_state: ptr3d for ", trim(varname)
-           call flush(mpp_pe()+2000)
-         
-
-           call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr3d(m)%p)
-              
-           if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-        !else ! This array is not domain-decomposed.  This variant may be under-tested.
-            !need a MOM_open_file interface routine that calls fms2_io for non-decomposed variables
-        endif            
-     elseif (associated(CS%var_ptr4d(m)%p)) then ! Register a 4d array.
-        if (pos /= 0) then ! domain-decomposed read
-           WRITE(mpp_pe()+2000,*) "restore_state: ptr4d for ", trim(varname)
-           call flush(mpp_pe()+2000)
-           call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr4d(m)%p)
-                if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-        !else ! This array is not domain-decomposed.  This variant may be under-tested.
-           !         need a MOM_open_file interface routine that calls fms2_io for non-decomposed variables
-        endif
-     else
-       call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//&
-                      trim(varname))
-     endif
-
-     ! check if the variable is mandatory and present in the restart file(s)
-     var_exists = fms2_variable_exists(fileObjRead, trim(varname))
-     !WRITE(mpp_pe()+2000,'(A,L1)') "restore_state: variable exists result ", var_exists
-     !call flush(mpp_pe()+2000)
-
-     CS%restart = .true.
-     if ((CS%restart_field(m)%mand_var) .and. (.not.(var_exists))) then
-        CS%restart = .false.
-        call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
-                        //trim(varname)//" in restart files.")
-     else ! get the variable checksum if it is required, and convert the checksum string to an integer
-        if (CS%checksum_required) then
-          if (is_root_pe()) &
-             call MOM_error(NOTE,"MOM_restart: computing checksums for "//trim(varname))
-
-           checksum_char = ''
-           checksum_file(:) = -1
-
-           call fms2_get_variable_attribute(fileObjRead, trim(varname), "checksum", checksum_char)
-           ! The following checksum conversion proceure is adapted from mpp_get_atts 
-           checksum_file = convert_checksum_string_to_int(checksum_char)
-
-           WRITE(mpp_pe()+2000,*) "getting checksum for ", trim(varname)
-           call flush(mpp_pe()+2000)
-          
-        endif
-     endif
-
-     if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
-        write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//&
-               " ",checksum_data, " does not match value ", checksum_file(1), &
-               " stored in "//trim(filepath)//"." 
-        call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
-     endif
-
-    
-     CS%restart_field(m)%initialized = .true.   
-  enddo ! end m loop
-
- !call fms2_close_file(fileObjRead)
-     if (allocated(x_indices)) deallocate(x_indices)
-     if (allocated(y_indices)) deallocate(y_indices)
- ! enddo
-      
-  ! read in all of the registered restart fields
-   !filepath = ''
-   !  filepath = trim(directory)//trim(base_file_name)
- !
-   !  file_open_success=MOM_open_file(fileObjRead, trim(filepath),"read", &
-   !                 G, is_restart = .true.)
-  call fms2_read_restart(fileObjRead)           
+  !Read in restart data and then close the file.
+  call fms2_read_restart(fileObjRead)
 
   call fms2_close_file(fileObjRead)
-  deallocate(file_list)
           
 end subroutine restore_state
 
