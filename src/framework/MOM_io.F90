@@ -20,6 +20,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_size, read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
+use mpp_mod,              only : mpp_max 
 use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
@@ -1949,6 +1950,37 @@ subroutine MOM_close_file(fileObj)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
    call fms2_close_file(fileObj)
 end subroutine MOM_close_file
+
+!> check if the time value(s) in distributed files are identical
+function same_file_times(fileobj,time_name) result(same_times)
+  type(FmsNetcdfDomainFile_t), intent(in) :: fileObj !< netCDF file object 
+  character(len=*) :: time_name !< name of the time variable
+
+  ! local
+  logical :: same_times 
+  integer :: ntime
+  real, allocatable :: time_vals(:)
+  
+  call fms2_get_dimension_size(fileObj, trim(time_name), ntime)
+
+  if (ntime < 1) call MOM_error(FATAL,"MOM_io::same_file_times : time dimension size of file < 1")
+
+  allocate(time_vals(ntime))
+  call fms2_read_data(fileObjRead,"Time", time_vals)
+  t1 = time_vals(1)
+  call mpp_max( time_vals(1) )
+     deallocate(time_vals)
+     day = real_to_time(t1*86400.0)
+
+
+                                                
+        if(t1) then 
+           write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(filepath)
+           call MOM_error(FATAL,"MOM_restart: "//mesg)
+        endif
+        
+  
+end function same_file_times
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
