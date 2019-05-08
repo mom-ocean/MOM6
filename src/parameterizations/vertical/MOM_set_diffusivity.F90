@@ -493,7 +493,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                                       Kd_lay, Kd_int, dd%Kd_BBL)
       else
         call add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
-                                  US%s_to_T**3 * maxTKE, kb, G, GV, US, CS, Kd_lay, Kd_int, dd%Kd_BBL)
+                                  maxTKE, kb, G, GV, US, CS, Kd_lay, Kd_int, dd%Kd_BBL)
       endif
     endif
 
@@ -1155,7 +1155,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                                           !! usually (~Rho_0 / (G_Earth * dRho_lay))
                                                           !! [Z2 T-1 / m3 T-3 = Z2 T2 m-3 ~> s2 m-1]
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: maxTKE !< The energy required to for a layer to entrain
-                                                          !! to its maximum-realizable thickness [m3 s-3]
+                                                          !! to its maximum-realizable thickness [m3 T-3 ~> m3 s-3]
   integer, dimension(SZI_(G)),      intent(in)    :: kb   !< Index of lightest layer denser than the buffer
                                                           !! layer, or -1 without a bulk mixed layer
   type(set_diffusivity_CS),         pointer       :: CS   !< Diffusivity control structure
@@ -1179,12 +1179,12 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                   ! the local ustar, times R0_g [kg m-2]
     Rho_top, &    ! density at top of the BBL [kg m-3]
     TKE, &        ! turbulent kinetic energy available to drive
-                  ! bottom-boundary layer mixing in a layer [m3 s-3]
+                  ! bottom-boundary layer mixing in a layer [m3 T-3 ~> m3 s-3]
     I2decay       ! inverse of twice the TKE decay scale [Z-1 ~> m-1].
 
-  real    :: TKE_to_layer   ! TKE used to drive mixing in a layer [m3 s-3]
-  real    :: TKE_Ray        ! TKE from layer Rayleigh drag used to drive mixing in layer [m3 s-3]
-  real    :: TKE_here       ! TKE that goes into mixing in this layer [m3 s-3]
+  real    :: TKE_to_layer   ! TKE used to drive mixing in a layer [m3 T-3 ~> m3 s-3]
+  real    :: TKE_Ray        ! TKE from layer Rayleigh drag used to drive mixing in layer [m3 T-3 ~> m3 s-3]
+  real    :: TKE_here       ! TKE that goes into mixing in this layer [m3 T-3 ~> m3 s-3]
   real    :: dRl, dRbot     ! temporaries holding density differences [kg m-3]
   real    :: cdrag_sqrt     ! square root of the drag coefficient [nondim]
   real    :: ustar_h        ! value of ustar at a thickness point [Z T-1 ~> m s-1].
@@ -1235,10 +1235,10 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
     endif
     TKE(i) = ((CS%BBL_effic * cdrag_sqrt) * &
               exp(-I2decay(i)*(GV%H_to_Z*h(i,j,nz))) ) * &
-             visc%TKE_BBL(i,j)
+             (US%T_to_s**3 * visc%TKE_BBL(i,j))
 
     if (associated(fluxes%TKE_tidal)) &
-      TKE(i) = TKE(i) + fluxes%TKE_tidal(i,j) * I_Rho0 * &
+      TKE(i) = TKE(i) + (US%T_to_s**3 * fluxes%TKE_tidal(i,j)) * I_Rho0 * &
            (CS%BBL_effic * exp(-I2decay(i)*(GV%H_to_Z*h(i,j,nz))))
 
     ! Distribute the work over a BBL of depth 20^2 ustar^2 / g' following
@@ -1296,6 +1296,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
       ! TKE_Ray has been initialized to 0 above.
       if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * US%Z_to_m * G%IareaT(i,j) * &
+            US%T_to_s**3 * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1308,13 +1309,13 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
           TKE(i) = TKE(i) - TKE_to_layer
 
-          if (Kd_lay(i,j,k) < (TKE_to_layer+TKE_Ray)*(US%T_to_s**2 * TKE_to_Kd(i,k))) then
-            delta_Kd = (TKE_to_layer+TKE_Ray)*(US%T_to_s**2 * TKE_to_Kd(i,k)) - Kd_lay(i,j,k)
+          if (Kd_lay(i,j,k) < US%s_to_T * ((TKE_to_layer + TKE_Ray) * TKE_to_Kd(i,k))) then
+            delta_Kd = US%s_to_T * ((TKE_to_layer + TKE_Ray) * TKE_to_Kd(i,k)) - Kd_lay(i,j,k)
             if ((CS%Kd_max >= 0.0) .and. (delta_Kd > CS%Kd_max)) then
               delta_Kd = CS%Kd_max
               Kd_lay(i,j,k) = Kd_lay(i,j,k) + delta_Kd
             else
-              Kd_lay(i,j,k) = (TKE_to_layer+TKE_Ray)*(US%T_to_s**2 * TKE_to_Kd(i,k))
+              Kd_lay(i,j,k) = US%s_to_T * ((TKE_to_layer + TKE_Ray) * TKE_to_Kd(i,k))
             endif
             Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*delta_Kd
             Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*delta_Kd
@@ -1324,22 +1325,23 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
             endif
           endif
         else
-          if (Kd_lay(i,j,k) >= maxTKE(i,k)*(US%T_to_s**2 * TKE_to_Kd(i,k))) then
+          if (Kd_lay(i,j,k) >= US%s_to_T * (maxTKE(i,k) * TKE_to_Kd(i,k))) then
             TKE_here = 0.0
             TKE(i) = TKE(i) + TKE_Ray
-          elseif (Kd_lay(i,j,k) + (TKE_to_layer+TKE_Ray)*(US%T_to_s**2 * TKE_to_Kd(i,k)) > &
-                  maxTKE(i,k)*(US%T_to_s**2 * TKE_to_Kd(i,k))) then
-            TKE_here = ( (TKE_to_layer+TKE_Ray) + Kd_lay(i,j,k)/(US%T_to_s**2 * TKE_to_Kd(i,k)) ) - &
-                       maxTKE(i,k)
+          elseif (Kd_lay(i,j,k) + US%s_to_T * ((TKE_to_layer + TKE_Ray) * TKE_to_Kd(i,k)) > &
+                  US%s_to_T * (maxTKE(i,k) * TKE_to_Kd(i,k))) then
+            TKE_here = ((TKE_to_layer + TKE_Ray) + (US%T_to_s * Kd_lay(i,j,k)) / TKE_to_Kd(i,k)) &
+                       - maxTKE(i,k)
+            ! ### Non-bracketed ternary sum
             TKE(i) = TKE(i) - TKE_here + TKE_Ray
           else
-            TKE_here = TKE_to_layer + TKE_ray
+            TKE_here = TKE_to_layer + TKE_Ray
             TKE(i) = TKE(i) - TKE_to_Layer
           endif
           if (TKE(i) < 0.0) TKE(i) = 0.0 ! This should be unnecessary?
 
           if (TKE_here > 0.0) then
-            delta_Kd = TKE_here * (US%T_to_s**2 * TKE_to_Kd(i,k))
+            delta_Kd = US%s_to_T * (TKE_here * TKE_to_Kd(i,k))
             if (CS%Kd_max >= 0.0) delta_Kd = min(delta_Kd, CS%Kd_max)
             Kd_lay(i,j,k) = Kd_lay(i,j,k) + delta_Kd
             Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*delta_Kd
@@ -1397,7 +1399,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
   ! Local variables
   real :: TKE_column       ! net TKE input into the column [m3 s-3]
-  real :: TKE_to_layer     ! TKE used to drive mixing in a layer [m3 s-3]
+  real :: TKE_to_layer     ! TKE used to drive mixing in a layer [m3 T-3 ~> m3 s-3]
   real :: TKE_Ray          ! TKE from a layer Rayleigh drag used to drive mixing in that layer [m3 s-3]
   real :: TKE_remaining    ! remaining TKE available for mixing in this layer and above [m3 s-3]
   real :: TKE_consumed     ! TKE used for mixing in this layer [m3 s-3]
