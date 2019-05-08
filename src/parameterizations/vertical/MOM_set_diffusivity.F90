@@ -1549,14 +1549,14 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
 ! This routine adds effects of mixed layer radiation to the layer diffusivities.
 
   real, dimension(SZI_(G)) :: h_ml  ! Mixed layer thickness [Z ~> m].
-  real, dimension(SZI_(G)) :: TKE_ml_flux
+  real, dimension(SZI_(G)) :: TKE_ml_flux ! Mixed layer TKE flux [Z3 T-3 ~> m3 s-3]
   real, dimension(SZI_(G)) :: I_decay ! A decay rate [Z-1 ~> m-1].
-  real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation [Z2 s-1 ~> m2 s-1].
+  real, dimension(SZI_(G)) :: Kd_mlr_ml ! Diffusivities associated with mixed layer radiation [Z2 T-1 ~> m2 s-1].
 
-  real :: f_sq              ! The square of the local Coriolis parameter or a related variable [s-2].
+  real :: f_sq              ! The square of the local Coriolis parameter or a related variable [T-2 ~> s-2].
   real :: h_ml_sq           ! The square of the mixed layer thickness [Z2 ~> m2].
-  real :: ustar_sq          ! ustar squared [Z2 s-2 ~> m2 s-2]
-  real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation [Z2 s-1 ~> m2 s-1].
+  real :: ustar_sq          ! ustar squared [Z2 T-2 ~> m2 s-2]
+  real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation [Z2 T-1 ~> m2 s-1].
   real :: C1_6              ! 1/6
   real :: Omega2            ! rotation rate squared [T-2 ~> s-2].
   real :: z1                ! layer thickness times I_decay [nondim]
@@ -1581,17 +1581,18 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
 
   do i=is,ie ; if (do_i(i)) then
     if (CS%ML_omega_frac >= 1.0) then
-      f_sq = 4.0*(US%s_to_T**2 * Omega2)
+      f_sq = 4.0 * Omega2
     else
-      f_sq = 0.25*US%s_to_T**2*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                                (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f_sq = 0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%ML_omega_frac > 0.0) &
-        f_sq = CS%ML_omega_frac*4.0*(US%s_to_T**2 * Omega2) + (1.0-CS%ML_omega_frac)*f_sq
+        f_sq = CS%ML_omega_frac * 4.0 * Omega2 + (1.0 - CS%ML_omega_frac) * f_sq
     endif
 
-    ustar_sq = max(fluxes%ustar(i,j), US%s_to_T * CS%ustar_min)**2
+    ustar_sq = max(US%T_to_s * fluxes%ustar(i,j), CS%ustar_min)**2
 
-    TKE_ml_flux(i) = (CS%mstar*CS%ML_rad_coeff)*(US%Z_to_m**3*ustar_sq*fluxes%ustar(i,j))
+    TKE_ml_flux(i) = (CS%mstar * CS%ML_rad_coeff) &
+        * (US%Z_to_m**3 * ustar_sq * (US%T_to_s * fluxes%ustar(i,j)))
     I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / ustar_sq)
 
     if (CS%ML_rad_TKE_decay) &
@@ -1605,25 +1606,24 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
     ! a more accurate Taylor series approximations for very thin layers.
     z1 = (GV%H_to_Z*h(i,j,kml+1)) * I_decay(i)
     if (z1 > 1e-5) then
-      Kd_mlr = (TKE_ml_flux(i) * (US%T_to_s**2 * TKE_to_Kd(i,kml+1))) * &
-               (1.0 - exp(-z1))
+      Kd_mlr = TKE_ml_flux(i) * TKE_to_Kd(i,kml+1) * (1.0 - exp(-z1))
     else
-      Kd_mlr = (TKE_ml_flux(i) * (US%T_to_s**2 * TKE_to_Kd(i,kml+1))) * &
-               (z1 * (1.0 - z1 * (0.5 - C1_6*z1)))
+      Kd_mlr = TKE_ml_flux(i) * TKE_to_Kd(i,kml+1) &
+        * (z1 * (1.0 - z1 * (0.5 - C1_6 * z1)))
     endif
     Kd_mlr_ml(i) = min(Kd_mlr, CS%ML_rad_kd_max)
     TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-z1)
   endif ; enddo
 
   do k=1,kml+1 ; do i=is,ie ; if (do_i(i)) then
-    Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr_ml(i)
+    Kd_lay(i,j,k) = Kd_lay(i,j,k) + (US%s_to_T * Kd_mlr_ml(i))
   endif ; enddo ; enddo
   if (present(Kd_int)) then
     do K=2,kml+1 ; do i=is,ie ; if (do_i(i)) then
-      Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_mlr_ml(i)
+      Kd_int(i,j,K) = Kd_int(i,j,K) + (US%s_to_T * Kd_mlr_ml(i))
     endif ; enddo ; enddo
     if (kml<=nz-1) then ; do i=is,ie ; if (do_i(i)) then
-      Kd_int(i,j,Kml+2) = Kd_int(i,j,Kml+2) + 0.5*Kd_mlr_ml(i)
+      Kd_int(i,j,Kml+2) = Kd_int(i,j,Kml+2) + 0.5 * (US%s_to_T * Kd_mlr_ml(i))
     endif ; enddo ; endif
   endif
 
@@ -1632,21 +1632,21 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
     do i=is,ie ; if (do_i(i)) then
       dzL = GV%H_to_Z*h(i,j,k) ;  z1 = dzL*I_decay(i)
       if (z1 > 1e-5) then
-        Kd_mlr = (TKE_ml_flux(i) * (US%T_to_s**2 * TKE_to_Kd(i,k))) * &
-                 US%m_to_Z * ((1.0 - exp(-z1)) / dzL)
+        Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) &
+          * US%m_to_Z * ((1.0 - exp(-z1)) / dzL)
       else
-        Kd_mlr = (TKE_ml_flux(i) * (US%T_to_s**2 * TKE_to_Kd(i,k))) * &
-                 US%m_to_Z * (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1)))
+        Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) &
+          * US%m_to_Z * (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1)))
       endif
       Kd_mlr = min(Kd_mlr, CS%ML_rad_kd_max)
-      Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr
+      Kd_lay(i,j,k) = Kd_lay(i,j,k) + (US%s_to_T * Kd_mlr)
       if (present(Kd_int)) then
-        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*Kd_mlr
-        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*Kd_mlr
+        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * (US%s_to_T * Kd_mlr)
+        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * (US%s_to_T * Kd_mlr)
       endif
 
       TKE_ml_flux(i) = TKE_ml_flux(i) * exp(-z1)
-      if (TKE_ml_flux(i) * I_decay(i) < 0.1*CS%Kd_min*US%Z_to_m**3*(US%s_to_T**2 * Omega2)) then
+      if ((US%s_to_T**3 * TKE_ml_flux(i)) * I_decay(i) < 0.1*CS%Kd_min*US%Z_to_m**3*(US%s_to_T**2 * Omega2)) then
         do_i(i) = .false.
       else ; do_any = .true. ; endif
     endif ; enddo
@@ -1984,7 +1984,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "The maximum diapycnal diffusivity due to turbulence \n"//&
                  "radiated from the base of the mixed layer. \n"//&
                  "This is only used if ML_RADIATION is true.", &
-                 units="m2 s-1", default=1.0e-3, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=1.0e-3, &
+                 scale=(US%m_to_Z**2)*(US%T_to_s))
     call get_param(param_file, mdl, "ML_RAD_COEFF", CS%ML_rad_coeff, &
                  "The coefficient which scales MSTAR*USTAR^3 to obtain \n"//&
                  "the energy available for mixing below the base of the \n"//&
