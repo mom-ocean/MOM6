@@ -29,9 +29,9 @@ use MOM_io, only : axis_data_type
 use MOM_io, only : MOM_get_axis_data
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
-use MOM_time_manager, only : days_in_month, gt_date, set_date
+use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum, mpp_pe
+use mpp_mod,         only:  mpp_chksum, mpp_pe, mpp_max
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_axis => register_axis, &
                            fms2_read_data => read_data, &
@@ -1114,7 +1114,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
            ! prepare the restart field checksum
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
         elseif (associated(CS%var_ptr2d(m)%p)) then
 
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
@@ -1122,7 +1122,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
            ! prepare the restart field checksum
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
         elseif (associated(CS%var_ptr4d(m)%p)) then
 
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
@@ -1130,7 +1130,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
            ! prepare the restart field checksum
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
         elseif (associated(CS%var_ptr1d(m)%p)) then
            ! need to explicitly define axis_names array for 1-D variable
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
@@ -1138,7 +1138,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
            call MOM_write_data(fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
            ! prepare the restart field checksum
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
         elseif (associated(CS%var_ptr0d(m)%p)) then
            ! need to explicitly define axis_names array for scalar variable
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
@@ -1146,16 +1146,16 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
            call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
            ! prepare the restart field checksum
-           check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
         endif
         ! convert the checksum to a string
-        checksum_char = ''
-        checksum_char = convert_checksum_to_string(check_val(m,1))
+        !checksum_char = ''
+        !checksum_char = convert_checksum_to_string(check_val(m,1))
         ! register the variable attributes
 
         call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
         call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
-        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
+        !call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
         
         if(allocated(time_vals)) deallocate(time_vals)     
      enddo
