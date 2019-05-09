@@ -1951,37 +1951,6 @@ subroutine MOM_close_file(fileObj)
    call fms2_close_file(fileObj)
 end subroutine MOM_close_file
 
-!> check if the time value(s) in distributed files are identical
-function same_file_times(fileobj,time_name) result(same_times)
-  type(FmsNetcdfDomainFile_t), intent(in) :: fileObj !< netCDF file object 
-  character(len=*) :: time_name !< name of the time variable
-
-  ! local
-  logical :: same_times 
-  integer :: ntime
-  real, allocatable :: time_vals(:)
-  
-  call fms2_get_dimension_size(fileObj, trim(time_name), ntime)
-
-  if (ntime < 1) call MOM_error(FATAL,"MOM_io::same_file_times : time dimension size of file < 1")
-
-  allocate(time_vals(ntime))
-  call fms2_read_data(fileObjRead,"Time", time_vals)
-  t1 = time_vals(1)
-  call mpp_max( time_vals(1) )
-     deallocate(time_vals)
-     day = real_to_time(t1*86400.0)
-
-
-                                                
-        if(t1) then 
-           write(mesg,'( "ERROR, unable to open restart file  ",A) ') trim(filepath)
-           call MOM_error(FATAL,"MOM_restart: "//mesg)
-        endif
-        
-  
-end function same_file_times
-
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
 subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
