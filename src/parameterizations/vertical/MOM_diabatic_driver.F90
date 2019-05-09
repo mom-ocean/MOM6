@@ -2911,12 +2911,11 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  default=.true.)
 
   call get_param(param_file, mdl, "AGGREGATE_FW_FORCING", CS%aggregate_FW_forcing, &
-                 "If true, the net incoming and outgoing fresh water fluxes are combined\n"//&
-                 "and applied as either incoming or outgoing depending on the sign of the net.\n"//&
-                 "If false, the net incoming fresh water flux is added to the model and\n"//&
-                 "thereafter the net outgoing is removed from the updated state."//&
-                 "into the first non-vanished layer for which the column remains stable", &
-                 default=.true.)
+                 "If true, the net incoming and outgoing fresh water fluxes are combined \n"//&
+                 "and applied as either incoming or outgoing depending on the sign of the net. \n"//&
+                 "If false, the net incoming fresh water flux is added to the model and \n"//&
+                 "thereafter the net outgoing is removed from the topmost non-vanished \n"//&
+                 "layers of the updated state.", default=.true.)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &

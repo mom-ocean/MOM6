@@ -1217,19 +1217,19 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                  "the biharmonic viscosity.", default=.false.)
 
   call get_param(param_file, mdl, "USE_KH_BG_2D", CS%use_Kh_bg_2d, &
-                 "If true, read a file containing 2-d background harmonic  \n"//&
-                 "viscosities. The final viscosity is the maximum of the other "//&
+                 "If true, read a file containing 2-d background harmonic \n"//&
+                 "viscosities. The final viscosity is the maximum of the other \n"//&
                  "terms and this background value.", default=.false.)
 
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mdl, "DT", dt, &
-                 "The (baroclinic) dynamics time step.", units = "s", &
+                 "The (baroclinic) dynamics time step.", units="s", &
                  fail_if_missing=.true.)
 
   if (CS%no_slip .and. CS%biharmonic) &
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
-                          "at the same time in MOM.")
+                         "at the same time in MOM.")
 
   if (.not.(CS%Laplacian .or. CS%biharmonic)) then
     ! Only issue inviscid warning if not in single column mode (usually 2x2 domain)
