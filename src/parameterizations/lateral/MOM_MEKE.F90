@@ -562,6 +562,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
   real :: EKE, EKEmin, EKEmax, resid, ResMin, ResMax, EKEerr
   real :: FatH    ! Coriolis parameter at h points; to compute topographic beta [s-1]
+  real :: beta_topo_x, beta_topo_y    ! Topographic PV gradients in x and y [s-1 m-1]
   integer :: i, j, is, ie, js, je, n1, n2
   real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket [m2 s-2].
   logical :: useSecant, debugIteration
@@ -581,11 +582,26 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
 
     FatH = 0.25*US%s_to_T*((G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1)) + &
            (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1))) !< Coriolis parameter at h points
-    !### This expression should be recast to use a single division, but it will change answers.
-    beta = sqrt( ( US%s_to_T*G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j)* &
-           (G%bathyT(i+1,j) - G%bathyT(i-1,j))/2./G%dxT(i,j) )**2. &
-           + ( US%s_to_T*G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
-           *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
+
+    ! If bathyT is zero, then a division by zero FPE will be raised.  In this
+    ! case, we apply Adcroft's rule of reciprocals and set the term to zero.
+    ! Since zero-bathymetry cells are masked, this should not affect values.
+    if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.) then
+      beta_topo_x = 0. ; beta_topo_y = 0.
+    else
+      !### These expressions should be recast to use a single division, but it will change answers.
+      !beta_topo_x = CS%MEKE_topographic_beta * FatH &
+      !  * 0.5 * (G%bathyT(i+1,j) - G%bathyT(i-1,j)) * G%IdxT(i,j) / G%bathyT(i,j)
+      !beta_topo_y = CS%MEKE_topographic_beta * FatH &
+      !  * 0.5 * (G%bathyT(i,j+1) - G%bathyT(i,j-1)) * G&IdxT(i,j) / G%bathyT(i,j)
+      beta_topo_x = CS%MEKE_topographic_beta * FatH / G%bathyT(i,j) &
+        * (G%bathyT(i+1,j) - G%bathyT(i-1,j)) / 2. / G%dxT(i,j)
+      beta_topo_y = CS%MEKE_topographic_beta * FatH / G%bathyT(i,j) &
+        * (G%bathyT(i,j+1) - G%bathyT(i,j-1)) / 2. / G%dyT(i,j)
+    endif
+
+    beta = sqrt((US%s_to_T * G%dF_dx(i,j) - beta_topo_x)**2 &
+      + ((US%s_to_T * G%dF_dy(i,j) - beta_topo_y)**2))
 
     I_H = GV%Rho0 * I_mass(i,j)
 
@@ -693,6 +709,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
   real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
   real :: beta, SN
   real :: FatH ! Coriolis parameter at h points [s-1]
+  real :: beta_topo_x, beta_topo_y  ! Topographic PV gradients in x and y [s-1 m-1]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -701,17 +718,35 @@ subroutine MEKE_lengthScales(CS, MEKE, G, US, SN_u, SN_v, &
   do j=js,je ; do i=is,ie
     if (.not.CS%use_old_lscale) then
       if (CS%aEady > 0.) then
-         SN = 0.25*( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)) )
+        SN = 0.25*( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)) )
       else
         SN = 0.
       endif
-      FatH = 0.25*US%s_to_T* ( ( G%CoriolisBu(i,j) + G%CoriolisBu(i-1,j-1) ) + &
-                               ( G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1) ) )  ! Coriolis parameter at h points
-      !### This expression should be recast to use a single division, but it will change answers.
-      beta = sqrt( ( US%s_to_T*G%dF_dx(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
-             *(G%bathyT(i+1,j) - G%bathyT(i-1,j)) /2./G%dxT(i,j) )**2. &
-             + ( US%s_to_T*G%dF_dy(i,j) - CS%MEKE_topographic_beta*FatH/G%bathyT(i,j) &
-             *(G%bathyT(i,j+1) - G%bathyT(i,j-1))/2./G%dyT(i,j) )**2. )
+      FatH = 0.25*US%s_to_T* ( ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1) ) + &
+                               ( G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1) ) )  ! Coriolis parameter at h points
+
+      ! If bathyT is zero, then a division by zero FPE will be raised.  In this
+      ! case, we apply Adcroft's rule of reciprocals and set the term to zero.
+      ! Since zero-bathymetry cells are masked, this should not affect values.
+      if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.0) then
+        beta_topo_x = 0. ; beta_topo_y = 0.
+      else
+        !### These expressions should be recast to use a single division, but it will change answers.
+        !beta_topo_x = CS%MEKE_topographic_beta * FatH &
+        !  * 0.5 * (G%bathyT(i+1,j) - G%bathyT(i-1,j)) * G%IdxT(i,j) / G%bathyT(i,j)
+        !beta_topo_y = CS%MEKE_topographic_beta * FatH &
+        !  * 0.5 * (G%bathyT(i,j+1) - G%bathyT(i,j-1)) * G&IdxT(i,j) / G%bathyT(i,j)
+        beta_topo_x = CS%MEKE_topographic_beta * FatH / G%bathyT(i,j) &
+          * (G%bathyT(i+1,j) - G%bathyT(i-1,j)) / 2. / G%dxT(i,j)
+        beta_topo_y = CS%MEKE_topographic_beta * FatH / G%bathyT(i,j) &
+          * (G%bathyT(i,j+1) - G%bathyT(i,j-1)) / 2. / G%dyT(i,j)
+      endif
+
+      beta = sqrt((US%s_to_T * G%dF_dx(i,j) - beta_topo_x)**2 &
+        + ((US%s_to_T * G%dF_dy(i,j) - beta_topo_y)**2))
+
+    else
+      beta = 0.
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),  &
