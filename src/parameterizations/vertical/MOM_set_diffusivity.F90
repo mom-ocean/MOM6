@@ -1399,24 +1399,23 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   real, dimension(:,:,:),   pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 s-1 ~> m2 s-1]
 
   ! Local variables
-  real :: TKE_column       ! net TKE input into the column [m3 s-3]
+  real :: TKE_column       ! net TKE input into the column [m3 T-3 ~> m3 s-3]
   real :: TKE_to_layer     ! TKE used to drive mixing in a layer [m3 T-3 ~> m3 s-3]
-  real :: TKE_Ray          ! TKE from a layer Rayleigh drag used to drive mixing in that layer [m3 s-3]
-  real :: TKE_remaining    ! remaining TKE available for mixing in this layer and above [m3 s-3]
-  real :: TKE_consumed     ! TKE used for mixing in this layer [m3 s-3]
-  real :: TKE_Kd_wall      ! TKE associated with unlimited law of the wall mixing [m3 s-3]
+  real :: TKE_remaining    ! remaining TKE available for mixing in this layer and above [m3 T-3 ~> m3 s-3]
+  real :: TKE_consumed     ! TKE used for mixing in this layer [m3 T-3 ~> m3 s-3]
+  real :: TKE_Kd_wall      ! TKE associated with unlimited law of the wall mixing [m3 T-3 ~> m3 s-3]
   real :: cdrag_sqrt       ! square root of the drag coefficient [nondim]
-  real :: ustar            ! value of ustar at a thickness point [Z s-1 ~> m s-1].
-  real :: ustar2           ! square of ustar, for convenience [Z2 s-2 ~> m2 s-2]
-  real :: absf             ! average absolute value of Coriolis parameter around a thickness point [s-1]
+  real :: ustar            ! value of ustar at a thickness point [Z T-1 ~> m s-1].
+  real :: ustar2           ! square of ustar, for convenience [Z2 T-2 ~> m2 s-2]
+  real :: absf             ! average absolute value of Coriolis parameter around a thickness point [T-1 ~> s-1]
   real :: dh, dhm1         ! thickness of layers k and k-1, respecitvely [Z ~> m].
   real :: z_bot            ! distance to interface k from bottom [Z ~> m].
   real :: D_minus_z        ! distance to interface k from surface [Z ~> m].
   real :: total_thickness  ! total thickness of water column [Z ~> m].
   real :: Idecay           ! inverse of decay scale used for "Joule heating" loss of TKE with height [Z-1 ~> m-1].
-  real :: Kd_wall          ! Law of the wall diffusivity [Z2 s-1 ~> m2 s-1].
-  real :: Kd_lower         ! diffusivity for lower interface [Z2 s-1 ~> m2 s-1]
-  real :: ustar_D          ! u* x D  [Z2 s-1 ~> m2 s-1].
+  real :: Kd_wall          ! Law of the wall diffusivity [Z2 T-1 ~> m2 s-1].
+  real :: Kd_lower         ! diffusivity for lower interface [Z2 T-1 ~> m2 s-1]
+  real :: ustar_D          ! u* x D  [Z2 T-1 ~> m2 s-1].
   real :: I_Rho0           ! 1 / rho0
   real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall [T-2 ~> s-2]
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
@@ -1437,32 +1436,31 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   I_Rho0 = 1.0/GV%Rho0
   cdrag_sqrt = sqrt(CS%cdrag)
 
-  TKE_Ray = 0. ! In case Rayleigh_drag is not used.
   do i=G%isc,G%iec ! Developed in single-column mode
 
     ! Column-wise parameters.
-    absf = 0.25*US%s_to_T*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                           (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
+    absf = 0.25 * ((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                   (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
 
     ! u* at the bottom [m s-1].
-    ustar = visc%ustar_BBL(i,j)
+    ustar = US%T_to_s * visc%ustar_BBL(i,j)
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
-    if (associated(fluxes%ustar_tidal)) ustar = ustar + US%m_to_Z*fluxes%ustar_tidal(i,j)
+    if (associated(fluxes%ustar_tidal)) ustar = ustar + (US%m_to_Z * US%T_to_s * fluxes%ustar_tidal(i,j))
 
     ! The maximum decay scale should be something of order 200 m. We use the smaller of u*/f and
     ! (IMax_decay)^-1 as the decay scale. If ustar = 0, this is land so this value doesn't matter.
     Idecay = CS%IMax_decay
-    if ((ustar > 0.0) .and. (absf > CS%IMax_decay*ustar)) Idecay = absf / ustar
+    if ((ustar > 0.0) .and. (absf > CS%IMax_decay * ustar)) Idecay = absf / ustar
 
     ! Energy input at the bottom [m3 s-3].
     ! (Note that visc%TKE_BBL is in m3 s-3, set in set_BBL_TKE().)
     ! I am still unsure about sqrt(cdrag) in this expressions - AJA
-    TKE_column = cdrag_sqrt * visc%TKE_BBL(i,j)
+    TKE_column = cdrag_sqrt * (US%T_to_s**3 * visc%TKE_BBL(i,j))
     ! Add in tidal dissipation energy at the bottom [m3 s-3].
     ! Note that TKE_tidal is in [W m-2].
-    if (associated(fluxes%TKE_tidal)) TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
+    if (associated(fluxes%TKE_tidal)) TKE_column = TKE_column + (US%T_to_s**3 * fluxes%TKE_tidal(i,j)) * I_Rho0
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
@@ -1480,6 +1478,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
+            US%T_to_s**3 * &
             0.5*CS%BBL_effic * US%Z_to_m * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
@@ -1498,22 +1497,22 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       if ( ustar_D + absf * ( z_bot * D_minus_z ) == 0.) then
         Kd_wall = 0.
       else
-        Kd_wall = ( ( von_karm * ustar2 ) * ( z_bot * D_minus_z ) ) / &
-                  ( ustar_D + absf * ( z_bot * D_minus_z ) )
+        Kd_wall = ((von_karm * ustar2) * (z_bot * D_minus_z)) &
+                  / (ustar_D + absf * (z_bot * D_minus_z))
       endif
 
       ! TKE associated with Kd_wall [m3 s-2].
       ! This calculation if for the volume spanning the interface.
-      TKE_Kd_wall = US%Z_to_m**3 * US%s_to_T**2 * Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
+      TKE_Kd_wall = US%Z_to_m**3 * Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 
       ! Now bound Kd such that the associated TKE is no greater than available TKE for mixing.
       if (TKE_Kd_wall > 0.) then
         TKE_consumed = min(TKE_Kd_wall, TKE_remaining)
-        Kd_wall = (TKE_consumed/TKE_Kd_wall) * Kd_wall ! Scale Kd so that only TKE_consumed is used.
+        Kd_wall = (TKE_consumed / TKE_Kd_wall) * Kd_wall ! Scale Kd so that only TKE_consumed is used.
       else
         ! Either N2=0 or dh = 0.
         if (TKE_remaining > 0.) then
-          Kd_wall = (US%s_to_T * CS%Kd_max)
+          Kd_wall = CS%Kd_max
         else
           Kd_wall = 0.
         endif
@@ -1524,10 +1523,10 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       TKE_remaining = TKE_remaining - TKE_consumed ! Note this will be non-negative
 
       ! Add this BBL diffusivity to the model net diffusivity.
-      Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_wall
-      Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*(Kd_wall + Kd_lower)
+      Kd_int(i,j,K) = Kd_int(i,j,K) + (US%s_to_T * Kd_wall)
+      Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * ((US%s_to_T * Kd_wall) + (US%s_to_T * Kd_lower))
       Kd_lower = Kd_wall ! Store for next level up.
-      if (do_diag_Kd_BBL) Kd_BBL(i,j,K) = Kd_wall
+      if (do_diag_Kd_BBL) Kd_BBL(i,j,K) = (US%s_to_T * Kd_wall)
     enddo ! k
   enddo ! i
 
