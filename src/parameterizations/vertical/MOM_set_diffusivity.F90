@@ -75,14 +75,14 @@ type, public :: set_diffusivity_CS ; private
   real    :: cdrag           !< quadratic drag coefficient [nondim]
   real    :: IMax_decay      !< inverse of a maximum decay scale for
                              !! bottom-drag driven turbulence [Z-1 ~> m-1].
-  real    :: Kv              !< The interior vertical viscosity [Z2 s-1 ~> m2 s-1].
-  real    :: Kd              !< interior diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
+  real    :: Kv              !< The interior vertical viscosity [Z2 T-1 ~> m2 s-1].
+  real    :: Kd              !< interior diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real    :: Kd_min          !< minimum diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real    :: Kd_max          !< maximum increment for diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
                              !! Set to a negative value to have no limit.
   real    :: Kd_add          !< uniform diffusivity added everywhere without
-                             !! filtering or scaling [Z2 s-1 ~> m2 s-1].
-  real    :: Kdml            !< mixed layer diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
+                             !! filtering or scaling [Z2 T-1 ~> m2 s-1].
+  real    :: Kdml            !< mixed layer diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
                              !! when bulkmixedlayer==.false.
   real    :: Hmix            !< mixed layer thickness [meter] when BULKMIXEDLAYER==.false.
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostic output timing
@@ -144,8 +144,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: simple_TKE_to_Kd !< If true, uses a simple estimate of Kd/TKE that
                               !! does not rely on a layer-formulation.
   real    :: Max_Rrho_salt_fingers      !< max density ratio for salt fingering
-  real    :: Max_salt_diff_salt_fingers !< max salt diffusivity for salt fingers [Z2 s-1 ~> m2 s-1]
-  real    :: Kv_molecular               !< molecular visc for double diff convect [Z2 s-1 ~> m2 s-1]
+  real    :: Max_salt_diff_salt_fingers !< max salt diffusivity for salt fingers [Z2 T-1 ~> m2 s-1]
+  real    :: Kv_molecular               !< molecular visc for double diff convect [Z2 T-1 ~> m2 s-1]
 
   character(len=200) :: inputdir !< The directory in which input files are found
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL() !< Control structure for a child module
@@ -295,9 +295,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! Set Kd_lay, Kd_int and Kv_slow to constant values.
   ! If nothing else is specified, this will be the value used.
-  Kd_lay(:,:,:) = CS%Kd
-  Kd_int(:,:,:) = CS%Kd
-  if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
+  Kd_lay(:,:,:) = US%s_to_T * CS%Kd
+  Kd_int(:,:,:) = US%s_to_T * CS%Kd
+  if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = US%s_to_T * CS%Kv
 
   ! Set up arrays for diagnostics.
 
@@ -413,14 +413,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, KT_extra, KS_extra)
       do K=2,nz ; do i=is,ie
         if (KS_extra(i,K) > KT_extra(i,K)) then ! salt fingering
-          Kd_lay(i,j,k-1) = Kd_lay(i,j,k-1) + 0.5*KT_extra(i,K)
-          Kd_lay(i,j,k)   = Kd_lay(i,j,k)   + 0.5*KT_extra(i,K)
-          visc%Kd_extra_S(i,j,k) = (KS_extra(i,K) - KT_extra(i,K))
+          Kd_lay(i,j,k-1) = Kd_lay(i,j,k-1) + 0.5 * (US%s_to_T * KT_extra(i,K))
+          Kd_lay(i,j,k)   = Kd_lay(i,j,k)   + 0.5 * (US%s_to_T * KT_extra(i,K))
+          visc%Kd_extra_S(i,j,k) = US%s_to_T * (KS_extra(i,K) - KT_extra(i,K))
           visc%Kd_extra_T(i,j,k) = 0.0
         elseif (KT_extra(i,K) > 0.0) then ! double-diffusive convection
-          Kd_lay(i,j,k-1) = Kd_lay(i,j,k-1) + 0.5*KS_extra(i,K)
-          Kd_lay(i,j,k)   = Kd_lay(i,j,k)   + 0.5*KS_extra(i,K)
-          visc%Kd_extra_T(i,j,k) = (KT_extra(i,K) - KS_extra(i,K))
+          Kd_lay(i,j,k-1) = Kd_lay(i,j,k-1) + 0.5 * (US%s_to_T * KS_extra(i,K))
+          Kd_lay(i,j,k)   = Kd_lay(i,j,k)   + 0.5 * (US%s_to_T * KS_extra(i,K))
+          visc%Kd_extra_T(i,j,k) = US%s_to_T * (KT_extra(i,K) - KS_extra(i,K))
           visc%Kd_extra_S(i,j,k) = 0.0
         else ! There is no double diffusion at this interface.
           visc%Kd_extra_T(i,j,k) = 0.0
@@ -559,13 +559,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (present(Kd_int)) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add
+        Kd_int(i,j,K) = Kd_int(i,j,K) + US%s_to_T * CS%Kd_add
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + US%s_to_T * CS%Kd_add
       enddo ; enddo ; enddo
     else
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + US%s_to_T * CS%Kd_add
       enddo ; enddo ; enddo
     endif
   endif
@@ -1062,10 +1062,10 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
   real, dimension(SZI_(G),SZK_(G)+1),       &
                             intent(out) :: Kd_T_dd !< Interface double diffusion diapycnal
-                                               !! diffusivity for temp [Z2 s-1 ~> m2 s-1].
+                                               !! diffusivity for temp [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZK_(G)+1),       &
                             intent(out) :: Kd_S_dd !< Interface double diffusion diapycnal
-                                               !! diffusivity for saln [Z2 s-1 ~> m2 s-1].
+                                               !! diffusivity for saln [Z2 T-1 ~> m2 s-1].
 
   real, dimension(SZI_(G)) :: &
     dRho_dT,  &    ! partial derivatives of density wrt temp [kg m-3 degC-1]
@@ -1079,20 +1079,15 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
 
   real :: Rrho    ! vertical density ratio [nondim]
   real :: diff_dd ! factor for double-diffusion [nondim]
-  real :: Kd_dd   ! The dominant double diffusive diffusivity [Z2 s-1 ~> m2 s-1]
+  real :: Kd_dd   ! The dominant double diffusive diffusivity [Z2 T-1 ~> m2 s-1]
   real :: prandtl ! flux ratio for diffusive convection regime
 
   real, parameter :: Rrho0  = 1.9 ! limit for double-diffusive density ratio [nondim]
-  real :: dsfmax        ! max diffusivity in case of salt fingering [Z2 s-1 ~> m2 s-1]
-  real :: Kv_molecular  ! molecular viscosity [Z2 s-1 ~> m2 s-1]
 
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   if (associated(tv%eqn_of_state)) then
-    dsfmax = US%m_to_Z**2 * 1.e-4 ! max salt fingering diffusivity rescaled to [Z2 s-1 ~> m2 s-1]
-    Kv_molecular = US%m_to_Z**2 * 1.5e-6 ! molecular viscosity rescaled to [Z2 s-1 ~> m2 s-1]
-
     do i=is,ie
       pres(i) = 0.0 ; Kd_T_dd(i,1) = 0.0 ; Kd_S_dd(i,1) = 0.0
       Kd_T_dd(i,nz+1) = 0.0 ; Kd_S_dd(i,nz+1) = 0.0
@@ -1113,16 +1108,16 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
         if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then  ! salt finger case
           Rrho = min(alpha_dT / beta_dS, Rrho0)
           diff_dd = 1.0 - ((RRho-1.0)/(RRho0-1.0))
-          Kd_dd = dsfmax * diff_dd*diff_dd*diff_dd
-          Kd_T_dd(i,K) = 0.7*Kd_dd
+          Kd_dd = CS%Max_salt_diff_salt_fingers * diff_dd*diff_dd*diff_dd
+          Kd_T_dd(i,K) = 0.7 * Kd_dd
           Kd_S_dd(i,K) = Kd_dd
         elseif ((alpha_dT < 0.) .and. (beta_dS < 0.) .and. (alpha_dT > beta_dS)) then ! diffusive convection
           Rrho = alpha_dT / beta_dS
-          Kd_dd = Kv_molecular * 0.909*exp(4.6*exp(-0.54*(1/Rrho-1)))
+          Kd_dd = CS%Kv_molecular * 0.909 * exp(4.6 * exp(-0.54 * (1/Rrho - 1)))
           prandtl = 0.15*Rrho
           if (Rrho > 0.5) prandtl = (1.85-0.85/Rrho)*Rrho
           Kd_T_dd(i,K) = Kd_dd
-          Kd_S_dd(i,K) = prandtl*Kd_dd
+          Kd_S_dd(i,K) = prandtl * Kd_dd
         else
           Kd_T_dd(i,K) = 0.0 ; Kd_S_dd(i,K) = 0.0
         endif
@@ -2082,12 +2077,14 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", scale=US%m_to_Z**2, fail_if_missing=.true.)
+                 units="m2 s-1", scale=(US%m_to_Z**2)*US%T_to_s, &
+                 fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
-                 "may be used.", units="m2 s-1", scale=US%m_to_Z**2, fail_if_missing=.true.)
+                 "may be used.", units="m2 s-1", scale=(US%m_to_Z**2)*US%T_to_s, &
+                 fail_if_missing=.true.)
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
                  units="m2 s-1", default=0.01*CS%Kd*US%Z_to_m**2, &
@@ -2102,7 +2099,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   call get_param(param_file, mdl, "KD_ADD", CS%Kd_add, &
                  "A uniform diapycnal diffusivity that is added \n"//&
                  "everywhere without any filtering or scaling.", &
-                 units="m2 s-1", default=0.0, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=0.0, scale=(US%m_to_Z**2)*US%T_to_s)
   if (CS%use_LOTW_BBL_diffusivity .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
                  "set_diffusivity_init: KD_MAX must be set (positive) when "// &
                  "USE_LOTW_BBL_DIFFUSIVITY=True.")
@@ -2116,11 +2113,14 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
                     ! cannot be a NaN.
   else
+    ! ### This parameter is unused and is staged for deletion
     call get_param(param_file, mdl, "KDML", CS%Kdml, &
                  "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
-                 units="m2 s-1", default=CS%Kd*US%Z_to_m**2, scale=US%m_to_Z**2)
+                 units="m2 s-1", &
+                 default=CS%Kd*(US%Z_to_m**2)*US%s_to_T, &
+                 scale=(US%m_to_Z**2)*US%T_to_s)
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
@@ -2186,9 +2186,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("N2", "s-2", &
                     "Buoyancy frequency, interpolated to z", z_grid='z')
-      CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%s_to_T**2)
       if (CS%user_change_diff) &
-        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
+        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
+                    conversion=(US%Z_to_m**2)*US%s_to_T)
     endif
   endif
 
@@ -2203,30 +2204,36 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  default=2.55, units="nondim")
     call get_param(param_file, mdl, "MAX_SALT_DIFF_SALT_FINGERS", CS%Max_salt_diff_salt_fingers, &
                  "Maximum salt diffusivity for salt fingering regime.", &
-                 default=1.e-4, units="m2 s-1")
+                 default=1.e-4, units="m2 s-1", scale=(US%m_to_Z**2)*US%T_to_s)
     call get_param(param_file, mdl, "KV_MOLECULAR", CS%Kv_molecular, &
                  "Molecular viscosity for calculation of fluxes under \n"//&
-                 "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
+                 "double-diffusive convection.", default=1.5e-6, units="m2 s-1", &
+                 scale=(US%m_to_Z**2)*US%T_to_s)
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
     CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z_to_m**2)
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', &
+         conversion=(US%Z_to_m**2)*US%s_to_T)
 
     CS%id_KS_extra = register_diag_field('ocean_model', 'KS_extra', diag%axesTi, Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z_to_m**2)
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', &
+         conversion=(US%Z_to_m**2)*US%s_to_T)
 
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("KT_extra", "m2 s-1", &
                     "Double-Diffusive Temperature Diffusivity, interpolated to z", &
                     z_grid='z')
-      CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
+      CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
+                    conversion=(US%Z_to_m**2)*US%s_to_T)
       vd = var_desc("KS_extra", "m2 s-1", &
                     "Double-Diffusive Salinity Diffusivity, interpolated to z", &
                     z_grid='z')
-      CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
+      CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
+                    conversion=(US%Z_to_m**2)*US%s_to_T)
       vd = var_desc("Kd_BBL", "m2 s-1", &
                     "Bottom Boundary Layer Diffusivity", z_grid='z')
-      CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%Z_to_m**2)
+      CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
+                    conversion=(US%Z_to_m**2)*US%s_to_T)
     endif
   endif ! old double-diffusion
 
