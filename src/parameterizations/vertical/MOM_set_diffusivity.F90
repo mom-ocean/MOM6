@@ -282,6 +282,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
          "Module must be initialized before it is used.")
 
   I_Rho0     = 1.0 / GV%Rho0
+  ! ### Dimensional parameters
   kappa_fill = 1.e-3 * US%m_to_Z**2 * US%T_to_s
   dt_fill    = 7200. * US%s_to_T
   Omega2     = CS%omega * CS%omega
@@ -336,8 +337,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
       call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
-    call vert_fill_TS(h, tv%T, tv%S, (US%s_to_T)*kappa_fill, &
-                      (US%T_to_s)*dt_fill, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, &
+                      dt_fill, T_f, S_f, G, GV)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
@@ -406,7 +407,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     ! Add background mixing
-    call calculate_bkgnd_mixing(h, tv, US%s_to_T**2 * N2_lay, Kd_lay, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
+    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, visc%Kv_slow, j, G, GV, US, CS%bkgnd_mixing_csp)
 
     ! Double-diffusion (old method)
     if (CS%double_diffusion) then
@@ -483,8 +484,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd, Kd_int)
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
-    call calculate_tidal_mixing(h, (US%s_to_T**2)*N2_bot, j, (US%T_to_s**2)*TKE_to_Kd, (US%s_to_T**3)*maxTKE, G, GV, US, CS%tm_csp, &
-                                (US%s_to_T**2)*N2_lay, (US%s_to_T**2)*N2_int, Kd_lay, Kd_int, (US%s_to_T*CS%Kd_max), visc%Kv_slow)
+    call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tm_csp, &
+                                N2_lay, N2_int, Kd_lay, Kd_int, CS%Kd_max, visc%Kv_slow)
 
     ! This adds the diffusion sustained by the energy extracted from the flow
     ! by the bottom drag.
