@@ -283,7 +283,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   I_Rho0     = 1.0 / GV%Rho0
   ! ### Dimensional parameters
-  kappa_fill = 1.e-3 * US%m_to_Z**2 * US%T_to_s
+  kappa_fill = 1.e-3 * US%m2_s_to_Z2_T
   dt_fill    = 7200. * US%s_to_T
   Omega2     = CS%omega * CS%omega
 
@@ -532,7 +532,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   if (CS%debug) then
     call hchksum(Kd_lay ,"Kd_lay", G%HI, haloshift=0, &
-                 scale=(US%Z_to_m**2)*US%s_to_T)
+                 scale=US%Z2_T_to_m2_s)
 
     if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, scale=US%Z_to_m**2)
 
@@ -1990,7 +1990,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "radiated from the base of the mixed layer. \n"//&
                  "This is only used if ML_RADIATION is true.", &
                  units="m2 s-1", default=1.0e-3, &
-                 scale=(US%m_to_Z**2)*(US%T_to_s))
+                 scale=US%m2_s_to_Z2_T)
     call get_param(param_file, mdl, "ML_RAD_COEFF", CS%ML_rad_coeff, &
                  "The coefficient which scales MSTAR*USTAR^3 to obtain \n"//&
                  "the energy available for mixing below the base of the \n"//&
@@ -2066,7 +2066,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
                  'Bottom Boundary Layer Diffusivity', 'm2 s-1', &
-                 conversion=(US%Z_to_m**2)*US%s_to_T)
+                 conversion=US%Z2_T_to_m2_s)
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
                  "work for arbitrary vertical coordinates. If false,\n"//&
@@ -2080,29 +2080,29 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", scale=(US%m_to_Z**2)*US%T_to_s, &
+                 units="m2 s-1", scale=US%m2_s_to_Z2_T, &
                  fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
-                 "may be used.", units="m2 s-1", scale=(US%m_to_Z**2)*US%T_to_s, &
+                 "may be used.", units="m2 s-1", scale=US%m2_s_to_Z2_T, &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
-                 units="m2 s-1", default=0.01*CS%Kd*US%Z_to_m**2, &
-                 scale=(US%m_to_Z**2)*(US%T_to_s))
+                 units="m2 s-1", default=0.01*CS%Kd*US%Z2_T_to_m2_s, &
+                 scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
                  "The maximum permitted increment for the diapycnal \n"//&
                  "diffusivity from TKE-based parameterizations, or a \n"//&
                  "negative value for no limit.", units="m2 s-1", default=-1.0, &
-                 scale=(US%m_to_Z**2)*(US%T_to_s))
+                 scale=US%m2_s_to_Z2_T)
   if (CS%simple_TKE_to_Kd .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
          "set_diffusivity_init: To use SIMPLE_TKE_TO_KD, KD_MAX must be set to >0.")
   call get_param(param_file, mdl, "KD_ADD", CS%Kd_add, &
                  "A uniform diapycnal diffusivity that is added \n"//&
                  "everywhere without any filtering or scaling.", &
-                 units="m2 s-1", default=0.0, scale=(US%m_to_Z**2)*US%T_to_s)
+                 units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T)
   if (CS%use_LOTW_BBL_diffusivity .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
                  "set_diffusivity_init: KD_MAX must be set (positive) when "// &
                  "USE_LOTW_BBL_DIFFUSIVITY=True.")
@@ -2121,9 +2121,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
-                 units="m2 s-1", &
-                 default=CS%Kd*(US%Z_to_m**2)*US%s_to_T, &
-                 scale=(US%m_to_Z**2)*US%T_to_s)
+                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, &
+                 scale=US%m2_s_to_Z2_T)
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
@@ -2140,21 +2139,21 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
   call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor).", units="W m-3", default=0.0, &
-                 scale=(US%m_to_Z**2)*(US%T_to_s**3))
+                 scale=US%m2_s_to_Z2_T*(US%T_to_s**2))
   call get_param(param_file, mdl, "DISSIPATION_N0", CS%dissip_N0, &
                  "The intercept when N=0 of the N-dependent expression \n"//&
                  "used to set a minimum dissipation by which to determine \n"//&
                  "a lower bound of Kd (a floor): A in eps_min = A + B*N.", &
                  units="W m-3", default=0.0, &
-                 scale=(US%m_to_Z**2)*(US%T_to_s)**3)
+                 scale=US%m2_s_to_Z2_T*(US%T_to_s**2))
   call get_param(param_file, mdl, "DISSIPATION_N1", CS%dissip_N1, &
                  "The coefficient multiplying N, following Gargett, used to \n"//&
                  "set a minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
-                 units="J m-3", default=0.0, scale=(US%m_to_Z**2)*(US%T_to_s**2))
+                 units="J m-3", default=0.0, scale=US%m2_s_to_Z2_T*US%T_to_s)
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
-                 units="m2 s-1", default=0.0, scale=(US%m_to_Z**2)*US%T_to_s)
+                 units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T)
 
   CS%limit_dissipation = (CS%dissip_min>0.) .or. (CS%dissip_N1>0.) .or. &
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
@@ -2164,7 +2163,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', &
-      conversion=(US%Z_to_m**2)*(US%s_to_T))
+      conversion=US%Z2_T_to_m2_s)
 
 
   if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation .or. &
@@ -2176,7 +2175,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
            'Maximum layer TKE', 'm3 s-3', conversion=US%s_to_T**3)
     CS%id_TKE_to_Kd = register_diag_field('ocean_model', 'TKE_to_Kd', diag%axesTL, Time, &
            'Convert TKE to Kd', 's2 m', &
-           conversion=(US%Z_to_m**2)*(US%T_to_s**2))
+           conversion=US%Z2_T_to_m2_s*(US%T_to_s**3))
     CS%id_N2 = register_diag_field('ocean_model', 'N2', diag%axesTi, Time, &
          'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq', &
           cmor_long_name='Square of seawater buoyancy frequency', &
@@ -2193,7 +2192,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
       CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, conversion=US%s_to_T**2)
       if (CS%user_change_diff) &
         CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
-                    conversion=(US%Z_to_m**2)*US%s_to_T)
+                    conversion=US%Z2_T_to_m2_s)
     endif
   endif
 
@@ -2208,36 +2207,36 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
                  default=2.55, units="nondim")
     call get_param(param_file, mdl, "MAX_SALT_DIFF_SALT_FINGERS", CS%Max_salt_diff_salt_fingers, &
                  "Maximum salt diffusivity for salt fingering regime.", &
-                 default=1.e-4, units="m2 s-1", scale=(US%m_to_Z**2)*US%T_to_s)
+                 default=1.e-4, units="m2 s-1", scale=US%m2_s_to_Z2_T)
     call get_param(param_file, mdl, "KV_MOLECULAR", CS%Kv_molecular, &
                  "Molecular viscosity for calculation of fluxes under \n"//&
                  "double-diffusive convection.", default=1.5e-6, units="m2 s-1", &
-                 scale=(US%m_to_Z**2)*US%T_to_s)
+                 scale=US%m2_s_to_Z2_T)
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
     CS%id_KT_extra = register_diag_field('ocean_model', 'KT_extra', diag%axesTi, Time, &
          'Double-diffusive diffusivity for temperature', 'm2 s-1', &
-         conversion=(US%Z_to_m**2)*US%s_to_T)
+         conversion=US%Z2_T_to_m2_s)
 
     CS%id_KS_extra = register_diag_field('ocean_model', 'KS_extra', diag%axesTi, Time, &
          'Double-diffusive diffusivity for salinity', 'm2 s-1', &
-         conversion=(US%Z_to_m**2)*US%s_to_T)
+         conversion=US%Z2_T_to_m2_s)
 
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("KT_extra", "m2 s-1", &
                     "Double-Diffusive Temperature Diffusivity, interpolated to z", &
                     z_grid='z')
       CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
-                    conversion=(US%Z_to_m**2)*US%s_to_T)
+                    conversion=US%Z2_T_to_m2_s)
       vd = var_desc("KS_extra", "m2 s-1", &
                     "Double-Diffusive Salinity Diffusivity, interpolated to z", &
                     z_grid='z')
       CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
-                    conversion=(US%Z_to_m**2)*US%s_to_T)
+                    conversion=US%Z2_T_to_m2_s)
       vd = var_desc("Kd_BBL", "m2 s-1", &
                     "Bottom Boundary Layer Diffusivity", z_grid='z')
       CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time, &
-                    conversion=(US%Z_to_m**2)*US%s_to_T)
+                    conversion=US%Z2_T_to_m2_s)
     endif
   endif ! old double-diffusion
 

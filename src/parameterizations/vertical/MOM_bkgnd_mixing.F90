@@ -447,7 +447,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
         CS%Kd_bkgnd(i,j,K) = US%m_to_Z**2*Kd_col(K)
       enddo
       do k=1,nz
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m_to_Z**2 * US%T_to_s * (Kd_col(K) + Kd_col(K+1))
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_col(K) + Kd_col(K+1))
       enddo
     enddo ! i loop
 
