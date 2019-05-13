@@ -390,7 +390,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
   real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
                                                                  !! with layers [T-2 ~> s-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay !< Diapycnal diffusivity of each layer
-                                                                 !! [Z2 s-1 ~> m2 s-1].
+                                                                 !! [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
                                                                  !! (not layer!) [Z2 s-1 ~> m2 s-1]
   integer,                                  intent(in)    :: j   !< Meridional grid index
@@ -447,7 +447,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
         CS%Kd_bkgnd(i,j,K) = US%m_to_Z**2*Kd_col(K)
       enddo
       do k=1,nz
-        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5*US%m_to_Z**2*(Kd_col(K) + Kd_col(K+1))
+        Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * US%m_to_Z**2 * US%T_to_s * (Kd_col(K) + Kd_col(K+1))
       enddo
     enddo ! i loop
 
@@ -460,7 +460,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
       if (depth_c <= CS%Hmix) then ; CS%Kd_bkgnd(i,j,k) = CS%Kdml
       elseif (depth_c >= 2.0*CS%Hmix) then ; CS%Kd_bkgnd(i,j,k) = CS%Kd_sfc(i,j)
       else
-        Kd_lay(i,j,k) = ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
+        Kd_lay(i,j,k) = US%T_to_s * ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
                         (2.0*CS%Kdml - CS%Kd_sfc(i,j))
       endif
 
@@ -506,7 +506,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
       CS%kv_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
 
       ! Update Kd (uniform profile; no interpolation needed)
-      kd_lay(i,j,:) = CS%kd_bkgnd(i,j,1)
+      kd_lay(i,j,:) = US%T_to_s * CS%kd_bkgnd(i,j,1)
 
     enddo
 
@@ -516,13 +516,13 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
       abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
       N_2Omega = max(abs_sin,sqrt(US%s_to_T**2 * N2_lay(i,k))*I_2Omega)
       N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-      Kd_lay(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
+      Kd_lay(i,j,k) = US%T_to_s * max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
     enddo ; enddo
 
   else
     do k=1,nz ; do i=is,ie
-      Kd_lay(i,j,k) = CS%Kd_sfc(i,j)
+      Kd_lay(i,j,k) = US%T_to_s * CS%Kd_sfc(i,j)
     enddo ; enddo
   endif
 
@@ -532,7 +532,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
       CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
-        CS%Kd_bkgnd(i,j,k) = 0.5*(Kd_lay(i,j,K-1) + Kd_lay(i,j,K))
+        CS%Kd_bkgnd(i,j,k) = US%s_to_T * (0.5*(Kd_lay(i,j,K-1) + Kd_lay(i,j,K)))
         CS%Kv_bkgnd(i,j,k) = CS%Kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
       enddo
     enddo
