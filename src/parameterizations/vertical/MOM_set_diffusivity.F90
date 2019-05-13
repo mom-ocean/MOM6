@@ -1163,7 +1163,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                                     intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
                                                             !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(:,:,:),           pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 s-1 ~> m2 s-1].
+  real, dimension(:,:,:),           pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 T-1 ~> m2 s-1].
 
 ! This routine adds diffusion sustained by flow energy extracted by bottom drag.
 
@@ -1318,8 +1318,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
             Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * delta_Kd
             Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * delta_Kd
             if (do_diag_Kd_BBL) then
-              Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5 * (US%s_to_T * delta_Kd)
-              Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5 * (US%s_to_T * delta_Kd)
+              Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5 * delta_Kd
+              Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5 * delta_Kd
             endif
           endif
         else
@@ -1345,8 +1345,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
             Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * delta_Kd
             Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * delta_Kd
             if (do_diag_Kd_BBL) then
-              Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5 * (US%s_to_T * delta_Kd)
-              Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5 * (US%s_to_T * delta_Kd)
+              Kd_BBL(i,j,K) = Kd_BBL(i,j,K) + 0.5 * delta_Kd
+              Kd_BBL(i,j,K+1) = Kd_BBL(i,j,K+1) + 0.5 * delta_Kd
             endif
           endif
         endif
@@ -1393,7 +1393,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                             intent(inout) :: Kd_lay !< Layer net diffusivity [Z2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                             intent(inout) :: Kd_int !< Interface net diffusivity [Z2 T-1 ~> m2 s-1]
-  real, dimension(:,:,:),   pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 s-1 ~> m2 s-1]
+  real, dimension(:,:,:),   pointer       :: Kd_BBL !< Interface BBL diffusivity [Z2 T-1 ~> m2 s-1]
 
   ! Local variables
   real :: TKE_column       ! net TKE input into the column [m3 T-3 ~> m3 s-3]
@@ -1523,7 +1523,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       Kd_int(i,j,K) = Kd_int(i,j,K) + Kd_wall
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + 0.5 * (Kd_wall + Kd_lower)
       Kd_lower = Kd_wall ! Store for next level up.
-      if (do_diag_Kd_BBL) Kd_BBL(i,j,K) = (US%s_to_T * Kd_wall)
+      if (do_diag_Kd_BBL) Kd_BBL(i,j,K) = Kd_wall
     enddo ! k
   enddo ! i
 
@@ -2065,7 +2065,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
-       'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=US%Z_to_m**2)
+                 'Bottom Boundary Layer Diffusivity', 'm2 s-1', &
+                 conversion=(US%Z_to_m**2)*US%s_to_T)
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
                  "work for arbitrary vertical coordinates. If false,\n"//&
