@@ -2264,7 +2264,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "SIMPLE_2ND_PPM_CONTINUITY", CS%simple_2nd, &
                  "If true, CONTINUITY_PPM uses a simple 2nd order \n"//&
                  "(arithmetic mean) interpolation of the edge values. \n"//&
-                 "This may give better PV conservation propterties. While \n"//&
+                 "This may give better PV conservation properties. While \n"//&
                  "it formally reduces the accuracy of the continuity \n"//&
                  "solver itself in the strongly advective limit, it does \n"//&
                  "not reduce the overall order of accuracy of the dynamic \n"//&

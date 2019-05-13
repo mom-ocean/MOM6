@@ -174,6 +174,8 @@ type, public:: diabatic_CS; private
   logical :: debug_energy_req        !< If true, test the mixing energy requirement code.
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
+  real :: dz_subML_N2                !< The distance over which to calculate a diagnostic of the
+                                     !! average stratification at the base of the mixed layer [Z ~> m].
   integer :: nsw                     !< SW_NBANDS
 
   !>@{ Diagnostic IDs
@@ -1100,7 +1102,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%id_MLD_003 > 0 .or. CS%id_subMLN2 > 0 .or. CS%id_mlotstsq > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03, G, GV, US, CS%diag, &
-                                        id_N2subML=CS%id_subMLN2, id_MLDsq=CS%id_mlotstsq)
+                                        id_N2subML=CS%id_subMLN2, id_MLDsq=CS%id_mlotstsq, dz_subML=CS%dz_subML_N2)
   endif
   if (CS%id_MLD_0125 > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, GV, US, CS%diag)
@@ -2397,7 +2399,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   if (CS%id_MLD_003 > 0 .or. CS%id_subMLN2 > 0 .or. CS%id_mlotstsq > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03, G, GV, US, CS%diag, &
-                                        id_N2subML=CS%id_subMLN2, id_MLDsq=CS%id_mlotstsq)
+                                        id_N2subML=CS%id_subMLN2, id_MLDsq=CS%id_mlotstsq, dz_subML=CS%dz_subML_N2)
   endif
   if (CS%id_MLD_0125 > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, GV, US, CS%diag)
@@ -2909,12 +2911,11 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  default=.true.)
 
   call get_param(param_file, mdl, "AGGREGATE_FW_FORCING", CS%aggregate_FW_forcing, &
-                 "If true, the net incoming and outgoing fresh water fluxes are combined\n"//&
-                 "and applied as either incoming or outgoing depending on the sign of the net.\n"//&
-                 "If false, the net incoming fresh water flux is added to the model and\n"//&
-                 "thereafter the net outgoing is removed from the updated state."//&
-                 "into the first non-vanished layer for which the column remains stable", &
-                 default=.true.)
+                 "If true, the net incoming and outgoing fresh water fluxes are combined \n"//&
+                 "and applied as either incoming or outgoing depending on the sign of the net. \n"//&
+                 "If false, the net incoming fresh water flux is added to the model and \n"//&
+                 "thereafter the net outgoing is removed from the topmost non-vanished \n"//&
+                 "layers of the updated state.", default=.true.)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
@@ -3030,6 +3031,10 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "layer depth, MLD_user, following the definition of Levitus 1982. \n"//&
                  "The MLD is the depth at which the density is larger than the\n"//&
                  "surface density by the specified amount.", units='kg/m3', default=0.1)
+  call get_param(param_file, mdl, "DIAG_DEPTH_SUBML_N2", CS%dz_subML_N2, &
+                 "The distance over which to calculate a diagnostic of the \n"//&
+                 "stratification at the base of the mixed layer.", &
+                 units='m', default=50.0, scale=US%m_to_Z)
 
   ! diagnostics making use of the z-gridding code
   if (associated(diag_to_Z_CSp)) then

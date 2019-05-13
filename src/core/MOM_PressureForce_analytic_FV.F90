@@ -831,8 +831,8 @@ subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_C
                  "The default is set by USE_REGRIDDING.", &
                  default=use_ALE )
   call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", CS%Recon_Scheme, &
-                 "Order of vertical reconstruction of T/S to use in the\n"//&
-                 "integrals within the FV pressure gradient calculation."//&
+                 "Order of vertical reconstruction of T/S to use in the \n"//&
+                 "integrals within the FV pressure gradient calculation.\n"//&
                  " 0: PCM or no reconstruction.\n"//&
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=1)
