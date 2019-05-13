@@ -677,7 +677,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
                                     intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces,
-                                                            !! [Z2 s-1 ~> m2 s-1].
+                                                            !! [Z2 T-1 ~> m2 s-1].
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                             !! diffusivity due to TKE-based processes,
                                                             !! [Z2 T-1 ~> m2 s-1].
@@ -947,7 +947,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
                                     intent(inout) :: Kd_lay !< The diapycnal diffusvity in layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusvity at interfaces
-                                                            !! [Z2 s-1 ~> m2 s-1].
+                                                            !! [Z2 T-1 ~> m2 s-1].
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                             !! diffusivity due to TKE-based processes
                                                             !! [Z2 s-1 ~> m2 s-1].
@@ -1195,8 +1195,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + (US%T_to_s) * Kd_add
 
       if (present(Kd_int)) then
-        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*Kd_add
-        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*Kd_add
+        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * (US%T_to_s * Kd_add)
+        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * (US%T_to_s * Kd_add)
       endif
 
       ! diagnostics
@@ -1282,8 +1282,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + (US%T_to_s) * Kd_add
 
       if (present(Kd_int)) then
-        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5*Kd_add
-        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5*Kd_add
+        Kd_int(i,j,K)   = Kd_int(i,j,K)   + 0.5 * (US%T_to_s * Kd_add)
+        Kd_int(i,j,K+1) = Kd_int(i,j,K+1) + 0.5 * (US%T_to_s * Kd_add)
       endif
 
       ! diagnostics
