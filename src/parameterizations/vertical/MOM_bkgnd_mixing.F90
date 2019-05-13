@@ -380,7 +380,7 @@ end subroutine sfc_bkgnd_mixing
 
 
 !> Calculates the vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
   type(ocean_grid_type),                    intent(in)    :: G   !< Grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< Vertical grid structure.
@@ -389,7 +389,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay !< squared buoyancy frequency associated
                                                                  !! with layers [T-2 ~> s-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay !< Diapycnal diffusivity of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd_lay !< Diapycnal diffusivity of each layer
                                                                  !! [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
                                                                  !! (not layer!) [Z2 s-1 ~> m2 s-1]
@@ -506,7 +506,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, Kv, j, G, GV, US, CS)
       CS%kv_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
 
       ! Update Kd (uniform profile; no interpolation needed)
-      kd_lay(i,j,:) = US%T_to_s * CS%kd_bkgnd(i,j,1)
+      Kd_lay(i,j,:) = US%T_to_s * CS%kd_bkgnd(i,j,1)
 
     enddo
 

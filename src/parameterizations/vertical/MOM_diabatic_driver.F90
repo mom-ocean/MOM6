@@ -1682,7 +1682,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
     ! XXX: Need to remove those US%s_to_T array multiply ops
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS%entrain_diffusive_CSp, &
-                               ea, eb, kb, Kd_Lay=US%s_to_T*Kd_lay, Kd_int=US%s_to_T*Kd_int)
+                               ea, eb, kb, Kd_lay=Kd_lay, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
     if (showCallTree) call callTree_waypoint("done with Entrainment_diffusive (diabatic)")
 
