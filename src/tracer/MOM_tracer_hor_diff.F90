@@ -1415,13 +1415,13 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS)
                  units="m2 s-1", default=0.0)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", CS%KhTr_passivity_coeff, &
                  "The coefficient that scales deformation radius over \n"//&
-                 "grid-spacing in passivity, where passiviity is the ratio \n"//&
-                 "between along isopycnal mxiing of tracers to thickness mixing. \n"//&
+                 "grid-spacing in passivity, where passivity is the ratio \n"//&
+                 "between along isopycnal mixing of tracers to thickness mixing. \n"//&
                  "A non-zero value enables this parameterization.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_MIN", CS%KhTr_passivity_min, &
                  "The minimum passivity which is the ratio between \n"//&
-                 "along isopycnal mxiing of tracers to thickness mixing. \n", &
+                 "along isopycnal mixing of tracers to thickness mixing. \n", &
                  units="nondim", default=0.5)
   call get_param(param_file, mdl, "DIFFUSE_ML_TO_INTERIOR", CS%Diffuse_ML_interior, &
                  "If true, enable epipycnal mixing between the surface \n"//&

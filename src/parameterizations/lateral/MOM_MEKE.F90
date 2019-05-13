@@ -865,7 +865,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "MEKE_DAMPING", CS%MEKE_damping, &
-                 "The local depth-indepented MEKE dissipation rate.", &
+                 "The local depth-independent MEKE dissipation rate.", &
                  units="s-1", default=0.0)
   call get_param(param_file, mdl, "MEKE_CD_SCALE", CS%MEKE_Cd_scale, &
                  "The ratio of the bottom eddy velocity to the column mean\n"//&
@@ -944,41 +944,41 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_FIXED_MIXING_LENGTH", CS%Lfixed, &
                  "If positive, is a fixed length contribution to the expression\n"//&
-                 "for mixing length used in MEKE-derived diffusiviity.", &
+                 "for mixing length used in MEKE-derived diffusivity.", &
                  units="m", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_DEFORM", CS%aDeform, &
                  "If positive, is a coefficient weighting the deformation scale\n"//&
-                 "in the expression for mixing length used in MEKE-derived diffusiviity.", &
+                 "in the expression for mixing length used in MEKE-derived diffusivity.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_RHINES", CS%aRhines, &
                  "If positive, is a coefficient weighting the Rhines scale\n"//&
-                 "in the expression for mixing length used in MEKE-derived diffusiviity.", &
+                 "in the expression for mixing length used in MEKE-derived diffusivity.", &
                  units="nondim", default=0.05)
   call get_param(param_file, mdl, "MEKE_ALPHA_EADY", CS%aEady, &
                  "If positive, is a coefficient weighting the Eady length scale\n"//&
-                 "in the expression for mixing length used in MEKE-derived diffusiviity.", &
+                 "in the expression for mixing length used in MEKE-derived diffusivity.", &
                  units="nondim", default=0.05)
   call get_param(param_file, mdl, "MEKE_ALPHA_FRICT", CS%aFrict, &
                  "If positive, is a coefficient weighting the frictional arrest scale\n"//&
-                 "in the expression for mixing length used in MEKE-derived diffusiviity.", &
+                 "in the expression for mixing length used in MEKE-derived diffusivity.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ALPHA_GRID", CS%aGrid, &
                  "If positive, is a coefficient weighting the grid-spacing as a scale\n"//&
-                 "in the expression for mixing length used in MEKE-derived diffusiviity.", &
+                 "in the expression for mixing length used in MEKE-derived diffusivity.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_COLD_START", coldStart, &
                  "If true, initialize EKE to zero. Otherwise a local equilibrium solution\n"//&
                  "is used as an initial condition for EKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_BACKSCAT_RO_C", MEKE%backscatter_Ro_c, &
-                 "The coefficient in the Rossby number function for scaling the buharmonic\n"//&
+                 "The coefficient in the Rossby number function for scaling the biharmonic\n"//&
                  "frictional energy source. Setting to non-zero enables the Rossby number function.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_BACKSCAT_RO_POW", MEKE%backscatter_Ro_pow, &
-                 "The power in the Rossby number function for scaling the biharmomnic\n"//&
+                 "The power in the Rossby number function for scaling the biharmonic\n"//&
                  "frictional energy source.", units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_ADVECTION_FACTOR", CS%MEKE_advection_factor, &
                  "A scale factor in front of advection of eddy energy. Zero turns advection off.\n"//&
-                 "Using unity would be normal but other values could accomodate a mismatch\n"//&
+                 "Using unity would be normal but other values could accommodate a mismatch\n"//&
                  "between the advecting barotropic flow and the vertical structure of MEKE.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_TOPOGRAPHIC_BETA", CS%MEKE_topographic_beta, &
