@@ -1469,8 +1469,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
-      CS%Ah_bg_xx(i,j) = MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / &
-                                               Ah_time_scale)
+      if (Ah_time_scale>0.) CS%Ah_bg_xx(i,j) = &
+            MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
         CS%Ah_bg_xx(i,j) = MIN(CS%Ah_bg_xx(i,j), CS%Ah_Max_xx(i,j))
@@ -1493,8 +1493,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
-      CS%Ah_bg_xy(i,j) = MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / &
-                                               Ah_time_scale)
+      if (Ah_time_scale>0.) CS%Ah_bg_xy(i,j) = &
+           MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xy(I,J) = Ah_Limit * (grid_sp_q2 * grid_sp_q2)
         CS%Ah_bg_xy(I,J) = MIN(CS%Ah_bg_xy(I,J), CS%Ah_Max_xy(I,J))
