@@ -1764,6 +1764,7 @@ subroutine ModelAdvance(gcomp, rc)
   ! local variables
   integer                                :: userRc
   logical                                :: existflag, isPresent, isSet
+  logical                                :: do_advance = .true.
   type(ESMF_Clock)                       :: clock!< ESMF Clock class definition
   type(ESMF_Alarm)                       :: alarm
   type(ESMF_State)                       :: importState, exportState
@@ -1846,8 +1847,51 @@ subroutine ModelAdvance(gcomp, rc)
     file=__FILE__)) &
     return  ! bail out
 
-  Time = esmf2fms_time(currTime)
-  Time_step_coupled = esmf2fms_time(timeStep)
+  !---------------
+  ! Apply ocean lag at startup:
+  !---------------
+
+  if (cesm_coupled) then
+    if (trim(runtype) == "initial") then
+
+      ! Do not call MOM6 timestepping routine if the first cpl tstep of a startup run
+      if (currTime == startTime) then
+        call ESMF_LogWrite("MOM6 - Skipping the first coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+        do_advance = .false.
+      else
+        do_advance = .true.
+      endif
+
+      ! If the second cpl tstep of a startup run, step back a cpl tstep and advance for two cpl tsteps
+      if (currTime == startTime + timeStep) then
+        call ESMF_LogWrite("MOM6 - Stepping back one coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+        Time = esmf2fms_time(currTime-timeStep) ! i.e., startTime
+
+        call ESMF_LogWrite("MOM6 - doubling the coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+        Time_step_coupled = 2 * esmf2fms_time(timeStep)
+      else
+        Time_step_coupled = esmf2fms_time(timeStep)
+        Time = esmf2fms_time(currTime)
+      endif
+    endif
+
+  else ! non-cesm runs:
+    Time_step_coupled = esmf2fms_time(timeStep)
+    Time = esmf2fms_time(currTime)
+  endif
+
 
   !---------------
   ! Write diagnostics for import
@@ -1890,7 +1934,9 @@ subroutine ModelAdvance(gcomp, rc)
   !---------------
 
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
-  call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
+  if (do_advance) then
+    call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
+  endif
   if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
   !---------------
