@@ -174,7 +174,7 @@ type diffusivity_diags
     Kd_user  => NULL(), & !< user-added diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing [kg T-3 ~> W m-2]
-    maxTKE   => NULL(), & !< energy required to entrain to h_max [m3 s-3]
+    maxTKE   => NULL(), & !< energy required to entrain to h_max [m3 T-3 ~> m3 s-3]
     KT_extra => NULL(), & !< double diffusion diffusivity for temp [Z2 T-1 ~> m2 s-1].
     KS_extra => NULL()    !< double diffusion diffusivity for saln [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
@@ -252,8 +252,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     N2_int,   &   !< squared buoyancy frequency associated at interfaces [T-2 ~> s-2]
     dRho_int, &   !< locally ref potential density difference across interfaces [kg m-3]
-    KT_extra, &   !< double difusion diffusivity of temperature [Z2 s-1 ~> m2 s-1]
-    KS_extra      !< double difusion diffusivity of salinity [Z2 s-1 ~> m2 s-1]
+    KT_extra, &   !< double difusion diffusivity of temperature [Z2 T-1 ~> m2 s-1]
+    KS_extra      !< double difusion diffusivity of salinity [Z2 T-1 ~> m2 s-1]
 
   real :: I_Rho0        ! inverse of Boussinesq density [m3 kg-1]
   real :: dissip        ! local variable for dissipation calculations [Z2 kg m-3 T-3 ~> W m-3]
@@ -337,8 +337,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
       call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
-    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, &
-                      dt_fill, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G, GV)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
