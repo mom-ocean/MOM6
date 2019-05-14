@@ -583,12 +583,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xx(i,j) * Shear_mag )
         if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xx(i,j) * Vort_mag )
+        Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
+        if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) ! *Add* the MEKE contribution (might be negative)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         ! Older method of bounding for stability
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xx(i,j))
-        Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
-        if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) ! *Add* the MEKE contribution (might be negative)
         if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * ( 1. - CS%n1n2_h(i,j)**2 ) ! *Add* the tension component
                                                                                ! of anisotropic viscosity
 
@@ -631,7 +631,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
             endif
           endif
           if (CS%Leith_Ah) &
-            AhLth = Vort_mag * (CS%BIHARM_CONST_xx(i,j))
+            AhLth = Vort_mag * (CS%BIHARM5_CONST_xx(i,j))
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
@@ -743,15 +743,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
         if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%LAPLAC_CONST_xy(I,J) * Shear_mag )
         if (CS%Leith_Kh) Kh = max( Kh, CS%LAPLAC3_CONST_xy(I,J) * Vort_mag)
-        ! All viscosity contributions above are subject to resolution scaling
-        if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
-        ! Older method of bounding for stability
-        if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
         Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
         if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
           Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
         endif
+        ! All viscosity contributions above are subject to resolution scaling
+        if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
+        ! Older method of bounding for stability
+        if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
         if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * CS%n1n2_q(I,J)**2 ! *Add* the shear component
                                                                       ! of anisotropic viscosity
 
@@ -866,7 +866,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     endif
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
-      ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
+      ! Diagnose   str_xx*d_x u + str_yy*d_y v + str_xy*(d_y u + d_x v)
       FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
@@ -984,6 +984,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   real :: Ah               ! biharmonic horizontal viscosity [m4 s-1]
   real :: Kh_vel_scale     ! this speed [m s-1] times grid spacing gives Lap visc
   real :: Ah_vel_scale     ! this speed [m s-1] times grid spacing cubed gives bih visc
+  real :: Ah_time_scale    ! damping time-scale for biharmonic visc
   real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
   real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
@@ -1145,6 +1146,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky and Leith viscosities, and AH.", &
                  units="m s-1", default=0.0)
+    call get_param(param_file, mdl, "AH_TIME_SCALE", Ah_time_scale, &
+                 "A time scale whose inverse is multiplied by the fourth \n"//&
+                 "power of the grid spacing to calculate biharmonic viscosity. \n"//&
+                 "The final viscosity is the largest of all viscosity  \n"//&
+                 "formulations in use. 0.0 means that it's not used.", &
+                 units="s", default=0.0)
     call get_param(param_file, mdl, "SMAGORINSKY_AH", CS%Smagorinsky_Ah, &
                  "If true, use a biharmonic Smagorinsky nonlinear eddy \n"//&
                  "viscosity.", default=.false.)
@@ -1462,6 +1469,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
+      CS%Ah_bg_xx(i,j) = MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / &
+                                               Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
         CS%Ah_bg_xx(i,j) = MIN(CS%Ah_bg_xx(i,j), CS%Ah_Max_xx(i,j))
@@ -1484,6 +1493,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
+      CS%Ah_bg_xy(i,j) = MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / &
+                                               Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xy(I,J) = Ah_Limit * (grid_sp_q2 * grid_sp_q2)
         CS%Ah_bg_xy(I,J) = MIN(CS%Ah_bg_xy(I,J), CS%Ah_Max_xy(I,J))
