@@ -1516,7 +1516,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           count_calls, tracer_flow_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
-  type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
+  type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
   type(MOM_restart_CS),      pointer       :: restart_CSp !< pointer set in this routine to the
@@ -1830,6 +1830,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If true, limit salinity to being positive. (The sea-ice \n"//&
                  "model may ask for more salt than is available and \n"//&
                  "drive the salinity negative otherwise.)", default=.false.)
+    call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
+                 "The minimum value of salinity when BOUND_SALINITY=True. \n"//&
+                 "The default is 0.01 for backward compatibility but ideally \n"//&
+                 "should be 0.", units="PPT", default=0.01, do_not_log=.not.bound_salinity)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
                  "The heat capacity of sea water, approximated as a \n"//&
                  "constant. This is only used if ENABLE_THERMODYNAMICS is \n"//&
@@ -3410,7 +3414,7 @@ end subroutine MOM_end
 !!  * src/tracer:
 !!    These files handle the lateral transport and diffusion of
 !!    tracers, or are the code to implement various passive tracer
-!!    packages.  Additional tracer packages are readily accomodated.
+!!    packages.  Additional tracer packages are readily accommodated.
 !!
 !!  * src/user:
 !!    These are either stub routines that a user could use to change

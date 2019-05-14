@@ -1142,7 +1142,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m].
   real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m].
   real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m].
-  real :: weight_t, weight_b        ! Nondimensional wieghts of the top and bottom.
+  real :: weight_t, weight_b        ! Nondimensional weights of the top and bottom.
   real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1).
   real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC].
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt].

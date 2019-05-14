@@ -1203,7 +1203,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "RESTORE_TEMPERATURE", CS%restore_temp, &
                  "If true, the coupled driver will add a  \n"//&
-                 "heat flux that drives sea-surface temperauture \n"//&
+                 "heat flux that drives sea-surface temperature \n"//&
                  "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "ADJUST_NET_SRESTORE_TO_ZERO", &
                  CS%adjust_net_srestore_to_zero, &

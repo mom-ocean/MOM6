@@ -2944,8 +2944,8 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  'Set the default missing value to use for diagnostics.', &
                  default=1.e20)
   call get_param(param_file, mdl, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
-                 'Instead of writing diagnostics to the diag manager, write\n' //&
-                 'a textfile containing the checksum (bitcount) of the array.',  &
+                 'Instead of writing diagnostics to the diag manager, write\n'//&
+                 'a text file containing the checksum (bitcount) of the array.',  &
                  default=.false.)
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping

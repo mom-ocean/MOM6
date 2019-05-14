@@ -298,7 +298,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
                    "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
                    "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
                    "\t                decay profile.\n"//&
-                   "\t POLZIN_09 - Use the Polzin WKB-streched algebraic \n"//&
+                   "\t POLZIN_09 - Use the Polzin WKB-stretched algebraic \n"//&
                    "\t                decay profile.", &
                    default=STLAURENT_PROFILE_STRING)
       int_tide_profile_str = uppercase(int_tide_profile_str)
@@ -332,7 +332,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
                  "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
                  "\t                decay profile.\n"//&
-                 "\t POLZIN_09 - Use the Polzin WKB-streched algebraic \n"//&
+                 "\t POLZIN_09 - Use the Polzin WKB-stretched algebraic \n"//&
                  "\t                decay profile.", &
                  default=STLAURENT_PROFILE_STRING)
     tmpstr = uppercase(tmpstr)
@@ -365,7 +365,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
                  units="nondim", default=0.0697)
     call get_param(param_file, mdl, "NBOTREF_POLZIN", CS%Nbotref_Polzin, &
                  "When the Polzin decay profile is used, this is the \n"//&
-                 "Rreference value of the buoyancy frequency at the ocean \n"//&
+                 "reference value of the buoyancy frequency at the ocean \n"//&
                  "bottom in the Polzin formulation for the vertical \n"//&
                  "scale of decay for the tidal energy dissipation.", &
                  units="s-1", default=9.61e-4)
@@ -425,10 +425,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     call safe_alloc_ptr(CS%tideamp,is,ie,js,je) ; CS%tideamp(:,:) = CS%utide
 
     call get_param(param_file, mdl, "KAPPA_H2_FACTOR", CS%kappa_h2_factor, &
-                 "A scaling factor for the roughness amplitude with n"//&
+                 "A scaling factor for the roughness amplitude with \n"//&
                  "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
     call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
-                 "The maximum internal tide energy source availble to mix \n"//&
+                 "The maximum internal tide energy source available to mix \n"//&
                  "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
                  units="W m-2",  default=1.0e3)
 

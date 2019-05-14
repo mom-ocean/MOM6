@@ -417,7 +417,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
       endif
       if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-        ! There are extra wide halos here to accomodate the cross-corner-point
+        ! There are extra wide halos here to accommodate the cross-corner-point
         ! OBC projections, but they might not be necessary if the accelerations
         ! are always zeroed out at OBC points, in which case the i-loop below
         ! becomes do i=is-1,ie+1. -RWH
@@ -1063,12 +1063,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                  "viscosity, the Smagorinsky and Leith viscosities, and KH.", &
                  units="m s-1", default=0.0)
     call get_param(param_file, mdl, "KH_SIN_LAT", Kh_sin_lat, &
-                 "The amplitude of a latidutinally-dependent background\n"//&
+                 "The amplitude of a latitudinally-dependent background\n"//&
                  "viscosity of the form KH_SIN_LAT*(SIN(LAT)**KH_PWR_OF_SINE).", &
                  units = "m2 s-1",  default=0.0)
     if (Kh_sin_lat>0. .or. get_all) &
       call get_param(param_file, mdl, "KH_PWR_OF_SINE", Kh_pwr_of_sine, &
-                 "The power used to raise SIN(LAT) when using a latidutinally-\n"//&
+                 "The power used to raise SIN(LAT) when using a latitudinally-\n"//&
                  "dependent background viscosity.", &
                  units = "nondim",  default=4.0)
 
@@ -1217,19 +1217,19 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                  "the biharmonic viscosity.", default=.false.)
 
   call get_param(param_file, mdl, "USE_KH_BG_2D", CS%use_Kh_bg_2d, &
-                 "If true, read a file containing 2-d background harmonic  \n"//&
-                 "viscosities. The final viscosity is the maximum of the other "//&
+                 "If true, read a file containing 2-d background harmonic \n"//&
+                 "viscosities. The final viscosity is the maximum of the other \n"//&
                  "terms and this background value.", default=.false.)
 
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mdl, "DT", dt, &
-                 "The (baroclinic) dynamics time step.", units = "s", &
+                 "The (baroclinic) dynamics time step.", units="s", &
                  fail_if_missing=.true.)
 
   if (CS%no_slip .and. CS%biharmonic) &
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
-                          "at the same time in MOM.")
+                         "at the same time in MOM.")
 
   if (.not.(CS%Laplacian .or. CS%biharmonic)) then
     ! Only issue inviscid warning if not in single column mode (usually 2x2 domain)

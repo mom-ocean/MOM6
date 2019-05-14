@@ -80,7 +80,7 @@ end type surface
 !> Pointers to an assortment of thermodynamic fields that may be available, including
 !! potential temperature, salinity, heat capacity, and the equation of state control structure.
 type, public :: thermo_var_ptrs
-!   If allocated, the following variables have nz layers.
+  ! If allocated, the following variables have nz layers.
   real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
   real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
@@ -95,14 +95,16 @@ type, public :: thermo_var_ptrs
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
                          !! actually the absolute salinity in units of [gSalt/kg].
-!  These arrays are accumulated fluxes for communication with other components.
+  real :: min_salinity = 0.01 !< The minimum value of salinity when BOUND_SALINITY=True [ppt].
+                         !! The default is 0.01 for backward compatibility but should be 0.
+  ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
                          !! freezing point since calculate_surface_state was2
                          !! last called [J m-2].
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
-                         !! at a minumum salinity of 0.01 PSU since the last time
+                         !! at a minimum salinity of MIN_SALINITY since the last time
                          !! that calculate_surface_state was called, [gSalt m-2].
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
