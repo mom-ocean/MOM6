@@ -171,12 +171,12 @@ end type set_diffusivity_CS
 type diffusivity_diags
   real, pointer, dimension(:,:,:) :: &
     N2_3d    => NULL(), & !< squared buoyancy frequency at interfaces [T-2 ~> s-2]
-    Kd_user  => NULL(), & !< user-added diffusivity at interfaces [Z2 s-1 ~> m2 s-1]
-    Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces [Z2 s-1 ~> m2 s-1]
+    Kd_user  => NULL(), & !< user-added diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
+    Kd_BBL   => NULL(), & !< BBL diffusivity at interfaces [Z2 T-1 ~> m2 s-1]
     Kd_work  => NULL(), & !< layer integrated work by diapycnal mixing [kg T-3 ~> W m-2]
     maxTKE   => NULL(), & !< energy required to entrain to h_max [m3 s-3]
-    KT_extra => NULL(), & !< double diffusion diffusivity for temp [Z2 s-1 ~> m2 s-1].
-    KS_extra => NULL()    !< double diffusion diffusivity for saln [Z2 s-1 ~> m2 s-1].
+    KT_extra => NULL(), & !< double diffusion diffusivity for temp [Z2 T-1 ~> m2 s-1].
+    KS_extra => NULL()    !< double diffusion diffusivity for saln [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: TKE_to_Kd => NULL()
                           !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between TKE
                           !! dissipated within a layer and Kd in that layer
@@ -2184,7 +2184,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, diag_to_Z
 
     if (CS%user_change_diff) &
       CS%id_Kd_user = register_diag_field('ocean_model', 'Kd_user', diag%axesTi, Time, &
-           'User-specified Extra Diffusivity', 'm2 s-1', conversion=US%Z_to_m**2)
+           'User-specified Extra Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
     if (associated(diag_to_Z_CSp)) then
       vd = var_desc("N2", "s-2", &
