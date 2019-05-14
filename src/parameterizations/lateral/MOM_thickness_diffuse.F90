@@ -1621,8 +1621,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity [ppt]
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 s-1 ~> m2 s-1]
-  real,                                     intent(in)  :: dt    !< Time increment [s]
+  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 T-1 ~> m2 s-1]
+  real,                                     intent(in)  :: dt    !< Time increment [T ~> s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity [ppt]
   integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
