@@ -1847,8 +1847,11 @@ subroutine ModelAdvance(gcomp, rc)
     file=__FILE__)) &
     return  ! bail out
 
+  Time_step_coupled = esmf2fms_time(timeStep)
+  Time = esmf2fms_time(currTime)
+
   !---------------
-  ! Apply ocean lag at startup:
+  ! Apply ocean lag for startup runs:
   !---------------
 
   if (cesm_coupled) then
@@ -1881,15 +1884,8 @@ subroutine ModelAdvance(gcomp, rc)
           file=__FILE__)) &
           return  ! bail out
         Time_step_coupled = 2 * esmf2fms_time(timeStep)
-      else
-        Time_step_coupled = esmf2fms_time(timeStep)
-        Time = esmf2fms_time(currTime)
       endif
     endif
-
-  else ! non-cesm runs:
-    Time_step_coupled = esmf2fms_time(timeStep)
-    Time = esmf2fms_time(currTime)
   endif
 
 
