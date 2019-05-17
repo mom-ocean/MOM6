@@ -177,7 +177,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
                  "If true, cell-by-cell reconstructions are checked for\n"//&
-                 "consistency and if non-monotonicty or an inconsistency is\n"//&
+                 "consistency and if non-monotonicity or an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
   call get_param(param_file, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
                  "If true, the results of remapping are checked for\n"//&
@@ -215,7 +215,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
                  "The depth below which full time-filtering is applied with time-scale\n"//&
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
-                 "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
+                 "REGRID_FILTER_SHALLOW_DEPTH the filter weights adopt a cubic profile.", &
                  units="m", default=0., scale=GV%m_to_H)
   call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth, &
                                       depth_of_time_filter_deep=filter_deep_depth)

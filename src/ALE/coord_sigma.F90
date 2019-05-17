@@ -72,7 +72,7 @@ subroutine build_sigma_column(CS, depth, totalThickness, zInterface)
   zInterface(CS%nk+1) = -depth
   do k = CS%nk,1,-1
     zInterface(k) = zInterface(k+1) + (totalThickness * CS%coordinateResolution(k))
-    ! Adjust interface position to accomodate inflating layers
+    ! Adjust interface position to accommodate inflating layers
     ! without disturbing the interface above
     if (zInterface(k) < (zInterface(k+1) + CS%min_thickness)) then
       zInterface(k) = zInterface(k+1) + CS%min_thickness

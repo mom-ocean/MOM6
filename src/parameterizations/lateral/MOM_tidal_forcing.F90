@@ -201,7 +201,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
-                &"to accomodate all the registered tidal constituents.")') nc
+                &"to accommodate all the registered tidal constituents.")') nc
     call MOM_error(FATAL, "MOM_tidal_forcing"//mesg)
   endif
 

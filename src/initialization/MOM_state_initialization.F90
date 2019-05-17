@@ -229,8 +229,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! is just to make sure that all valid parameters are read to enable the
   ! detection of unused parameters.
   call get_param(PF, mdl, "INIT_LAYERS_FROM_Z_FILE", from_Z_file, &
-             "If true, intialize the layer thicknesses, temperatures, \n"//&
-             "and salnities from a Z-space file on a latitude- \n"//&
+             "If true, initialize the layer thicknesses, temperatures, \n"//&
+             "and salinities from a Z-space file on a latitude- \n"//&
              "longitude grid.", default=.false., do_not_log=just_read)
 
   if (from_Z_file) then
@@ -447,7 +447,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
                "If true, cuts way the top of the column for initial conditions\n"//&
-               "at the depth where the hydrostatic presure matches the imposed\n"//&
+               "at the depth where the hydrostatic pressure matches the imposed\n"//&
                "surface pressure which is read from file.", default=.false., &
                do_not_log=just_read)
   if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&

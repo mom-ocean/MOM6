@@ -34,7 +34,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public idealized_hurricane_wind_init !Public interface to intialize the idealized
+public idealized_hurricane_wind_init !Public interface to initialize the idealized
                                      ! hurricane wind profile.
 public idealized_hurricane_wind_forcing !Public interface to update the idealized
                                         ! hurricane wind profile.

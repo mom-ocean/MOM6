@@ -1621,8 +1621,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity [ppt]
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 s-1 ~> m2 s-1]
-  real,                                     intent(in)  :: dt    !< Time increment [s]
+  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 T-1 ~> m2 s-1]
+  real,                                     intent(in)  :: dt    !< Time increment [T ~> s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity [ppt]
   integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
@@ -1742,7 +1742,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
   call get_param(param_file, mdl, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
                  "If defined add 3-d structured enhanced interface height \n"//&
-                 "diffusivities to horizonally smooth jagged layers.", &
+                 "diffusivities to horizontally smooth jagged layers.", &
                  default=.false.)
   CS%detangle_time = 0.0
   if (CS%detangle_interfaces) &

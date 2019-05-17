@@ -26,7 +26,7 @@ public user_change_diff, user_change_diff_init, user_change_diff_end
 !> Control structure for user_change_diffusivity
 type, public :: user_change_diff_CS ; private
   real :: Kd_add        !< The scale of a diffusivity that is added everywhere
-                        !! without any filtering or scaling [Z2 s-1 ~> m2 s-1].
+                        !! without any filtering or scaling [Z2 T-1 ~> m2 s-1].
   real :: lat_range(4)  !< 4 values that define the latitude range over which
                         !! a diffusivity scaled by Kd_add is added [degLat].
   real :: rho_range(4)  !< 4 values that define the coordinate potential
@@ -53,16 +53,16 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
                                                                  !! fields. Absent fields have NULL ptrs.
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
-                                                                  !! each layer [Z2 s-1 ~> m2 s-1].
+                                                                  !! each layer [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
-                                                                  !! at each interface [Z2 s-1 ~> m2 s-1].
+                                                                  !! at each interface [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
                                                                   !! layers filled in vertically [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
                                                                   !! layers filled in vertically [ppt].
   real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
-                                                                  !! each interface [Z2 s-1 ~> m2 s-1].
+                                                                  !! each interface [Z2 T-1 ~> m2 s-1].
   ! Local variables
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [kg m-3].
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
@@ -222,7 +222,8 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of \n"//&
-                 "latitude and density.", default=0.0, units="m2 s-1", scale=US%m_to_Z**2)
+                 "latitude and density.", default=0.0, units="m2 s-1", &
+                 scale=US%m2_s_to_Z2_T)
   if (CS%Kd_add /= 0.0) then
     call get_param(param_file, mdl, "USER_KD_ADD_LAT_RANGE", CS%lat_range(:), &
                  "Four successive values that define a range of latitudes \n"//&

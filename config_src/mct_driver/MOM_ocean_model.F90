@@ -313,7 +313,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "RESTORE_TEMPERATURE",OS%restore_temp, &
                  "If true, the coupled driver will add a  \n"//&
-                 "heat flux that drives sea-surface temperauture \n"//&
+                 "heat flux that drives sea-surface temperature \n"//&
                  "toward specified values.", default=.false.)
   call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&

@@ -3544,7 +3544,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "heating depth of an exponential profile by moving some \n"//&
                  "of the heating upward in the water column.", default=.false.)
   call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
-                 "If true, apply additional mixing whereever there is \n"//&
+                 "If true, apply additional mixing wherever there is \n"//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH, \n"//&
                  "if the ocean is that deep.", default=.false.)
   if (CS%do_rivermix) &

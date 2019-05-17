@@ -316,7 +316,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "A scaling factor for the roughness amplitude with n"//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
-               "The maximum internal tide energy source availble to mix \n"//&
+               "The maximum internal tide energy source available to mix \n"//&
                "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
                units="W m-2",  default=1.0e3)
 

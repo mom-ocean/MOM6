@@ -1696,7 +1696,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "to be reported; the default is CFL_TRUNCATE.", &
                  units="nondim", default=CS%CFL_trunc)
   call get_param(param_file, mdl, "CFL_TRUNCATE_RAMP_TIME", CS%truncRampTime, &
-                 "The time over which the CFL trunction value is ramped\n"//&
+                 "The time over which the CFL truncation value is ramped\n"//&
                  "up at the beginning of the run.", &
                  units="s", default=0.)
   CS%CFL_truncE = CS%CFL_trunc
