@@ -328,19 +328,19 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
   if (CS%MatchTechnique == 'ParabolicNonLocal') then
-     ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
-     !  May be used during CVMix initialization.
-     Cs_is_one=.true.
+    ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
+    !  May be used during CVMix initialization.
+    Cs_is_one=.true.
   endif
   if (CS%MatchTechnique == 'ParabolicNonLocal' .or. CS%MatchTechnique == 'SimpleShapes') then
-     ! if gradient won't be matched, lnoDGat1=.true.
-     lnoDGat1=.true.
+    ! if gradient won't be matched, lnoDGat1=.true.
+    lnoDGat1=.true.
   endif
 
   ! safety check to avoid negative diff/visc
   if (CS%MatchTechnique == 'MatchBoth' .and. (CS%interpType2 == 'cubic' .or. &
-     CS%interpType2 == 'quadratic')) then
-     call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
+      CS%interpType2 == 'quadratic')) then
+    call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
                "linear or LMD94 (recommended) to avoid negative viscosity and diffusivity.\n"//&
                "Please select one of these valid options." )
   endif
@@ -349,15 +349,15 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
   call get_param(paramFile, mdl, 'KPP_IS_ADDITIVE', CS%KPPisAdditive,                &
-                 'If true, adds KPP diffusivity to diffusivity from other schemes.'//&
+                 'If true, adds KPP diffusivity to diffusivity from other schemes.\n'//&
                  'If false, KPP is the only diffusivity wherever KPP is non-zero.',  &
                  default=.True.)
   call get_param(paramFile, mdl, 'KPP_SHORTWAVE_METHOD',string,                      &
-                 'Determines contribution of shortwave radiation to KPP surface '// &
+                 'Determines contribution of shortwave radiation to KPP surface \n'// &
                  'buoyancy flux.  Options include:\n'//                             &
                  '  ALL_SW: use total shortwave radiation\n'//                      &
-                 '  MXL_SW:  use shortwave radiation absorbed by mixing layer\n'//  &
-                 '  LV1_SW:  use shortwave radiation absorbed by top model layer',  &
+                 '  MXL_SW: use shortwave radiation absorbed by mixing layer\n'//  &
+                 '  LV1_SW: use shortwave radiation absorbed by top model layer',  &
                  default='MXL_SW')
   select case ( trim(string) )
     case ("ALL_SW") ; CS%SW_METHOD = SW_METHOD_ALL_SW

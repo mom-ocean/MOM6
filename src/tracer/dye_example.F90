@@ -141,7 +141,7 @@ function register_dye_tracer(HI, GV, G,  US, param_file, CS, tr_Reg, restart_CS)
 
   CS%dye_source_mindepth(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
-                 "This is the minumum depth at which we inject dyes.", &
+                 "This is the minimum depth at which we inject dyes.", &
                  units="m", scale=US%m_to_Z, fail_if_missing=.true.)
   if (minval(CS%dye_source_mindepth(:)) < -1.e29*US%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")

@@ -199,7 +199,7 @@ type, public :: barotropic_CS ; private
                              !! update at the start of a call to btstep.  The
                              !! default is 1.
   logical :: BT_project_velocity !< If true, step the barotropic velocity first
-                             !! and project out the velocity tendancy by 1+BEBT
+                             !! and project out the velocity tendency by 1+BEBT
                              !! when calculating the transport.  The default
                              !! (false) is to use a predictor continuity step to
                              !! find the pressure field, and then do a corrector
@@ -3785,7 +3785,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   call get_param(param_file, mdl, "BT_CONT_CORR_BOUNDS", CS%BT_cont_bounds, &
                  "If true, and BOUND_BT_CORRECTION is true, use the \n"//&
                  "BT_cont_type variables to set limits determined by \n"//&
-                 "MAXCFL_BT_CONT on the CFL number of the velocites \n"//&
+                 "MAXCFL_BT_CONT on the CFL number of the velocities \n"//&
                  "that are likely to be driven by the corrective mass fluxes.", &
                  default=.true.) !, do_not_log=.not.CS%bound_BT_corr)
   call get_param(param_file, mdl, "ADJUST_BT_CONT", CS%adjust_BT_cont, &
@@ -3846,7 +3846,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  units="nondim", default=1)
   call get_param(param_file, mdl, "BT_PROJECT_VELOCITY", CS%BT_project_velocity,&
                  "If true, step the barotropic velocity first and project \n"//&
-                 "out the velocity tendancy by 1+BEBT when calculating the \n"//&
+                 "out the velocity tendency by 1+BEBT when calculating the \n"//&
                  "transport.  The default (false) is to use a predictor \n"//&
                  "continuity step to find the pressure field, and then \n"//&
                  "to do a corrector continuity step using a weighted \n"//&
@@ -3917,7 +3917,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "barotropic steps.", default=.false.)
   call get_param(param_file, mdl, "BT_LINEAR_WAVE_DRAG", CS%linear_wave_drag, &
                  "If true, apply a linear drag to the barotropic velocities, \n"//&
-                 "using rates set by lin_drag_u & _vdivided by the depth of \n"//&
+                 "using rates set by lin_drag_u & _v divided by the depth of \n"//&
                  "the ocean.  This was introduced to facilitate tide modeling.", &
                  default=.false.)
   call get_param(param_file, mdl, "BT_WAVE_DRAG_FILE", wave_drag_file, &

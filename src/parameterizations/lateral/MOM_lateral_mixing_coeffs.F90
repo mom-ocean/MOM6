@@ -853,8 +853,19 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
                  "The fixed length scale in the Visbeck formula.", units="m", &
                  default=0.0)
-    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = CS%Visbeck_L_scale**2
-    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = CS%Visbeck_L_scale**2
+    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = 0.0
+    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
+    if (CS%Visbeck_L_scale<0) then
+      do j=js,je ; do I=is-1,Ieq
+        CS%L2u(I,j) = CS%Visbeck_L_scale**2*G%areaCu(I,j)
+      enddo; enddo
+      do J=js-1,Jeq ; do i=is,ie
+        CS%L2v(i,J) = CS%Visbeck_L_scale**2*G%areaCv(i,J)
+      enddo; enddo
+    else
+      CS%L2u(:,:) = CS%Visbeck_L_scale**2
+      CS%L2v(:,:) = CS%Visbeck_L_scale**2
+    endif
 
     CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm2')
@@ -933,11 +944,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
+    !### Change the default of GILL_EQUATORIAL_LD to True.
     call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
                  "If true, uses Gill's definition of the baroclinic\n"//&
                  "equatorial deformation radius, otherwise, if false, use\n"//&
-                 "Pedlosky's definition. These definitions differ by a factor\n"//&
-                 "of 2 infront of the beta term in the denominator. Gill's"//&
+                 "Pedlosky's definition. These definitions differ by a factor \n"//&
+                 "of 2 in front of the beta term in the denominator. Gill's \n"//&
                  "is the more appropriate definition.\n", default=.false.)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0

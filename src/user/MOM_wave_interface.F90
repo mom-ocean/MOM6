@@ -352,7 +352,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
          "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-         " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
+         " Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
          units="nondim",default=0.04)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", LA_Misalignment,    &
          "Flag (logical) if using misalignment bt shear and waves in LA",&
@@ -408,7 +408,7 @@ subroutine MOM_wave_interface_init_lite(param_file)
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
        "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-       " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
+       " Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
        units="nondim",default=0.04)
 
   if (WaveMethod==NULL_WaveMethod) then

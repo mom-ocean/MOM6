@@ -305,8 +305,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries
   allocate(OBC)
 
-  call log_version(param_file, mdl, version, "Controls where open boundaries are located, what "//&
-                 "kind of boundary condition to impose, and what data to apply, if any.")
+  call log_version(param_file, mdl, version, &
+                 "Controls where open boundaries are located, what kind of boundary condition \n"//&
+                 "to impose, and what data to apply, if any.")
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)

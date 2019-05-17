@@ -1838,8 +1838,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   if (.not.adiabatic) then
     CS%RiNo_mix = kappa_shear_is_used(param_file)
     call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
-                 "If true, increase diffusivitives for temperature or salt \n"//&
-                 "based on double-diffusive paramaterization from MOM4/KPP.", &
+                 "If true, increase diffusivites for temperature or salt \n"//&
+                 "based on double-diffusive parameterization from MOM4/KPP.", &
                  default=.false.)
     use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   endif
@@ -1942,7 +1942,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 
   call get_param(param_file, mdl, "ADD_KV_SLOW", visc%add_Kv_slow, &
                  "If true, the background vertical viscosity in the interior \n"//&
-                 "(i.e., tidal + background + shear + convenction) is addded \n"// &
+                 "(i.e., tidal + background + shear + convection) is added \n"// &
                  "when computing the coupling coefficient. The purpose of this \n"// &
                  "flag is to be able to recover previous answers and it will likely \n"// &
                  "be removed in the future since this option should always be true.", &
