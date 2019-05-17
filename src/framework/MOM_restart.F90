@@ -18,7 +18,6 @@ use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : file_exists
 use MOM_io, only : get_dimension_features
 use MOM_io, only : get_horizontal_grid_position
-use MOM_io, only : get_time_values
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
 use MOM_io, only : MOM_register_axis
@@ -871,7 +870,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
   integer :: unit                       ! The mpp unit of the open file.
-  integer :: m, nz, i, num_files, pos
+  integer :: m, nz, i, k, num_files, pos
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   character(len=64) :: var_name         ! A variable's name.
@@ -885,6 +884,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: substring_index
   integer :: horgrid_position = 1
   integer :: num_axes
+  integer :: var_periods
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
   logical :: variable_exists = .false.
@@ -893,7 +893,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=64) :: checksum_char
   character(len=64) :: units
   character(len=256) :: longname
-  character(len=16) :: t_grid_read 
+  character(len=16) :: t_grid_read, t_grid_str
   real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
   type(axis_data_type) :: axis_data_CS
@@ -991,17 +991,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      !WRITE(mpp_pe()+2000,*) "save_restart: the restart path is ", trim(restartpath)
      !call flush(mpp_pe()+2000)
 
-     ! get the restart time value(s) and assign to time_vals array
-     if (.not.(allocated(time_vals))) then
-           t_grid_read = adjustl(t_grid)
-           if (t_grid_read(1:1) /= 'p') then
-              allocate(time_vals(1))
-              time_vals(1) = restart_time
-           else
-              time_vals = get_time_values(t_grid)
-           endif
-     endif
-     
      file_open_success = MOM_open_file(fileObjWrite, trim(restartpath),"write", &
                     G, is_restart = .true.)
    
@@ -1011,6 +1000,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      ! get variable sizes in bytes
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+
      
      do m=start_var,CS%novars
         !WRITE(mpp_pe()+2000,*) "save_restart: getting axis stuff for ", trim(CS%restart_field(m)%var_name)
@@ -1018,8 +1008,35 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
    
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
+
+        ! get the restart time value(s) and assign to time_vals array
+     if (.not.(allocated(time_vals))) then
+        t_grid_str = ''
+        t_grid_str = adjustl(t_grid)
+        select case (t_grid_str(1:1))
+           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
+              allocate(time_vals(1))
+              time_vals(1) = restart_time
+           case ('p')
+              if (len_trim(t_grid(2:8)) > 0) then
+                 var_periods = -1
+                 t_grid_read = adjustl(t_grid(2:8))
+                 read(t_grid_read,*) var_periods
+                  if (var_periods < 1) then 
+                     call MOM_error(FATAL, "MOM_restart::save_restart: "//&
+                                   "Period value must be positive.")
+                  endif
+                 ! Define a periodic axis array
+                 allocate(time_vals(var_periods))
+                 do k=1,var_periods
+                    time_vals(k) = real(k)
+                 enddo
+              endif
+        end select
+     endif
         
         var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
+     
 
         if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
            size_in_file = size_in_file + var_sz

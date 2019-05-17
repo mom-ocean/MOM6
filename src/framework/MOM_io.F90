@@ -70,7 +70,6 @@ public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 public :: get_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
-public :: get_time_values
 public :: get_time_units
 public :: MOM_get_axis_data
 public :: MOM_open_file
@@ -946,61 +945,6 @@ function get_time_units(time_value) result(time_units_out)
    time_units_out = trim(time_units)
 end function get_time_units
 
-!> get the time values from the t_grid string
-!>@note: Be sure to deallocate the time_values array
-!! at the end of the routine that calls this function to
-!! avoid memory leaks.
-function get_time_values(t_grid_in, array_size) result(time_values)
-  character(len=*), intent(in) :: t_grid_in !< string for the time grid
-  integer, optional, intent(in) :: array_size !< array size to allocate
-  ! local
-  character(len=12) :: t_grid
-  character(len=12) :: t_grid_read
-  integer :: var_periods
-  integer :: k
-  real, dimension(:), allocatable :: time_values
-  
-  t_grid = ''
-  t_grid_read = ''
-  var_periods = -9999999
-  t_grid(1:len_trim(adjustl(t_grid_in))) = trim(adjustl(t_grid_in))
-
-  select case (t_grid(1:1))
-     case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
-        allocate(time_values(array_size))
-     case ('p')
-        if (len_trim(t_grid(2:8)) <= 0) then
-             call MOM_error(FATAL, &
-             "MOM_io::get_time_values: No periodic axis length was specified in "//&
-          trim(t_grid_in) // " in the periodic axis argument")
-        endif
-        var_periods = -9999999
-        t_grid_read = adjustl(t_grid(2:8))
-        read(t_grid_read,*) var_periods
-
-        if (var_periods == -9999999) then
-             call MOM_error(FATAL, &
-             "MOM_io:: get_period_value: Failed to read the number of periods from "//&
-              trim(t_grid_in))
-        endif
-
-        if (var_periods < 1) then 
-            call MOM_error(FATAL, "MOM_io::get_time_values: "//&
-           "Period value must be positive.")
-        endif
-        ! Define a periodic axis array
-        allocate(time_values(var_periods))
-        do k=1,var_periods
-           time_values(k) = real(k)
-        enddo
-     case ('1') ! Do nothing.
-     case default
-        call MOM_error(WARNING, "MOM_io::get_time_values:"//trim(t_grid_in)//&
-                       " is an unrecognized t_grid value.")
-  end select
-
-end function get_time_values
-
 !> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
   character(len=*),   intent(in)  :: filename  !< Name of the file to read
@@ -1409,7 +1353,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0
-  integer :: i, is, ie
+  integer :: i, is, ie, k
+  integer :: var_periods
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1417,7 +1362,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(4)
   character(len=20) :: time_units = ''
-  character(len=20) :: t_grid_read = ''
+  character(len=20) :: t_grid_read, t_grid_str
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
@@ -1447,15 +1392,30 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
   time_units = get_time_units(ic_time)
-  ! get an array of time values
   if (.not.(allocated(time_vals))) then
-     t_grid_read = adjustl(vd%t_grid)
-     if (t_grid_read(1:1) /= 'p') then
-        time_vals = get_time_values(vd%t_grid, 1)
-        time_vals(1) = ic_time
-     else
-        time_vals = get_time_values(vd%t_grid)
-     endif
+     t_grid_str = ''
+     t_grid_str = adjustl(vd%t_grid)
+     select case (t_grid_str(1:1))
+           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
+              allocate(time_vals(1))
+              time_vals(1) = ic_time
+           case ('p')
+              if (len_trim(t_grid(2:8)) > 0) then
+                 var_periods = -1
+                 t_grid_read = ''
+                 t_grid_read = adjustl(t_grid(2:8))
+                 read(t_grid_read,*) var_periods
+                 if (var_periods < 1) then 
+                     call MOM_error(FATAL, "MOM_io::write_IC_data_4d: "//&
+                                   "Period value must be positive.")
+                 endif
+                 ! Define a periodic axis array
+                 allocate(time_vals(var_periods))
+                 do k=1,var_periods
+                    time_vals(k) = real(k)
+                 enddo
+              endif
+     end select
   endif
  
   file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
@@ -1540,7 +1500,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0
-  integer :: i, is, ie
+  integer :: var_periods
+  integer :: i, is, ie, k
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1548,7 +1509,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(4)
   character(len=20) :: time_units = ''
-  character(len=20) :: t_grid_read = ''
+  character(len=20) :: t_grid_read, t_grid_str
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
@@ -1578,16 +1539,31 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   ic_time = time_type_to_real(time) / 86400.0
   time_units = get_time_units(ic_time)
   ! get an array of time values
-  if (.not.(allocated(time_vals))) then
-     t_grid_read = adjustl(vd%t_grid)
-     if (t_grid_read(1:1) /= 'p') then
-        time_vals = get_time_values(vd%t_grid, 1)
-        time_vals(1) = ic_time
-     else
-        time_vals = get_time_values(vd%t_grid)
-     endif
+   if (.not.(allocated(time_vals))) then
+     t_grid_str = ''
+     t_grid_str = adjustl(vd%t_grid)
+     select case (t_grid_str(1:1))
+           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
+              allocate(time_vals(1))
+              time_vals(1) = ic_time
+           case ('p')
+              if (len_trim(t_grid(2:8)) > 0) then
+                 var_periods = -1
+                 t_grid_read = ''
+                 t_grid_read = adjustl(t_grid(2:8))
+                 read(t_grid_read,*) var_periods
+                 if (var_periods < 1) then 
+                     call MOM_error(FATAL, "MOM_io::write_IC_data_3d: "//&
+                                   "Period value must be positive.")
+                 endif
+                 ! Define a periodic axis array
+                 allocate(time_vals(var_periods))
+                 do k=1,var_periods
+                    time_vals(k) = real(k)
+                 enddo
+              endif
+     end select
   endif
-
   file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
   
   if (.not. (file_open_success)) then
@@ -1672,7 +1648,8 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes
-  integer :: i, is, ie
+  integer :: var_periods
+  integer :: i, is, ie, k
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1680,7 +1657,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(3)
   character(len=20) :: time_units = ''
-  character(len=20) :: t_grid_read =''
+  character(len=20) :: t_grid_read, t_grid_str
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
@@ -1709,16 +1686,31 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   ic_time = time_type_to_real(time) / 86400.0
   time_units = get_time_units(ic_time)
   ! get an array of time values
-  if (.not.(allocated(time_vals))) then
-     t_grid_read = adjustl(vd%t_grid)
-     if (t_grid_read(1:1) /= 'p') then
-        time_vals = get_time_values(vd%t_grid, 1)
-        time_vals(1) = ic_time
-     else
-        time_vals = get_time_values(vd%t_grid)
-     endif
+   if (.not.(allocated(time_vals))) then
+     t_grid_str = ''
+     t_grid_str = adjustl(vd%t_grid)
+     select case (t_grid_str(1:1))
+           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
+              allocate(time_vals(1))
+              time_vals(1) = ic_time
+           case ('p')
+              if (len_trim(t_grid(2:8)) > 0) then
+                 var_periods = -1
+                 t_grid_read = ''
+                 t_grid_read = adjustl(t_grid(2:8))
+                 read(t_grid_read,*) var_periods
+                 if (var_periods < 1) then 
+                     call MOM_error(FATAL, "MOM_io::write_IC_data_2d: "//&
+                                   "Period value must be positive.")
+                 endif
+                 ! Define a periodic axis array
+                 allocate(time_vals(var_periods))
+                 do k=1,var_periods
+                    time_vals(k) = real(k)
+                 enddo
+              endif
+     end select
   endif
-
   file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
   
   if (.not. (file_open_success)) then
@@ -1802,7 +1794,8 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0
-  integer :: i, is, ie
+  integer :: var_periods
+  integer :: i, is, ie, k
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
   logical :: axis_exists = .false.
@@ -1810,7 +1803,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   character(len=200) :: base_file_name = ''
   character(len=200) :: dim_names(2)
   character(len=10) :: time_units = ''
-  character(len=20) :: t_grid_read = ''
+  character(len=20) :: t_grid_read, t_grid_str
   real :: ic_time
   real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
@@ -1840,13 +1833,29 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   time_units = get_time_units(ic_time)
   ! get an array of time values
   if (.not.(allocated(time_vals))) then
-     t_grid_read = adjustl(vd%t_grid)
-     if (t_grid_read(1:1) /= 'p') then
-        time_vals = get_time_values(vd%t_grid, 1)
-        time_vals(1) = ic_time
-     else
-        time_vals = get_time_values(vd%t_grid)
-     endif
+     t_grid_str = ''
+     t_grid_str = adjustl(vd%t_grid)
+     select case (t_grid_str(1:1))
+           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
+              allocate(time_vals(1))
+              time_vals(1) = ic_time
+           case ('p')
+              if (len_trim(t_grid(2:8)) > 0) then
+                 var_periods = -1
+                 t_grid_read = ''
+                 t_grid_read = adjustl(t_grid(2:8))
+                 read(t_grid_read,*) var_periods
+                 if (var_periods < 1) then 
+                     call MOM_error(FATAL, "MOM_io::write_IC_data_1d: "//&
+                                   "Period value must be positive.")
+                 endif
+                 ! Define a periodic axis array
+                 allocate(time_vals(var_periods))
+                 do k=1,var_periods
+                    time_vals(k) = real(k)
+                 enddo
+              endif
+     end select
   endif
 
   file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
