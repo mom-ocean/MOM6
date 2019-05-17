@@ -162,9 +162,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   type(cont_diag_ptrs),  intent(inout)   :: CDp    !< Continuity equation terms
   type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
   real, dimension(SZIB_(G),SZJ_(G)), &
-                   optional, intent(out) :: taux_bot !< Zonal bottom stress from ocean to rock [Pa]
+                   optional, intent(out) :: taux_bot !< Zonal bottom stress from ocean to rock [kg Z s-2 m-2 ~> Pa]
   real, dimension(SZI_(G),SZJB_(G)), &
-                   optional, intent(out) :: tauy_bot !< Meridional bottom stress from ocean to rock [Pa]
+                   optional, intent(out) :: tauy_bot !< Meridional bottom stress from ocean to rock [kg Z s-2 m-2 ~> Pa]
   type(wave_parameters_CS), &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
 
@@ -1769,9 +1769,11 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
-     Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa')
+     Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
+     conversion=US%Z_to_m)
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
-     Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa')
+     Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
+     conversion=US%Z_to_m)
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
