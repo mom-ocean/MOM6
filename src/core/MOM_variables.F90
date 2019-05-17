@@ -208,7 +208,8 @@ type, public :: vertvisc_type
     ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points [Z s-1 ~> m s-1].
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
-                             !! energy, currently in [m3 s-3], but will later be changed to [W m-2].
+                             !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
+                             !! to [kg Z3 m-3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
     taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [Pa].
     tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [Pa].
