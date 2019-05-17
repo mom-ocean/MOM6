@@ -1391,7 +1391,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time)
+  time_units = get_time_units(ic_time*86400.0)
   if (.not.(allocated(time_vals))) then
      t_grid_str = ''
      t_grid_str = adjustl(vd%t_grid)
@@ -1537,7 +1537,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
 
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time)
+  time_units = get_time_units(ic_time*86400.0)
   ! get an array of time values
    if (.not.(allocated(time_vals))) then
      t_grid_str = ''
@@ -1684,7 +1684,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   endif
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time)
+  time_units = get_time_units(ic_time*86400.0)
   ! get an array of time values
    if (.not.(allocated(time_vals))) then
      t_grid_str = ''
@@ -1830,7 +1830,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
 
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time)
+  time_units = get_time_units(ic_time*86400.0)
   ! get an array of time values
   if (.not.(allocated(time_vals))) then
      t_grid_str = ''
