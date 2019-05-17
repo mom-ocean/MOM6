@@ -39,6 +39,7 @@ use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
                                 fms2_get_num_variables => get_num_variables, &
+                                fms2_read_data => read_data, &
                                 fms2_register_restart_field => register_restart_field, &
                                 fms2_register_axis => register_axis, &
                                 fms2_register_field => register_field, &
@@ -67,6 +68,7 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 
+public :: FmsNetcdfDomainFile_t
 public :: get_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
@@ -1963,6 +1965,7 @@ end subroutine MOM_close_file
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
 subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
+!  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -1971,6 +1974,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
                                                      !! by before they are returned.
 
   call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+!  call fms2_read_data(fileObj, fieldname, data)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     data(:) = scale*data(:)

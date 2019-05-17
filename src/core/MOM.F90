@@ -36,7 +36,9 @@ use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
+use MOM_io,                   only : MOM_open_file, MOM_close_file
 use MOM_io,                   only : MOM_write_IC
+use MOM_io,                   only : FmsNetcdfDomainFile_t
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -1591,6 +1593,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical :: calc_dtbt         ! Indicates whether the dynamically adjusted barotropic
                                ! time step needs to be updated before it is used.
   logical :: debug_truncations ! If true, turn on diagnostics useful for debugging truncations.
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.  This can be altered during the course
@@ -1604,6 +1607,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
+  type(FmsNetcdfDomainFile_t)     :: fileObjRead ! file object returned by call to MOM_open_file
   character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
 
   if (associated(CS)) then
@@ -2236,6 +2240,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
       call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain)
+      !file_open_success = MOM_open_file(fileObjRead,filename, "read", G)
+      !call MOM_read_data(fileObjRead, trim(area_varname), area_shelf_h)
+      !call MOM_close_file(fileObjRead)
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
       ! compute fractional ice shelf coverage of h
