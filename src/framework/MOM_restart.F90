@@ -1267,6 +1267,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (t1 .ne. t2) then
     call MOM_error(FATAL, "times are different in different restart files.")
   endif
+  
+  day = real_to_time(t1*86400.0)
 
  ! Register the horizontal axes that correspond to x and y of the domain.
   axis_names = (/'lath', 'lonh', 'latq', 'lonq'/)
