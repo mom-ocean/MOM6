@@ -797,9 +797,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
-             "If true, a density-gradient dependent re-stratifying \n"//&
-             "flow is imposed in the mixed layer. Can be used in ALE mode\n"//&
-             "without restriction but in layer mode can only be used if\n"//&
+             "If true, a density-gradient dependent re-stratifying "//&
+             "flow is imposed in the mixed layer. Can be used in ALE mode "//&
+             "without restriction but in layer mode can only be used if "//&
              "BULKMIXEDLAYER is true.", default=.false.)
   if (.not. mixedlayer_restrat_init) return
 
@@ -817,53 +817,53 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
-             "A nondimensional coefficient that is proportional to \n"//&
-             "the ratio of the deformation radius to the dominant \n"//&
-             "lengthscale of the submesoscale mixed layer \n"//&
-             "instabilities, times the minimum of the ratio of the \n"//&
-             "mesoscale eddy kinetic energy to the large-scale \n"//&
-             "geostrophic kinetic energy or 1 plus the square of the \n"//&
-             "grid spacing over the deformation radius, as detailed \n"//&
+             "A nondimensional coefficient that is proportional to "//&
+             "the ratio of the deformation radius to the dominant "//&
+             "lengthscale of the submesoscale mixed layer "//&
+             "instabilities, times the minimum of the ratio of the "//&
+             "mesoscale eddy kinetic energy to the large-scale "//&
+             "geostrophic kinetic energy or 1 plus the square of the "//&
+             "grid spacing over the deformation radius, as detailed "//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
   ! We use GV%nkml to distinguish between the old and new implementation of MLE.
   ! The old implementation only works for the layer model with nkml>0.
   if (GV%nkml==0) then
     call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
-             "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application\n"//&
+             "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application "//&
              "of the MLE restratification parameterization.", units="nondim", default=0.0)
     call get_param(param_file, mdl, "MLE_FRONT_LENGTH", CS%front_length, &
-             "If non-zero, is the frontal-length scale used to calculate the\n"//&
-             "upscaling of buoyancy gradients that is otherwise represented\n"//&
-             "by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is\n"//&
+             "If non-zero, is the frontal-length scale used to calculate the "//&
+             "upscaling of buoyancy gradients that is otherwise represented "//&
+             "by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is "//&
              "non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.",&
              units="m", default=0.0)
     call get_param(param_file, mdl, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
-             "If true, the MLE parameterization will use the mixed-layer\n"//&
-             "depth provided by the active PBL parameterization. If false,\n"//&
-             "MLE will estimate a MLD based on a density difference with the\n"//&
+             "If true, the MLE parameterization will use the mixed-layer "//&
+             "depth provided by the active PBL parameterization. If false, "//&
+             "MLE will estimate a MLD based on a density difference with the "//&
              "surface using the parameter MLE_DENSITY_DIFF.", default=.false.)
     call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
-             "The time-scale for a running-mean filter applied to the mixed-layer\n"//&
-             "depth used in the MLE restratification parameterization. When\n"//&
-             "the MLD deepens below the current running-mean the running-mean\n"//&
+             "The time-scale for a running-mean filter applied to the mixed-layer "//&
+             "depth used in the MLE restratification parameterization. When "//&
+             "the MLD deepens below the current running-mean the running-mean "//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
     call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
-             "The time-scale for a running-mean filter applied to the filtered\n"//&
-             "mixed-layer depth used in a second MLE restratification parameterization.\n"//&
-             "When the MLD deepens below the current running-mean the running-mean\n"//&
+             "The time-scale for a running-mean filter applied to the filtered "//&
+             "mixed-layer depth used in a second MLE restratification parameterization. "//&
+             "When the MLD deepens below the current running-mean the running-mean "//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
     if (.not. CS%MLE_use_PBL_MLD) then
       call get_param(param_file, mdl, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
-             "Density difference used to detect the mixed-layer\n"//&
-             "depth used for the mixed-layer eddy parameterization\n"//&
+             "Density difference used to detect the mixed-layer "//&
+             "depth used for the mixed-layer eddy parameterization "//&
              "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
     endif
     call get_param(param_file, mdl, "MLE_TAIL_DH", CS%MLE_tail_dh, &
-             "Fraction by which to extend the mixed-layer restratification\n"//&
-             "depth used for a smoother stream function at the base of\n"//&
+             "Fraction by which to extend the mixed-layer restratification "//&
+             "depth used for a smoother stream function at the base of "//&
              "the mixed-layer.", units="nondim", default=0.0)
     call get_param(param_file, mdl, "MLE_MLD_STRETCH", CS%MLE_MLD_stretch, &
-             "A scaling coefficient for stretching/shrinking the MLD\n"//&
+             "A scaling coefficient for stretching/shrinking the MLD "//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
     call get_param(param_file, mdl, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &

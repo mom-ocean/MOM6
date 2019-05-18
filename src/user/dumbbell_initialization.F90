@@ -132,7 +132,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
     call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
     call get_param(param_file, mdl, "INTERFACE_IC_QUANTA", eta_IC_quanta, &
-                   "The granularity of initial interface height values \n"//&
+                   "The granularity of initial interface height values "//&
                    "per meter, to avoid sensivity to order-of-arithmetic changes.", &
                    default=2048.0, units="m-1", scale=US%Z_to_m, do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
@@ -220,7 +220,7 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_DENSITY_PROFILE", density_profile, &
-                 'Initial profile shape. Valid values are "linear", "parabolic"\n'// &
+                 'Initial profile shape. Valid values are "linear", "parabolic" '// &
                  'and "exponential".', default='linear', do_not_log=just_read)
   call get_param(param_file, mdl,"DUMBBELL_SREF", S_surf, &
                  'DUMBBELL REFERENCE SALINITY', units='1e-3', default=34., do_not_log=just_read)

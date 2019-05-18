@@ -97,8 +97,8 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the ISOMIP tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the ISOMIP tracers, or blank to initialize "//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -108,8 +108,8 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                    CS%tracer_IC_file)
   endif
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0

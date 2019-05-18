@@ -117,13 +117,13 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ANALYTIC_FV_PGF", CS%Analytic_FV_PGF, &
-                 "If true the pressure gradient forces are calculated \n"//&
-                 "with a finite volume form that analytically integrates \n"//&
-                 "the equations of state in pressure to avoid any \n"//&
-                 "possibility of numerical thermobaric instability, as \n"//&
+                 "If true the pressure gradient forces are calculated "//&
+                 "with a finite volume form that analytically integrates "//&
+                 "the equations of state in pressure to avoid any "//&
+                 "possibility of numerical thermobaric instability, as "//&
                  "described in Adcroft et al., O. Mod. (2008).", default=.true.)
   call get_param(param_file, mdl, "BLOCKED_ANALYTIC_FV_PGF", CS%blocked_AFV, &
-                 "If true, used the blocked version of the ANALYTIC_FV_PGF \n"//&
+                 "If true, used the blocked version of the ANALYTIC_FV_PGF "//&
                  "code.  The value of this parameter should not change answers.", &
                  default=.false., do_not_log=.true., debuggingParam=.true.)
 

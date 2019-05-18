@@ -92,9 +92,9 @@ subroutine verticalGridInit( param_file, GV, US )
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
   call get_param(param_file, mdl, "RHO_0", GV%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
@@ -103,7 +103,7 @@ subroutine verticalGridInit( param_file, GV, US )
                  "The minimum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
   call get_param(param_file, mdl, "H_RESCALE_POWER", H_power, &
-                 "An integer power of 2 that is used to rescale the model's \n"//&
+                 "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of thickness.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
   if (abs(H_power) > 300) call MOM_error(FATAL, "verticalGridInit: "//&
@@ -112,13 +112,13 @@ subroutine verticalGridInit( param_file, GV, US )
   if (H_power /= 0) H_rescale_factor = 2.0**H_power
   if (.not.GV%Boussinesq) then
     call get_param(param_file, mdl, "H_TO_KG_M2", GV%H_to_kg_m2,&
-                 "A constant that translates thicknesses from the model's \n"//&
+                 "A constant that translates thicknesses from the model's "//&
                  "internal units of thickness to kg m-2.", units="kg m-2 H-1", &
                  default=1.0)
     GV%H_to_kg_m2 = GV%H_to_kg_m2 * H_rescale_factor
   else
     call get_param(param_file, mdl, "H_TO_M", GV%H_to_m, &
-                 "A constant that translates the model's internal \n"//&
+                 "A constant that translates the model's internal "//&
                  "units of thickness into m.", units="m H-1", default=1.0)
     GV%H_to_m = GV%H_to_m * H_rescale_factor
   endif

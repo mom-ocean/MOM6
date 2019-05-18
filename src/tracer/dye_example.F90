@@ -99,7 +99,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", CS%ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate region.", default=0)
   allocate(CS%dye_source_minlon(CS%ntr), &
            CS%dye_source_maxlon(CS%ntr), &

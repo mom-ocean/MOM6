@@ -73,13 +73,13 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, &
-                 "The maximum amount of cpu time per processor for which \n"//&
-                 "MOM should run before saving a restart file and \n"//&
-                 "quitting with a return value that indicates that a \n"//&
-                 "further run is required to complete the simulation. \n"//&
-                 "If automatic restarts are not desired, use a negative \n"//&
-                 "value for MAXCPU.  MAXCPU has units of wall-clock \n"//&
-                 "seconds, so the actual CPU time used is larger by a \n"//&
+                 "The maximum amount of cpu time per processor for which "//&
+                 "MOM should run before saving a restart file and "//&
+                 "quitting with a return value that indicates that a "//&
+                 "further run is required to complete the simulation. "//&
+                 "If automatic restarts are not desired, use a negative "//&
+                 "value for MAXCPU.  MAXCPU has units of wall-clock "//&
+                 "seconds, so the actual CPU time used is larger by a "//&
                  "factor of the number of processors used.", &
                  units="wall-clock seconds", default=-1.0)
   call get_param(param_file, mdl, "CPU_TIME_FILE", CS%CPUfile, &
