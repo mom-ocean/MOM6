@@ -261,8 +261,8 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
   CS%inputdir = slasher(CS%inputdir)
   call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
-                 "If true, use an internal tidal dissipation scheme to \n"//&
-                 "drive diapycnal mixing, along the lines of St. Laurent \n"//&
+                 "If true, use an internal tidal dissipation scheme to "//&
+                 "drive diapycnal mixing, along the lines of St. Laurent "//&
                  "et al. (2002) and Simmons et al. (2004).", default=CS%use_CVMix_tidal)
 
   ! return if tidal mixing is inactive
@@ -274,7 +274,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     ! Read in CVMix tidal scheme if CVMix tidal mixing is on
     if (CS%use_CVMix_tidal) then
       call get_param(param_file, mdl, "CVMIX_TIDAL_SCHEME", CVMix_tidal_scheme_str, &
-                 "CVMIX_TIDAL_SCHEME selects the CVMix tidal mixing\n"//&
+                 "CVMIX_TIDAL_SCHEME selects the CVMix tidal mixing "//&
                  "scheme with INT_TIDE_DISSIPATION. Valid values are:\n"//&
                  "\t SIMMONS - Use the Simmons et al (2004) tidal \n"//&
                  "\t                mixing scheme.\n"//&
@@ -295,7 +295,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     ! Read in vertical profile of tidal energy dissipation
     if ( CS%CVMix_tidal_scheme.eq.SCHMITTNER .or. .not. CS%use_CVMix_tidal) then
       call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
-                   "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
+                   "INT_TIDE_PROFILE selects the vertical profile of energy "//&
                    "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
                    "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
                    "\t                decay profile.\n"//&
@@ -319,9 +319,9 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
   endif
 
   call get_param(param_file, mdl, "LEE_WAVE_DISSIPATION", CS%Lee_wave_dissipation, &
-                 "If true, use an lee wave driven dissipation scheme to \n"//&
-                 "drive diapycnal mixing, along the lines of Nikurashin \n"//&
-                 "(2010) and using the St. Laurent et al. (2002) \n"//&
+                 "If true, use an lee wave driven dissipation scheme to "//&
+                 "drive diapycnal mixing, along the lines of Nikurashin "//&
+                 "(2010) and using the St. Laurent et al. (2002) "//&
                  "and Simmons et al. (2004) vertical profile", default=.false.)
   if (CS%lee_wave_dissipation) then
     if (CS%use_CVMix_tidal) then
@@ -329,7 +329,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
             "be used when CVMix tidal mixing scheme is active.")
     endif
     call get_param(param_file, mdl, "LEE_WAVE_PROFILE", tmpstr, &
-                 "LEE_WAVE_PROFILE selects the vertical profile of energy \n"//&
+                 "LEE_WAVE_PROFILE selects the vertical profile of energy "//&
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
                  "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
                  "\t                decay profile.\n"//&
@@ -347,10 +347,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
   endif
 
   call get_param(param_file, mdl, "INT_TIDE_LOWMODE_DISSIPATION", CS%Lowmode_itidal_dissipation, &
-                 "If true, consider mixing due to breaking low modes that \n"//&
-                 "have been remotely generated; as with itidal drag on the \n"//&
-                 "barotropic tide, use an internal tidal dissipation scheme to \n"//&
-                 "drive diapycnal mixing, along the lines of St. Laurent \n"//&
+                 "If true, consider mixing due to breaking low modes that "//&
+                 "have been remotely generated; as with itidal drag on the "//&
+                 "barotropic tide, use an internal tidal dissipation scheme to "//&
+                 "drive diapycnal mixing, along the lines of St. Laurent "//&
                  "et al. (2002) and Simmons et al. (2004).", default=.false.)
 
   if ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
@@ -360,29 +360,29 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
             "be used when CVMix tidal mixing scheme is active.")
     endif
     call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
-                 "When the Polzin decay profile is used, this is a \n"//&
-                 "non-dimensional constant in the expression for the \n"//&
+                 "When the Polzin decay profile is used, this is a "//&
+                 "non-dimensional constant in the expression for the "//&
                  "vertical scale of decay for the tidal energy dissipation.", &
                  units="nondim", default=0.0697)
     call get_param(param_file, mdl, "NBOTREF_POLZIN", CS%Nbotref_Polzin, &
-                 "When the Polzin decay profile is used, this is the \n"//&
-                 "reference value of the buoyancy frequency at the ocean \n"//&
-                 "bottom in the Polzin formulation for the vertical \n"//&
+                 "When the Polzin decay profile is used, this is the "//&
+                 "reference value of the buoyancy frequency at the ocean "//&
+                 "bottom in the Polzin formulation for the vertical "//&
                  "scale of decay for the tidal energy dissipation.", &
                  units="s-1", default=9.61e-4)
     call get_param(param_file, mdl, "POLZIN_DECAY_SCALE_FACTOR", &
                  CS%Polzin_decay_scale_factor, &
-                 "When the Polzin decay profile is used, this is a \n"//&
-                 "scale factor for the vertical scale of decay of the tidal \n"//&
+                 "When the Polzin decay profile is used, this is a "//&
+                 "scale factor for the vertical scale of decay of the tidal "//&
                  "energy dissipation.", default=1.0, units="nondim")
     call get_param(param_file, mdl, "POLZIN_SCALE_MAX_FACTOR", &
                  CS%Polzin_decay_scale_max_factor, &
-                 "When the Polzin decay profile is used, this is a factor \n"//&
-                 "to limit the vertical scale of decay of the tidal \n"//&
-                 "energy dissipation to POLZIN_DECAY_SCALE_MAX_FACTOR \n"//&
+                 "When the Polzin decay profile is used, this is a factor "//&
+                 "to limit the vertical scale of decay of the tidal "//&
+                 "energy dissipation to POLZIN_DECAY_SCALE_MAX_FACTOR "//&
                  "times the depth of the ocean.", units="nondim", default=1.0)
     call get_param(param_file, mdl, "POLZIN_MIN_DECAY_SCALE", CS%Polzin_min_decay_scale, &
-                 "When the Polzin decay profile is used, this is the \n"//&
+                 "When the Polzin decay profile is used, this is the "//&
                  "minimum vertical decay scale for the vertical profile\n"//&
                  "of internal tide dissipation with the Polzin (2009) formulation", &
                  units="m", default=0.0, scale=US%m_to_Z)
@@ -390,20 +390,20 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
     call get_param(param_file, mdl, "INT_TIDE_DECAY_SCALE", CS%Int_tide_decay_scale, &
-                 "The decay scale away from the bottom for tidal TKE with \n"//&
+                 "The decay scale away from the bottom for tidal TKE with "//&
                  "the new coding when INT_TIDE_DISSIPATION is used.", &
                  !units="m", default=0.0)
                  units="m", default=500.0, scale=US%m_to_Z)  ! TODO: confirm this new default
     call get_param(param_file, mdl, "MU_ITIDES", CS%Mu_itides, &
-                 "A dimensionless turbulent mixing efficiency used with \n"//&
+                 "A dimensionless turbulent mixing efficiency used with "//&
                  "INT_TIDE_DISSIPATION, often 0.2.", units="nondim", default=0.2)
     call get_param(param_file, mdl, "GAMMA_ITIDES", CS%Gamma_itides, &
-                 "The fraction of the internal tidal energy that is \n"//&
-                 "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
+                 "The fraction of the internal tidal energy that is "//&
+                 "dissipated locally with INT_TIDE_DISSIPATION. "//&
                  "THIS NAME COULD BE BETTER.", &
                  units="nondim", default=0.3333)
     call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
-                 "Turn off internal tidal dissipation when the total \n"//&
+                 "Turn off internal tidal dissipation when the total "//&
                  "ocean depth is less than this value.", units="m", default=0.0, scale=US%m_to_Z)
   endif
 
@@ -416,7 +416,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     call safe_alloc_ptr(CS%mask_itidal,isd,ied,jsd,jed) ; CS%mask_itidal(:,:) = 1.0
 
     call get_param(param_file, mdl, "KAPPA_ITIDES", CS%kappa_itides, &
-                 "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
+                 "A topographic wavenumber used with INT_TIDE_DISSIPATION. "//&
                  "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                  units="m-1", default=8.e-4*atan(1.0), scale=US%Z_to_m)
 
@@ -426,15 +426,15 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     call safe_alloc_ptr(CS%tideamp,is,ie,js,je) ; CS%tideamp(:,:) = CS%utide
 
     call get_param(param_file, mdl, "KAPPA_H2_FACTOR", CS%kappa_h2_factor, &
-                 "A scaling factor for the roughness amplitude with \n"//&
+                 "A scaling factor for the roughness amplitude with "//&
                  "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
     call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
-                 "The maximum internal tide energy source available to mix \n"//&
+                 "The maximum internal tide energy source available to mix "//&
                  "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
                  units="W m-2",  default=1.0e3, scale=US%m_to_Z**3*US%T_to_s**3)
 
     call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
-                 "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
+                 "If true, read a file (given by TIDEAMP_FILE) containing "//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
     if (read_tideamp) then
       if (CS%use_CVMix_tidal) then
@@ -442,7 +442,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
               "not compatible with CVMix tidal mixing. ")
       endif
       call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
-                 "The path to the file containing the spatially varying \n"//&
+                 "The path to the file containing the spatially varying "//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
@@ -450,7 +450,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
-                 "The path to the file containing the sub-grid-scale \n"//&
+                 "The path to the file containing the sub-grid-scale "//&
                  "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
@@ -477,11 +477,11 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
   if (CS%Lee_wave_dissipation) then
 
     call get_param(param_file, mdl, "NIKURASHIN_TKE_INPUT_FILE",Niku_TKE_input_file, &
-                 "The path to the file containing the TKE input from lee \n"//&
+                 "The path to the file containing the TKE input from lee "//&
                  "wave driven mixing. Used with LEE_WAVE_DISSIPATION.", &
                  fail_if_missing=.true.)
     call get_param(param_file, mdl, "NIKURASHIN_SCALE",Niku_scale, &
-                 "A non-dimensional factor by which to scale the lee-wave \n"//&
+                 "A non-dimensional factor by which to scale the lee-wave "//&
                  "driven TKE input. Used with LEE_WAVE_DISSIPATION.", &
                  units="nondim", default=1.0)
 
@@ -494,11 +494,11 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
-                 "The fraction of the lee wave energy that is dissipated \n"//&
+                 "The fraction of the lee wave energy that is dissipated "//&
                  "locally with LEE_WAVE_DISSIPATION.", units="nondim", &
                  default=0.3333)
     call get_param(param_file, mdl, "DECAY_SCALE_FACTOR_LEE",CS%Decay_scale_factor_lee, &
-                 "Scaling for the vertical decay scaleof the local \n"//&
+                 "Scaling for the vertical decay scaleof the local "//&
                  "dissipation of lee waves dissipation.", units="nondim", &
                  default=1.0)
   else
@@ -514,17 +514,17 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_
                    "largest acceptable value for tidal diffusivity", &
                    units="m^2/s", default=50e-4) ! the default is 50e-4 in CVMix, 100e-4 in POP.
     call get_param(param_file, mdl, "TIDAL_DISS_LIM_TC", CS%tidal_diss_lim_tc, &
-                   "Min allowable depth for dissipation for tidal-energy-constituent data. \n"//&
+                   "Min allowable depth for dissipation for tidal-energy-constituent data. "//&
                    "No dissipation contribution is applied above TIDAL_DISS_LIM_TC.", &
                    units="m", default=0.0, scale=US%m_to_Z)
     call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
-                 "The path to the file containing tidal energy \n"//&
+                 "The path to the file containing tidal energy "//&
                  "dissipation. Used with CVMix tidal mixing schemes.", &
                  fail_if_missing=.true.)
     call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, &
                    do_not_log=.True.)
     call get_param(param_file, mdl, "PRANDTL_TIDAL", prandtl_tidal, &
-                   "Prandtl number used by CVMix tidal mixing schemes \n"//&
+                   "Prandtl number used by CVMix tidal mixing schemes "//&
                    "to convert vertical diffusivities into viscosities.", &
                     units="nondim", default=1.0, &
                    do_not_log=.true.)

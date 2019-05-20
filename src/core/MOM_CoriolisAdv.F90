@@ -951,23 +951,23 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
-                 "If true, no slip boundary conditions are used; otherwise \n"//&
-                 "free slip boundary conditions are assumed. The \n"//&
-                 "implementation of the free slip BCs on a C-grid is much \n"//&
-                 "cleaner than the no slip BCs. The use of free slip BCs \n"//&
-                 "is strongly encouraged, and no slip BCs are not used with \n"//&
+                 "If true, no slip boundary conditions are used; otherwise "//&
+                 "free slip boundary conditions are assumed. The "//&
+                 "implementation of the free slip BCs on a C-grid is much "//&
+                 "cleaner than the no slip BCs. The use of free slip BCs "//&
+                 "is strongly encouraged, and no slip BCs are not used with "//&
                  "the biharmonic viscosity.", default=.false.)
 
   call get_param(param_file, mdl, "CORIOLIS_EN_DIS", CS%Coriolis_En_Dis, &
-                 "If true, two estimates of the thickness fluxes are used \n"//&
-                 "to estimate the Coriolis term, and the one that \n"//&
+                 "If true, two estimates of the thickness fluxes are used "//&
+                 "to estimate the Coriolis term, and the one that "//&
                  "dissipates energy relative to the other one is used.", &
                  default=.false.)
 
   ! Set %Coriolis_Scheme
   ! (Select the baseline discretization for the Coriolis term)
   call get_param(param_file, mdl, "CORIOLIS_SCHEME", tmpstr, &
-                 "CORIOLIS_SCHEME selects the discretization for the \n"//&
+                 "CORIOLIS_SCHEME selects the discretization for the "//&
                  "Coriolis terms. Valid values are: \n"//&
                  "\t SADOURNY75_ENERGY - Sadourny, 1975; energy cons. \n"//&
                  "\t ARAKAWA_HSU90     - Arakawa & Hsu, 1990 \n"//&
@@ -998,16 +998,16 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   end select
   if (CS%Coriolis_Scheme == AL_BLEND) then
     call get_param(param_file, mdl, "CORIOLIS_BLEND_WT_LIN", CS%wt_lin_blend, &
-                 "A weighting value for the ratio of inverse thicknesses, \n"//&
-                 "beyond which the blending between Sadourny Energy and \n"//&
-                 "Arakawa & Hsu goes linearly to 0 when CORIOLIS_SCHEME \n"//&
+                 "A weighting value for the ratio of inverse thicknesses, "//&
+                 "beyond which the blending between Sadourny Energy and "//&
+                 "Arakawa & Hsu goes linearly to 0 when CORIOLIS_SCHEME "//&
                  "is ARAWAKA_LAMB_BLEND. This must be between 1 and 1e-16.", &
                  units="nondim", default=0.125)
     call get_param(param_file, mdl, "CORIOLIS_BLEND_F_EFF_MAX", CS%F_eff_max_blend, &
-                 "The factor by which the maximum effective Coriolis \n"//&
-                 "acceleration from any point can be increased when \n"//&
-                 "blending different discretizations with the \n"//&
-                 "ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be \n"//&
+                 "The factor by which the maximum effective Coriolis "//&
+                 "acceleration from any point can be increased when "//&
+                 "blending different discretizations with the "//&
+                 "ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be "//&
                  "greater than 2.0 (the max value for Sadourny energy).", &
                  units="nondim", default=4.0)
     CS%wt_lin_blend = min(1.0, max(CS%wt_lin_blend,1e-16))
@@ -1015,16 +1015,16 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
            "CORIOLIS_BLEND_F_EFF_MAX should be at least 2.")
   endif
 
-  mesg = "If true, the Coriolis terms at u-points are bounded by \n"//&
-         "the four estimates of (f+rv)v from the four neighboring \n"//&
+  mesg = "If true, the Coriolis terms at u-points are bounded by "//&
+         "the four estimates of (f+rv)v from the four neighboring "//&
          "v-points, and similarly at v-points."
   if (CS%Coriolis_En_Dis .and. (CS%Coriolis_Scheme == SADOURNY75_ENERGY)) then
-    mesg = trim(mesg)//"  This option is \n"//&
-                 "always effectively false with CORIOLIS_EN_DIS defined and \n"//&
+    mesg = trim(mesg)//"  This option is "//&
+                 "always effectively false with CORIOLIS_EN_DIS defined and "//&
                  "CORIOLIS_SCHEME set to "//trim(SADOURNY75_ENERGY_STRING)//"."
   else
-    mesg = trim(mesg)//"  This option would \n"//&
-                 "have no effect on the SADOURNY Coriolis scheme if it \n"//&
+    mesg = trim(mesg)//"  This option would "//&
+                 "have no effect on the SADOURNY Coriolis scheme if it "//&
                  "were possible to use centered difference thickness fluxes."
   endif
   call get_param(param_file, mdl, "BOUND_CORIOLIS", CS%bound_Coriolis, mesg, &
@@ -1034,7 +1034,7 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
 
   ! Set KE_Scheme (selects discretization of KE)
   call get_param(param_file, mdl, "KE_SCHEME", tmpstr, &
-                 "KE_SCHEME selects the discretization for acceleration \n"//&
+                 "KE_SCHEME selects the discretization for acceleration "//&
                  "due to the kinetic energy gradient. Valid values are: \n"//&
                  "\t KE_ARAKAWA, KE_SIMPLE_GUDONOV, KE_GUDONOV", &
                  default=KE_ARAKAWA_STRING)
@@ -1051,7 +1051,7 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
 
   ! Set PV_Adv_Scheme (selects discretization of PV advection)
   call get_param(param_file, mdl, "PV_ADV_SCHEME", tmpstr, &
-                 "PV_ADV_SCHEME selects the discretization for PV \n"//&
+                 "PV_ADV_SCHEME selects the discretization for PV "//&
                  "advection. Valid values are: \n"//&
                  "\t PV_ADV_CENTERED - centered (aka Sadourny, 75) \n"//&
                  "\t PV_ADV_UPWIND1  - upwind, first order", &

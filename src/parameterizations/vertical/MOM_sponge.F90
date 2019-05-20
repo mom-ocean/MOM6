@@ -118,8 +118,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "SPONGE", use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   if (.not.use_sponge) return

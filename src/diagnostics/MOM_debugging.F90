@@ -88,11 +88,11 @@ subroutine MOM_debugging_init(param_file)
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_CHKSUMS", debug_chksums, &
-                 "If true, checksums are performed on arrays in the \n"//&
+                 "If true, checksums are performed on arrays in the "//&
                  "various vec_chksum routines.", default=debug, &
                  debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_REDUNDANT", debug_redundant, &
-                 "If true, debug redundant data points during calls to \n"//&
+                 "If true, debug redundant data points during calls to "//&
                  "the various vec_chksum routines.", default=debug, &
                  debuggingParam=.true.)
 
