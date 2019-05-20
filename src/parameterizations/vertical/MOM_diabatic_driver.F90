@@ -1513,9 +1513,9 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
     call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, &
-                 scale=(US%Z_to_m**2)*US%s_to_T)
+                 scale=US%Z2_T_to_m2_s)
     call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, &
-                 scale=(US%Z_to_m**2)*US%s_to_T)
+                 scale=US%Z2_T_to_m2_s)
   endif
 
 
@@ -1587,9 +1587,9 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, &
-                   scale=(US%Z_to_m**2)*US%s_to_T)
+                   scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0, &
-                   scale=(US%Z_to_m**2)*US%s_to_T)
+                   scale=US%Z2_T_to_m2_s)
     endif
 
   endif  ! endif for KPP
@@ -3086,7 +3086,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
-      'Total diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z_to_m**2)
+      'Total diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   if (CS%use_energetic_PBL) then
       CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
           'ePBL diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z_to_m**2)
