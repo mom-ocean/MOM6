@@ -35,6 +35,7 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_register_axis => register_axis, &
                            fms2_read_data => read_data, &
                            fms2_read_restart => read_restart, &
+                           fms2_write_restart => write_restart,&
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_attribute_exists => variable_att_exists, &
@@ -1129,7 +1130,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
+           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
         elseif (associated(CS%var_ptr2d(m)%p)) then
@@ -1137,7 +1138,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
+           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
         elseif (associated(CS%var_ptr4d(m)%p)) then
@@ -1145,7 +1146,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
+           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
         elseif (associated(CS%var_ptr1d(m)%p)) then
@@ -1153,7 +1154,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
-           call MOM_write_data(fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
+           !call MOM_write_data(fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
         elseif (associated(CS%var_ptr0d(m)%p)) then
@@ -1161,7 +1162,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
-           call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
+           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
         endif
@@ -1177,7 +1178,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         if(allocated(time_vals)) deallocate(time_vals)     
      enddo
      
-
+     call fms2_write_restart(fileObjWrite)
      call fms2_close_file(fileObjWrite)
      num_files = num_files+1
   enddo
