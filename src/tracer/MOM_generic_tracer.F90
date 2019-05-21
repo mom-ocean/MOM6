@@ -130,7 +130,7 @@ contains
   ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, sub_name, version, "")
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE", CS%IC_file, &
-                 "The file in which the generic trcer initial values can \n"//&
+                 "The file in which the generic trcer initial values can "//&
                  "be found, or an empty string for internal initialization.", &
                  default=" ")
     if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -140,12 +140,12 @@ contains
       call log_param(param_file, sub_name, "INPUTDIR/GENERIC_TRACER_IC_FILE", CS%IC_file)
     endif
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE_IS_Z", CS%Z_IC_file, &
-                 "If true, GENERIC_TRACER_IC_FILE is in depth space, not \n"//&
+                 "If true, GENERIC_TRACER_IC_FILE is in depth space, not "//&
                  "layer space.",default=.false.)
     call get_param(param_file, sub_name, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
     CS%restart_CSp => restart_CS

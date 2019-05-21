@@ -77,9 +77,9 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   if (CS%first_call) call write_user_log(param_file)
   CS%first_call = .false.
   call get_param(param_file, mdl, "RHO_0", CS%Rho_ocean, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%Z_to_m)
   call get_param(param_file, mdl, "SHELF_MAX_DRAFT", CS%max_draft, &

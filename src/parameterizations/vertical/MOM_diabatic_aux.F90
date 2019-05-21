@@ -1337,31 +1337,31 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
                    "The following parameters are used for auxiliary diabatic processes.")
 
   call get_param(param_file, mdl, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
-                 "If true, try to use any frazil heat deficit to cool any\n"//&
-                 "overlying layers down to the freezing point, thereby \n"//&
-                 "avoiding the creation of thin ice when the SST is above \n"//&
+                 "If true, try to use any frazil heat deficit to cool any "//&
+                 "overlying layers down to the freezing point, thereby "//&
+                 "avoiding the creation of thin ice when the SST is above "//&
                  "the freezing point.", default=.true.)
   call get_param(param_file, mdl, "PRESSURE_DEPENDENT_FRAZIL", &
                                 CS%pressure_dependent_frazil, &
-                 "If true, use a pressure dependent freezing temperature \n"//&
-                 "when making frazil. The default is false, which will be \n"//&
+                 "If true, use a pressure dependent freezing temperature "//&
+                 "when making frazil. The default is false, which will be "//&
                  "faster but is inappropriate with ice-shelf cavities.", &
                  default=.false.)
 
   if (use_ePBL) then
     call get_param(param_file, mdl, "IGNORE_FLUXES_OVER_LAND", CS%ignore_fluxes_over_land,&
-         "If true, the model does not check if fluxes are being applied\n"//&
-         "over land points. This is needed when the ocean is coupled \n"//&
-         "with ice shelves and sea ice, since the sea ice mask needs to \n"//&
-         "be different than the ocean mask to avoid sea ice formation \n"//&
+         "If true, the model does not check if fluxes are being applied "//&
+         "over land points. This is needed when the ocean is coupled "//&
+         "with ice shelves and sea ice, since the sea ice mask needs to "//&
+         "be different than the ocean mask to avoid sea ice formation "//&
          "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
     call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
-                 "If true, apply additional mixing wherever there is \n"//&
-                 "runoff, so that it is mixed down to RIVERMIX_DEPTH \n"//&
+                 "If true, apply additional mixing wherever there is "//&
+                 "runoff, so that it is mixed down to RIVERMIX_DEPTH "//&
                  "if the ocean is that deep.", default=.false.)
     if (CS%do_rivermix) &
       call get_param(param_file, mdl, "RIVERMIX_DEPTH", CS%rivermix_depth, &
-                 "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
+                 "The depth to which rivers are mixed if DO_RIVERMIX is "//&
                  "defined.", units="m", default=0.0, scale=US%m_to_Z)
   else
     CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; CS%ignore_fluxes_over_land = .false.
@@ -1369,11 +1369,11 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 
   if (GV%nkml == 0) then
     call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
-                   "If true, use the fluxes%runoff_Hflx field to set the \n"//&
+                   "If true, use the fluxes%runoff_Hflx field to set the "//&
                    "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
                    default=.false.)
     call get_param(param_file, mdl, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
-                   "If true, use the fluxes%calving_Hflx field to set the \n"//&
+                   "If true, use the fluxes%calving_Hflx field to set the "//&
                    "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
                    default=.false.)
   else

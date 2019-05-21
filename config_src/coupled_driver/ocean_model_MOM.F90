@@ -278,41 +278,41 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "SINGLE_STEPPING_CALL", OS%single_step_call, &
-                 "If true, advance the state of MOM with a single step \n"//&
-                 "including both dynamics and thermodynamics.  If false, \n"//&
+                 "If true, advance the state of MOM with a single step "//&
+                 "including both dynamics and thermodynamics.  If false, "//&
                  "the two phases are advanced with separate calls.", default=.true.)
   call get_param(param_file, mdl, "DT", OS%dt, &
-                 "The (baroclinic) dynamics time step.  The time-step that \n"//&
-                 "is actually used will be an integer fraction of the \n"//&
+                 "The (baroclinic) dynamics time step.  The time-step that "//&
+                 "is actually used will be an integer fraction of the "//&
                  "forcing time-step.", units="s", fail_if_missing=.true.)
   call get_param(param_file, mdl, "DT_THERM", OS%dt_therm, &
-                 "The thermodynamic and tracer advection time step. \n"//&
-                 "Ideally DT_THERM should be an integer multiple of DT \n"//&
-                 "and less than the forcing or coupling time-step, unless \n"//&
-                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
-                 "can be an integer multiple of the coupling timestep.  By \n"//&
+                 "The thermodynamic and tracer advection time step. "//&
+                 "Ideally DT_THERM should be an integer multiple of DT "//&
+                 "and less than the forcing or coupling time-step, unless "//&
+                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM "//&
+                 "can be an integer multiple of the coupling timestep.  By "//&
                  "default DT_THERM is set to DT.", units="s", default=OS%dt)
   call get_param(param_file, "MOM", "THERMO_SPANS_COUPLING", OS%thermo_spans_coupling, &
-                 "If true, the MOM will take thermodynamic and tracer \n"//&
-                 "timesteps that can be longer than the coupling timestep. \n"//&
-                 "The actual thermodynamic timestep that is used in this \n"//&
-                 "case is the largest integer multiple of the coupling \n"//&
+                 "If true, the MOM will take thermodynamic and tracer "//&
+                 "timesteps that can be longer than the coupling timestep. "//&
+                 "The actual thermodynamic timestep that is used in this "//&
+                 "case is the largest integer multiple of the coupling "//&
                  "timestep that is less than or equal to DT_THERM.", default=.false.)
   call get_param(param_file, mdl, "DIABATIC_FIRST", OS%diabatic_first, &
-                 "If true, apply diabatic and thermodynamic processes, \n"//&
-                 "including buoyancy forcing and mass gain or loss, \n"//&
+                 "If true, apply diabatic and thermodynamic processes, "//&
+                 "including buoyancy forcing and mass gain or loss, "//&
                  "before stepping the dynamics forward.", default=.false.)
 
   call get_param(param_file, mdl, "RESTART_CONTROL", OS%Restart_control, &
-                 "An integer whose bits encode which restart files are \n"//&
-                 "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
-                 "(bit 0) for a non-time-stamped file.  A restart file \n"//&
-                 "will be saved at the end of the run segment for any \n"//&
+                 "An integer whose bits encode which restart files are "//&
+                 "written. Add 2 (bit 1) for a time-stamped file, and odd "//&
+                 "(bit 0) for a non-time-stamped file.  A restart file "//&
+                 "will be saved at the end of the run segment for any "//&
                  "non-negative value.", default=1)
   call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
-                 "A case-insensitive character string to indicate the \n"//&
-                 "staggering of the surface velocity field that is \n"//&
-                 "returned to the coupler.  Valid values include \n"//&
+                 "A case-insensitive character string to indicate the "//&
+                 "staggering of the surface velocity field that is "//&
+                 "returned to the coupler.  Valid values include "//&
                  "'A', 'B', or 'C'.", default="C")
   if (uppercase(stagger(1:1)) == 'A') then ; Ocean_sfc%stagger = AGRID
   elseif (uppercase(stagger(1:1)) == 'B') then ; Ocean_sfc%stagger = BGRID_NE
@@ -321,9 +321,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                         trim(stagger)//" is invalid.") ; endif
 
   call get_param(param_file, mdl, "RHO_0", Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "G_EARTH", G_Earth, &
@@ -341,9 +341,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
   call get_param(param_file, mdl, "HFREEZE", HFrz, &
-                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
-                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
-                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
                  "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)
 
   if (HFrz .gt. 0.0) then

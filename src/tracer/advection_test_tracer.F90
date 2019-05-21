@@ -98,16 +98,16 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "ADVECTION_TEST_X_ORIGIN", CS%x_origin, &
-        "The x-coorindate of the center of the test-functions.\n", default=0.)
+        "The x-coorindate of the center of the test-functions.", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_ORIGIN", CS%y_origin, &
-        "The y-coorindate of the center of the test-functions.\n", default=0.)
+        "The y-coorindate of the center of the test-functions.", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_X_WIDTH", CS%x_width, &
-        "The x-width of the test-functions.\n", default=0.)
+        "The x-width of the test-functions.", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_WIDTH", CS%y_width, &
-        "The y-width of the test-functions.\n", default=0.)
+        "The y-width of the test-functions.", default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_TRACER_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the tracers, or blank to initialize "//&
                  "them internally.", default=" ")
 
   if (len_trim(CS%tracer_IC_file) >= 1) then
@@ -117,14 +117,14 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
                    CS%tracer_IC_file)
   endif
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if the tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if the tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
 

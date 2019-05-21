@@ -52,7 +52,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   if (.not.associated(OBC)) return
 
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate boundary segment.", default=0,   &
                  do_not_log=.true.)
 

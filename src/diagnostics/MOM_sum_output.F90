@@ -169,41 +169,41 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CALCULATE_APE", CS%do_APE_calc, &
-                 "If true, calculate the available potential energy of \n"//&
-                 "the interfaces.  Setting this to false reduces the \n"//&
+                 "If true, calculate the available potential energy of "//&
+                 "the interfaces.  Setting this to false reduces the "//&
                  "memory footprint of high-PE-count models dramatically.", &
                  default=.true.)
   call get_param(param_file, mdl, "WRITE_STOCKS", CS%write_stocks, &
-                 "If true, write the integrated tracer amounts to stdout \n"//&
+                 "If true, write the integrated tracer amounts to stdout "//&
                  "when the energy files are written.", default=.true.)
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
   call get_param(param_file, mdl, "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.", units="s", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "MAXTRUNC", CS%maxtrunc, &
-                 "The run will be stopped, and the day set to a very \n"//&
-                 "large value if the velocity is truncated more than \n"//&
-                 "MAXTRUNC times between energy saves.  Set MAXTRUNC to 0 \n"//&
+                 "The run will be stopped, and the day set to a very "//&
+                 "large value if the velocity is truncated more than "//&
+                 "MAXTRUNC times between energy saves.  Set MAXTRUNC to 0 "//&
                  "to stop if there is any truncation of velocities.", &
                  units="truncations save_interval-1", default=0)
 
   call get_param(param_file, mdl, "MAX_ENERGY", CS%max_Energy, &
-                 "The maximum permitted average energy per unit mass; the \n"//&
-                 "model will be stopped if there is more energy than \n"//&
+                 "The maximum permitted average energy per unit mass; the "//&
+                 "model will be stopped if there is more energy than "//&
                  "this.  If zero or negative, this is set to 10*MAXVEL^2.", &
                  units="m2 s-2", default=0.0)
   if (CS%max_Energy <= 0.0) then
     call get_param(param_file, mdl, "MAXVEL", maxvel, &
-                 "The maximum velocity allowed before the velocity \n"//&
+                 "The maximum velocity allowed before the velocity "//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
     call log_param(param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
-                 "The file to use to write the energies and globally \n"//&
+                 "The file to use to write the energies and globally "//&
                  "summed diagnostics.", default="ocean.stats")
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
@@ -230,10 +230,10 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
 
   if (CS%do_APE_calc) then
     call get_param(param_file, mdl, "READ_DEPTH_LIST", CS%read_depth_list, &
-                   "Read the depth list from a file if it exists or \n"//&
+                   "Read the depth list from a file if it exists or "//&
                    "create that file otherwise.", default=.false.)
     call get_param(param_file, mdl, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
-                   "The minimum increment between the depths of the \n"//&
+                   "The minimum increment between the depths of the "//&
                    "entries in the depth-list file.", &
                    units="m", default=1.0E-10, scale=US%m_to_Z)
     if (CS%read_depth_list) then
@@ -244,12 +244,12 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
 
       call get_param(param_file, mdl, "REQUIRE_DEPTH_LIST_CHECKSUMS", &
                      CS%require_depth_list_chksum, &
-                 "Require that matching checksums be in Depth_list.nc\n" // &
+                 "Require that matching checksums be in Depth_list.nc "//&
                  "when reading the file.", default=.true.)
       if (.not. CS%require_depth_list_chksum) &
         call get_param(param_file, mdl, "UPDATE_DEPTH_LIST_CHECKSUMS", &
                      CS%update_depth_list_chksum, &
-                 "Automatically update the Depth_list.nc file if the\n" // &
+                 "Automatically update the Depth_list.nc file if the "//&
                  "checksums are missing or do not match current values.", &
                  default=.false.)
     endif
@@ -264,12 +264,12 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                  "The time unit for ENERGYSAVEDAYS.", &
                  units="s", default=86400.0)
   call get_param(param_file, mdl, "ENERGYSAVEDAYS",CS%energysavedays, &
-                 "The interval in units of TIMEUNIT between saves of the \n"//&
+                 "The interval in units of TIMEUNIT between saves of the "//&
                  "energies of the run and other globally summed diagnostics.",&
                  default=set_time(0,days=1), timeunit=Time_unit)
   call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC",CS%energysavedays_geometric, &
-                 "The starting interval in units of TIMEUNIT for the first call \n"//&
-                 "to save the energies of the run and other globally summed diagnostics. \n"//&
+                 "The starting interval in units of TIMEUNIT for the first call "//&
+                 "to save the energies of the run and other globally summed diagnostics. "//&
                  "The interval increases by a factor of 2. after each call to write_energy.",&
                  default=set_time(seconds=0), timeunit=Time_unit)
 
