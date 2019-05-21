@@ -20,7 +20,6 @@ use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_a
 use MOM_diag_mediator,       only : diag_grid_storage, diag_grid_storage_init, diag_grid_storage_end
 use MOM_diag_mediator,       only : diag_copy_diag_to_storage, diag_copy_storage_to_diag
 use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
-use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_CVMix_conv,          only : CVMix_conv_init, CVMix_conv_cs
@@ -43,7 +42,6 @@ use MOM_forcing_type,        only : forcing, MOM_forcing_chksum
 use MOM_forcing_type,        only : calculateBuoyancyFlux2d, forcing_SinglePointPrint
 use MOM_geothermal,          only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid,                only : ocean_grid_type
-use MOM_io,                  only : vardesc, var_desc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
 use MOM_interface_heights,   only : find_eta
@@ -183,9 +181,8 @@ type, public:: diabatic_CS; private
   integer, allocatable, dimension(:) :: id_cn ! diag handle for all mode speeds (BDM)
   integer :: id_wd       = -1, id_ea       = -1, id_eb           = -1 ! used by layer diabatic
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_ea_s         = -1, id_eb_s     = -1
-  integer :: id_ea_t     = -1, id_eb_t     = -1, id_Kd_z         = -1
+  integer :: id_ea_t     = -1, id_eb_t     = -1
   integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
-  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
   integer :: id_subMLN2  = -1, id_brine_lay = -1
@@ -238,7 +235,6 @@ type, public:: diabatic_CS; private
   type(ALE_sponge_CS),          pointer :: ALE_sponge_CSp        => NULL() !< Control structure for a child module
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL() !< Control structure for a child module
   type(optics_type),            pointer :: optics                => NULL() !< Control structure for a child module
-  type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL() !< Control structure for a child module
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
   type(tidal_mixing_cs),        pointer :: tidal_mixing_csp      => NULL() !< Control structure for a child module
   type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL() !< Control structure for a child module
@@ -383,9 +379,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real :: dt_mix  ! amount of time over which to apply mixing [s]
   real :: Idt     ! inverse time step [s-1]
 
-  type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
-  integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
-  integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
@@ -901,8 +894,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   call diag_update_remap_grids(CS%diag)
 
   ! diagnostics
-  if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
-      (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
+  if ((CS%id_Tdif > 0) .or. (CS%id_Tadv > 0)) then
     do j=js,je ; do i=is,ie
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
       Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
@@ -915,8 +907,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                     0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
     enddo ; enddo ; enddo
   endif
-  if ((CS%id_Sdif > 0) .or. (CS%id_Sdif_z > 0) .or. &
-      (CS%id_Sadv > 0) .or. (CS%id_Sadv_z > 0)) then
+  if ((CS%id_Sdif > 0) .or. (CS%id_Sadv > 0)) then
     do j=js,je ; do i=is,ie
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
       Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
@@ -1124,31 +1115,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   call disable_averaging(CS%diag)
 
-  num_z_diags = 0
-  if (CS%id_Kd_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Kd_z ; z_ptrs(num_z_diags)%p => Kd_int
-  endif
-  if (CS%id_Tdif_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Tdif_z ; z_ptrs(num_z_diags)%p => Tdif_flx
-  endif
-  if (CS%id_Tadv_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Tadv_z ; z_ptrs(num_z_diags)%p => Tadv_flx
-  endif
-  if (CS%id_Sdif_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Sdif_z ; z_ptrs(num_z_diags)%p => Sdif_flx
-  endif
-  if (CS%id_Sadv_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Sadv_z ; z_ptrs(num_z_diags)%p => Sadv_flx
-  endif
-
-  if (num_z_diags > 0) &
-    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, GV, CS%diag_to_Z_CSp)
-
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G)
   if (showCallTree) call callTree_leave("diabatic()")
 
@@ -1269,9 +1235,6 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   real :: dt_mix  ! amount of time over which to apply mixing [s]
   real :: Idt     ! inverse time step [s-1]
 
-  type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
-  integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
-  integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
@@ -2056,8 +2019,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   call diag_update_remap_grids(CS%diag)
 
   ! diagnostics
-  if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
-      (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
+  if ((CS%id_Tdif > 0) .or. (CS%id_Tadv > 0)) then
     do j=js,je ; do i=is,ie
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
       Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
@@ -2070,8 +2032,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
                     0.5*(tv%T(i,j,k-1) + tv%T(i,j,k))
     enddo ; enddo ; enddo
   endif
-  if ((CS%id_Sdif > 0) .or. (CS%id_Sdif_z > 0) .or. &
-      (CS%id_Sadv > 0) .or. (CS%id_Sadv_z > 0)) then
+  if ((CS%id_Sdif > 0) .or. (CS%id_Sadv > 0)) then
     do j=js,je ; do i=is,ie
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
       Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
@@ -2426,31 +2387,6 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   call disable_averaging(CS%diag)
 
-  num_z_diags = 0
-  if (CS%id_Kd_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Kd_z ; z_ptrs(num_z_diags)%p => Kd_int
-  endif
-  if (CS%id_Tdif_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Tdif_z ; z_ptrs(num_z_diags)%p => Tdif_flx
-  endif
-  if (CS%id_Tadv_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Tadv_z ; z_ptrs(num_z_diags)%p => Tadv_flx
-  endif
-  if (CS%id_Sdif_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Sdif_z ; z_ptrs(num_z_diags)%p => Sdif_flx
-  endif
-  if (CS%id_Sadv_z > 0) then
-    num_z_diags = num_z_diags + 1
-    z_ids(num_z_diags) = CS%id_Sadv_z ; z_ptrs(num_z_diags)%p => Sadv_flx
-  endif
-
-  if (num_z_diags > 0) &
-    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, GV, CS%diag_to_Z_CSp)
-
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G)
   if (showCallTree) call callTree_leave("diabatic()")
 
@@ -2735,7 +2671,7 @@ end subroutine diagnose_frazil_tendency
 !! tracer column functions to be called without allowing any
 !! of the diabatic processes to be used.
 subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
-                                tracer_flow_CSp, diag_to_Z_CSp)
+                                tracer_flow_CSp)
   type(time_type),         intent(in)    :: Time             !< current model time
   type(ocean_grid_type),   intent(in)    :: G                !< model grid structure
   type(param_file_type),   intent(in)    :: param_file       !< the file to parse for parameter values
@@ -2743,7 +2679,6 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   type(diabatic_CS),       pointer       :: CS               !< module control structure
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of the
                                                              !! tracer flow control module
-  type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp    !< pointer to Z-diagnostics control structure
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
@@ -2757,7 +2692,6 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
-  if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
@@ -2769,7 +2703,7 @@ end subroutine adiabatic_driver_init
 !> This routine initializes the diabatic driver module.
 subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, &
-                                ALE_sponge_CSp, diag_to_Z_CSp)
+                                ALE_sponge_CSp)
   type(time_type), target                :: Time             !< model time
   type(ocean_grid_type),   intent(inout) :: G                !< model grid structure
   type(verticalGrid_type), intent(in)    :: GV               !< model vertical grid structure
@@ -2785,12 +2719,10 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                                                              !! tracer flow control module
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
-  type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp    !< pointer to the Z-diagnostics control structure
 
   real    :: Kd
   integer :: num_mode
   logical :: use_temperature, differentialDiffusion
-  type(vardesc) :: vd
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
@@ -2816,7 +2748,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
   if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
   if (associated(ALE_sponge_CSp))  CS%ALE_sponge_CSp  => ALE_sponge_CSp
-  if (associated(diag_to_Z_CSp))   CS%diag_to_Z_CSp   => diag_to_Z_CSp
 
   CS%useALEalgorithm = useALEalgorithm
   CS%bulkmixedlayer = (GV%nkml > 0)
@@ -3041,29 +2972,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "stratification at the base of the mixed layer.", &
                  units='m', default=50.0, scale=US%m_to_Z)
 
-  ! diagnostics making use of the z-gridding code
-  if (associated(diag_to_Z_CSp)) then
-    vd = var_desc("Kd_interface", "m2 s-1", &
-                  "Diapycnal diffusivity at interfaces, interpolated to z", z_grid='z')
-    CS%id_Kd_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Tflx_dia_diff", "degC m s-1", &
-                  "Diffusive diapycnal temperature flux across interfaces, interpolated to z", &
-                  z_grid='z')
-    CS%id_Tdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Tflx_dia_adv", "degC m s-1", &
-                  "Advective diapycnal temperature flux across interfaces, interpolated to z", &
-                  z_grid='z')
-    CS%id_Tadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Sflx_dia_diff", "psu m s-1", &
-                  "Diffusive diapycnal salinity flux across interfaces, interpolated to z", &
-                  z_grid='z')
-    CS%id_Sdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Sflx_dia_adv", "psu m s-1", &
-                  "Advective diapycnal salinity flux across interfaces, interpolated to z", &
-                  z_grid='z')
-    CS%id_Sadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-  endif
-
   if (CS%id_dudt_dia > 0) call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
   if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
 
@@ -3084,7 +2992,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
 
-  !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
+  !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   if (CS%use_energetic_PBL) then
@@ -3299,7 +3207,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
-  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, diag, diag_to_Z_CSp, &
+  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, diag, &
                                           CS%tidal_mixing_CSp)
 
   ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise
@@ -3320,9 +3228,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! initialize module for setting diffusivities
-  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, &
+  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, &
                             CS%int_tide_CSp, CS%tidal_mixing_CSp, CS%halo_TS_diff)
-
 
   ! set up the clocks for this module
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
