@@ -526,8 +526,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: K_Enhancement ! A local enhancement of K, perhaps due to Langmuir turbulence
   ! For LT_ENH_K_R16
   real :: Shape_Function                ! The shape function of the enhancement
-  real :: Max_Shape_Function = 0.148148 ! The max value of the shape function of the enhancement
-  real :: Max_K_Enhancement = 2.25      ! The max value of the enhancement
+  real, parameter :: Max_Shape_Function = 0.148148 ! The max value of the shape function of the enhancement
+  real, parameter :: Max_K_Enhancement = 2.25      ! The max value of the enhancement
   !-End for LT_ENH_K_R16
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 
