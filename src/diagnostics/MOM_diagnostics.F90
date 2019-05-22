@@ -13,7 +13,6 @@ use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
 use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
 use MOM_diag_mediator,     only : diag_grid_storage
 use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
-use MOM_diag_to_Z,         only : calculate_Z_transport, diag_to_Z_CS
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, int_density_dz
@@ -1313,8 +1312,8 @@ end subroutine post_surface_thermo_diags
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, &
-                                      diag_to_Z_CSp, Reg)
+subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, &
+                                      diag, dt_trans, Reg)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
@@ -1327,8 +1326,6 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
   type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
   real,                     intent(in)    :: dt_trans !< total time step associated with the transports [s].
-  type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< A control structure for remapping
-                                                           !! the transports to depth space
   type(tracer_registry_type), pointer     :: Reg !< Pointer to the tracer registry
 
   ! Local variables
@@ -1346,8 +1343,6 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
 
   Idt = 1. / dt_trans
   H_to_kg_m2_dt = GV%H_to_kg_m2 * Idt
-
-  call calculate_Z_transport(uhtr, vhtr, h, dt_trans, G, GV, diag_to_Z_CSp)
 
   call diag_save_grids(diag)
   call diag_copy_storage_to_diag(diag, diag_pre_dyn)

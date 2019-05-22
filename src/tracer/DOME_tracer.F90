@@ -4,7 +4,6 @@ module DOME_tracer
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,   only : diag_ctrl
-use MOM_diag_to_Z,       only : diag_to_Z_CS
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING
 use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,    only : forcing
@@ -141,7 +140,7 @@ end function register_DOME_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:) and sets up the tracer output.
 subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp, param_file)
+                                  sponge_CSp, param_file)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                 intent(in) :: US !< A dimensional unit scaling type
@@ -155,8 +154,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                                                !! call to DOME_register_tracer.
   type(sponge_CS),                       pointer    :: sponge_CSp    !< A pointer to the control structure
                                                                      !! for the sponges, if they are in use.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                     !! for diagnostics in depth space.
   type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
 
 ! Local variables

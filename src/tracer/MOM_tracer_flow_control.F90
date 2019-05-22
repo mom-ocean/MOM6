@@ -4,7 +4,6 @@ module MOM_tracer_flow_control
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : time_type, diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type, close_param_file
 use MOM_forcing_type, only : forcing, optics_type
@@ -270,7 +269,7 @@ end subroutine call_tracer_register
 !> This subroutine calls all registered tracer initialization
 !! subroutines.
 subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag, OBC, &
-                                    CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
+                                    CS, sponge_CSp, ALE_sponge_CSp, tv)
   logical,                               intent(in)    :: restart !< 1 if the fields have already
                                                                   !! been read from a restart file.
   type(time_type), target,               intent(in)    :: day     !< Time of the start of the run.
@@ -296,8 +295,6 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
   type(ALE_sponge_CS),                   pointer       :: ALE_sponge_CSp !< A pointer to the control
                                                !! structure for the ALE sponges, if they are in use.
                                                !! Otherwise this may be unassociated.
-  type(diag_to_Z_CS),                    pointer       :: diag_to_Z_CSp  !< A pointer to the control
-                                               !! structure for diagnostics in depth space.
   type(thermo_var_ptrs),                 intent(in)    :: tv      !< A structure pointing to various
                                                                   !! thermodynamic variables
 
@@ -307,42 +304,41 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
 !  Add other user-provided calls here.
   if (CS%use_USER_tracer_example) &
     call USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS%USER_tracer_example_CSp, &
-                                sponge_CSp, diag_to_Z_CSp)
+                                sponge_CSp)
   if (CS%use_DOME_tracer) &
     call initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS%DOME_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp, param_file)
+                                sponge_CSp, param_file)
   if (CS%use_ISOMIP_tracer) &
     call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
-                                ALE_sponge_CSp, diag_to_Z_CSp)
+                                ALE_sponge_CSp)
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS%ideal_age_tracer_CSp, &
-                                     sponge_CSp, diag_to_Z_CSp)
+                                     sponge_CSp)
   if (CS%use_regional_dyes) &
     call initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS%dye_tracer_CSp, &
-                                     sponge_CSp, diag_to_Z_CSp)
+                                     sponge_CSp)
   if (CS%use_oil) &
     call initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS%oil_tracer_CSp, &
-                                     sponge_CSp, diag_to_Z_CSp)
+                                     sponge_CSp)
   if (CS%use_advection_test_tracer) &
     call initialize_advection_test_tracer(restart, day, G, GV, h, diag, OBC, CS%advection_test_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp)
+                                sponge_CSp)
   if (CS%use_OCMIP2_CFC) &
     call initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS%OCMIP2_CFC_CSp, &
-                                sponge_CSp, diag_to_Z_CSp)
+                                sponge_CSp)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) &
     call initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, &
-        CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
+        CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp)
 #endif
   if (CS%use_pseudo_salt_tracer) &
     call initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS%pseudo_salt_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp, tv)
+                                sponge_CSp, tv)
   if (CS%use_boundary_impulse_tracer) &
     call initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS%boundary_impulse_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp, tv)
+                                sponge_CSp, tv)
   if (CS%use_dyed_obc_tracer) &
-    call initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS%dyed_obc_tracer_CSp, &
-                                diag_to_Z_CSp)
+    call initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS%dyed_obc_tracer_CSp)
 
 end subroutine tracer_flow_control_init
 

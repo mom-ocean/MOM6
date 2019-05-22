@@ -4,7 +4,6 @@ module oil_tracer
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -202,7 +201,7 @@ end function register_oil_tracer
 
 !> Initialize the oil tracers and set up tracer output
 subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp)
+                                  sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
@@ -219,8 +218,6 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(oil_tracer_CS),                pointer    :: CS !< The control structure returned by a previous
                                                        !! call to register_oil_tracer.
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                  !! for diagnostics in depth space.
 
   ! Local variables
   character(len=16) :: name     ! A variable's name in a NetCDF file.

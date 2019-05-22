@@ -60,8 +60,6 @@ use MOM_diagnostics,           only : register_transport_diags, post_transport_d
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
 use MOM_diagnostics,           only : post_surface_dyn_diags, post_surface_thermo_diags
 use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs, transport_diag_IDs
-use MOM_diag_to_Z,             only : calculate_Z_diag_fields, register_Z_tracer
-use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, MOM_diag_to_Z_end, diag_to_Z_CS
 use MOM_dynamics_unsplit,      only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
@@ -246,9 +244,6 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: dtbt_reset_time !< The next time DTBT should be calculated.
 
 
-  type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
-  type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
-
   real, dimension(:,:,:), pointer :: &
     h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
     T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].
@@ -352,8 +347,6 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the globally summed output control structure
   type(diagnostics_CS),          pointer :: diagnostics_CSp => NULL()
     !< Pointer to the MOM diagnostics control structure
-  type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp => NULL()
-    !< Pointer to the MOM Z-space diagnostics control structure
   type(offline_transport_CS),    pointer :: offline_CSp => NULL()
     !< Pointer to the offline tracer transport control structure
 
@@ -797,18 +790,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call disable_averaging(CS%diag)
       CS%t_dyn_rel_diag = 0.0
 
-      call cpu_clock_begin(id_clock_Z_diag)
-      if (Time_local + real_to_time(0.5*dt_therm) > CS%Z_diag_time) then
-        call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
-                              CS%Z_diag_time, CS%diag)
-      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
-        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, &
-                                     G, GV, US, CS%diag_to_Z_CSp)
-        CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
-        call disable_averaging(CS%diag)
-        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
-      endif
-      call cpu_clock_end(id_clock_Z_diag)
       call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
     endif
 
@@ -1111,7 +1092,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, Time_local)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
   call post_transport_diagnostics(G, GV, CS%uhtr, CS%vhtr, h, CS%transport_IDs, &
-           CS%diag_pre_dyn, CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, CS%tracer_reg)
+           CS%diag_pre_dyn, CS%diag, CS%t_dyn_rel_adv, CS%tracer_reg)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -1793,11 +1774,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
                  "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
                  "melt potential will not be computed.", units="m", default=-1.0)
-  call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
-                 "The minimum amount of time in seconds between "//&
-                 "calculations of depth-space diagnostics. Making this "//&
-                 "larger than DT_THERM reduces the  performance penalty "//&
-                 "of regridding to depth online.", units="s", default=0.0)
   call get_param(param_file, "MOM", "INTERPOLATE_P_SURF", CS%interp_p_surf, &
                  "If true, linearly interpolate the surface pressure "//&
                  "over the coupling time step, using the specified value "//&
@@ -2365,11 +2341,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
-  CS%Z_diag_interval = real_to_time(CS%dt_therm * max(1,floor(0.01 + Z_diag_int/CS%dt_therm)))
-  call MOM_diag_to_Z_init(Time, G, GV, US, param_file, diag, CS%diag_to_Z_CSp)
-  CS%Z_diag_time = Start_time + CS%Z_diag_interval * (1 + &
-    ((Time + real_to_time(CS%dt_therm)) - Start_time) / CS%Z_diag_interval)
-
   if (associated(CS%sponge_CSp)) &
     call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
 
@@ -2378,11 +2349,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (CS%adiabatic) then
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
-                               CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
+                               CS%tracer_flow_CSp)
   else
     call diabatic_driver_init(Time, G, GV, US, param_file, CS%use_ALE_algorithm, diag, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+                              CS%sponge_CSp, CS%ALE_sponge_CSp)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
@@ -2397,7 +2368,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_diags(Time, G, GV, CS%IDs, CS%diag)
   call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
-                                   CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
+                                   CS%use_ALE_algorithm)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, US, diag, CS%ALE_CSp)
   endif
@@ -2406,7 +2377,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   new_sim = is_new_run(restart_CSp)
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, US, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
-             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
+             CS%ALE_sponge_CSp, CS%tv)
   if (present(tracer_flow_CSp)) tracer_flow_CSp => CS%tracer_flow_CSp
 
   ! If running in offline tracer mode, initialize the necessary control structure and
