@@ -940,7 +940,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
           mech_TKE_k(i,1) = mech_TKE(i) ; conv_PErel_k(i,1) = conv_PErel(i)
           nstar_k(:) = 0.0 ; nstar_k(1) = CS%nstar ; num_itts(:) = -1
         endif
-        K_Enhancement = 0. !Initialize to zero
         do K=2,nz
           ! Apply dissipation to the TKE, here applied as an exponential decay
           ! due to 3-d turbulent energy being lost to inefficient rotational modes.
@@ -1103,13 +1102,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
               dMKE_max = 0.0 ; MKE2_Hharm = 0.0
             endif
 
-            ! Compute the local enhnacement of K (perhaps due to Langmuir)
-            if (CS%LT_ENH_K_R16) then
-              Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
-              K_Enhancement = ( min( Max_K_Enhancement,1.+1./La ) - 1. )
-              K_Enhancement = K_Enhancement * Shape_Function / Max_Shape_Function
-            endif
-
             ! At this point, Kddt_h(K) will be unknown because its value may depend
             ! on how much energy is available.  mech_TKE might be negative due to
             ! contributions from TKE_forced.
@@ -1135,7 +1127,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
               else
                  Kd_guess0 = vstar * vonKar * Mixing_Length_Used(k)
               endif
-              Kd_guess0 = Kd_guess0 * (K_Enhancement+1.)
+              Kd_guess0 = Kd_guess0
+              ! Compute the local enhnacement of K (perhaps due to Langmuir)
+              if (CS%LT_ENH_K_R16) then
+                Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
+                K_Enhancement = ( min( Max_K_Enhancement,1.+1./La ) - 1. )
+                Kd_guess0 = Kd_guess0 * Shape_Function / Max_Shape_Function
+              endif
             else
               vstar = 0.0 ; Kd_guess0 = 0.0
             endif
@@ -1195,7 +1193,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                   else
                     Kd(i,k) = vstar * vonKar * Mixing_Length_Used(k)
                   endif
-                  Kd(i,k) = Kd(i,k) * (K_Enhancement+1.)
+                  ! Compute the local enhnacement of K (perhaps due to Langmuir)
+                  if (CS%LT_ENH_K_R16) then
+                    Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
+                    K_Enhancement = ( min( Max_K_Enhancement,1.+1./La ) - 1. )
+                    Kd(i,k) = Kd(i,K) * Shape_Function / Max_Shape_Function
+                  endif
                 else
                   vstar = 0.0 ; Kd(i,k) = 0.0
                 endif
