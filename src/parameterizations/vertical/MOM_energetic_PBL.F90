@@ -1127,7 +1127,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
               else
                  Kd_guess0 = vstar * vonKar * Mixing_Length_Used(k)
               endif
-              Kd_guess0 = Kd_guess0
               ! Compute the local enhnacement of K (perhaps due to Langmuir)
               if (CS%LT_ENH_K_R16) then
                 Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
