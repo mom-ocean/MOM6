@@ -38,7 +38,10 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_write_restart => write_restart,&
                            fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
+                           fms2_global_att_exists => global_att_exists, &
                            fms2_attribute_exists => variable_att_exists, &
+                           fms2_get_global_attribute => get_global_attribute, &
+                           fms2_get_compute_domain_dimension_indices => get_compute_domain_dimension_indices, &
                            fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
                            fms2_get_compute_domain_dimension_indices => get_compute_domain_dimension_indices, &
                            fms2_get_variable_attribute => get_variable_attribute, &
@@ -1082,7 +1085,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
         call get_dimension_features(hor_grid, z_grid, t_grid, G, &
                                     axis_names, axis_lengths, num_axes, GV)
-        ! write the axis data and associated metadata to the file
+
+        ! write the axes and associated metadata to the file
         do i=1,num_axes
            variable_exists = fms2_variable_exists(fileObjWrite, axis_names(i))
            if (.not.(variable_exists)) then
@@ -1130,7 +1134,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
         elseif (associated(CS%var_ptr2d(m)%p)) then
@@ -1138,7 +1141,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
         elseif (associated(CS%var_ptr4d(m)%p)) then
@@ -1146,7 +1148,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
                dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
 
-           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
         elseif (associated(CS%var_ptr1d(m)%p)) then
@@ -1154,7 +1155,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
-           !call MOM_write_data(fileObjWrite,CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
         elseif (associated(CS%var_ptr0d(m)%p)) then
@@ -1162,7 +1162,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
                dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
 
-           !call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p)
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
         endif
@@ -1180,8 +1179,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      
      call fms2_write_restart(fileObjWrite)
      call fms2_close_file(fileObjWrite)
+
      num_files = num_files+1
   enddo
+
 end subroutine save_restart
 
 !> restore_state reads the model state from previously generated files.  All
@@ -1354,9 +1355,9 @@ function restart_files_exist(filename, directory, G, CS)
       "restart_files_exist: Module must be initialized before it is used.")
 
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
-    num_files = open_restart_units('r', directory, G, CS)
+    num_files = get_num_restart_files('r', directory, G, CS)
   else
-    num_files = open_restart_units(filename, directory, G, CS)
+    num_files = get_num_restart_files(filename, directory, G, CS)
   endif
   restart_files_exist = (num_files > 0)
 
@@ -1385,7 +1386,7 @@ function determine_is_new_run(filename, directory, G, CS) result(is_new_run)
   elseif (filename(1:1) == 'n') then
     CS%new_run = .true.
   elseif (filename(1:1) == 'F') then
-    CS%new_run = (open_restart_units('r', directory, G, CS) == 0)
+    CS%new_run = (get_num_restart_files('r', directory, G, CS) == 0)
   else
     CS%new_run = .false.
   endif
@@ -1411,143 +1412,118 @@ function is_new_run(CS)
   is_new_run = CS%new_run
 end function is_new_run
 
-!> open_restart_units determines the number of existing restart files and optionally opens
-!! them and returns unit ids, paths and whether the files are global or spatially decomposed.
-function open_restart_units(filename, directory, G, CS, units, file_paths, &
-                            global_files) result(num_files)
+!> get_num_restart_files determines the number of existing restart files.
+!> @note This function replaces open_restart_units
+function get_num_restart_files(filename, directory, G, CS,file_paths) result(num_files)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
-  integer, dimension(:), &
-               optional, intent(out) :: units     !< The mpp units of all opened files.
   character(len=*), dimension(:), &
                optional, intent(out) :: file_paths   !< The full paths to open files.
-  logical, dimension(:), &
-               optional, intent(out) :: global_files !< True if a file is global.
-
+ 
   integer :: num_files  !< The number of files (both automatically named restart
-                        !! files and others explicitly in filename) that have been opened.
-
-!  This subroutine reads the model state from previously
-!  generated files.  All restart variables are read from the first
-!  file in the input filename list in which they are found.
+                        !! files and others explicitly in filename) that have been opened
 
   ! Local variables
   character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
   character(len=256) :: fname     ! The name of the current file.
   character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
-! character(len=256) :: mesg      ! A message for warnings.
   integer :: num_restart     ! The number of restart files that have already
                              ! been opened.
   integer :: start_char      ! The location of the starting character in the
                              ! current file name.
-  integer :: n, m, err, length
+  integer :: n, m, err
   logical :: fexists
-  character(len=32) :: filename_appendix !fms appendix to filename for ensemble runs
   character(len=80) :: restartname
+  character(len=1024) :: restartname_temp ! temporary location for restart name
+  integer :: substring_index
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! fms2 data structure
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "open_restart_units: Module must be initialized before it is used.")
+      "get_num_restart_files: Module must be initialized before it is used.")
 
-! Get NetCDF ids for all of the restart files.
-  num_restart = 0 ; n = 1 ; start_char = 1
+! Check whether restart file(s) in 'filename' or, if filename is 'r', restart file(s) with the base name
+! in CS%restart file, exist
+  num_restart = 0
+  start_char = 1
+
   do while (start_char <= len_trim(filename) )
-    do m=start_char,len_trim(filename)
-      if (filename(m:m) == ' ') exit
-    enddo
-    fname = filename(start_char:m-1)
-    start_char = m
-    do while (start_char <= len_trim(filename))
-      if (filename(start_char:start_char) == ' ') then
-        start_char = start_char + 1
-      else
-        exit
-      endif
-    enddo
+     ! parse filename
+     do m=start_char,len_trim(filename)
+        if (filename(m:m) == ' ') exit
+     enddo
+     fname = filename(start_char:m-1)
+     start_char = m
+     do while (start_char <= len_trim(filename))
+        if (filename(start_char:start_char) == ' ') then
+           start_char = start_char + 1
+        else
+           exit
+        endif
+     enddo
+    
+     restartname = ''
+     restartname_temp=''
 
-    if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
-      err = 0
-      if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
-      do while (err == 0)
-        restartname = trim(CS%restartfile)
-
-       !query fms_io if there is a filename_appendix (for ensemble runs)
-       filename_appendix = ''
-       !call get_filename_appendix(filename_appendix) all this dows
-       if (len_trim(filename_appendix) > 0) then
-         length = len_trim(restartname)
-         if (restartname(length-2:length) == '.nc') then
-            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-         else
-            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-         endif
+     if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
+        restartname_temp = trim(CS%restartfile)
+     else
+        restartname_temp = trim(fname)
+     endif
+      
+     err = 0
+     if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
+     do while (err == 0)
+        ! append '.nc' to the restart file name if it is missing
+        substring_index = index('.nc', trim(restartname_temp))
+        if (substring_index <= 0) then
+           restartname = append_substring(restartname_temp,'.nc')
+        else 
+           restartname = restartname_temp
         endif
         filepath = trim(directory) // trim(restartname)
 
-        if (num_restart < 10) then
-          write(suffix,'("_",I1)') num_restart
-        else
-          write(suffix,'("_",I2)') num_restart
-        endif
-        if (num_restart > 0) filepath = trim(filepath) // suffix
-
-        ! if (.not.file_exists(filepath)) &
-          filepath = trim(filepath)//".nc"
-
-        num_restart = num_restart + 1
-        inquire(file=filepath, exist=fexists)
+        fexists = MOM_open_file(fileObjRead, trim(filepath), "read", G, is_restart=.true.)
         if (fexists) then
-          if (present(units)) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                           threading = MULTIPLE, fileset = SINGLE_FILE)
-          if (present(global_files)) global_files(n) = .true.
-        elseif (CS%parallel_restartfiles) then
-          ! Look for decomposed files using the I/O Layout.
-          fexists = file_exists(filepath)
-          if (fexists .and. (present(units))) &
-            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                           domain=G%Domain%mpp_domain)
-          if (fexists .and. present(global_files)) global_files(n) = .false.
-        endif
-
-        if (fexists) then
-          if (present(file_paths)) file_paths(n) = filepath
-          n = n + 1
-          if (is_root_pe() .and. (present(units))) &
-            call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
+           if (fms2_global_att_exists(fileObjRead,'NumFilesInSet')) then
+              call fms2_get_global_attribute(fileObjRead, 'NumFilesInSet', num_restart)
+           else
+              num_restart = num_restart + 1
+           endif
+   
+           if (is_root_pe()) then
+              call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
+           else
+              err = 1 ; exit
+           endif
         else
-          err = 1 ; exit
+            call MOM_error(WARNING,"MOM_restart: Unable to find restart file(s) with base name : "//trim(filepath))
         endif
-      enddo ! while (err == 0) loop
-    else
-      filepath = trim(directory)//trim(fname)
-      inquire(file=filepath, exist=fexists)
-      if (.not. fexists) filepath = trim(filepath)//".nc"
 
-      inquire(file=filepath, exist=fexists)
-      if (fexists) then
-        if (present(units)) &
-          call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                       threading = MULTIPLE, fileset = SINGLE_FILE)
-        if (present(global_files)) global_files(n) = .true.
-        if (present(file_paths)) file_paths(n) = filepath
-        n = n + 1
-        if (is_root_pe() .and. (present(units))) &
-          call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
-      else
-        if (present(units)) &
-          call MOM_error(WARNING,"MOM_restart: Unable to find restart file : "//trim(filepath))
-      endif
-
-    endif
+        call fms2_close_file(fileObjRead)
+ 
+     enddo ! while (err == 0) loop
+      
   enddo ! while (start_char < strlen(filename)) loop
-  num_files = n-1
 
-end function open_restart_units
+  num_files = num_restart
+  ! populate file_paths if present
+  if (present(file_paths)) then
+     do n=1,num_files
+        suffix='' 
+        if (n < 10) then
+           write(suffix,'("_",I1)') n
+        else
+           write(suffix,'("_",I2)') n
+        endif
+        file_paths(n) = trim(filepath) // suffix
+     enddo
+  endif
+end function get_num_restart_files
 
 !> Initialize this module and set up a restart control structure.
 subroutine restart_init(param_file, CS, restart_root)
