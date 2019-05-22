@@ -1414,15 +1414,13 @@ end function is_new_run
 
 !> get_num_restart_files determines the number of existing restart files.
 !> @note This function replaces open_restart_units
-function get_num_restart_files(filename, directory, G, CS,file_paths) result(num_files)
+function get_num_restart_files(filename, directory, G, CS) result(num_files)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
                                                   !! character 'r' to read automatically named files.
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
                                                   !! call to restart_init.
-  character(len=*), dimension(:), &
-               optional, intent(out) :: file_paths   !< The full paths to open files.
  
   integer :: num_files  !< The number of files (both automatically named restart
                         !! files and others explicitly in filename) that have been opened
@@ -1436,7 +1434,7 @@ function get_num_restart_files(filename, directory, G, CS,file_paths) result(num
                              ! been opened.
   integer :: start_char      ! The location of the starting character in the
                              ! current file name.
-  integer :: n, m, err
+  integer :: m, err
   logical :: fexists
   character(len=80) :: restartname
   character(len=1024) :: restartname_temp ! temporary location for restart name
@@ -1511,18 +1509,7 @@ function get_num_restart_files(filename, directory, G, CS,file_paths) result(num
   enddo ! while (start_char < strlen(filename)) loop
 
   num_files = num_restart
-  ! populate file_paths if present
-  if (present(file_paths)) then
-     do n=1,num_files
-        suffix='' 
-        if (n < 10) then
-           write(suffix,'("_",I1)') n
-        else
-           write(suffix,'("_",I2)') n
-        endif
-        file_paths(n) = trim(filepath) // suffix
-     enddo
-  endif
+  
 end function get_num_restart_files
 
 !> Initialize this module and set up a restart control structure.
