@@ -1056,8 +1056,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            if (.not.(axis_exists)) then
               total_axes=total_axes+1
               call MOM_get_axis_data(axis_data_CS, axis_names(i), total_axes, G=G, GV=GV, &
-                                     time_val=time_vals=, time_units=restart_time_units)
-              call MOM_register_axis(fileObjWrite, axis_data_CS%name(total_axes), axis_lengths(i))
+                                     time_val=time_vals, time_units=restart_time_units)
+              call MOM_register_axis(fileObjWrite, axis_data_CS%axis(i)%name, axis_lengths(i))
            endif
         enddo
     
@@ -1071,26 +1071,26 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
               if (axis_data_CS%axis(i)%is_domain_decomposed) then
                  call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
 
-                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)name), &
+                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p(is:ie), &
-                                                  dimensions=(/trim(axis_data_CS%axis(i)name)/), &
-                                                  domain_position=axis_data_CS%axis(i)horgrid_position)
+                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/), &
+                                                  domain_position=axis_data_CS%axis(i)%horgrid_position)
               else
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p, &
                                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/), &
-                                                  domain_position=axis_data_CS%axis(i)horgrid_position)
+                                                  domain_position=axis_data_CS%axis(i)%horgrid_position)
               endif
 
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)name), &
-                                                      'long_name',axis_data_CS%axis(i)longname)
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)name), &
-                                                      'units',axis_data_CS%axis(i)units)
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)name), &
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'long_name',axis_data_CS%axis(i)%longname)
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'units',axis_data_CS%axis(i)%units)
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                       'cartesian_axis',axis_data_CS%axis(i)%cartesian_axis)
               if (len_trim(axis_data_CS%axis(i)%positive)>1) then
                   call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                       'positive',trim(axis_data_CS%axis(i)positive))
+                                                       'positive',trim(axis_data_CS%axis(i)%positive))
               endif
                  
            endif

@@ -523,7 +523,7 @@ subroutine MOM_register_axis(fileObj, axis_name, axis_length)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to fms2_open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
-                                                !! (only needed for z-grid and Time)
+                                                !! (only needed for Layer, Interface, Time, and Period)
    select case (trim(axis_name))
          case ('latq'); call fms2_register_axis(fileObj,'latq','y')
          case ('lath'); call fms2_register_axis(fileObj,'lath','y') 
@@ -667,17 +667,13 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   
   ! set the ocean grid coordinates
   if (present(G)) then
-     domain_set = .true. ; Domain => G%Domain
      gridLatT => G%gridLatT ; gridLatB => G%gridLatB
      gridLonT => G%gridLonT ; gridLonB => G%gridLonB
-     x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
      isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
      IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
   elseif (present(dG)) then
-     domain_set = .true. ; Domain => dG%Domain
      gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
      gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
-     x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
      isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
      IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
@@ -788,6 +784,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
   real,dimension(:), target, optional, intent(in) :: time_val !< time value
   character(len=*), optional,intent(in) :: time_units!< units for non-periodic time axis
   ! local
+  character(len=40) :: x_axis_units='', y_axis_units=''
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
@@ -796,14 +793,12 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
 
   ! set the ocean grid coordinates
   if (present(G)) then
-     domain_set = .true. ; Domain => G%Domain
      gridLatT => G%gridLatT ; gridLatB => G%gridLatB
      gridLonT => G%gridLonT ; gridLonB => G%gridLonB
      x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
      isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
      IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
   elseif (present(dG)) then
-     domain_set = .true. ; Domain => dG%Domain
      gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
      gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
      x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
@@ -824,7 +819,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%data(axis_number)%p=>gridLatT(jsg:jeg)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
-        axis_data_CS%axis(axis_number)%units = G%y_axis_units
+        axis_data_CS%axis(axis_number)%units = y_axis_units
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
         axis_data_CS%axis(axis_number)%cartesian_axis  = 'Y'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
@@ -833,14 +828,14 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
         axis_data_CS%axis(axis_number)%longname = 'Longitude'
-        axis_data_CS%axis(axis_number)%units = G%x_axis_units
+        axis_data_CS%axis(axis_number)%units = x_axis_units
         axis_data_CS%axis(axis_number)%cartesian_axis = 'X'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('latq')
         axis_data_CS%data(axis_number)%p=>gridLatB(JsgB:JegB)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
-        axis_data_CS%axis(axis_number)%units(axis_number) = G%y_axis_units
+        axis_data_CS%axis(axis_number)%units = y_axis_units
         axis_data_CS%axis(axis_number)%cartesian_axis = 'Y'
         axis_data_CS%axis(axis_number)%horgrid_position = CORNER
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
@@ -848,7 +843,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%data(axis_number)%p=>gridLonB(IsgB:IegB)
         axis_data_CS%axis(axis_number)%longname  = 'Longitude'
-        axis_data_CS%axis(axis_number)%units = G%x_axis_units
+        axis_data_CS%axis(axis_number)%units = x_axis_units
         axis_data_CS%axis(axis_number)%cartesian_axis = 'X'
         axis_data_CS%axis(axis_number)%horgrid_position = CORNER
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
@@ -858,8 +853,8 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%longname = 'Layer pseudo-depth, -z*'
         axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
         axis_data_CS%axis(axis_number)%cartesian_axis = 'Z'
-        axis_data_CS%axis(axis_number)%positive(axis_number)  = 'up'
-        axis_data_CS%axis(axis_number)%horgrid_position(axis_number)  = CENTER ! dummy value for the domain-decomposed write
+        axis_data_CS%axis(axis_number)%positive  = 'up'
+        axis_data_CS%axis(axis_number)%horgrid_position  = CENTER ! dummy value for the domain-decomposed write
      case('Interface')
         axis_data_CS%data(axis_number)%p=>GV%sInterface(1:GV%ke+1)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
@@ -1479,12 +1474,12 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   enddo
   
   do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
+     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
            call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))  
            if (axis_data_CS%axis(i)%is_domain_decomposed) then
               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
               call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
@@ -1626,12 +1621,12 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   ! write the axes data and attributes to the file if they do not exist
   
   do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
+     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
            call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))  
            if (axis_data_CS%axis(i)%is_domain_decomposed) then
               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
               call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
@@ -1650,7 +1645,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
 
   ! register and write the IC variable and attributes to the IC file
   call fms2_register_field(fileObjWrite, variable_name, "double", &
-                          dimensions=dim_names(1:num_axes), domain_position=horgrid_position) 
+                           dimensions=dim_names(1:num_axes), & 
+                           domain_position=horgrid_position) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
@@ -1686,7 +1682,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   integer :: horgrid_position = 1
   integer :: substring_index = 0
   integer :: name_length = 0
-  integer :: num_axes, trotal_axes
+  integer :: num_axes, total_axes
   integer :: var_periods
   integer :: i, is, ie, k
   integer, dimension(4) :: dim_lengths
@@ -1770,12 +1766,12 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   ! write the axes data and attributes to the file if they do not exist
   
   do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
+     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
            call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/) ) 
            if (axis_data_CS%axis(i)%is_domain_decomposed) then
               call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
               call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
@@ -1917,12 +1913,12 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   ! write the axes data and attributes to the file if they do not exist
   
   do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
+     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
            call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), & 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/) )  
   
            call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
 
