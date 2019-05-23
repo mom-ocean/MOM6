@@ -795,7 +795,6 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
      gridLonB => NULL()
 
   ! set the ocean grid coordinates
-   set the ocean grid coordinates
   if (present(G)) then
      domain_set = .true. ; Domain => G%Domain
      gridLatT => G%gridLatT ; gridLatB => G%gridLatB
@@ -812,63 +811,63 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
      IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
 
-  axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-  axis_data_CS%axis_atts(axis_number)%longname = ''
-  axis_data_CS%axis_atts(axis_number)%units = ''
-  axis_data_CS%axis_atts(axis_number)%horgrid_position = 0
-  axis_data_CS%axis_atts(axis_number)%is_domain_decomposed = .false.
-  axis_data_CS%axis_atts(axis_number)%positive = ''
+  axis_data_CS%axis(axis_number)%name = trim(axis_name)
+  axis_data_CS%axis(axis_number)%longname = ''
+  axis_data_CS%axis(axis_number)%units = ''
+  axis_data_CS%axis(axis_number)%horgrid_position = 0
+  axis_data_CS%axis(axis_number)%is_domain_decomposed = .false.
+  axis_data_CS%axis(axis_number)%positive = ''
   axis_data_CS%data(axis_number)%p => NULL()
   
   select case(trim(axis_name))
      case('lath')
         axis_data_CS%data(axis_number)%p=>gridLatT(jsg:jeg)
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%longname = 'Latitude'
-        axis_data_CS%axis_atts(axis_number)%units = G%y_axis_units
-        axis_data_CS%axis_atts(axis_number)%horgrid_position  = CENTER
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis  = 'Y'
-        axis_data_CS%axis_atts(axis_number)%is_domain_decomposed  = .true.
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%longname = 'Latitude'
+        axis_data_CS%axis(axis_number)%units = G%y_axis_units
+        axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
+        axis_data_CS%axis(axis_number)%cartesian_axis  = 'Y'
+        axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('lonh')
         axis_data_CS%data(axis_number)%p=>gridLonT(isg:ieg)
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%horgrid_position  = CENTER
-        axis_data_CS%axis_atts(axis_number)%longname = 'Longitude'
-        axis_data_CS%axis_atts(axis_number)%units = G%x_axis_units
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'X'
-        axis_data_CS%axis_atts(axis_number)%is_domain_decomposed  = .true.
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
+        axis_data_CS%axis(axis_number)%longname = 'Longitude'
+        axis_data_CS%axis(axis_number)%units = G%x_axis_units
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'X'
+        axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('latq')
         axis_data_CS%data(axis_number)%p=>gridLatB(JsgB:JegB)
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%longname = 'Latitude'
-        axis_data_CS%axis_atts(axis_number)%units(axis_number) = G%y_axis_units
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'Y'
-        axis_data_CS%axis_atts(axis_number)%horgrid_position = CORNER
-        axis_data_CS%axis_atts(axis_number)%is_domain_decomposed = .true.
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%longname = 'Latitude'
+        axis_data_CS%axis(axis_number)%units(axis_number) = G%y_axis_units
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'Y'
+        axis_data_CS%axis(axis_number)%horgrid_position = CORNER
+        axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('lonq')
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%data(axis_number)%p=>gridLonB(IsgB:IegB)
-        axis_data_CS%axis_atts(axis_number)%longname  = 'Longitude'
-        axis_data_CS%axis_atts(axis_number)%units = G%x_axis_units
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'X'
-        axis_data_CS%axis_atts(axis_number)%horgrid_position = CORNER
-        axis_data_CS%axis_atts(axis_number)%is_domain_decomposed = .true.
+        axis_data_CS%axis(axis_number)%longname  = 'Longitude'
+        axis_data_CS%axis(axis_number)%units = G%x_axis_units
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'X'
+        axis_data_CS%axis(axis_number)%horgrid_position = CORNER
+        axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('Layer')
         axis_data_CS%data(axis_number)%p=>GV%sLayer(1:GV%ke)
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%longname = 'Layer pseudo-depth, -z*'
-        axis_data_CS%axis_atts(axis_number)%units = GV%zAxisUnits
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'Z'
-        axis_data_CS%axis_atts(axis_number)%positive(axis_number)  = 'up'
-        axis_data_CS%axis_atts(axis_number)%horgrid_position(axis_number)  = CENTER ! dummy value for the domain-decomposed write
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%longname = 'Layer pseudo-depth, -z*'
+        axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'Z'
+        axis_data_CS%axis(axis_number)%positive(axis_number)  = 'up'
+        axis_data_CS%axis(axis_number)%horgrid_position(axis_number)  = CENTER ! dummy value for the domain-decomposed write
      case('Interface')
         axis_data_CS%data(axis_number)%p=>GV%sInterface(1:GV%ke+1)
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%longname = 'Interface pseudo-depth, -z*'
-        axis_data_CS%axis_atts(axis_number)%units = GV%zAxisUnits
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'Z'
-        axis_data_CS%axis_atts(axis_number)%positive = 'up'
-        axis_data_CS%axis_atts(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%longname = 'Interface pseudo-depth, -z*'
+        axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'Z'
+        axis_data_CS%axis(axis_number)%positive = 'up'
+        axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Time')
         
         if (.not.(present(time_val))) then
@@ -877,16 +876,16 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         endif
 
         axis_data_CS%data(axis_number)%p=>time_val
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%longname  = 'Time'
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%longname  = 'Time'
 
         if (present(time_units)) then
-           axis_data_CS%axis_atts(axis_number)%units  = time_units
+           axis_data_CS%axis(axis_number)%units  = time_units
         else
-           axis_data_CS%axis_atts(axis_number)%units  = 'days'
+           axis_data_CS%axis(axis_number)%units  = 'days'
         endif
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'T'
-        axis_data_CS%axis_atts(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'T'
+        axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Period')
         if (.not.(present(time_val))) then
            call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//&
@@ -894,10 +893,10 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         endif
 
         axis_data_CS%data(axis_number)%p=>time_val
-        axis_data_CS%axis_atts(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis_atts(axis_number)%longname = 'Periods for cyclical variables'
-        axis_data_CS%axis_atts(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
-        axis_data_CS%axis_atts(axis_number)%cartesian_axis = 'T'
+        axis_data_CS%axis(axis_number)%name = trim(axis_name)
+        axis_data_CS%axis(axis_number)%longname = 'Periods for cyclical variables'
+        axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
+        axis_data_CS%axis(axis_number)%cartesian_axis = 'T'
      case default
         call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
                        " is an unrecognized axis")
@@ -1483,21 +1482,21 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
      variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name),& 
+           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis_atts(i)name)/)  
-           if (axis_data_CS%axis_atts(i)%is_domain_decomposed) then
-              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), is, ie)
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p(is:ie))
+                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+           if (axis_data_CS%axis(i)%is_domain_decomposed) then
+              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
            else
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p) 
+              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
            endif
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'long_name',axis_data_CS%axis_atts(i)%longname)
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'long_name',axis_data_CS%axis(i)%longname)
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'units',trim(axis_data_CS%axis_atts(i)%units))
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'units',trim(axis_data_CS%axis(i)%units))
         endif
      endif
   enddo
@@ -1630,21 +1629,21 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
      variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name),& 
+           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis_atts(i)name)/)  
-           if (axis_data_CS%axis_atts(i)%is_domain_decomposed) then
-              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), is, ie)
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p(is:ie))
+                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+           if (axis_data_CS%axis(i)%is_domain_decomposed) then
+              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
            else
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p) 
+              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
            endif
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'long_name',axis_data_CS%axis_atts(i)%longname)
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'long_name',axis_data_CS%axis(i)%longname)
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'units',trim(axis_data_CS%axis_atts(i)%units))
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'units',trim(axis_data_CS%axis(i)%units))
         endif
      endif
   enddo
@@ -1774,21 +1773,21 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
      variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name),& 
+           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis_atts(i)name)/)  
-           if (axis_data_CS%axis_atts(i)%is_domain_decomposed) then
-              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), is, ie)
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p(is:ie))
+                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
+           if (axis_data_CS%axis(i)%is_domain_decomposed) then
+              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
            else
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p) 
+              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
            endif
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'long_name',axis_data_CS%axis_atts(i)%longname)
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'long_name',axis_data_CS%axis(i)%longname)
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'units',trim(axis_data_CS%axis_atts(i)%units))
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'units',trim(axis_data_CS%axis(i)%units))
         endif
      endif
   enddo
@@ -1921,17 +1920,17 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
      variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
      if (.not.(variable_exists)) then 
         if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), & 
+           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), & 
                                    "double", &
-                                   dimensions=(/trim(axis_data_CS%axis_atts(i)name)/)  
+                                   dimensions=(/trim(axis_data_CS%axis(i)name)/)  
   
-           call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), axis_data_CS%data(i)%p) 
+           call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'long_name',axis_data_CS%axis_atts(i)%longname)
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'long_name',axis_data_CS%axis(i)%longname)
 
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                      'units',trim(axis_data_CS%axis_atts(i)%units))
+           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                      'units',trim(axis_data_CS%axis(i)%units))
         endif
      endif
   enddo

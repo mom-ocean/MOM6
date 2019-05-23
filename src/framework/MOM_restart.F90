@@ -1065,32 +1065,32 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      ! register the axis variables and their attributes
      do i=1,total_axes
-        variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name))
+        variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
         if (.not.(variable_exists)) then 
            if (associated(axis_data_CS%data(i)%p)) then
-              if (axis_data_CS%axis_atts(i)%is_domain_decomposed) then
-                 call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), is, ie)
+              if (axis_data_CS%axis(i)%is_domain_decomposed) then
+                 call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
 
-                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
+                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)name), &
                                                   axis_data_CS%data(i)%p(is:ie), &
-                                                  dimensions=(/trim(axis_data_CS%axis_atts(i)name)/), &
-                                                  domain_position=axis_data_CS%axis_atts(i)horgrid_position)
+                                                  dimensions=(/trim(axis_data_CS%axis(i)name)/), &
+                                                  domain_position=axis_data_CS%axis(i)horgrid_position)
               else
-                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
+                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p, &
-                                                  dimensions=(/trim(axis_data_CS%axis_atts(i)%name)/), &
-                                                  domain_position=axis_data_CS%axis_atts(i)horgrid_position)
+                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/), &
+                                                  domain_position=axis_data_CS%axis(i)horgrid_position)
               endif
 
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
-                                                      'long_name',axis_data_CS%axis_atts(i)longname)
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
-                                                      'units',axis_data_CS%axis_atts(i)units)
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
-                                                      'cartesian_axis',axis_data_CS%axis_atts(i)%cartesian_axis)
-              if (len_trim(axis_data_CS%axis_atts(i)%positive)>1) then
-                  call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
-                                                       'positive',trim(axis_data_CS%axis_atts(i)positive))
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)name), &
+                                                      'long_name',axis_data_CS%axis(i)longname)
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)name), &
+                                                      'units',axis_data_CS%axis(i)units)
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)name), &
+                                                      'cartesian_axis',axis_data_CS%axis(i)%cartesian_axis)
+              if (len_trim(axis_data_CS%axis(i)%positive)>1) then
+                  call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                       'positive',trim(axis_data_CS%axis(i)positive))
               endif
                  
            endif
