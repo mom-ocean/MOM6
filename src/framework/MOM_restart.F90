@@ -1037,15 +1037,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      
         if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
            size_in_file = size_in_file + var_sz
-        !else ; exit
         endif
         
         ! get the axis (dimension) names and lengths for variable 'm'                                
         ! note: 4d variables are lon x lat x vertical level x time
         num_axes = 0
 
-        call get_var_dimension_features(hor_grid, z_grid, t_grid, G, &
-                                     axis_names, axis_lengths, num_axes, GV)
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                     axis_names, axis_lengths, num_axes,G=G,GV=GV)
         
         ! register all of the restart variable axes to the file if they do not exist
         if (num_axes <= 0) then
@@ -1056,49 +1055,42 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            axis_exists = fms2_dimension_exists(fileObjWrite, axis_names(i))
            if (.not.(axis_exists)) then
               total_axes=total_axes+1
-              call MOM_get_axis_data(axis_data_CS, axis_names(i), total_axes, G, GV, &
-                                     time_vals, restart_time_units)
+              call MOM_get_axis_data(axis_data_CS, axis_names(i), total_axes, G=G, GV=GV, &
+                                     time_val=time_vals=, time_units=restart_time_units)
               call MOM_register_axis(fileObjWrite, axis_data_CS%name(total_axes), axis_lengths(i))
            endif
         enddo
     
      enddo
 
-     ! register the axis variables
+     ! register the axis variables and their attributes
      do i=1,total_axes
-        variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%name(i)))
+        variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name))
         if (.not.(variable_exists)) then 
            if (associated(axis_data_CS%data(i)%p)) then
-                
-              !allocate(data_temp(size(axis_data_CS%data(i)%p)))
-              !data_temp = axis_data_CS%data(i)%p
-                 
-              if (axis_data_CS%is_domain_decomposed(i)) then
-                 call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%name(i)), is, ie)
-                 call fms2_register_restart_field(fileObjWrite, axis_data_CS%name(i), axis_data_CS%data(i)%p(is:ie), &
-                                                  dimensions=(/trim(axis_data_CS%name(i))/), &
-                                                  domain_position=axis_data_CS%horgrid_position(i))
+              if (axis_data_CS%axis_atts(i)%is_domain_decomposed) then
+                 call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), is, ie)
 
-                 !call MOM_write_data(fileObjWrite, trim(axis_data_CS%name), data_temp(is:ie))
+                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
+                                                  axis_data_CS%data(i)%p(is:ie), &
+                                                  dimensions=(/trim(axis_data_CS%axis_atts(i)name)/), &
+                                                  domain_position=axis_data_CS%axis_atts(i)horgrid_position)
               else
-                 call fms2_register_restart_field(fileObjWrite, axis_data_CS%name(i), axis_data_CS%data(i)%p, &
-                                                  dimensions=(/trim(axis_data_CS%name(i))/), &
-                                                  domain_position=axis_data_CS%horgrid_position(i))
-
-                    !call MOM_write_data(fileObjWrite, trim(axis_data_CS%name), data_temp) 
+                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
+                                                  axis_data_CS%data(i)%p, &
+                                                  dimensions=(/trim(axis_data_CS%axis_atts(i)%name)/), &
+                                                  domain_position=axis_data_CS%axis_atts(i)horgrid_position)
               endif
- 
-              !deallocate(data_temp)
 
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name(i)), &
-                                                      'long_name',axis_data_CS%longname(i))
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name(i)), &
-                                                      'units',axis_data_CS%units(i))
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name(i)), &
-                                                      'cartesian_axis',axis_data_CS%cartesian_axis(i))
-              if (len_trim(axis_data_CS%positive(i))>1) then
-                  call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%name(i)), &
-                                                       'positive',axis_data_CS%positive(i))
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
+                                                      'long_name',axis_data_CS%axis_atts(i)longname)
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
+                                                      'units',axis_data_CS%axis_atts(i)units)
+              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)name), &
+                                                      'cartesian_axis',axis_data_CS%axis_atts(i)%cartesian_axis)
+              if (len_trim(axis_data_CS%axis_atts(i)%positive)>1) then
+                  call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis_atts(i)%name), &
+                                                       'positive',trim(axis_data_CS%axis_atts(i)positive))
               endif
                  
            endif
@@ -1119,8 +1111,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         
         num_axes = 0
 
-        call get_var_dimension_features(hor_grid, z_grid, t_grid, G, &
-                                    axis_names, axis_lengths, num_axes, GV)
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                        axis_names, axis_lengths, num_axes, G=G, GV=GV)
         
         ! register and write the restart variables to the file
         if (associated(CS%var_ptr3d(m)%p)) then
