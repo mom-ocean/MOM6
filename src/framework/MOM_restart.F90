@@ -43,7 +43,6 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_get_global_attribute => get_global_attribute, &
                            fms2_get_compute_domain_dimension_indices => get_compute_domain_dimension_indices, &
                            fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
-                           fms2_get_compute_domain_dimension_indices => get_compute_domain_dimension_indices, &
                            fms2_get_variable_attribute => get_variable_attribute, &
                            fms2_get_variable_names => get_variable_names, &
                            fms2_get_dimension_size => get_dimension_size, &
@@ -998,6 +997,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      ! get variable sizes in bytes
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+
      ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
      !>@NOTE the user may need to increase the allocated array sizes to accomodate 
      !! more axes. As of May 2019, only up to 7 axes are registered to the MOM restart files.
@@ -1007,10 +1007,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      total_axes=0 ! total number of axes registered and written to restart file
      do m=start_var,CS%novars
-        !WRITE(mpp_pe()+2000,*) "save_restart: getting axis stuff for ", trim(CS%restart_field(m)%var_name)
-        !call flush(mpp_pe()+2000)
 
-       
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
 
