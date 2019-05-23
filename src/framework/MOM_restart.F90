@@ -998,12 +998,19 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      ! get variable sizes in bytes
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+     ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+     !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+     !! more axes. As of May 2019, only up to 7 axes are registered to the MOM restart files.
+     !! The arrays here are size 20 as a precaution. 
+     allocate(axis_data_CS%axis(20))
+     allocate(axis_data_CS%data(20))
 
      total_axes=0 ! total number of axes registered and written to restart file
      do m=start_var,CS%novars
         !WRITE(mpp_pe()+2000,*) "save_restart: getting axis stuff for ", trim(CS%restart_field(m)%var_name)
         !call flush(mpp_pe()+2000)
-   
+
+       
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
 
@@ -1041,8 +1048,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         
         ! get the axis (dimension) names and lengths for variable 'm'                                
         ! note: 4d variables are lon x lat x vertical level x time
-        num_axes = 0
-
+        num_axes=0
         call get_var_dimension_features(hor_grid, z_grid, t_grid, &
                                      axis_names, axis_lengths, num_axes,G=G,GV=GV)
         
@@ -1055,16 +1061,16 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            axis_exists = fms2_dimension_exists(fileObjWrite, axis_names(i))
            if (.not.(axis_exists)) then
               total_axes=total_axes+1
+              call MOM_register_axis(fileObjWrite, axis_names(i), axis_lengths(i))
               call MOM_get_axis_data(axis_data_CS, axis_names(i), total_axes, G=G, GV=GV, &
                                      time_val=time_vals, time_units=restart_time_units)
-              call MOM_register_axis(fileObjWrite, axis_data_CS%axis(i)%name, axis_lengths(i))
            endif
-        enddo
-    
+        enddo  
      enddo
 
      ! register the axis variables and their attributes
      do i=1,total_axes
+        
         variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
         if (.not.(variable_exists)) then 
            if (associated(axis_data_CS%data(i)%p)) then
@@ -1092,7 +1098,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                   call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                        'positive',trim(axis_data_CS%axis(i)%positive))
               endif
-                 
+           else
+              call MOM_error(FATAL,"MOM_restart::save_restart: Pointer to the axis variable "//&
+                          trim(axis_data_CS%axis(i)%name)// " is not associated.")     
            endif
         endif
      enddo   
@@ -1159,11 +1167,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
         !call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
         
-        if(allocated(time_vals)) deallocate(time_vals)     
      enddo
-     
+    
      call fms2_write_restart(fileObjWrite)
      call fms2_close_file(fileObjWrite)
+    
+     if(allocated(time_vals)) deallocate(time_vals)     
+     deallocate(axis_data_CS%axis)
+     deallocate(axis_data_CS%data)
 
      num_files = num_files+1
   enddo

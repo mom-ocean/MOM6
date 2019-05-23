@@ -806,7 +806,8 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
      IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
 
-  axis_data_CS%axis(axis_number)%name = trim(axis_name)
+
+  axis_data_CS%axis(axis_number)%name = ''
   axis_data_CS%axis(axis_number)%longname = ''
   axis_data_CS%axis(axis_number)%units = ''
   axis_data_CS%axis(axis_number)%horgrid_position = 0
@@ -968,6 +969,8 @@ function get_time_units(time_value) result(time_units_out)
    time_units_out = ''
    if (time_value < 0.0) then
       time_units = "days" ! The default value.
+   elseif (mod(time_value,86400.0)==0.0) then
+      time_units = "days"
    elseif ((time_value >= 0.99) .and. (time_value < 1.01)) then
               time_units = "seconds"
    elseif ((time_value >= 3599.0) .and. (time_value < 3601.0)) then
@@ -1460,8 +1463,14 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_4d: Failed to open file "//trim(base_file_name))
   endif
+ 
+  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+   
   ! register the axes, and write the axis variables to the file if they do not exist
-  
   total_axes=0
   do i=1,num_axes
      axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
@@ -1507,6 +1516,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   call MOM_close_file(fileObjWrite)
 
   if(allocated(time_vals)) deallocate(time_vals)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
 
 end subroutine MOM_write_IC_4d
 
@@ -1605,6 +1616,12 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_3d: Failed to open file "//trim(base_file_name))
   endif
+  
+  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
    
   ! register the variable axes to the file if they do not exist
   total_axes=0
@@ -1654,6 +1671,8 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   call MOM_close_file(fileObjWrite)
 
   if(allocated(time_vals)) deallocate(time_vals)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
 
 end subroutine MOM_write_IC_3d
 
@@ -1751,6 +1770,13 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_2d: Failed to open file "//trim(base_file_name))
   endif
+  
+  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+
  ! register the variable axes to the file if they do not exist
   total_axes=0
   do i=1,num_axes
@@ -1799,6 +1825,8 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   call MOM_close_file(fileObjWrite)
 
   if(allocated(time_vals)) deallocate(time_vals)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
 
 end subroutine MOM_write_IC_2d
 
@@ -1897,6 +1925,12 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   if (.not. (file_open_success)) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_1d: Failed to open file "//trim(base_file_name))
   endif
+  
+  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
 
   ! register the variable axes to the file if they do not exist
   total_axes=0
@@ -1943,6 +1977,8 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   call MOM_close_file(fileObjWrite)
 
   if(allocated(time_vals)) deallocate(time_vals)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
 
 end subroutine MOM_write_IC_1d
 
