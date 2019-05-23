@@ -289,8 +289,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-      f2 = 0.25*((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25 * US%s_to_T**2 * ((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
 
     ! ----------------------------------------------------
@@ -612,7 +612,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-      f2 = G%CoriolisBu(I,J)**2
+      f2 = US%s_to_T**2 * G%CoriolisBu(I,J)**2
       surface_pres = 0.0 ; if (associated(p_surf)) then
         surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
                                (p_surf(i+1,j) + p_surf(i,j+1)))
@@ -2021,86 +2021,86 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008")
   call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_init, &
-                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
+                 "If true, use the Jackson-Hallberg-Legg (JPO 2008) "//&
                  "shear mixing parameterization.", default=.false.)
   call get_param(param_file, mdl, "VERTEX_SHEAR", CS%KS_at_vertex, &
-                 "If true, do the calculations of the shear-driven mixing \n"//&
+                 "If true, do the calculations of the shear-driven mixing "//&
                  "at the cell vertices (i.e., the vorticity points).", &
                  default=.false.)
   call get_param(param_file, mdl, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25)
   call get_param(param_file, mdl, "SHEARMIX_RATE", CS%Shearmix_rate, &
-                 "A nondimensional rate scale for shear-driven entrainment.\n"//&
+                 "A nondimensional rate scale for shear-driven entrainment. "//&
                  "Jackson et al find values in the range of 0.085-0.089.", &
                  units="nondim", default=0.089)
   call get_param(param_file, mdl, "MAX_RINO_IT", CS%max_RiNo_it, &
-                 "The maximum number of iterations that may be used to \n"//&
+                 "The maximum number of iterations that may be used to "//&
                  "estimate the Richardson number driven mixing.", &
                  units="nondim", default=50)
   call get_param(param_file, mdl, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
   call get_param(param_file, mdl, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
-                 "The background diffusivity that is used to smooth the \n"//&
-                 "density and shear profiles before solving for the \n"//&
+                 "The background diffusivity that is used to smooth the "//&
+                 "density and shear profiles before solving for the "//&
                  "diffusivities. Defaults to value of KD.", &
                  units="m2 s-1", default=KD_normal, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
-                 "The nondimensional curvature of the function of the \n"//&
-                 "Richardson number in the kappa source term in the \n"//&
+                 "The nondimensional curvature of the function of the "//&
+                 "Richardson number in the kappa source term in the "//&
                  "Jackson et al. scheme.", units="nondim", default=-0.97)
   call get_param(param_file, mdl, "TKE_N_DECAY_CONST", CS%C_N, &
-                 "The coefficient for the decay of TKE due to \n"//&
-                 "stratification (i.e. proportional to N*tke). \n"//&
+                 "The coefficient for the decay of TKE due to "//&
+                 "stratification (i.e. proportional to N*tke). "//&
                  "The values found by Jackson et al. are 0.24-0.28.", &
                  units="nondim", default=0.24)
 !  call get_param(param_file, mdl, "LAYER_KAPPA_STAGGER", CS%layer_stagger, &
 !                 default=.false.)
   call get_param(param_file, mdl, "TKE_SHEAR_DECAY_CONST", CS%C_S, &
-                 "The coefficient for the decay of TKE due to shear (i.e. \n"//&
-                 "proportional to |S|*tke). The values found by Jackson \n"//&
+                 "The coefficient for the decay of TKE due to shear (i.e. "//&
+                 "proportional to |S|*tke). The values found by Jackson "//&
                  "et al. are 0.14-0.12.", units="nondim", default=0.14)
   call get_param(param_file, mdl, "KAPPA_BUOY_SCALE_COEF", CS%lambda, &
-                 "The coefficient for the buoyancy length scale in the \n"//&
-                 "kappa equation.  The values found by Jackson et al. are \n"//&
+                 "The coefficient for the buoyancy length scale in the "//&
+                 "kappa equation.  The values found by Jackson et al. are "//&
                  "in the range of 0.81-0.86.", units="nondim", default=0.82)
   call get_param(param_file, mdl, "KAPPA_N_OVER_S_SCALE_COEF2", CS%lambda2_N_S, &
-                 "The square of the ratio of the coefficients of the \n"//&
-                 "buoyancy and shear scales in the diffusivity equation, \n"//&
-                 "Set this to 0 (the default) to eliminate the shear scale. \n"//&
+                 "The square of the ratio of the coefficients of the "//&
+                 "buoyancy and shear scales in the diffusivity equation, "//&
+                 "Set this to 0 (the default) to eliminate the shear scale. "//&
                  "This is only used if USE_JACKSON_PARAM is true.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "KAPPA_SHEAR_TOL_ERR", CS%kappa_tol_err, &
-                 "The fractional error in kappa that is tolerated. \n"//&
-                 "Iteration stops when changes between subsequent \n"//&
-                 "iterations are smaller than this everywhere in a \n"//&
-                 "column.  The peak diffusivities usually converge most \n"//&
+                 "The fractional error in kappa that is tolerated. "//&
+                 "Iteration stops when changes between subsequent "//&
+                 "iterations are smaller than this everywhere in a "//&
+                 "column.  The peak diffusivities usually converge most "//&
                  "rapidly, and have much smaller errors than this.", &
                  units="nondim", default=0.1)
   call get_param(param_file, mdl, "TKE_BACKGROUND", CS%TKE_bg, &
-                 "A background level of TKE used in the first iteration \n"//&
+                 "A background level of TKE used in the first iteration "//&
                  "of the kappa equation.  TKE_BACKGROUND could be 0.", &
                  units="m2 s-2", default=0.0)
   call get_param(param_file, mdl, "KAPPA_SHEAR_ELIM_MASSLESS", CS%eliminate_massless, &
-                 "If true, massless layers are merged with neighboring \n"//&
-                 "massive layers in this calculation.  The default is \n"//&
-                 "true and I can think of no good reason why it should \n"//&
+                 "If true, massless layers are merged with neighboring "//&
+                 "massive layers in this calculation.  The default is "//&
+                 "true and I can think of no good reason why it should "//&
                  "be false. This is only used if USE_JACKSON_PARAM is true.", &
                  default=.true.)
   call get_param(param_file, mdl, "MAX_KAPPA_SHEAR_IT", CS%max_KS_it, &
-                 "The maximum number of iterations that may be used to \n"//&
+                 "The maximum number of iterations that may be used to "//&
                  "estimate the time-averaged diffusivity.", units="nondim", &
                  default=13)
   call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
-                 "The turbulent Prandtl number applied to shear \n"//&
+                 "The turbulent Prandtl number applied to shear "//&
                  "instability.", units="nondim", default=1.0, do_not_log=.true.)
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
-                 "A negligibly small velocity magnitude below which velocity \n"//&
-                 "components are set to 0.  A reasonable value might be \n"//&
-                 "1e-30 m/s, which is less than an Angstrom divided by \n"//&
+                 "A negligibly small velocity magnitude below which velocity "//&
+                 "components are set to 0.  A reasonable value might be "//&
+                 "1e-30 m/s, which is less than an Angstrom divided by "//&
                  "the age of the universe.", units="m s-1", default=0.0)
   call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
-                 "Caution: this option is _very_ verbose and should only \n"//&
+                 "Caution: this option is _very_ verbose and should only "//&
                  "be used in single-column mode!", &
                  default=.false., debuggingParam=.true.)
 
@@ -2112,7 +2112,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   CS%nkml = 1
   if (GV%nkml>0) then
     call get_param(param_file, mdl, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
-                 "If true, combine the mixed layers together before \n"//&
+                 "If true, combine the mixed layers together before "//&
                  "solving the kappa-shear equations.", default=.true.)
     if (merge_mixedlayer) CS%nkml = GV%nkml
   endif
@@ -2160,7 +2160,7 @@ logical function kappa_shear_at_vertex(param_file)
   kappa_shear_at_vertex = .false.
   if (do_Kappa_Shear) &
     call get_param(param_file, mdl, "VERTEX_SHEAR", kappa_shear_at_vertex, &
-                 "If true, do the calculations of the shear-driven mixing \n"//&
+                 "If true, do the calculations of the shear-driven mixing "//&
                  "at the cell vertices (i.e., the vorticity points).", &
                  default=.false., do_not_log=.true.)
 

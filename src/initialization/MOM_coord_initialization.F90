@@ -275,7 +275,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
-                 "The file from which the coordinate temperatures and \n"//&
+                 "The file from which the coordinate temperatures and "//&
                  "salinities are read.", fail_if_missing=.true.)
 
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
@@ -330,25 +330,25 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
   call get_param(param_file, mdl, "T_REF", T_Ref, &
                  "The default initial temperatures.", units="degC", default=10.0)
   call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_Light, &
-                 "The initial temperature of the lightest layer when \n"//&
+                 "The initial temperature of the lightest layer when "//&
                  "COORD_CONFIG is set to ts_range.", units="degC", default=T_Ref)
   call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_Dense, &
-                 "The initial temperature of the densest layer when \n"//&
+                 "The initial temperature of the densest layer when "//&
                  "COORD_CONFIG is set to ts_range.", units="degC", default=T_Ref)
 
   call get_param(param_file, mdl, "S_REF", S_Ref, &
                  "The default initial salinities.", units="PSU", default=35.0)
   call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_Light, &
-                 "The initial lightest salinities when COORD_CONFIG \n"//&
+                 "The initial lightest salinities when COORD_CONFIG "//&
                  "is set to ts_range.", default = S_Ref, units="PSU")
   call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_Dense, &
-                 "The initial densest salinities when COORD_CONFIG \n"//&
+                 "The initial densest salinities when COORD_CONFIG "//&
                  "is set to ts_range.", default = S_Ref, units="PSU")
 
   call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, &
-                 "The ratio of density space resolution in the densest \n"//&
-                 "part of the range to that in the lightest part of the \n"//&
-                 "range when COORD_CONFIG is set to ts_range. Values \n"//&
+                 "The ratio of density space resolution in the densest "//&
+                 "part of the range to that in the lightest part of the "//&
+                 "range when COORD_CONFIG is set to ts_range. Values "//&
                  "greater than 1 increase the resolution of the denser water.",&
                  default=1.0, units="nondim")
 
@@ -408,7 +408,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
                  "The file from which the coordinate densities are read.", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "COORD_VAR", coord_var, &
-                 "The variable in COORD_FILE that is to be used for the \n"//&
+                 "The variable in COORD_FILE that is to be used for the "//&
                  "coordinate densities.", default="Layer")
   filename = trim(inputdir)//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
@@ -449,11 +449,11 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
-                 "The reference potential density used for the surface \n"// &
-                 "interface.", units="kg m-3", default=GV%Rho0)
+                 "The reference potential density used for the surface interface.", &
+                 units="kg m-3", default=GV%Rho0)
   call get_param(param_file, mdl, "DENSITY_RANGE", Rlay_range, &
-                 "The range of reference potential densities across \n"// &
-                 "all interfaces.", units="kg m-3", default=2.0)
+                 "The range of reference potential densities across all interfaces.", &
+                 units="kg m-3", default=2.0)
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)

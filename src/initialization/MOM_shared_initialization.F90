@@ -56,7 +56,7 @@ end subroutine MOM_shared_init_init
 !> MOM_initialize_rotation makes the appropriate call to set up the Coriolis parameter.
 subroutine MOM_initialize_rotation(f, G, PF, US)
   type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid type
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter [s-1]
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter [T-1 ~> s-1]
   type(param_file_type),                        intent(in)  :: PF !< Parameter file structure
   type(unit_scale_type),              optional, intent(in)  :: US !< A dimensional unit scaling type
 
@@ -72,13 +72,13 @@ subroutine MOM_initialize_rotation(f, G, PF, US)
                  "This specifies how the Coriolis parameter is specified: \n"//&
                  " \t 2omegasinlat - Use twice the planetary rotation rate \n"//&
                  " \t\t times the sine of latitude.\n"//&
-                 " \t betaplane - Use a beta-plane or f-plane. \n"//&
+                 " \t betaplane - Use a beta-plane or f-plane.\n"//&
                  " \t USER - call a user modified routine.", &
                  default="2omegasinlat")
   select case (trim(config))
-    case ("2omegasinlat"); call set_rotation_planetary(f, G, PF)
-    case ("beta"); call set_rotation_beta_plane(f, G, PF)
-    case ("betaplane"); call set_rotation_beta_plane(f, G, PF)
+    case ("2omegasinlat"); call set_rotation_planetary(f, G, PF, US)
+    case ("beta"); call set_rotation_beta_plane(f, G, PF, US)
+    case ("betaplane"); call set_rotation_beta_plane(f, G, PF, US)
    !case ("nonrotating") ! Note from AJA: Missing case?
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized rotation setup "//trim(config))
@@ -90,9 +90,9 @@ end subroutine MOM_initialize_rotation
 subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(dyn_horgrid_type),             intent(inout) :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out)   :: dF_dx !< x-component of grad f
+                                      intent(out)   :: dF_dx !< x-component of grad f [T-1 m-1 ~> s-1 m-1]
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out)   :: dF_dy !< y-component of grad f
+                                      intent(out)   :: dF_dy !< y-component of grad f [T-1 m-1 ~> s-1 m-1]
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
@@ -349,7 +349,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 !   call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
 !                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mdl, "TOPOG_SLOPE_SCALE", expdecay, &
-                   "The exponential decay scale used in defining some of \n"//&
+                   "The exponential decay scale used in defining some of "//&
                    "the named topographies.", units="m", default=400000.0)
   endif
 
@@ -426,9 +426,9 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
   m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
-                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
-                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "If MASKING_DEPTH is unspecified, then anything shallower than "//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than "//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
@@ -459,20 +459,24 @@ end subroutine limit_topography
 subroutine set_rotation_planetary(f, G, param_file, US)
   type(dyn_horgrid_type), intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                          intent(out) :: f  !< Coriolis parameter (vertical component) in s^-1
+                          intent(out) :: f  !< Coriolis parameter (vertical component) [T-1 ~> s-1]
   type(param_file_type),  intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine sets up the Coriolis parameter for a sphere
   character(len=30) :: mdl = "set_rotation_planetary" ! This subroutine's name.
   integer :: I, J
-  real    :: PI, omega
+  real    :: PI
+  real    :: omega  ! The planetary rotation rate [T-1 ~> s-1]
+  real    :: T_to_s ! A time unit conversion factor
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
+  T_to_s = 1.0 ; if (present(US)) T_to_s = US%T_to_s
+
   call get_param(param_file, "set_rotation_planetary", "OMEGA", omega, &
                  "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5)
+                 default=7.2921e-5, scale=T_to_s)
   PI = 4.0*atan(1.0)
 
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
@@ -488,24 +492,30 @@ end subroutine set_rotation_planetary
 subroutine set_rotation_beta_plane(f, G, param_file, US)
   type(dyn_horgrid_type), intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                          intent(out) :: f  !< Coriolis parameter (vertical component) in s^-1
+                          intent(out) :: f  !< Coriolis parameter (vertical component) [T-1 ~> s-1]
   type(param_file_type),  intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine sets up the Coriolis parameter for a beta-plane
   integer :: I, J
-  real    :: f_0, beta, y_scl, Rad_Earth, PI
+  real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
+  real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 m-1 ~> s-1 m-1]
+  real    :: y_scl, Rad_Earth
+  real    :: T_to_s ! A time unit conversion factor
+  real    :: PI
   character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
+  T_to_s = 1.0 ; if (present(US)) T_to_s = US%T_to_s
+
   call get_param(param_file, mdl, "F_0", f_0, &
-                 "The reference value of the Coriolis parameter with the \n"//&
-                 "betaplane option.", units="s-1", default=0.0)
+                 "The reference value of the Coriolis parameter with the "//&
+                 "betaplane option.", units="s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "BETA", beta, &
-                 "The northward gradient of the Coriolis parameter with \n"//&
-                 "the betaplane option.", units="m-1 s-1", default=0.0)
+                 "The northward gradient of the Coriolis parameter with "//&
+                 "the betaplane option.", units="m-1 s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
   PI = 4.0*atan(1.0)
@@ -544,8 +554,8 @@ subroutine initialize_grid_rotation_angle(G, PF)
   integer :: i, j, m, n
 
   call get_param(PF, mdl, "GRID_ROTATION_ANGLE_BUGS", use_bugs, &
-                 "If true, use an older algorithm to calculate the sine and \n"//&
-                 "cosines needed rotate between grid-oriented directions and \n"//&
+                 "If true, use an older algorithm to calculate the sine and "//&
+                 "cosines needed rotate between grid-oriented directions and "//&
                  "true north and east.  Differences arise at the tripolar fold.", &
                  default=.True.)
 
@@ -832,7 +842,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   filename = trim(inputdir)//trim(chan_file)
   call log_param(param_file, mdl, "INPUTDIR/CHANNEL_LIST_FILE", filename)
   call get_param(param_file, mdl, "CHANNEL_LIST_360_LON_CHECK", check_360, &
-                 "If true, the channel configuration list works for any \n"//&
+                 "If true, the channel configuration list works for any "//&
                  "longitudes in the range of -360 to 360.", default=.true.)
 
   if (is_root_pe()) then
@@ -1159,6 +1169,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
+  real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   integer :: unit
   integer :: file_threading
   integer :: nFlds_used
@@ -1176,6 +1187,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
+  s_to_T_scale = 1.0 ; if (present(US)) s_to_T_scale = US%s_to_T
 
 !   vardesc is a structure defined in MOM_io.F90.  The elements of
 ! this structure, in order, are:
@@ -1229,7 +1241,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   out_q(:,:) = 0.0
 
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
-                 "If true, each processor writes its own restart file, \n"//&
+                 "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
   file_threading = SINGLE_FILE
@@ -1247,7 +1259,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
-  call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
+  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
 
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have

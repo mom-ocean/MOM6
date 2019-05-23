@@ -110,7 +110,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "OIL_IC_FILE", CS%IC_file, &
-                 "The file in which the oil tracer initial values can be \n"//&
+                 "The file in which the oil tracer initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -124,9 +124,9 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  default=.false.)
 
   call get_param(param_file, mdl, "OIL_MAY_REINIT", CS%oil_may_reinit, &
-                 "If true, oil tracers may go through the initialization \n"//&
-                 "code if they are not found in the restart files. \n"//&
-                 "Otherwise it is a fatal error if the oil tracers are not \n"//&
+                 "If true, oil tracers may go through the initialization "//&
+                 "code if they are not found in the restart files. "//&
+                 "Otherwise it is a fatal error if the oil tracers are not "//&
                  "found in the restart files of a restarted run.", &
                  default=.false.)
   call get_param(param_file, mdl, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
@@ -136,14 +136,14 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "The geographic latitude of the oil source.", units="degrees N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "OIL_SOURCE_LAYER", CS%oil_source_k, &
-                 "The layer into which the oil is introduced, or a \n"//&
-                 "negative number for a vertically uniform source, \n"//&
+                 "The layer into which the oil is introduced, or a "//&
+                 "negative number for a vertically uniform source, "//&
                  "or 0 not to use this tracer.", units="Layer", default=0)
   call get_param(param_file, mdl, "OIL_SOURCE_RATE", CS%oil_source_rate, &
                  "The rate of oil injection.", units="kg s-1", default=1.0)
   call get_param(param_file, mdl, "OIL_DECAY_DAYS", CS%oil_decay_days, &
-                 "The decay timescale in days (if positive), or no decay \n"//&
-                 "if 0, or use the temperature dependent decay rate of \n"//&
+                 "The decay timescale in days (if positive), or no decay "//&
+                 "if 0, or use the temperature dependent decay rate of "//&
                  "Adcroft et al. (GRL, 2010) if negative.", units="days", &
                  default=0.0)
   call get_param(param_file, mdl, "OIL_DATED_START_YEAR", CS%oil_start_year, &

@@ -170,8 +170,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SPONGE", use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   if (.not.use_sponge) return
@@ -183,14 +183,14 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
                  default=.false.)
 
   call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
-                 "This sets the reconstruction scheme used \n"//&
+                 "This sets the reconstruction scheme used "//&
                  " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
 
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
-                 "When defined, a proper high-order reconstruction \n"//&
-                 "scheme is used within boundary cells rather \n"// &
-                 "than PCM. E.g., if PPM is used for remapping, a \n" //&
+                 "When defined, a proper high-order reconstruction "//&
+                 "scheme is used within boundary cells rather "//&
+                 "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
 
@@ -401,8 +401,8 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SPONGE", use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   if (.not.use_sponge) return
@@ -414,14 +414,14 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  default=.false.)
 
   call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
-                 "This sets the reconstruction scheme used \n"//&
+                 "This sets the reconstruction scheme used "//&
                  " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
 
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
-                 "When defined, a proper high-order reconstruction \n"//&
-                 "scheme is used within boundary cells rather \n"// &
-                 "than PCM. E.g., if PPM is used for remapping, a \n" //&
+                 "When defined, a proper high-order reconstruction "//&
+                 "scheme is used within boundary cells rather "//&
+                 "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
 

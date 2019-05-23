@@ -32,7 +32,7 @@ use fms_io_mod,        only : file_exist, parse_mask_table
 
 implicit none ; private
 
-public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent
+public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
 public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
 public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
 public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
@@ -98,6 +98,8 @@ end interface clone_MOM_domain
 !> The MOM_domain_type contains information about the domain decompositoin.
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() !< The FMS domain with halos
+                                !! on this processor, centered at h points.
+  type(domain2D), pointer :: mpp_domain_d2 => NULL() !< A coarse FMS domain with halos
                                 !! on this processor, centered at h points.
   integer :: niglobal           !< The total horizontal i-domain size.
   integer :: njglobal           !< The total horizontal j-domain size.
@@ -1204,7 +1206,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
   character(len=40) :: nihalo_nm, njhalo_nm, layout_nm, io_layout_nm, masktable_nm
   character(len=40) :: niproc_nm, njproc_nm
-
+  integer :: xhalo_d2,yhalo_d2
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl ! This module's name.
@@ -1212,6 +1214,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
     allocate(MOM_dom%mpp_domain)
+    allocate(MOM_dom%mpp_domain_d2)
   endif
 
   pe = PE_here()
@@ -1264,7 +1267,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "If true, the domain is meridionally reentrant.", &
                  default=.false.)
   call get_param(param_file, mdl, "TRIPOLAR_N", tripolar_N, &
-                 "Use tripolar connectivity at the northern edge of the \n"//&
+                 "Use tripolar connectivity at the northern edge of the "//&
                  "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
 
@@ -1304,19 +1307,19 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
-                 "If defined, the velocity point data domain includes \n"//&
-                 "every face of the thickness points. In other words, \n"//&
-                 "some arrays are larger than others, depending on where \n"//&
-                 "they are on the staggered grid.  Also, the starting \n"//&
-                 "index of the velocity-point arrays is usually 0, not 1. \n"//&
+                 "If defined, the velocity point data domain includes "//&
+                 "every face of the thickness points. In other words, "//&
+                 "some arrays are larger than others, depending on where "//&
+                 "they are on the staggered grid.  Also, the starting "//&
+                 "index of the velocity-point arrays is usually 0, not 1. "//&
                  "This can only be set at compile time.",&
                  layoutParam=.true.)
   call get_param(param_file, mdl, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
   call get_param(param_file, mdl, "THIN_HALO_UPDATES", MOM_dom%thin_halo_updates, &
-                 "If true, optional arguments may be used to specify the \n"//&
-                 "The width of the halos that are updated with each call.", &
+                 "If true, optional arguments may be used to specify the "//&
+                 "the width of the halos that are updated with each call.", &
                  default=.true., layoutParam=.true.)
 
   nihalo_dflt = 4 ; njhalo_dflt = 4
@@ -1324,24 +1327,24 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   if (present(NJHALO)) njhalo_dflt = NJHALO
 
   call log_param(param_file, mdl, "!STATIC_MEMORY_", is_static, &
-                 "If STATIC_MEMORY_ is defined, the principle variables \n"//&
-                 "will have sizes that are statically determined at \n"//&
-                 "compile time.  Otherwise the sizes are not determined \n"//&
-                 "until run time. The STATIC option is substantially \n"//&
-                 "faster, but does not allow the PE count to be changed \n"//&
+                 "If STATIC_MEMORY_ is defined, the principle variables "//&
+                 "will have sizes that are statically determined at "//&
+                 "compile time.  Otherwise the sizes are not determined "//&
+                 "until run time. The STATIC option is substantially "//&
+                 "faster, but does not allow the PE count to be changed "//&
                  "at run time.  This can only be set at compile time.",&
                  layoutParam=.true.)
 
   call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
-                 "The number of halo points on each side in the \n"//&
-                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
+                 "The number of halo points on each side in the "//&
+                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ "//&
+                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
                  default=4, static_value=nihalo_dflt, layoutParam=.true.)
   call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
-                 "The number of halo points on each side in the \n"//&
-                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
+                 "The number of halo points on each side in the "//&
+                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ "//&
+                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
                  "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
                  default=4, static_value=njhalo_dflt, layoutParam=.true.)
   if (present(min_halo)) then
@@ -1354,13 +1357,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
   if (is_static) then
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NIGLOBAL)
     call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NJGLOBAL)
     if (MOM_dom%niglobal /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
@@ -1376,13 +1379,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     endif
   else
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
     call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
   endif
@@ -1394,15 +1397,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   inputdir = slasher(inputdir)
 
   call get_param(param_file, mdl, trim(masktable_nm), mask_table, &
-                 "A text file to specify n_mask, layout and mask_list. \n"//&
-                 "This feature masks out processors that contain only land points. \n"//&
-                 "The first line of mask_table is the number of regions to be masked out.\n"//&
-                 "The second line is the layout of the model and must be \n"//&
-                 "consistent with the actual model layout.\n"//&
-                 "The following (n_mask) lines give the logical positions \n"//&
-                 "of the processors that are masked out. The mask_table \n"//&
-                 "can be created by tools like check_mask. The \n"//&
-                 "following example of mask_table masks out 2 processors, \n"//&
+                 "A text file to specify n_mask, layout and mask_list. "//&
+                 "This feature masks out processors that contain only land points. "//&
+                 "The first line of mask_table is the number of regions to be masked out. "//&
+                 "The second line is the layout of the model and must be "//&
+                 "consistent with the actual model layout. "//&
+                 "The following (n_mask) lines give the logical positions "//&
+                 "of the processors that are masked out. The mask_table "//&
+                 "can be created by tools like check_mask. The "//&
+                 "following example of mask_table masks out 2 processors, "//&
                  "(1,2) and (3,6), out of the 24 in a 4x6 layout: \n"//&
                  " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table", &
                  layoutParam=.true.)
@@ -1413,7 +1416,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     layout(1) = NIPROC ; layout(2) = NJPROC
   else
     call get_param(param_file, mdl, trim(layout_nm), layout, &
-                 "The processor layout to be used, or 0, 0 to automatically \n"//&
+                 "The processor layout to be used, or 0, 0 to automatically "//&
                  "set the layout based on the number of processors.", default=0, &
                  do_not_log=.true.)
     call get_param(param_file, mdl, trim(niproc_nm), nip_parsed, &
@@ -1452,11 +1455,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     endif
   endif
   call log_param(param_file, mdl, trim(niproc_nm), layout(1), &
-                 "The number of processors in the x-direction. With \n"//&
+                 "The number of processors in the x-direction. With "//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(njproc_nm), layout(2), &
-                 "The number of processors in the y-direction. With \n"//&
+                 "The number of processors in the y-direction. With "//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(layout_nm), layout, &
@@ -1481,7 +1484,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   ! number of PEs in each direction.
   io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
-                 "The processor layout to be used, or 0,0 to automatically \n"//&
+                 "The processor layout to be used, or 0,0 to automatically "//&
                  "set the io_layout to be the same as the layout.", default=1, &
                  layoutParam=.true.)
 
@@ -1566,6 +1569,31 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     endif
   endif
 
+  global_indices(1) = 1 ; global_indices(2) = int(MOM_dom%niglobal/2)
+  global_indices(3) = 1 ; global_indices(4) = int(MOM_dom%njglobal/2)
+  !For downsampled domain, recommend a halo of 1 (or 0?) since we're not doing wide-stencil computations.
+  !But that does not work because the downsampled field would not have the correct size to pass the checks, e.g., we get
+  !error: downsample_diag_indices_get: peculiar size 28 in i-direction\ndoes not match one of 24 25 26 27
+  xhalo_d2 = int(MOM_dom%nihalo/2)
+  yhalo_d2 = int(MOM_dom%njhalo/2)
+  if (mask_table_exists) then
+    call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xhalo=xhalo_d2, yhalo=yhalo_d2, &
+                symmetry = MOM_dom%symmetric, name=trim("MOMc"), &
+                maskmap=MOM_dom%maskmap )
+  else
+    call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xhalo=xhalo_d2, yhalo=yhalo_d2, &
+                symmetry = MOM_dom%symmetric, name=trim("MOMc"))
+  endif
+
+  if ((io_layout(1) > 0) .and. (io_layout(2) > 0) .and. &
+      (layout(1)*layout(2) > 1)) then
+    call MOM_define_io_domain(MOM_dom%mpp_domain_d2, io_layout)
+  endif
+
 end subroutine MOM_domains_init
 
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
@@ -1597,6 +1625,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
     allocate(MOM_dom%mpp_domain)
+    allocate(MOM_dom%mpp_domain_d2)
   endif
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
@@ -1791,6 +1820,34 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   symmetric = Domain%symmetric
 
 end subroutine get_domain_extent
+
+subroutine get_domain_extent_dsamp2(Domain, isc_d2, iec_d2, jsc_d2, jec_d2,&
+                                            isd_d2, ied_d2, jsd_d2, jed_d2,&
+                                            isg_d2, ieg_d2, jsg_d2, jeg_d2)
+  type(MOM_domain_type), &
+           intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer, intent(out) :: isc_d2 !< The start i-index of the computational domain
+  integer, intent(out) :: iec_d2 !< The end i-index of the computational domain
+  integer, intent(out) :: jsc_d2 !< The start j-index of the computational domain
+  integer, intent(out) :: jec_d2 !< The end j-index of the computational domain
+  integer, intent(out) :: isd_d2 !< The start i-index of the data domain
+  integer, intent(out) :: ied_d2 !< The end i-index of the data domain
+  integer, intent(out) :: jsd_d2 !< The start j-index of the data domain
+  integer, intent(out) :: jed_d2 !< The end j-index of the data domain
+  integer, intent(out) :: isg_d2 !< The start i-index of the global domain
+  integer, intent(out) :: ieg_d2 !< The end i-index of the global domain
+  integer, intent(out) :: jsg_d2 !< The start j-index of the global domain
+  integer, intent(out) :: jeg_d2 !< The end j-index of the global domain
+
+  call mpp_get_compute_domain(Domain%mpp_domain_d2, isc_d2, iec_d2, jsc_d2, jec_d2)
+  call mpp_get_data_domain(Domain%mpp_domain_d2, isd_d2, ied_d2, jsd_d2, jed_d2)
+  call mpp_get_global_domain (Domain%mpp_domain_d2, isg_d2, ieg_d2, jsg_d2, jeg_d2)
+  ! This code institutes the MOM convention that local array indices start at 1.
+  isc_d2 = isc_d2-isd_d2+1 ; iec_d2 = iec_d2-isd_d2+1
+  jsc_d2 = jsc_d2-jsd_d2+1 ; jec_d2 = jec_d2-jsd_d2+1
+  ied_d2 = ied_d2-isd_d2+1 ; jed_d2 = jed_d2-jsd_d2+1
+  isd_d2 = 1 ; jsd_d2 = 1
+end subroutine get_domain_extent_dsamp2
 
 !> Return the (potentially symmetric) computational domain i-bounds for an array
 !! passed without index specifications (i.e. indices start at 1) based on an array size.

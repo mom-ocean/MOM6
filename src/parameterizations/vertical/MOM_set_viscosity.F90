@@ -19,6 +19,7 @@ use MOM_cvmix_shear, only : cvmix_shear_is_used
 use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_CVMix_ddiff, only : CVMix_ddiff_is_used
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : register_restart_field_as_obsolete
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
@@ -625,8 +626,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 ! The  bottom boundary layer thickness is found by solving the same
 ! equation as in Killworth and Edwards:    (h/h_f)^2 + h/h_N = 1.
 
-      if (m==1) then ; C2f = (G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J))
-      else ; C2f = (G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) ; endif
+      if (m==1) then ; C2f = US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J))
+      else ; C2f = US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) ; endif
 
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
@@ -1202,7 +1203,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
-            absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
+            absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
             if (CS%omega_frac > 0.0) &
               absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
           endif
@@ -1405,10 +1406,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
        !visc%tbl_thick_shelf_u(I,j) = GV%H_to_Z * max(CS%Htbl_shelf_min, &
        !    htot(I) / (0.5 + sqrt(0.25 + &
-       !                 (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
+       !                 (htot(i)*US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
        !                 (ustar(i)*GV%Z_to_H)**2 )) )
         ustar1 = ustar(i)*GV%Z_to_H
-        h2f2 = (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
+        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_u(I,j) = tbl_thick_Z
@@ -1437,7 +1438,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
-           absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+           absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
            if (CS%omega_frac > 0.0) &
              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
@@ -1642,10 +1643,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
        !visc%tbl_thick_shelf_v(i,J) = GV%H_to_Z * max(CS%Htbl_shelf_min, &
        !    htot(i) / (0.5 + sqrt(0.25 + &
-       !        (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
+       !        (htot(i)*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
        !        (ustar(i)*GV%Z_to_H)**2 )) )
         ustar1 = ustar(i)*GV%Z_to_H
-        h2f2 = (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
+        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_v(i,J) = tbl_thick_Z
@@ -1699,12 +1700,12 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     use_CVMix_shear = CVMix_shear_is_used(param_file)
     use_CVMix_conv  = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
-                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, &
-                 "If true, use an implied energetics planetary boundary \n"//&
-                 "layer scheme to determine the diffusivity and viscosity \n"//&
+                 "If true, use an implied energetics planetary boundary "//&
+                 "layer scheme to determine the diffusivity and viscosity "//&
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
 
@@ -1811,65 +1812,65 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
   differential_diffusion = .false.
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
-                 "If true, the bottom stress is calculated with a drag \n"//&
-                 "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
-                 "may be an assumed value or it may be based on the \n"//&
-                 "actual velocity in the bottommost HBBL, depending on \n"//&
+                 "If true, the bottom stress is calculated with a drag "//&
+                 "law of the form c_drag*|u|*u. The velocity magnitude "//&
+                 "may be an assumed value or it may be based on the "//&
+                 "actual velocity in the bottommost HBBL, depending on "//&
                  "LINEAR_DRAG.", default=.true.)
   call get_param(param_file, mdl, "CHANNEL_DRAG", CS%Channel_drag, &
-                 "If true, the bottom drag is exerted directly on each \n"//&
-                 "layer proportional to the fraction of the bottom it \n"//&
+                 "If true, the bottom drag is exerted directly on each "//&
+                 "layer proportional to the fraction of the bottom it "//&
                  "overlies.", default=.false.)
   call get_param(param_file, mdl, "LINEAR_DRAG", CS%linear_drag, &
-                 "If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag \n"//&
+                 "If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag "//&
                  "law is cdrag*DRAG_BG_VEL*u.", default=.false.)
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
   if (adiabatic) then
     call log_param(param_file, mdl, "ADIABATIC",adiabatic, &
-                 "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
-                 "true. This assumes that KD = KDML = 0.0 and that \n"//&
-                 "there is no buoyancy forcing, but makes the model \n"//&
+                 "There are no diapycnal mass fluxes if ADIABATIC is "//&
+                 "true. This assumes that KD = KDML = 0.0 and that "//&
+                 "there is no buoyancy forcing, but makes the model "//&
                  "faster by eliminating subroutine calls.", default=.false.)
   endif
 
   if (.not.adiabatic) then
     CS%RiNo_mix = kappa_shear_is_used(param_file)
     call get_param(param_file, mdl, "DOUBLE_DIFFUSION", differential_diffusion, &
-                 "If true, increase diffusivitives for temperature or salt \n"//&
-                 "based on double-diffusive paramaterization from MOM4/KPP.", &
+                 "If true, increase diffusivites for temperature or salt "//&
+                 "based on double-diffusive parameterization from MOM4/KPP.", &
                  default=.false.)
     use_CVMix_ddiff = CVMix_ddiff_is_used(param_file)
   endif
 
   call get_param(param_file, mdl, "PRANDTL_TURB", visc%Prandtl_turb, &
-                 "The turbulent Prandtl number applied to shear \n"//&
+                 "The turbulent Prandtl number applied to shear "//&
                  "instability.", units="nondim", default=1.0)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
-                 "If true, use a bulk Richardson number criterion to \n"//&
+                 "If true, use a bulk Richardson number criterion to "//&
                  "determine the mixed layer thickness for viscosity.", &
                  default=.false.)
   if (CS%dynamic_viscous_ML) then
     call get_param(param_file, mdl, "BULK_RI_ML", bulk_Ri_ML_dflt, default=0.0)
     call get_param(param_file, mdl, "BULK_RI_ML_VISC", CS%bulk_Ri_ML, &
-                 "The efficiency with which mean kinetic energy released \n"//&
-                 "by mechanically forced entrainment of the mixed layer \n"//&
-                 "is converted to turbulent kinetic energy.  By default, \n"//&
+                 "The efficiency with which mean kinetic energy released "//&
+                 "by mechanically forced entrainment of the mixed layer "//&
+                 "is converted to turbulent kinetic energy.  By default, "//&
                  "BULK_RI_ML_VISC = BULK_RI_ML or 0.", units="nondim", &
                  default=bulk_Ri_ML_dflt)
     call get_param(param_file, mdl, "TKE_DECAY", TKE_decay_dflt, default=0.0)
     call get_param(param_file, mdl, "TKE_DECAY_VISC", CS%TKE_decay, &
-                 "TKE_DECAY_VISC relates the vertical rate of decay of \n"//&
-                 "the TKE available for mechanical entrainment to the \n"//&
-                 "natural Ekman depth for use in calculating the dynamic \n"//&
-                 "mixed layer viscosity.  By default, \n"//&
+                 "TKE_DECAY_VISC relates the vertical rate of decay of "//&
+                 "the TKE available for mechanical entrainment to the "//&
+                 "natural Ekman depth for use in calculating the dynamic "//&
+                 "mixed layer viscosity.  By default, "//&
                  "TKE_DECAY_VISC = TKE_DECAY or 0.", units="nondim", &
                  default=TKE_decay_dflt)
     call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
-                 "If true, use the absolute rotation rate instead of the \n"//&
-                 "vertical component of rotation when setting the decay \n"//&
+                 "If true, use the absolute rotation rate instead of the "//&
+                 "vertical component of rotation when setting the decay "//&
                    "scale for turbulence.", default=.false., do_not_log=.true.)
     omega_frac_dflt = 0.0
     if (use_omega) then
@@ -1877,8 +1878,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       omega_frac_dflt = 1.0
     endif
     call get_param(param_file, mdl, "ML_OMEGA_FRAC", CS%omega_frac, &
-                   "When setting the decay scale for turbulence, use this \n"//&
-                   "fraction of the absolute rotation rate blended with the \n"//&
+                   "When setting the decay scale for turbulence, use this "//&
+                   "fraction of the absolute rotation rate blended with the "//&
                    "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
                    units="nondim", default=omega_frac_dflt)
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
@@ -1893,62 +1894,62 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   endif
 
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
-                 "The thickness of a bottom boundary layer with a \n"//&
-                 "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or \n"//&
-                 "the thickness over which near-bottom velocities are \n"//&
-                 "averaged for the drag law if BOTTOMDRAGLAW is defined \n"//&
+                 "The thickness of a bottom boundary layer with a "//&
+                 "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or "//&
+                 "the thickness over which near-bottom velocities are "//&
+                 "averaged for the drag law if BOTTOMDRAGLAW is defined "//&
                  "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true.) ! Rescaled later
   if (CS%bottomdraglaw) then
     call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of \n"//&
-                 "the velocity field to the bottom stress. CDRAG is only \n"//&
+                 "CDRAG is the drag coefficient relating the magnitude of "//&
+                 "the velocity field to the bottom stress. CDRAG is only "//&
                  "used if BOTTOMDRAGLAW is defined.", units="nondim", &
                  default=0.003)
     call get_param(param_file, mdl, "DRAG_BG_VEL", CS%drag_bg_vel, &
-                 "DRAG_BG_VEL is either the assumed bottom velocity (with \n"//&
-                 "LINEAR_DRAG) or an unresolved  velocity that is \n"//&
-                 "combined with the resolved velocity to estimate the \n"//&
-                 "velocity magnitude.  DRAG_BG_VEL is only used when \n"//&
+                 "DRAG_BG_VEL is either the assumed bottom velocity (with "//&
+                 "LINEAR_DRAG) or an unresolved  velocity that is "//&
+                 "combined with the resolved velocity to estimate the "//&
+                 "velocity magnitude.  DRAG_BG_VEL is only used when "//&
                  "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0)
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
-                 "If true, use the equation of state in determining the \n"//&
-                 "properties of the bottom boundary layer.  Otherwise use \n"//&
+                 "If true, use the equation of state in determining the "//&
+                 "properties of the bottom boundary layer.  Otherwise use "//&
                  "the layer target potential densities.", default=.false.)
   endif
   call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
-                 "The minimum bottom boundary layer thickness that can be \n"//&
-                 "used with BOTTOMDRAGLAW. This might be \n"//&
-                 "Kv / (cdrag * drag_bg_vel) to give Kv as the minimum \n"//&
+                 "The minimum bottom boundary layer thickness that can be "//&
+                 "used with BOTTOMDRAGLAW. This might be "//&
+                 "Kv/(cdrag*drag_bg_vel) to give Kv as the minimum "//&
                  "near-bottom viscosity.", units="m", default=0.0)  ! Rescaled later
   call get_param(param_file, mdl, "HTBL_SHELF_MIN", CS%Htbl_shelf_min, &
-                 "The minimum top boundary layer thickness that can be \n"//&
-                 "used with BOTTOMDRAGLAW. This might be \n"//&
-                 "Kv / (cdrag * drag_bg_vel) to give Kv as the minimum \n"//&
+                 "The minimum top boundary layer thickness that can be "//&
+                 "used with BOTTOMDRAGLAW. This might be "//&
+                 "Kv/(cdrag*drag_bg_vel) to give Kv as the minimum "//&
                  "near-top viscosity.", units="m", default=CS%BBL_thick_min, scale=GV%m_to_H)
   call get_param(param_file, mdl, "HTBL_SHELF", CS%Htbl_shelf, &
-                 "The thickness over which near-surface velocities are \n"//&
-                 "averaged for the drag law under an ice shelf.  By \n"//&
+                 "The thickness over which near-surface velocities are "//&
+                 "averaged for the drag law under an ice shelf.  By "//&
                  "default this is the same as HBBL", units="m", default=CS%Hbbl, scale=GV%m_to_H)
   ! These unit conversions are out outside the get_param calls because the are also defaults.
   CS%Hbbl = CS%Hbbl * GV%m_to_H                   ! Rescale
   CS%BBL_thick_min = CS%BBL_thick_min * GV%m_to_H ! Rescale
 
   call get_param(param_file, mdl, "KV", Kv_background, &
-                 "The background kinematic viscosity in the interior. \n"//&
+                 "The background kinematic viscosity in the interior. "//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "ADD_KV_SLOW", visc%add_Kv_slow, &
-                 "If true, the background vertical viscosity in the interior \n"//&
-                 "(i.e., tidal + background + shear + convenction) is addded \n"// &
-                 "when computing the coupling coefficient. The purpose of this \n"// &
-                 "flag is to be able to recover previous answers and it will likely \n"// &
+                 "If true, the background vertical viscosity in the interior "//&
+                 "(i.e., tidal + background + shear + convection) is added "//&
+                 "when computing the coupling coefficient. The purpose of this "//&
+                 "flag is to be able to recover previous answers and it will likely "//&
                  "be removed in the future since this option should always be true.", &
                   default=.false.)
 
   call get_param(param_file, mdl, "USE_KPP", use_KPP, &
-                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
-                 "to calculate diffusivities and non-local transport in the OBL.",     &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
+                 "to calculate diffusivities and non-local transport in the OBL.", &
                  do_not_log=.true., default=.false.)
 
   if (use_KPP .and. visc%add_Kv_slow) call MOM_error(FATAL,"set_visc_init: "//&
@@ -1970,10 +1971,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     if (smag_const1 >= 0.0) cSmag_chan_dflt = smag_const1
 
     call get_param(param_file, mdl, "SMAG_CONST_CHANNEL", CS%c_Smag, &
-                 "The nondimensional Laplacian Smagorinsky constant used \n"//&
-                 "in calculating the channel drag if it is enabled.  The \n"//&
-                 "default is to use the same value as SMAG_LAP_CONST if \n"//&
-                 "it is defined, or 0.15 if it is not. The value used is \n"//&
+                 "The nondimensional Laplacian Smagorinsky constant used "//&
+                 "in calculating the channel drag if it is enabled.  The "//&
+                 "default is to use the same value as SMAG_LAP_CONST if "//&
+                 "it is defined, or 0.15 if it is not. The value used is "//&
                  "also 0.15 if the specified value is negative.", &
                  units="nondim", default=cSmag_chan_dflt)
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
@@ -2024,6 +2025,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
   endif
+
+  call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
+  call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
 
   if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
     Z_rescale = US%m_to_Z / US%m_to_Z_restart

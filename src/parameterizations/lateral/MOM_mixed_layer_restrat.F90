@@ -357,7 +357,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !$OMP do
   do j=js,je ; do I=is-1,ie
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
-    absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
           ( sqrt( 0.5 * ( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 ) ) * I_l_f ) &
@@ -433,7 +433,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !$OMP do
   do J=js-1,je ; do i=is,ie
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
-    absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
           ( sqrt( 0.5 * ( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 ) ) * I_l_f ) &
@@ -524,14 +524,14 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
 
     if (CS%id_uml > 0) then
-      do J=js,je ; do i=is,ie
+      do J=js,je ; do i=is-1,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
         uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
-      do J=js,je ; do i=is,ie
+      do J=js-1,je ; do i=is,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
         vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
@@ -650,54 +650,50 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
 !   U - Component
 !$OMP do
-  do j=js,je
-    do i=is,ie ; utimescale_diag(i,j) = 0.0 ; enddo
-    do i=is,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
-    do I=is-1,ie
-      h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
+  do j=js,je; do I=is-1,ie
+    h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
-      u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
-      absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
-      ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
-      ! momentum mixing rate: pi^2*visc/h_ml^2
-      ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
-      mom_mixrate = (0.41*9.8696)*u_star**2 / &
-                    (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
-      timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+    ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
+    ! momentum mixing rate: pi^2*visc/h_ml^2
+    ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
+    mom_mixrate = (0.41*9.8696)*u_star**2 / &
+                  (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
+    timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
 
-      timescale = timescale * CS%ml_restrat_coef
-!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
+    timescale = timescale * CS%ml_restrat_coef
+!      timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
 
-      utimescale_diag(I,j) = timescale
+    uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
+        G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * GV%Z_to_H)
 
-      uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
-          G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * GV%Z_to_H)
+    if (uDml(I) == 0) then
+      do k=1,nkml ; uhml(I,j,k) = 0.0 ; enddo
+    else
+      I2htot = 1.0 / (htot(i,j) + htot(i+1,j) + h_neglect)
+      z_topx2 = 0.0
+      ! a(k) relates the sublayer transport to uDml with a linear profile.
+      ! The sum of a(k) through the mixed layers must be 0.
+      do k=1,nkml
+        hx2 = (h(i,j,k) + h(i+1,j,k) + h_neglect)
+        a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
+        z_topx2 = z_topx2 + hx2
+        if (a(k)*uDml(I) > 0.0) then
+          if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
+        else
+          if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k)/a(k)
+        endif
+      enddo
+      do k=1,nkml
+        uhml(I,j,k) = a(k)*uDml(I)
+        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
+      enddo
+    endif
 
-      if (uDml(i) == 0) then
-        do k=1,nkml ; uhml(I,j,k) = 0.0 ; enddo
-      else
-        I2htot = 1.0 / (htot(i,j) + htot(i+1,j) + h_neglect)
-        z_topx2 = 0.0
-        ! a(k) relates the sublayer transport to uDml with a linear profile.
-        ! The sum of a(k) through the mixed layers must be 0.
-        do k=1,nkml
-          hx2 = (h(i,j,k) + h(i+1,j,k) + h_neglect)
-          a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
-          z_topx2 = z_topx2 + hx2
-          if (a(k)*uDml(I) > 0.0) then
-            if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
-          else
-            if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k)/a(k)
-          endif
-        enddo
-        do k=1,nkml
-          uhml(I,j,k) = a(k)*uDml(I)
-          uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
-        enddo
-      endif
-    enddo
-    uDml_diag(is:ie,j) = uDml(is:ie)
-  enddo
+    uDml_diag(I,j) = uDml(I)
+    utimescale_diag(I,j) = timescale
+  enddo; enddo
 
 !  V- component
 !$OMP do
@@ -705,7 +701,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_Z
 
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
-    absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+    absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
@@ -715,8 +711,6 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
     timescale = timescale * CS%ml_restrat_coef
 !        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
-
-    vtimescale_diag(i,J) = timescale
 
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * GV%Z_to_H)
@@ -742,9 +736,10 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
         vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
-    enddo
-    vDml_diag(is:ie,j) = vDml(is:ie)
-  enddo
+
+    vtimescale_diag(i,J) = timescale
+    vDml_diag(i,J) = vDml(i)
+  enddo; enddo
 
 !$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie
@@ -802,9 +797,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
-             "If true, a density-gradient dependent re-stratifying \n"//&
-             "flow is imposed in the mixed layer. Can be used in ALE mode\n"//&
-             "without restriction but in layer mode can only be used if\n"//&
+             "If true, a density-gradient dependent re-stratifying "//&
+             "flow is imposed in the mixed layer. Can be used in ALE mode "//&
+             "without restriction but in layer mode can only be used if "//&
              "BULKMIXEDLAYER is true.", default=.false.)
   if (.not. mixedlayer_restrat_init) return
 
@@ -822,53 +817,53 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
-             "A nondimensional coefficient that is proportional to \n"//&
-             "the ratio of the deformation radius to the dominant \n"//&
-             "lengthscale of the submesoscale mixed layer \n"//&
-             "instabilities, times the minimum of the ratio of the \n"//&
-             "mesoscale eddy kinetic energy to the large-scale \n"//&
-             "geostrophic kinetic energy or 1 plus the square of the \n"//&
-             "grid spacing over the deformation radius, as detailed \n"//&
+             "A nondimensional coefficient that is proportional to "//&
+             "the ratio of the deformation radius to the dominant "//&
+             "lengthscale of the submesoscale mixed layer "//&
+             "instabilities, times the minimum of the ratio of the "//&
+             "mesoscale eddy kinetic energy to the large-scale "//&
+             "geostrophic kinetic energy or 1 plus the square of the "//&
+             "grid spacing over the deformation radius, as detailed "//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
   ! We use GV%nkml to distinguish between the old and new implementation of MLE.
   ! The old implementation only works for the layer model with nkml>0.
   if (GV%nkml==0) then
     call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
-             "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application\n"//&
+             "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application "//&
              "of the MLE restratification parameterization.", units="nondim", default=0.0)
     call get_param(param_file, mdl, "MLE_FRONT_LENGTH", CS%front_length, &
-             "If non-zero, is the frontal-length scale used to calculate the\n"//&
-             "upscaling of buoyancy gradients that is otherwise represented\n"//&
-             "by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is\n"//&
+             "If non-zero, is the frontal-length scale used to calculate the "//&
+             "upscaling of buoyancy gradients that is otherwise represented "//&
+             "by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is "//&
              "non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.",&
              units="m", default=0.0)
     call get_param(param_file, mdl, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
-             "If true, the MLE parameterization will use the mixed-layer\n"//&
-             "depth provided by the active PBL parameterization. If false,\n"//&
-             "MLE will estimate a MLD based on a density difference with the\n"//&
+             "If true, the MLE parameterization will use the mixed-layer "//&
+             "depth provided by the active PBL parameterization. If false, "//&
+             "MLE will estimate a MLD based on a density difference with the "//&
              "surface using the parameter MLE_DENSITY_DIFF.", default=.false.)
     call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
-             "The time-scale for a running-mean filter applied to the mixed-layer\n"//&
-             "depth used in the MLE restratification parameterization. When\n"//&
-             "the MLD deepens below the current running-mean the running-mean\n"//&
+             "The time-scale for a running-mean filter applied to the mixed-layer "//&
+             "depth used in the MLE restratification parameterization. When "//&
+             "the MLD deepens below the current running-mean the running-mean "//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
     call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
-             "The time-scale for a running-mean filter applied to the filtered\n"//&
-             "mixed-layer depth used in a second MLE restratification parameterization.\n"//&
-             "When the MLD deepens below the current running-mean the running-mean\n"//&
+             "The time-scale for a running-mean filter applied to the filtered "//&
+             "mixed-layer depth used in a second MLE restratification parameterization. "//&
+             "When the MLD deepens below the current running-mean the running-mean "//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
     if (.not. CS%MLE_use_PBL_MLD) then
       call get_param(param_file, mdl, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
-             "Density difference used to detect the mixed-layer\n"//&
-             "depth used for the mixed-layer eddy parameterization\n"//&
+             "Density difference used to detect the mixed-layer "//&
+             "depth used for the mixed-layer eddy parameterization "//&
              "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
     endif
     call get_param(param_file, mdl, "MLE_TAIL_DH", CS%MLE_tail_dh, &
-             "Fraction by which to extend the mixed-layer restratification\n"//&
-             "depth used for a smoother stream function at the base of\n"//&
+             "Fraction by which to extend the mixed-layer restratification "//&
+             "depth used for a smoother stream function at the base of "//&
              "the mixed-layer.", units="nondim", default=0.0)
     call get_param(param_file, mdl, "MLE_MLD_STRETCH", CS%MLE_MLD_stretch, &
-             "A scaling coefficient for stretching/shrinking the MLD\n"//&
+             "A scaling coefficient for stretching/shrinking the MLD "//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
     call get_param(param_file, mdl, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &

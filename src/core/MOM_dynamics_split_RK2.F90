@@ -433,7 +433,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, Gv, CS%CoriolisAdv_CSp)
+                 G, Gv, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -682,14 +682,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
-                            MEKE, Varmix, G, GV, CS%hor_visc_CSp, OBC=CS%OBC)
+                            MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -1023,28 +1023,28 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, mdl, "BE", CS%be, &
-                 "If SPLIT is true, BE determines the relative weighting \n"//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
-                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
-                 "used for the Coriolis and inertial terms.  BE may be \n"//&
-                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
-                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
+                 "If SPLIT is true, BE determines the relative weighting "//&
+                 "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
+                 "scheme (0.5) and a backward Euler scheme (1) that is "//&
+                 "used for the Coriolis and inertial terms.  BE may be "//&
+                 "from 0.5 to 1, but instability may occur near 0.5. "//&
+                 "BE is also applicable if SPLIT is false and USE_RK2 "//&
                  "is true.", units="nondim", default=0.6)
   call get_param(param_file, mdl, "BEGW", CS%begw, &
-                 "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
-                 "controls the extent to which the treatment of gravity \n"//&
-                 "waves is forward-backward (0) or simulated backward \n"//&
-                 "Euler (1).  0 is almost always used.\n"//&
-                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
+                 "If SPLIT is true, BEGW is a number from 0 to 1 that "//&
+                 "controls the extent to which the treatment of gravity "//&
+                 "waves is forward-backward (0) or simulated backward "//&
+                 "Euler (1).  0 is almost always used. "//&
+                 "If SPLIT is false and USE_RK2 is true, BEGW can be "//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
 
   call get_param(param_file, mdl, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
-                 "If true, provide the bottom stress calculated by the \n"//&
+                 "If true, provide the bottom stress calculated by the "//&
                  "vertical viscosity to the barotropic solver.", default=.false.)
   call get_param(param_file, mdl, "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
-                 "If true, use the summed layered fluxes plus an \n"//&
-                 "adjustment due to the change in the barotropic velocity \n"//&
+                 "If true, use the summed layered fluxes plus an "//&
+                 "adjustment due to the change in the barotropic velocity "//&
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
@@ -1096,7 +1096,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
-  call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
+  call hor_visc_init(Time, G, US, param_file, diag, CS%hor_visc_CSp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
@@ -1136,7 +1136,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, CS%hor_visc_CSp, OBC=CS%OBC)
+                              G, GV, US, CS%hor_visc_CSp, OBC=CS%OBC)
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
     CS%u_av(:,:,:) = u(:,:,:)

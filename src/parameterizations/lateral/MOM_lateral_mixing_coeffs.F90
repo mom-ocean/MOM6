@@ -719,7 +719,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
   real :: KhTr_passivity_coeff
-  real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
+  real :: absurdly_small_freq2  ! A miniscule frequency
              ! squared that is used to avoid division by 0 [s-2].  This
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
@@ -747,46 +747,47 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
   CS%calculate_Eady_growth_rate = .false.
+  absurdly_small_freq2 = 1e-34  !### Note the hard-coded dimensional parameter.
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USE_VARIABLE_MIXING", CS%use_variable_mixing,&
-                 "If true, the variable mixing code will be called.  This \n"//&
-                 "allows diagnostics to be created even if the scheme is \n"//&
-                 "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, \n"//&
-                 "this is set to true regardless of what is in the \n"//&
+                 "If true, the variable mixing code will be called.  This "//&
+                 "allows diagnostics to be created even if the scheme is "//&
+                 "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, "//&
+                 "this is set to true regardless of what is in the "//&
                  "parameter file.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KH", CS%Resoln_scaled_Kh, &
-                 "If true, the Laplacian lateral viscosity is scaled away \n"//&
-                 "when the first baroclinic deformation radius is well \n"//&
+                 "If true, the Laplacian lateral viscosity is scaled away "//&
+                 "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", CS%Resoln_scaled_KhTh, &
-                 "If true, the interface depth diffusivity is scaled away \n"//&
-                 "when the first baroclinic deformation radius is well \n"//&
+                 "If true, the interface depth diffusivity is scaled away "//&
+                 "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTR", CS%Resoln_scaled_KhTr, &
-                 "If true, the epipycnal tracer diffusivity is scaled \n"//&
-                 "away when the first baroclinic deformation radius is \n"//&
+                 "If true, the epipycnal tracer diffusivity is scaled "//&
+                 "away when the first baroclinic deformation radius is "//&
                  "well resolved.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_USE_EBT", CS%Resoln_use_ebt, &
-                 "If true, uses the equivalent barotropic wave speed instead\n"//&
+                 "If true, uses the equivalent barotropic wave speed instead "//&
                  "of first baroclinic wave for calculating the resolution fn.",&
                  default=.false.)
   call get_param(param_file, mdl, "KHTH_USE_EBT_STRUCT", CS%khth_use_ebt_struct, &
-                 "If true, uses the equivalent barotropic structure\n"//&
+                 "If true, uses the equivalent barotropic structure "//&
                  "as the vertical structure of thickness diffusivity.",&
                  default=.false.)
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
-                 "The nondimensional coefficient in the Visbeck formula \n"//&
+                 "The nondimensional coefficient in the Visbeck formula "//&
                  "for the interface depth diffusivity", units="nondim", &
                  default=0.0)
   call get_param(param_file, mdl, "KHTR_SLOPE_CFF", KhTr_Slope_Cff, &
-                 "The nondimensional coefficient in the Visbeck formula \n"//&
+                 "The nondimensional coefficient in the Visbeck formula "//&
                  "for the epipycnal tracer diffusivity", units="nondim", &
                  default=0.0)
   call get_param(param_file, mdl, "USE_STORED_SLOPES", CS%use_stored_slopes,&
-                 "If true, the isopycnal slopes are calculated once and\n"//&
-                 "stored for re-use. This uses more memory but avoids calling\n"//&
+                 "If true, the isopycnal slopes are calculated once and "//&
+                 "stored for re-use. This uses more memory but avoids calling "//&
                  "the equation of state more times than should be necessary.", &
                  default=.false.)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", use_FGNV_streamfn, &
@@ -808,7 +809,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) then
     in_use = .true.
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
-                 "The depth below which N2 is monotonized to avoid stratification\n"//&
+                 "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
                  units='m', default=2000.)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
@@ -817,8 +818,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
     CS%calculate_Eady_growth_rate = .true.
     call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
-          "If non-zero, is an upper bound on slopes used in the\n"//       &
-          "Visbeck formula for diffusivity. This does not affect the\n"//  &
+          "If non-zero, is an upper bound on slopes used in the "//&
+          "Visbeck formula for diffusivity. This does not affect the "//&
           "isopycnal slope calculation used within thickness diffusion.",  &
           units="nondim", default=0.0)
   endif
@@ -828,7 +829,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
-                 "A diapycnal diffusivity that is used to interpolate \n"//&
+                 "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
                  default=1.0e-6, scale=US%m_to_Z**2) !### Add units argument.
   endif
@@ -842,7 +843,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's-1')
     call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
-                 "The layer number at which to start vertical integration \n"//&
+                 "The layer number at which to start vertical integration "//&
                  "of S*N for purposes of finding the Eady growth rate.", &
                  units="nondim", default=2)
   endif
@@ -852,8 +853,19 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
                  "The fixed length scale in the Visbeck formula.", units="m", &
                  default=0.0)
-    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = CS%Visbeck_L_scale**2
-    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = CS%Visbeck_L_scale**2
+    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = 0.0
+    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
+    if (CS%Visbeck_L_scale<0) then
+      do j=js,je ; do I=is-1,Ieq
+        CS%L2u(I,j) = CS%Visbeck_L_scale**2*G%areaCu(I,j)
+      enddo; enddo
+      do J=js-1,Jeq ; do i=is,ie
+        CS%L2v(i,J) = CS%Visbeck_L_scale**2*G%areaCv(i,J)
+      enddo; enddo
+    else
+      CS%L2u(:,:) = CS%Visbeck_L_scale**2
+      CS%L2v(:,:) = CS%Visbeck_L_scale**2
+    endif
 
     CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm2')
@@ -890,39 +902,39 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'Resolution function for scaling diffusivities', 'nondim')
 
     call get_param(param_file, mdl, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
-                 "A coefficient that determines how KhTh is scaled away if \n"//&
-                 "RESOLN_SCALED_... is true, as \n"//&
+                 "A coefficient that determines how KhTh is scaled away if "//&
+                 "RESOLN_SCALED_... is true, as "//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).", &
                  units="nondim", default=1.0)
     call get_param(param_file, mdl, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
-                 "The power of dx/Ld in the Kh resolution function.  Any \n"//&
-                 "positive integer may be used, although even integers \n"//&
-                 "are more efficient to calculate.  Setting this greater \n"//&
+                 "The power of dx/Ld in the Kh resolution function.  Any "//&
+                 "positive integer may be used, although even integers "//&
+                 "are more efficient to calculate.  Setting this greater "//&
                  "than 100 results in a step-function being used.", &
                  units="nondim", default=2)
     call get_param(param_file, mdl, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
-                 "A coefficient that determines how Kh is scaled away if \n"//&
-                 "RESOLN_SCALED_... is true, as \n"//&
-                 "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).\n"//&
+                 "A coefficient that determines how Kh is scaled away if "//&
+                 "RESOLN_SCALED_... is true, as "//&
+                 "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER). "//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_coef_khth)
     call get_param(param_file, mdl, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
-                 "The power of dx/Ld in the Kh resolution function.  Any \n"//&
-                 "positive integer may be used, although even integers \n"//&
-                 "are more efficient to calculate.  Setting this greater \n"//&
-                 "than 100 results in a step-function being used.\n"//&
+                 "The power of dx/Ld in the Kh resolution function.  Any "//&
+                 "positive integer may be used, although even integers "//&
+                 "are more efficient to calculate.  Setting this greater "//&
+                 "than 100 results in a step-function being used. "//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_fn_power_khth)
     call get_param(param_file, mdl, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
-                 "If true, interpolate the resolution function to the \n"//&
-                 "velocity points from the thickness points; otherwise \n"//&
-                 "interpolate the wave speed and calculate the resolution \n"//&
+                 "If true, interpolate the resolution function to the "//&
+                 "velocity points from the thickness points; otherwise "//&
+                 "interpolate the wave speed and calculate the resolution "//&
                  "function independently at each point.", default=.true.)
     call get_param(param_file, mdl, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
-                 "If true, then retain a legacy bug in the calculation of weights \n"//&
-                 "applied to isoneutral slopes. There was an erroneous k-indexing \n"//&
-                 "for layer thicknesses. In addition, masking at coastlines was not \n"//&
-                 "used which introduced potential restart issues.  This flag will be \n"//&
+                 "If true, then retain a legacy bug in the calculation of weights "//&
+                 "applied to isoneutral slopes. There was an erroneous k-indexing "//&
+                 "for layer thicknesses. In addition, masking at coastlines was not "//&
+                 "used which introduced potential restart issues.  This flag will be "//&
                  "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
@@ -932,12 +944,13 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
+    !### Change the default of GILL_EQUATORIAL_LD to True.
     call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
-                 "If true, uses Gill's definition of the baroclinic\n"//&
-                 "equatorial deformation radius, otherwise, if false, use\n"//&
-                 "Pedlosky's definition. These definitions differ by a factor\n"//&
-                 "of 2 infront of the beta term in the denominator. Gill's"//&
-                 "is the more appropriate definition.\n", default=.false.)
+                 "If true, uses Gill's definition of the baroclinic "//&
+                 "equatorial deformation radius, otherwise, if false, use "//&
+                 "Pedlosky's definition. These definitions differ by a factor "//&
+                 "of 2 in front of the beta term in the denominator. Gill's "//&
+                 "is the more appropriate definition.", default=.false.)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0
     else
@@ -946,8 +959,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
-                         max(G%CoriolisBu(I,J)**2, absurdly_small_freq2)
-      CS%beta_dx2_q(I,J) = oneOrTwo * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (sqrt(0.5 * &
+                         max(US%s_to_T**2 * G%CoriolisBu(I,J)**2, absurdly_small_freq2)
+      CS%beta_dx2_q(I,J) = oneOrTwo * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (US%s_to_T * sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -956,8 +969,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do j=js,je ; do I=is-1,Ieq
       CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
-          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq2)
-      CS%beta_dx2_u(I,j) = oneOrTwo * (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (sqrt( &
+          max(0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq2)
+      CS%beta_dx2_u(I,j) = oneOrTwo * (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (US%s_to_T * sqrt( &
           0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
                   ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
                  (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2 + &
@@ -967,8 +980,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do J=js-1,Jeq ; do i=is,ie
       CS%f2_dx2_v(i,J) = (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * &
-          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq2)
-      CS%beta_dx2_v(i,J) = oneOrTwo * (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (sqrt( &
+          max(0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq2)
+      CS%beta_dx2_v(i,J) = oneOrTwo * (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (US%s_to_T * sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
           0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
                   ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2) + &
@@ -990,10 +1003,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed))  ; CS%f2_dx2_h(:,:) = 0.0
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
-          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+          max(0.25 * US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
               absurdly_small_freq2)
-      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
+      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (US%s_to_T * sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &

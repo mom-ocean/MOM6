@@ -34,7 +34,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public idealized_hurricane_wind_init !Public interface to intialize the idealized
+public idealized_hurricane_wind_init !Public interface to initialize the idealized
                                      ! hurricane wind profile.
 public idealized_hurricane_wind_forcing !Public interface to update the idealized
                                         ! hurricane wind profile.
@@ -121,25 +121,25 @@ subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
 
   ! Parameters for computing a wind profile
   call get_param(param_file, mdl, "IDL_HURR_RHO_AIR", CS%rho_a, &
-                 "Air density used to compute the idealized hurricane"// &
+                 "Air density used to compute the idealized hurricane "//&
                  "wind profile.", units='kg/m3', default=1.2)
   call get_param(param_file, mdl, "IDL_HURR_AMBIENT_PRESSURE", &
-                 CS%pressure_ambient, "Ambient pressure used in the "// &
+                 CS%pressure_ambient, "Ambient pressure used in the "//&
                  "idealized hurricane wind profile.", units='Pa', &
                  default=101200.)
   call get_param(param_file, mdl, "IDL_HURR_CENTRAL_PRESSURE", &
-                 CS%pressure_central, "Central pressure used in the "// &
+                 CS%pressure_central, "Central pressure used in the "//&
                  "idealized hurricane wind profile.", units='Pa', &
                  default=96800.)
   call get_param(param_file, mdl, "IDL_HURR_RAD_MAX_WIND", &
-                 CS%rad_max_wind, "Radius of maximum winds used in the"// &
+                 CS%rad_max_wind, "Radius of maximum winds used in the "//&
                  "idealized hurricane wind profile.", units='m', &
                  default=50.e3)
   call get_param(param_file, mdl, "IDL_HURR_MAX_WIND", CS%max_windspeed, &
                  "Maximum wind speed used in the idealized hurricane"// &
                  "wind profile.", units='m/s', default=65.)
   call get_param(param_file, mdl, "IDL_HURR_TRAN_SPEED", CS%hurr_translation_spd, &
-                 "Translation speed of hurricane used in the idealized"// &
+                 "Translation speed of hurricane used in the idealized "//&
                  "hurricane wind profile.", units='m/s', default=5.0)
   call get_param(param_file, mdl, "IDL_HURR_TRAN_DIR", CS%hurr_translation_dir, &
                  "Translation direction (towards) of hurricane used in the "//&
@@ -153,7 +153,7 @@ subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "Idealized Hurricane initial Y position", &
                  units='m', default=0.)
   call get_param(param_file, mdl, "IDL_HURR_TAU_CURR_REL", CS%relative_tau, &
-                 "Current relative stress switch"//                         &
+                 "Current relative stress switch "//&
                  "used in the idealized hurricane wind profile.", &
                  units='', default=.false.)
 
@@ -163,20 +163,20 @@ subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "invoking a modification (bug) in the wind profile meant to "//&
                  "reproduce a previous implementation.", units='', default=.false.)
   call get_param(param_file, mdl, "IDL_HURR_SCM", CS%SCM_MODE, &
-                 "Single Column mode switch"//                         &
+                 "Single Column mode switch "//&
                  "used in the SCM idealized hurricane wind profile.", &
                  units='', default=.false.)
   call get_param(param_file, mdl, "IDL_HURR_SCM_LOCY", CS%DY_from_center, &
-                 "Y distance of station used in the SCM idealized hurricane "// &
+                 "Y distance of station used in the SCM idealized hurricane "//&
                  "wind profile.", units='m', default=50.e3)
 
   ! The following parameters are model run-time parameters which are used
   ! and logged elsewhere and so should not be logged here. The default
   ! value should be consistent with the rest of the model.
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
@@ -258,8 +258,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
       Uocn = state%u(I,j)*REL_TAU_FAC
       Vocn = 0.25*(state%v(i,J)+state%v(i+1,J-1)&
              +state%v(i+1,J)+state%v(i,J-1))*REL_TAU_FAC
-      f = abs(0.5*(G%CoriolisBu(I,J)+G%CoriolisBu(I,J-1)))*fbench_fac &
-           + fbench
+      f = abs(0.5*US%s_to_T*(G%CoriolisBu(I,J)+G%CoriolisBu(I,J-1)))*fbench_fac + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
         YY = YC + CS%dy_from_center
@@ -281,8 +280,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
       Uocn = 0.25*(state%u(I,j)+state%u(I-1,j+1)&
             +state%u(I-1,j)+state%u(I,j+1))*REL_TAU_FAC
       Vocn = state%v(i,J)*REL_TAU_FAC
-      f = abs(0.5*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))*fbench_fac &
-           + fbench
+      f = abs(0.5*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))*fbench_fac + fbench
       ! Calculate position as a function of time.
       if (CS%SCM_mode) then
         YY = YC + CS%dy_from_center
@@ -487,10 +485,10 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
      B = C**2 * 1.2 * exp(1.0)
   endif
   A = (CS%rad_max_wind/1000.)**B
-  f =G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
+  f = US%s_to_T*G%CoriolisBu(is,js) ! f=f(x,y) but in the SCM is constant
   if (BR_Bench) then
      ! f reset to value used in generated wind for benchmark test
-     f = 5.5659e-05
+     f = 5.5659e-05  !### A constant value in s-1.
   endif
   !/ BR
   ! Calculate x position as a function of time.

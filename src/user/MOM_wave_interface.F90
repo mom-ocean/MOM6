@@ -111,11 +111,11 @@ type, public :: wave_parameters_CS ; private
   type(diag_ctrl), pointer, public :: diag !< A structure that is used to regulate the
                                            !! timing of diagnostic output.
 
-  ! An arbitrary lower-bound on the Langmuir number.  Run-time parameter.
-  ! Langmuir number is sqrt(u_star/u_stokes). When both are small
-  ! but u_star is orders of magnitude smaller the Langmuir number could
-  ! have unintended consequences.  Since both are small it can be safely capped
-  ! to avoid such consequences.
+  !> An arbitrary lower-bound on the Langmuir number.  Run-time parameter.
+  !! Langmuir number is sqrt(u_star/u_stokes). When both are small
+  !! but u_star is orders of magnitude smaller the Langmuir number could
+  !! have unintended consequences.  Since both are small it can be safely capped
+  !! to avoid such consequences.
   real :: La_min = 0.05
 
   !>@{ Diagnostic handles
@@ -302,9 +302,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     case (INPUT_STRING)! A method to input the Stokes band (globally uniform)
       DataSource = Input
       call get_param(param_file,mdl,"SURFBAND_NB",NumBands,                 &
-         "Prescribe number of wavenumber bands for Stokes drift. \n"//      &
-         " Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and \n"// &
-         " STOKES_Y, there are no safety checks in the code.",              &
+         "Prescribe number of wavenumber bands for Stokes drift. "//      &
+         "Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and "// &
+         "STOKES_Y, there are no safety checks in the code.",              &
          units='', default=1)
       allocate( CS%WaveNum_Cen(1:NumBands) )
       CS%WaveNum_Cen(:) = 0.0
@@ -351,16 +351,16 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
-         "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-         " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
+         "The depth (normalized by BLD) to average Stokes drift over in "//&
+         "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
          units="nondim",default=0.04)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", LA_Misalignment,    &
          "Flag (logical) if using misalignment bt shear and waves in LA",&
          default=.false.)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
-         "A minimum value for all Langmuir numbers that is not physical, \n"//&
-         " but is likely only encountered when the wind is very small and \n"//&
-         " therefore its effects should be mostly benign.",units="nondim",&
+         "A minimum value for all Langmuir numbers that is not physical, "//&
+         "but is likely only encountered when the wind is very small and "//&
+         "therefore its effects should be mostly benign.",units="nondim",&
          default=0.05)
 
   ! Allocate and initialize
@@ -407,8 +407,8 @@ subroutine MOM_wave_interface_init_lite(param_file)
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
-       "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-       " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
+       "The depth (normalized by BLD) to average Stokes drift over in "//&
+       "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
        units="nondim",default=0.04)
 
   if (WaveMethod==NULL_WaveMethod) then
@@ -1251,7 +1251,7 @@ end subroutine StokesMixing
 !! CHECK THAT RIGHT TIMESTEP IS PASSED IF YOU USE THIS**
 !!
 !! Not accessed in the standard code.
-subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
+subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
@@ -1265,8 +1265,9 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
        intent(inout) :: v     !< Velocity j-component [m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
+  type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
   ! Local variables
-  real :: DVel
+  real :: DVel ! A rescaled velocity change [m s-1 T-1 ~> m s-2]
   integer :: i,j,k
 
   do k = 1, G%ke
@@ -1274,7 +1275,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
                0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
-        u(I,j,k) = u(I,j,k) + DVEL*DT
+        u(I,j,k) = u(I,j,k) + DVEL*US%s_to_T*DT
       enddo
     enddo
   enddo
@@ -1284,7 +1285,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
       do i = G%isc, G%iec
         DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
                0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
-        v(i,J,k) = v(i,j,k) - DVEL*DT
+        v(i,J,k) = v(i,j,k) - DVEL*US%s_to_T*DT
       enddo
     enddo
   enddo

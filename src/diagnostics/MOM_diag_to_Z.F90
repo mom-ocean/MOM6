@@ -997,8 +997,8 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
   ! Read in z-space info from a NetCDF file.
   call get_param(param_file, mdl, "Z_OUTPUT_GRID_FILE", zgrid_file, &
-                 "The file that specifies the vertical grid for \n"//&
-                 "depth-space diagnostics, or blank to disable \n"//&
+                 "The file that specifies the vertical grid for "//&
+                 "depth-space diagnostics, or blank to disable "//&
                  "depth-space output.", default="")
 
   if (len_trim(zgrid_file) > 0) then
@@ -1011,7 +1011,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, US, param_file, diag, CS)
     call log_param(param_file, mdl, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
                    trim(in_dir)//trim(zgrid_file))
     call log_param(param_file, mdl, "!NK_ZSPACE (from file)", CS%nk_zspace, &
-                 "The number of depth-space levels.  This is determined \n"//&
+                 "The number of depth-space levels.  This is determined "//&
                  "from the size of the variable zw in the output grid file.", &
                  units="nondim")
   else

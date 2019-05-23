@@ -137,54 +137,54 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "NDIFF_CONTINUOUS", CS%continuous_reconstruction, &
-                 "If true, uses a continuous reconstruction of T and S when  \n"//  &
-                 "finding neutral surfaces along which diffusion will happen.\n"//  &
-                 "If false, a PPM discontinuous reconstruction of T and S    \n"//  &
-                 "is done which results in a higher order routine but exacts \n"//  &
+                 "If true, uses a continuous reconstruction of T and S when "//&
+                 "finding neutral surfaces along which diffusion will happen. "//&
+                 "If false, a PPM discontinuous reconstruction of T and S "//&
+                 "is done which results in a higher order routine but exacts "//&
                  "a higher computational cost.", default=.true.)
   call get_param(param_file, mdl, "NDIFF_REF_PRES", CS%ref_pres,                    &
-                 "The reference pressure (Pa) used for the derivatives of    \n"//  &
-                 "the equation of state. If negative (default), local        \n"//  &
+                 "The reference pressure (Pa) used for the derivatives of "//&
+                 "the equation of state. If negative (default), local "//&
                  "pressure is used.", &
                  default = -1.)
   ! Initialize and configure remapping
   if (CS%continuous_reconstruction .eqv. .false.) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
-                   "Uses a rootfinding approach to find the position of a\n"//   &
-                   "neutral surface within a layer taking into account the\n"//  &
-                   "nonlinearity of the equation of state and the\n"//           &
+                   "Uses a rootfinding approach to find the position of a "//&
+                   "neutral surface within a layer taking into account the "//&
+                   "nonlinearity of the equation of state and the "//&
                    "polynomial reconstructions of T/S.",                         &
                    default=.false.)
     call get_param(param_file, mdl, "NDIFF_REMAPPING_SCHEME", string, &
-                   "This sets the reconstruction scheme used\n"//&
-                   "for vertical remapping for all variables.\n"//&
-                   "It can be one of the following schemes:\n"//&
+                   "This sets the reconstruction scheme used "//&
+                   "for vertical remapping for all variables. "//&
+                   "It can be one of the following schemes: "//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
     call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
     call get_param(param_file, mdl, "NDIFF_REFINE_POSITION", CS%refine_position, &
-                   "Uses a rootfinding approach to find the position of a\n"//   &
-                   "neutral surface within a layer taking into account the\n"//  &
-                   "nonlinearity of the equation of state and the\n"//           &
+                   "Uses a rootfinding approach to find the position of a "//&
+                   "neutral surface within a layer taking into account the "//&
+                   "nonlinearity of the equation of state and the "//&
                    "polynomial reconstructions of T/S.",                         &
                    default=.false.)
     if (CS%refine_position) then
       call get_param(param_file, mdl, "NDIFF_DRHO_TOL", drho_tol,            &
-                     "Sets the convergence criterion for finding the neutral\n"// &
+                     "Sets the convergence criterion for finding the neutral "//&
                      "position within a layer in kg m-3.",                        &
                      default=1.e-10)
       call get_param(param_file, mdl, "NDIFF_X_TOL", xtol,            &
-                     "Sets the convergence criterion for a change in nondim\n"// &
+                     "Sets the convergence criterion for a change in nondim "//&
                      "position within a layer.",                        &
                      default=0.)
       call get_param(param_file, mdl, "NDIFF_MAX_ITER", max_iter,              &
-                    "The maximum number of iterations to be done before \n"//     &
+                    "The maximum number of iterations to be done before "//&
                      "exiting the iterative loop to find the neutral surface",    &
                      default=10)
       call set_ndiff_aux_params(CS%ndiff_aux_CS, max_iter = max_iter, drho_tol = drho_tol, xtol = xtol)
     endif
     call get_param(param_file, mdl, "NDIFF_DEBUG", CS%debug,             &
-                   "Turns on verbose output for discontinuous neutral \n"//      &
+                   "Turns on verbose output for discontinuous neutral "//&
                    "diffusion routines.", &
                    default = .false.)
     call set_ndiff_aux_params(CS%ndiff_aux_CS, deg=CS%deg, ref_pres = CS%ref_pres, EOS = EOS, debug = CS%debug)

@@ -286,7 +286,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     zInterface(1) = 0.
     do k = 1,nz
       zInterface(k+1) = zInterface(k) - h1(k)
-      ! Adjust interface position to accomodate inflating layers
+      ! Adjust interface position to accommodate inflating layers
       ! without disturbing the interface above
     enddo
   else
@@ -294,7 +294,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     zInterface(nz+1) = -depth
     do k = nz,1,-1
       zInterface(k) = zInterface(k+1) + h1(k)
-      ! Adjust interface position to accomodate inflating layers
+      ! Adjust interface position to accommodate inflating layers
       ! without disturbing the interface above
     enddo
   endif

@@ -3,6 +3,7 @@ module MOM_sum_output
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use iso_fortran_env, only : int64
 use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
 use MOM_coms, only : reproducing_sum, EFP_to_real, real_to_EFP
 use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=)
@@ -24,6 +25,7 @@ use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
+use mpp_mod, only : mpp_chksum
 
 use netcdf
 
@@ -39,6 +41,13 @@ public write_energy, accumulate_net_input, MOM_sum_output_init
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 integer, parameter :: NUM_FIELDS = 17 !< Number of diagnostic fields
+character (*), parameter :: depth_chksum_attr = "bathyT_checksum"
+                                      !< Checksum attribute name of G%bathyT
+                                      !! over the compute domain
+character (*), parameter :: area_chksum_attr = "mask2dT_areaT_checksum"
+                                      !< Checksum attribute of name of
+                                      !! G%mask2dT * G%areaT over the compute
+                                      !! domain
 
 !> A list of depths and corresponding globally integrated ocean area at each
 !! depth and the ocean volume below each depth.
@@ -64,6 +73,12 @@ type, public :: sum_output_CS ; private
   character(len=200) :: depth_list_file  !< The name of the depth list file.
   real    :: D_list_min_inc     !<  The minimum increment [Z ~> m], between the depths of the
                                 !! entries in the depth-list file, 0 by default.
+  logical :: require_depth_list_chksum
+                                !< Require matching checksums in Depth_list.nc when reading
+                                !! the file.
+  logical :: update_depth_list_chksum
+                                !< Automatically update the Depth_list.nc file if the
+                                !! checksums are missing or do not match current values.
   logical :: use_temperature    !<   If true, temperature and salinity are state variables.
   real    :: fresh_water_input  !<   The total mass of fresh water added by surface fluxes
                                 !! since the last time that write_energy was called [kg].
@@ -154,41 +169,41 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CALCULATE_APE", CS%do_APE_calc, &
-                 "If true, calculate the available potential energy of \n"//&
-                 "the interfaces.  Setting this to false reduces the \n"//&
+                 "If true, calculate the available potential energy of "//&
+                 "the interfaces.  Setting this to false reduces the "//&
                  "memory footprint of high-PE-count models dramatically.", &
                  default=.true.)
   call get_param(param_file, mdl, "WRITE_STOCKS", CS%write_stocks, &
-                 "If true, write the integrated tracer amounts to stdout \n"//&
+                 "If true, write the integrated tracer amounts to stdout "//&
                  "when the energy files are written.", default=.true.)
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
   call get_param(param_file, mdl, "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.", units="s", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "MAXTRUNC", CS%maxtrunc, &
-                 "The run will be stopped, and the day set to a very \n"//&
-                 "large value if the velocity is truncated more than \n"//&
-                 "MAXTRUNC times between energy saves.  Set MAXTRUNC to 0 \n"//&
+                 "The run will be stopped, and the day set to a very "//&
+                 "large value if the velocity is truncated more than "//&
+                 "MAXTRUNC times between energy saves.  Set MAXTRUNC to 0 "//&
                  "to stop if there is any truncation of velocities.", &
                  units="truncations save_interval-1", default=0)
 
   call get_param(param_file, mdl, "MAX_ENERGY", CS%max_Energy, &
-                 "The maximum permitted average energy per unit mass; the \n"//&
-                 "model will be stopped if there is more energy than \n"//&
+                 "The maximum permitted average energy per unit mass; the "//&
+                 "model will be stopped if there is more energy than "//&
                  "this.  If zero or negative, this is set to 10*MAXVEL^2.", &
                  units="m2 s-2", default=0.0)
   if (CS%max_Energy <= 0.0) then
     call get_param(param_file, mdl, "MAXVEL", maxvel, &
-                 "The maximum velocity allowed before the velocity \n"//&
+                 "The maximum velocity allowed before the velocity "//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
     call log_param(param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
   call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
-                 "The file to use to write the energies and globally \n"//&
+                 "The file to use to write the energies and globally "//&
                  "summed diagnostics.", default="ocean.stats")
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
@@ -215,10 +230,10 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
 
   if (CS%do_APE_calc) then
     call get_param(param_file, mdl, "READ_DEPTH_LIST", CS%read_depth_list, &
-                   "Read the depth list from a file if it exists or \n"//&
+                   "Read the depth list from a file if it exists or "//&
                    "create that file otherwise.", default=.false.)
     call get_param(param_file, mdl, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
-                   "The minimum increment between the depths of the \n"//&
+                   "The minimum increment between the depths of the "//&
                    "entries in the depth-list file.", &
                    units="m", default=1.0E-10, scale=US%m_to_Z)
     if (CS%read_depth_list) then
@@ -226,6 +241,17 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                    "The name of the depth list file.", default="Depth_list.nc")
       if (scan(CS%depth_list_file,'/') == 0) &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
+
+      call get_param(param_file, mdl, "REQUIRE_DEPTH_LIST_CHECKSUMS", &
+                     CS%require_depth_list_chksum, &
+                 "Require that matching checksums be in Depth_list.nc "//&
+                 "when reading the file.", default=.true.)
+      if (.not. CS%require_depth_list_chksum) &
+        call get_param(param_file, mdl, "UPDATE_DEPTH_LIST_CHECKSUMS", &
+                     CS%update_depth_list_chksum, &
+                 "Automatically update the Depth_list.nc file if the "//&
+                 "checksums are missing or do not match current values.", &
+                 default=.false.)
     endif
 
     allocate(CS%lH(G%ke))
@@ -238,12 +264,12 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                  "The time unit for ENERGYSAVEDAYS.", &
                  units="s", default=86400.0)
   call get_param(param_file, mdl, "ENERGYSAVEDAYS",CS%energysavedays, &
-                 "The interval in units of TIMEUNIT between saves of the \n"//&
+                 "The interval in units of TIMEUNIT between saves of the "//&
                  "energies of the run and other globally summed diagnostics.",&
                  default=set_time(0,days=1), timeunit=Time_unit)
   call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC",CS%energysavedays_geometric, &
-                 "The starting interval in units of TIMEUNIT for the first call \n"//&
-                 "to save the energies of the run and other globally summed diagnostics. \n"//&
+                 "The starting interval in units of TIMEUNIT for the first call "//&
+                 "to save the energies of the run and other globally summed diagnostics. "//&
                  "The interval increases by a factor of 2. after each call to write_energy.",&
                  default=set_time(seconds=0), timeunit=Time_unit)
 
@@ -1102,7 +1128,7 @@ subroutine create_depth_list(G, CS)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
     Dlist(list_pos) = G%bathyT(i,j)
-    Arealist(list_pos) = G%mask2dT(i,j)*G%areaT(i,j)
+    Arealist(list_pos) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
 
   ! These sums reproduce across PEs because the arrays are only nonzero on one PE.
@@ -1203,6 +1229,10 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
   ! Local variables
   real, allocatable :: tmp(:)
   integer :: ncid, dimid(1), Did, Aid, Vid, status, k
+  character(len=16) :: depth_chksum, area_chksum
+
+  ! All ranks are required to compute the global checksum
+  call get_depth_list_checksums(G, depth_chksum, area_chksum)
 
   if (.not.is_root_pe()) return
 
@@ -1248,6 +1278,15 @@ subroutine write_depth_list(G, US, CS, filename, list_size)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
 
+  ! Dependency checksums
+  status = NF90_PUT_ATT(ncid, NF90_GLOBAL, depth_chksum_attr, depth_chksum)
+  if (status /= NF90_NOERR) call MOM_error(WARNING, &
+      filename//" "//depth_chksum_attr//" "//trim(NF90_STRERROR(status)))
+
+  status = NF90_PUT_ATT(ncid, NF90_GLOBAL, area_chksum_attr, area_chksum)
+  if (status /= NF90_NOERR) call MOM_error(WARNING, &
+      filename//" "//area_chksum_attr//" "//trim(NF90_STRERROR(status)))
+
   status = NF90_ENDDEF(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//trim(NF90_STRERROR(status)))
@@ -1287,6 +1326,9 @@ subroutine read_depth_list(G, US, CS, filename)
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)
+  character(len=16) :: depth_file_chksum, depth_grid_chksum
+  character(len=16) :: area_file_chksum, area_grid_chksum
+  integer :: depth_attr_status, area_attr_status
 
   mdl = "MOM_sum_output read_depth_list:"
 
@@ -1294,6 +1336,60 @@ subroutine read_depth_list(G, US, CS, filename)
   if (status /= NF90_NOERR) then
     call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
         " - "//trim(NF90_STRERROR(status)))
+  endif
+
+  ! Check bathymetric consistency
+  depth_attr_status = NF90_GET_ATT(ncid, NF90_GLOBAL, depth_chksum_attr, &
+                                   depth_file_chksum)
+  area_attr_status = NF90_GET_ATT(ncid, NF90_GLOBAL, area_chksum_attr, &
+                                  area_file_chksum)
+
+  if (any([depth_attr_status, area_attr_status] == NF90_ENOTATT)) then
+    var_msg = trim(CS%depth_list_file) // " checksums are missing;"
+    if (CS%require_depth_list_chksum) then
+      call MOM_error(FATAL, trim(var_msg) // " aborting.")
+    elseif (CS%update_depth_list_chksum) then
+      call MOM_error(WARNING, trim(var_msg) // " updating file.")
+      call create_depth_list(G, CS)
+      call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
+      return
+    else
+      call MOM_error(WARNING, &
+        trim(var_msg) // " some diagnostics may not be reproducible.")
+    endif
+  else
+    ! Validate netCDF call
+    if (depth_attr_status /= NF90_NOERR) then
+      var_msg = mdl // "Failed to read " // trim(filename) // ":" &
+                // depth_chksum_attr
+      call MOM_error(FATAL, &
+        trim(var_msg) // " - " // NF90_STRERROR(depth_attr_status))
+    endif
+
+    if (area_attr_status /= NF90_NOERR) then
+      var_msg = mdl // "Failed to read " // trim(filename) // ":" &
+                // area_chksum_attr
+      call MOM_error(FATAL, &
+        trim(var_msg) // " - " // NF90_STRERROR(area_attr_status))
+    endif
+
+    call get_depth_list_checksums(G, depth_grid_chksum, area_grid_chksum)
+
+    if (depth_grid_chksum /= depth_file_chksum &
+            .or. area_grid_chksum /= area_file_chksum) then
+      var_msg = trim(CS%depth_list_file) // " checksums do not match;"
+      if (CS%require_depth_list_chksum) then
+        call MOM_error(FATAL, trim(var_msg) // " aborting.")
+      elseif (CS%update_depth_list_chksum) then
+        call MOM_error(WARNING, trim(var_msg) // " updating file.")
+        call create_depth_list(G, CS)
+        call write_depth_list(G, US, CS, CS%depth_list_file, CS%list_size+1)
+        return
+      else
+        call MOM_error(WARNING, &
+          trim(var_msg) // " some diagnostics may not be reproducible.")
+      endif
+    endif
   endif
 
   var_name = "depth"
@@ -1362,6 +1458,42 @@ subroutine read_depth_list(G, US, CS, filename)
   deallocate(tmp)
 
 end subroutine read_depth_list
+
+
+!> Return the checksums required to verify DEPTH_LIST_FILE contents.
+!!
+!! This function computes checksums for the bathymetry (G%bathyT) and masked
+!! area (mask2dT * areaT) fields of the model grid G, which are used to compute
+!! the depth list.  A difference in checksum indicates that a different method
+!! was used to compute the grid data, and that any results using the depth
+!! list, such as APE, will not be reproducible.
+!!
+!! Checksums are saved as hexadecimal strings, in order to avoid potential
+!! datatype issues with netCDF attributes.
+subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
+  type(ocean_grid_type), intent(in) :: G          !< Ocean grid structure
+  character(len=16), intent(out) :: depth_chksum  !< Depth checksum hexstring
+  character(len=16), intent(out) :: area_chksum   !< Area checksum hexstring
+
+  integer :: i, j
+  real, allocatable :: field(:,:)
+
+  allocate(field(G%isc:G%iec, G%jsc:G%jec))
+
+  ! Depth checksum
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    field(i,j) = G%bathyT(i,j)
+  enddo ; enddo
+  write(depth_chksum, '(Z16)') mpp_chksum(field(:,:))
+
+  ! Area checksum
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    field(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
+  enddo ; enddo
+  write(area_chksum, '(Z16)') mpp_chksum(field(:,:))
+
+  deallocate(field)
+end subroutine get_depth_list_checksums
 
 !> \namespace mom_sum_output
 !!

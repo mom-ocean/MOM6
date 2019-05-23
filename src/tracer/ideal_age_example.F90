@@ -102,23 +102,23 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DO_IDEAL_AGE", do_ideal_age, &
-                 "If true, use an ideal age tracer that is set to 0 age \n"//&
+                 "If true, use an ideal age tracer that is set to 0 age "//&
                  "in the mixed layer and ages at unit rate in the interior.", &
                  default=.true.)
   call get_param(param_file, mdl, "DO_IDEAL_VINTAGE", do_vintage, &
-                 "If true, use an ideal vintage tracer that is set to an \n"//&
-                 "exponentially increasing value in the mixed layer and \n"//&
+                 "If true, use an ideal vintage tracer that is set to an "//&
+                 "exponentially increasing value in the mixed layer and "//&
                  "is conserved thereafter.", default=.false.)
   call get_param(param_file, mdl, "DO_IDEAL_AGE_DATED", do_ideal_age_dated, &
-                 "If true, use an ideal age tracer that is everywhere 0 \n"//&
-                 "before IDEAL_AGE_DATED_START_YEAR, but the behaves like \n"//&
-                 "the standard ideal age tracer - i.e. is set to 0 age in \n"//&
+                 "If true, use an ideal age tracer that is everywhere 0 "//&
+                 "before IDEAL_AGE_DATED_START_YEAR, but the behaves like "//&
+                 "the standard ideal age tracer - i.e. is set to 0 age in "//&
                  "the mixed layer and ages at unit rate in the interior.", &
                  default=.false.)
 
 
   call get_param(param_file, mdl, "AGE_IC_FILE", CS%IC_file, &
-                 "The file in which the age-tracer initial values can be \n"//&
+                 "The file in which the age-tracer initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -131,9 +131,9 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "If true, AGE_IC_FILE is in depth space, not layer space", &
                  default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if the tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if the tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
   CS%ntr = 0

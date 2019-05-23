@@ -7,6 +7,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -159,9 +160,10 @@ end subroutine Rossby_front_initialize_temperature_salinity
 
 
 !> Initialization of u and v in the Rossby front test
-subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_read_params)
+subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                               intent(out) :: u  !< i-component of velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -178,7 +180,8 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
   real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f
   real    :: dRho_dT
   real    :: Dml, zi, zc, zm ! Depths [Z ~> m].
-  real    :: f, Ty
+  real    :: f            ! The local Coriolis parameter [T-1 ~> s-1]
+  real    :: Ty
   real    :: hAtU         ! Interpolated layer thickness [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -200,9 +203,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
   u(:,:,:) = 0.0
 
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
-    f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
+    f = 0.5* (G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
-      dUdT = ( GV%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
+      dUdT = ( GV%g_Earth * dRho_dT ) / ( US%s_to_T * f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.

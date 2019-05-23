@@ -627,10 +627,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 !$OMP                          private(f2_h,mag_beta)
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
-        f2_h = absurdly_small_freq2 + 0.25 * &
+        f2_h = absurdly_small_freq2 + 0.25 * US%s_to_T**2 * &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        mag_beta = sqrt(0.5 * ( &
+        mag_beta = sqrt(0.5 * US%s_to_T**2 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -676,10 +676,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 !$OMP                          private(f2_h,mag_beta)
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
-        f2_h = absurdly_small_freq2 + 0.25 * &
+        f2_h = absurdly_small_freq2 + 0.25 * US%s_to_T**2 * &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        mag_beta = sqrt(0.5 * ( &
+        mag_beta = sqrt(0.5 * US%s_to_T**2 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -1450,11 +1450,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
-                 "The lower fraction of water column over which N2 is limited as monotonic\n"// &
+                 "The lower fraction of water column over which N2 is limited as monotonic "// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
                  units='nondim', default=0.)
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
-                 "The depth below which N2 is limited as monotonic for the\n"// &
+                 "The depth below which N2 is limited as monotonic for the "// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
                  units='m', default=-1.)
 
@@ -1916,7 +1916,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
-        'Coriolis parameter at corner (Bu) points', 's-1', interp_method='none')
+        'Coriolis parameter at corner (Bu) points', 's-1', interp_method='none', conversion=US%s_to_T)
   if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxt', diag%axesT1, &

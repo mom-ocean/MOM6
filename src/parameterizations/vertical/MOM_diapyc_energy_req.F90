@@ -95,8 +95,8 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
       enddo
 
       ustar = 0.01*US%m_to_Z ! Change this to being an input parameter?
-      absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                   (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
+      absf = 0.25*US%s_to_T*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                             (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
       do K=2,nz
         tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z
@@ -1291,14 +1291,14 @@ subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
-                 "A scaling factor for the diapycnal diffusivity used in \n"//&
+                 "A scaling factor for the diapycnal diffusivity used in "//&
                  "testing the energy requirements.", default=1.0, units="nondim")
   call get_param(param_file, mdl, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
-                 "A scaling factor for the column height change correction \n"//&
+                 "A scaling factor for the column height change correction "//&
                  "used in testing the energy requirements.", default=1.0, units="nondim")
   call get_param(param_file, mdl, "ENERGY_REQ_USE_TEST_PROFILE", &
                  CS%use_test_Kh_profile, &
-                 "If true, use the internal test diffusivity profile in \n"//&
+                 "If true, use the internal test diffusivity profile in "//&
                  "place of any that might be passed in as an argument.", default=.false.)
 
   CS%id_ERt = register_diag_field('ocean_model', 'EnReqTest_ERt', diag%axesZi, Time, &

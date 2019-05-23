@@ -40,6 +40,7 @@ type, public :: doc_type ; private
   logical :: defineSyntax = .false. !< If true, use '\#def' syntax instead of a=b syntax
   logical :: warnOnConflicts = .false. !< Cause a WARNING error if defaults differ.
   integer :: commentColumn = 32     !< Number of spaces before the comment marker.
+  integer :: max_line_len = 112     !< The maximum length of message lines.
   type(link_msg), pointer :: chain_msg => NULL() !< Database of messages
   character(len=240) :: blockPrefix = '' !< The full name of the current block.
 end type doc_type
@@ -457,9 +458,16 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   integer, optional, intent(in) :: indent      !< An amount by which to indent this message
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
-  character(len=mLen) :: mesg
-  integer :: start_ind = 1, end_ind, indnt, tab, len_tab, len_nl
-  logical :: all, short, layout, debug
+
+  ! Local variables
+  character(len=mLen) :: mesg          ! A full line of a message including indents.
+  character(len=mLen) :: mesg_text     ! A line of message text without preliminary indents.
+  integer :: start_ind = 1             ! The starting index in the description for the next line.
+  integer :: nl_ind, tab_ind, end_ind  ! The indices of new-lines, tabs, and the end of a line.
+  integer :: len_text, len_tab, len_nl ! The lengths of the text string, tabs and new-lines.
+  integer :: indnt, msg_pad            ! Space counts used to format a message.
+  logical :: msg_done, reset_msg_pad   ! Logicals used to format messages.
+  logical :: all, short, layout, debug ! Flags indicating which files to write into.
 
   layout = .false. ; if (present(layoutParam)) layout = layoutParam
   debug = .false. ; if (present(debuggingParam)) debug = debuggingParam
@@ -475,41 +483,64 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   if (len_trim(desc) == 0) return
 
   len_tab = len_trim("_\t_") - 2
-  len_nl = len_trim("_\n_") -2
+  len_nl = len_trim("_\n_") - 2
 
   indnt = doc%commentColumn ; if (present(indent)) indnt = indent
-  start_ind = 1
+  len_text = doc%max_line_len - (indnt + 2)
+  start_ind = 1 ; msg_pad = 0 ; msg_done = .false.
   do
     if (len_trim(desc(start_ind:)) < 1) exit
 
-    end_ind = index(desc(start_ind:), "\n")
+    nl_ind = index(desc(start_ind:), "\n")
 
-    if (end_ind > 0) then
-      mesg = repeat(" ",indnt)//"! "//trim(desc(start_ind:start_ind+end_ind-2))
-      start_ind = start_ind + end_ind - 1 + len_nl
-
-      do ; tab = index(mesg, "\t")
-        if (tab == 0) exit
-        mesg(tab:) = "  "//trim(mesg(tab+len_tab:))
-      enddo
-      if (all) write(doc%unitAll, '(a)') trim(mesg)
-      if (short) write(doc%unitShort, '(a)') trim(mesg)
-      if (layout) write(doc%unitLayout, '(a)') trim(mesg)
-      if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
-    else
-      mesg = repeat(" ",indnt)//"! "//trim(desc(start_ind:))
-      do ; tab = index(mesg, "\t")
-        if (tab == 0) exit
-        mesg(tab:) = "  "//trim(mesg(tab+len_tab:))
-      enddo
-      if (all) write(doc%unitAll, '(a)') trim(mesg)
-      if (short) write(doc%unitShort, '(a)') trim(mesg)
-      if (layout) write(doc%unitLayout, '(a)') trim(mesg)
-      if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
-      exit
+    end_ind = 0
+    if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_text-msg_pad)) then
+      ! This line is too long despite the new-line character.  Look for an earlier space to break.
+      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
+      if (end_ind > 0) nl_ind = 0
+    elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_text-msg_pad)) then
+      ! This line is too long and does not have a new-line character.  Look for a space to break.
+      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
     endif
 
+    reset_msg_pad = .false.
+    if (nl_ind > 0) then
+      mesg_text = trim(desc(start_ind:start_ind+nl_ind-2))
+      start_ind = start_ind + nl_ind + len_nl - 1
+      reset_msg_pad = .true.
+    elseif (end_ind > 0) then
+      mesg_text = trim(desc(start_ind:start_ind+end_ind))
+      start_ind = start_ind + end_ind + 1
+      ! Adjust the starting point to move past leading spaces.
+      start_ind = start_ind + (len_trim(desc(start_ind:)) - len_trim(adjustl(desc(start_ind:))))
+    else
+      mesg_text = trim(desc(start_ind:))
+      msg_done = .true.
+    endif
+
+    do ; tab_ind = index(mesg_text, "\t") ! Replace \t with 2 spaces.
+      if (tab_ind == 0) exit
+      mesg_text(tab_ind:) = "  "//trim(mesg_text(tab_ind+len_tab:))
+    enddo
+
+    mesg = repeat(" ",indnt)//"! "//repeat(" ",msg_pad)//trim(mesg_text)
+
+    if (reset_msg_pad) then
+      msg_pad = 0
+    elseif (msg_pad == 0) then ! Indent continuation lines.
+      msg_pad = len_trim(mesg_text) - len_trim(adjustl(mesg_text))
+      ! If already indented, indent an additional 2 spaces.
+      if (msg_pad >= 2) msg_pad = msg_pad + 2
+    endif
+
+    if (all) write(doc%unitAll, '(a)') trim(mesg)
+    if (short) write(doc%unitShort, '(a)') trim(mesg)
+    if (layout) write(doc%unitLayout, '(a)') trim(mesg)
+    if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
+
+    if (msg_done) exit
   enddo
+
 end subroutine writeMessageAndDesc
 
 ! ----------------------------------------------------------------------

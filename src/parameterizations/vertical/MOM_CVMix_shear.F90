@@ -213,14 +213,14 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of shear-driven turbulence via CVMix (various options)")
   call get_param(param_file, mdl, "USE_LMD94", CS%use_LMD94, &
-                 "If true, use the Large-McWilliams-Doney (JGR 1994) \n"//&
+                 "If true, use the Large-McWilliams-Doney (JGR 1994) "//&
                  "shear mixing parameterization.", default=.false.)
   if (CS%use_LMD94) then
      NumberTrue=NumberTrue + 1
      CS%Mix_Scheme='KPP'
   endif
   call get_param(param_file, mdl, "USE_PP81", CS%use_PP81, &
-                 "If true, use the Pacanowski and Philander (JPO 1981) \n"//&
+                 "If true, use the Pacanowski and Philander (JPO 1981) "//&
                  "shear mixing parameterization.", default=.false.)
   if (CS%use_PP81) then
      NumberTrue = NumberTrue + 1
@@ -243,16 +243,16 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "Leading coefficient in KPP shear mixing.", &
                  units="nondim", default=5.e-3)
   call get_param(param_file, mdl, "RI_ZERO", CS%Ri_Zero, &
-                 "Critical Richardson for KPP shear mixing,"// &
-                 " NOTE this the internal mixing and this is"// &
-                 " not for setting the boundary layer depth." &
+                 "Critical Richardson for KPP shear mixing, "// &
+                 "NOTE this the internal mixing and this is "// &
+                 "not for setting the boundary layer depth." &
                  ,units="nondim", default=0.8)
   call get_param(param_file, mdl, "KPP_EXP", CS%KPP_exp, &
-                 "Exponent of unitless factor of diffusivities,"// &
-                 " for KPP internal shear mixing scheme." &
+                 "Exponent of unitless factor of diffusivities, "// &
+                 "for KPP internal shear mixing scheme." &
                  ,units="nondim", default=3.0)
   call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
-                 "If true, vertically smooth the Richardson"// &
+                 "If true, vertically smooth the Richardson "// &
                  "number by applying a 1-2-1 filter once.", &
                  default = .false.)
   call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &

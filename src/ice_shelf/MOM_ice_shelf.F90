@@ -375,8 +375,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
           ! Estimate the neutral ocean boundary layer thickness as the minimum of the
           ! reported ocean mixed layer thickness and the neutral Ekman depth.
-          absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                       (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+          absf = 0.25*US%s_to_T*((abs(US%s_to_T*G%CoriolisBu(I,J)) + abs(US%s_to_T*G%CoriolisBu(I-1,J-1))) + &
+                                 (abs(US%s_to_T*G%CoriolisBu(I,J-1)) + abs(US%s_to_T*G%CoriolisBu(I-1,J))))
           if (absf*state%Hml(i,j) <= VK*ustar_h) then ; hBL_neut = state%Hml(i,j)
           else ; hBL_neut = (VK*ustar_h) / absf ; endif
           hBL_neut_h_molec = ZETA_N * ((hBL_neut * ustar_h) / (5.0 * CS%Kv_molec))
@@ -1170,15 +1170,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  default=.false.)
   if (shelf_mass_is_dynamic) then
     call get_param(param_file, mdl, "OVERRIDE_SHELF_MOVEMENT", CS%override_shelf_movement, &
-                 "If true, user provided code specifies the ice-shelf \n"//&
+                 "If true, user provided code specifies the ice-shelf "//&
                  "movement instead of the dynamic ice model.", default=.false.)
     CS%active_shelf_dynamics = .not.CS%override_shelf_movement
     call get_param(param_file, mdl, "GROUNDING_LINE_INTERPOLATE", CS%GL_regularize, &
-                 "If true, regularize the floatation condition at the \n"//&
+                 "If true, regularize the floatation condition at the "//&
                  "grounding line as in Goldberg Holland Schoof 2009.", default=.false.)
     call get_param(param_file, mdl, "GROUNDING_LINE_COUPLE", CS%GL_couple, &
-                 "If true, let the floatation condition be determined by \n"//&
-                 "ocean column thickness. This means that update_OD_ffrac \n"//&
+                 "If true, let the floatation condition be determined by "//&
+                 "ocean column thickness. This means that update_OD_ffrac "//&
                  "will be called.  GL_REGULARIZE and GL_COUPLE are exclusive.", &
                  default=.false., do_not_log=CS%GL_regularize)
     if (CS%GL_regularize) CS%GL_couple = .false.
@@ -1188,24 +1188,24 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "If true, use a thermodynamically interactive ice shelf.", &
                  default=.false.)
   call get_param(param_file, mdl, "SHELF_THREE_EQN", CS%threeeq, &
-                 "If true, use the three equation expression of \n"//&
-                 "consistency to calculate the fluxes at the ice-ocean \n"//&
+                 "If true, use the three equation expression of "//&
+                 "consistency to calculate the fluxes at the ice-ocean "//&
                  "interface.", default=.true.)
   call get_param(param_file, mdl, "SHELF_INSULATOR", CS%insulator, &
-                 "If true, the ice shelf is a perfect insulatior \n"//&
+                 "If true, the ice shelf is a perfect insulatior "//&
                  "(no conduction).", default=.false.)
   call get_param(param_file, mdl, "MELTING_CUTOFF_DEPTH", CS%cutoff_depth, &
-                 "Depth above which the melt is set to zero (it must be >= 0) \n"//&
+                 "Depth above which the melt is set to zero (it must be >= 0) "//&
                  "Default value won't affect the solution.", default=0.0)
   if (CS%cutoff_depth < 0.) &
     call MOM_error(WARNING,"Initialize_ice_shelf: MELTING_CUTOFF_DEPTH must be >= 0.")
 
   call get_param(param_file, mdl, "CONST_SEA_LEVEL", CS%constant_sea_level, &
-                 "If true, apply evaporative, heat and salt fluxes in \n"//&
-                  "the sponge region. This will avoid a large increase \n"//&
-                 "in sea level. This option is needed for some of the \n"//&
-                 "ISOMIP+ experiments (Ocean3 and Ocean4). \n"//&
-                 "IMPORTANT: it is not currently possible to do \n"//&
+                 "If true, apply evaporative, heat and salt fluxes in "//&
+                  "the sponge region. This will avoid a large increase "//&
+                 "in sea level. This option is needed for some of the "//&
+                 "ISOMIP+ experiments (Ocean3 and Ocean4). "//&
+                 "IMPORTANT: it is not currently possible to do "//&
                  "prefect restarts using this flag.", default=.false.)
 
   call get_param(param_file, mdl, "ISOMIP_S_SUR_SPONGE", &
@@ -1217,8 +1217,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                 default=-1.9, do_not_log=.true.)
 
   call get_param(param_file, mdl, "SHELF_3EQ_GAMMA", CS%const_gamma, &
-                 "If true, user specifies a constant nondimensional heat-transfer coefficient \n"//&
-                 "(GAMMA_T_3EQ), from which the salt-transfer coefficient is then computed \n"//&
+                 "If true, user specifies a constant nondimensional heat-transfer coefficient "//&
+                 "(GAMMA_T_3EQ), from which the salt-transfer coefficient is then computed "//&
                  " as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
   if (CS%const_gamma) call get_param(param_file, mdl, "SHELF_3EQ_GAMMA_T", CS%Gamma_T_3EQ, &
                  "Nondimensional heat-transfer coefficient.",default=2.2E-2, &
@@ -1230,19 +1230,19 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   if (CS%threeeq) &
     call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
-                 "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) \n "//&
-                 "is computed from a quadratic equation. Otherwise, the previous \n"//&
+                 "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) "//&
+                 "is computed from a quadratic equation. Otherwise, the previous "//&
                  "interactive method to estimate Sbdry is used.", default=.false.)
   if (CS%find_salt_root) then ! read liquidus coeffs.
      call get_param(param_file, mdl, "TFREEZE_S0_P0",CS%lambda1, &
-                 "this is the freezing potential temperature at \n"//&
+                 "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DS",CS%lambda1, &
-                 "this is the derivative of the freezing potential \n"//&
+                 "this is the derivative of the freezing potential "//&
                  "temperature with salinity.", &
                  units="degC psu-1", default=-0.054, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DP",CS%lambda3, &
-                 "this is the derivative of the freezing potential \n"//&
+                 "this is the derivative of the freezing potential "//&
                  "temperature with pressure.", &
                  units="degC Pa-1", default=0.0, do_not_log=.true.)
 
@@ -1250,7 +1250,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
 
   if (.not.CS%threeeq) &
     call get_param(param_file, mdl, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
-                 "If SHELF_THREE_EQN is false, this the fixed turbulent \n"//&
+                 "If SHELF_THREE_EQN is false, this the fixed turbulent "//&
                  "exchange velocity at the ice-ocean interface.", &
                  units="m s-1", fail_if_missing=.true.)
 
@@ -1261,9 +1261,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "The heat capacity of sea water.", units="J kg-1 K-1", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0) !### MAKE THIS A SEPARATE PARAMETER.
   call get_param(param_file, mdl, "C_P_ICE", CS%Cp_ice, &
@@ -1271,13 +1271,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  default=2.10e3)
 
   call get_param(param_file, mdl, "ICE_SHELF_FLUX_FACTOR", CS%flux_factor, &
-                 "Non-dimensional factor applied to shelf thermodynamic \n"//&
+                 "Non-dimensional factor applied to shelf thermodynamic "//&
                  "fluxes.", units="none", default=1.0)
 
   call get_param(param_file, mdl, "KV_ICE", CS%kv_ice, &
                  "The viscosity of the ice.", units="m2 s-1", default=1.0e10)
   call get_param(param_file, mdl, "KV_MOLECULAR", CS%kv_molec, &
-                 "The molecular kinimatic viscosity of sea water at the \n"//&
+                 "The molecular kinimatic viscosity of sea water at the "//&
                  "freezing temperature.", units="m2 s-1", default=1.95e-6)
   call get_param(param_file, mdl, "ICE_SHELF_SALINITY", CS%Salin_ice, &
                  "The salinity of the ice inside the ice shelf.", units="psu", &
@@ -1286,17 +1286,17 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "The temperature at the center of the ice shelf.", &
                  units = "degC", default=-15.0)
   call get_param(param_file, mdl, "KD_SALT_MOLECULAR", CS%kd_molec_salt, &
-                 "The molecular diffusivity of salt in sea water at the \n"//&
+                 "The molecular diffusivity of salt in sea water at the "//&
                  "freezing point.", units="m2 s-1", default=8.02e-10)
   call get_param(param_file, mdl, "KD_TEMP_MOLECULAR", CS%kd_molec_temp, &
-                 "The molecular diffusivity of heat in sea water at the \n"//&
+                 "The molecular diffusivity of heat in sea water at the "//&
                  "freezing point.", units="m2 s-1", default=1.41e-7)
   call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
                  "avg ocean density used in floatation cond", &
                  units="kg m-3", default=1035.)
   call get_param(param_file, mdl, "DT_FORCING", CS%time_step, &
-                 "The time step for changing forcing, coupling with other \n"//&
-                 "components, or potentially writing certain diagnostics. \n"//&
+                 "The time step for changing forcing, coupling with other "//&
+                 "components, or potentially writing certain diagnostics. "//&
                  "The default value is given by DT.", units="s", default=0.0)
 
   call get_param(param_file, mdl, "COL_THICK_MELT_THRESHOLD", CS%col_thick_melt_threshold, &
@@ -1304,14 +1304,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  default=0.0)
 
   call get_param(param_file, mdl, "READ_TIDEAMP", read_TIDEAMP, &
-                 "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
+                 "If true, read a file (given by TIDEAMP_FILE) containing "//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
 
   call safe_alloc_ptr(CS%utide,isd,ied,jsd,jed)   ; CS%utide(:,:) = 0.0
 
   if (read_TIDEAMP) then
     call get_param(param_file, mdl, "TIDEAMP_FILE", TideAmp_file, &
-                 "The path to the file containing the spatially varying \n"//&
+                 "The path to the file containing the spatially varying "//&
                  "tidal amplitudes.", &
                  default="tideamp.nc")
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -1353,15 +1353,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "The minimum value of ustar under ice sheves.", &
                  units="m s-1", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "CDRAG_SHELF", cdrag, &
-       "CDRAG is the drag coefficient relating the magnitude of \n"//&
+       "CDRAG is the drag coefficient relating the magnitude of "//&
        "the velocity field to the surface stress.", units="nondim", &
        default=0.003)
   CS%cdrag = cdrag
   if (CS%ustar_bg <= 0.0) then
     call get_param(param_file, mdl, "DRAG_BG_VEL_SHELF", drag_bg_vel, &
-                 "DRAG_BG_VEL is either the assumed bottom velocity (with \n"//&
-                 "LINEAR_DRAG) or an unresolved  velocity that is \n"//&
-                 "combined with the resolved velocity to estimate the \n"//&
+                 "DRAG_BG_VEL is either the assumed bottom velocity (with "//&
+                 "LINEAR_DRAG) or an unresolved  velocity that is "//&
+                 "combined with the resolved velocity to estimate the "//&
                  "velocity magnitude.", units="m s-1", default=0.0, scale=US%m_to_Z)
     if (CS%cdrag*drag_bg_vel > 0.0) CS%ustar_bg = sqrt(CS%cdrag)*drag_bg_vel
   endif
@@ -1394,8 +1394,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call rescale_dyn_horgrid_bathymetry(dG, US%Z_to_m)
 
   ! Set up the Coriolis parameter, G%f, usually analytically.
-  call MOM_initialize_rotation(dG%CoriolisBu, dG, param_file)
-  ! This copies grid elements, inglucy bathyT and CoriolisBu from dG to CS%grid.
+  call MOM_initialize_rotation(dG%CoriolisBu, dG, param_file, US)
+  ! This copies grid elements, including bathyT and CoriolisBu from dG to CS%grid.
   call copy_dyngrid_to_MOM_grid(dG, CS%grid)
 
   call destroy_dyn_horgrid(dG)
@@ -1536,7 +1536,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "If true, save the ice shelf initial conditions.", &
                  default=.false.)
   if (save_IC) call get_param(param_file, mdl, "SHELF_IC_OUTPUT_FILE", IC_file,&
-                 "The name-root of the output file for the ice shelf \n"//&
+                 "The name-root of the output file for the ice shelf "//&
                  "initial conditions.", default="MOM_Shelf_IC")
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
@@ -1606,7 +1606,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
   new_sim_2 = .true. ; if (present(new_sim)) new_sim_2 = new_sim
 
   call get_param(param_file, mdl, "ICE_SHELF_CONFIG", config, &
-                 "A string that specifies how the ice shelf is \n"//&
+                 "A string that specifies how the ice shelf is "//&
                  "initialized. Valid options include:\n"//&
                  " \tfile\t Read from a file.\n"//&
                  " \tzero\t Set shelf mass to 0 everywhere.\n"//&
@@ -1622,8 +1622,8 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
       inputdir = slasher(inputdir)
 
       call get_param(param_file, mdl, "SHELF_FILE", shelf_file, &
-              "If DYNAMIC_SHELF_MASS = True, OVERRIDE_SHELF_MOVEMENT = True \n"//&
-              "and ICE_SHELF_MASS_FROM_FILE = True, this is the file from \n"//&
+              "If DYNAMIC_SHELF_MASS = True, OVERRIDE_SHELF_MOVEMENT = True "//&
+              "and ICE_SHELF_MASS_FROM_FILE = True, this is the file from "//&
               "which to read the shelf mass and area.", &
                default="shelf_mass.nc")
       call get_param(param_file, mdl, "SHELF_MASS_VAR", shelf_mass_var, &

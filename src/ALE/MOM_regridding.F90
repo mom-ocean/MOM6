@@ -140,8 +140,8 @@ public get_zlike_CS, get_sigma_CS, get_rho_CS
 !> Documentation for coordinate options
 character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
-                 " ZSTAR, Z* - stetched geopotential z*\n"//&
-                 " SIGMA_SHELF_ZSTAR - stetched geopotential z* ignoring shelf\n"//&
+                 " ZSTAR, Z* - stretched geopotential z*\n"//&
+                 " SIGMA_SHELF_ZSTAR - stretched geopotential z* ignoring shelf\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
@@ -230,8 +230,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   if (main_parameters) then
     ! Read coordinate units parameter (main model = REGRIDDING_COORDINATE_UNITS)
     call get_param(param_file, mdl, "REGRIDDING_COORDINATE_UNITS", coord_units, &
-                 "Units of the regridding coordinuate.",& !### Spelling error "coordinuate"
-                 default=coordinateUnits(coord_mode))
+                 "Units of the regridding coordinate.", default=coordinateUnits(coord_mode))
   else
     coord_units=coordinateUnits(coord_mode)
   endif
@@ -245,21 +244,21 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       string2 = 'PPM_H4' ! Default for diagnostics
     endif
     call get_param(param_file, mdl, "INTERPOLATION_SCHEME", string, &
-                 "This sets the interpolation scheme to use to\n"//&
-                 "determine the new grid. These parameters are\n"//&
-                 "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
-                 "set to a function of state. Otherwise, it is not\n"//&
-                 "used. It can be one of the following schemes:\n"//&
+                 "This sets the interpolation scheme to use to "//&
+                 "determine the new grid. These parameters are "//&
+                 "only relevant when REGRIDDING_COORDINATE_MODE is "//&
+                 "set to a function of state. Otherwise, it is not "//&
+                 "used. It can be one of the following schemes: "//&
                  trim(regriddingInterpSchemeDoc), default=trim(string2))
     call set_regrid_params(CS, interp_scheme=string)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
     call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
-                 "When defined, a proper high-order reconstruction\n"//&
-                 "scheme is used within boundary cells rather\n"//&
-                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
-                 "PPM reconstruction will also be used within\n"//&
+                 "When defined, a proper high-order reconstruction "//&
+                 "scheme is used within boundary cells rather "//&
+                 "than PCM. E.g., if PPM is used for remapping, a "//&
+                 "PPM reconstruction will also be used within "//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
     call set_regrid_params(CS, boundary_extrapolation=tmpLogical)
   else
@@ -278,7 +277,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (maximum_depth>3000.) string2='WOA09' ! For convenience
   endif
   call get_param(param_file, mdl, param_name, string, &
-                 "Determines how to specify the coordinate\n"//&
+                 "Determines how to specify the coordinate "//&
                  "resolution. Valid options are:\n"//&
                  " PARAM       - use the vector-parameter "//trim(coord_res_param)//"\n"//&
                  " UNIFORM[:N] - uniformly distributed\n"//&
@@ -420,7 +419,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
-               'HYBRID target densities for itnerfaces', units=coordinateUnits(coord_mode))
+               'HYBRID target densities for interfaces', units=coordinateUnits(coord_mode))
     endif
   elseif (index(trim(string),'WOA09')==1) then
     if (len_trim(string)==5) then
@@ -502,15 +501,15 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
   if (main_parameters .and. coord_is_state_dependent) then
     call get_param(param_file, mdl, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
-                 "When interpolating potential density profiles we can add\n"//&
-                 "some artificial compressibility solely to make homogenous\n"//&
+                 "When interpolating potential density profiles we can add "//&
+                 "some artificial compressibility solely to make homogeneous "//&
                  "regions appear stratified.", default=0.)
     call set_regrid_params(CS, compress_fraction=tmpReal)
   endif
 
   if (main_parameters) then
     call get_param(param_file, mdl, "MIN_THICKNESS", tmpReal, &
-                 "When regridding, this is the minimum layer\n"//&
+                 "When regridding, this is the minimum layer "//&
                  "thickness allowed.", units="m", scale=GV%m_to_H, &
                  default=regriddingDefaultMinThickness )
     call set_regrid_params(CS, min_thickness=tmpReal)
@@ -521,23 +520,23 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   if (coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
     ! Set SLight-specific regridding parameters.
     call get_param(param_file, mdl, "SLIGHT_DZ_SURFACE", dz_fixed_sfc, &
-                 "The nominal thickness of fixed thickness near-surface\n"//&
+                 "The nominal thickness of fixed thickness near-surface "//&
                  "layers with the SLight coordinate.", units="m", default=1.0, scale=GV%m_to_H)
     call get_param(param_file, mdl, "SLIGHT_NZ_SURFACE_FIXED", nz_fixed_sfc, &
-                 "The number of fixed-depth surface layers with the SLight\n"//&
+                 "The number of fixed-depth surface layers with the SLight "//&
                  "coordinate.", units="nondimensional", default=2)
     call get_param(param_file, mdl, "SLIGHT_SURFACE_AVG_DEPTH", Rho_avg_depth, &
-                 "The thickness of the surface region over which to average\n"//&
-                 "when calculating the density to use to define the interior\n"//&
+                 "The thickness of the surface region over which to average "//&
+                 "when calculating the density to use to define the interior "//&
                  "with the SLight coordinate.", units="m", default=1.0, scale=GV%m_to_H)
     call get_param(param_file, mdl, "SLIGHT_NLAY_TO_INTERIOR", nlay_sfc_int, &
-                 "The number of layers to offset the surface density when\n"//&
+                 "The number of layers to offset the surface density when "//&
                  "defining where the interior ocean starts with SLight.", &
                  units="nondimensional", default=2.0)
     call get_param(param_file, mdl, "SLIGHT_FIX_HALOCLINES", fix_haloclines, &
-                 "If true, identify regions above the reference pressure\n"//&
-                 "where the reference pressure systematically underestimates\n"//&
-                 "the stratification and use this in the definition of the\n"//&
+                 "If true, identify regions above the reference pressure "//&
+                 "where the reference pressure systematically underestimates "//&
+                 "the stratification and use this in the definition of the "//&
                  "interior with the SLight coordinate.", default=.false.)
 
     call set_regrid_params(CS, dz_min_surface=dz_fixed_sfc, &
@@ -546,14 +545,14 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (fix_haloclines) then
       ! Set additional parameters related to SLIGHT_FIX_HALOCLINES.
       call get_param(param_file, mdl, "HALOCLINE_FILTER_LENGTH", filt_len, &
-                 "A length scale over which to smooth the temperature and\n"//&
+                 "A length scale over which to smooth the temperature and "//&
                  "salinity before identifying erroneously unstable haloclines.", &
                  units="m", default=2.0)
       call get_param(param_file, mdl, "HALOCLINE_STRAT_TOL", strat_tol, &
-                 "A tolerance for the ratio of the stratification of the\n"//&
-                 "apparent coordinate stratification to the actual value\n"//&
-                 "that is used to identify erroneously unstable haloclines.\n"//&
-                 "This ratio is 1 when they are equal, and sensible values \n"//&
+                 "A tolerance for the ratio of the stratification of the "//&
+                 "apparent coordinate stratification to the actual value "//&
+                 "that is used to identify erroneously unstable haloclines. "//&
+                 "This ratio is 1 when they are equal, and sensible values "//&
                  "are between 0 and 0.5.", units="nondimensional", default=0.2)
       call set_regrid_params(CS, halocline_filt_len=filt_len, &
                              halocline_strat_tol=strat_tol)
@@ -576,7 +575,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
          "Scaling on optimization tendency.", &
          units="nondim", default=1.0)
     call get_param(param_file, mdl, "ADAPT_DO_MIN_DEPTH", tmpLogical, &
-         "If true, make a HyCOM-like mixed layer by preventing interfaces\n"//&
+         "If true, make a HyCOM-like mixed layer by preventing interfaces "//&
          "from being shallower than the depths specified by the regridding coordinate.", &
          default=.false.)
 

@@ -67,14 +67,13 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
-!### UNCOMMENT TO FIX THIS "The fractional depth where the stratification is centered.", &
-                 "The maximum depth of the ocean.", &
+                 "The fractional depth where the stratification is centered.", &
                  units="nondim", default = 0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -148,7 +147,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -165,11 +164,11 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
 ! This uses d/d y_2 atan(y_2 / jet_width)
 !    u(I,j,k) = u(I,j,k+1) + (1e-3 * jet_height / &
 !           (jet_width * (1.0 + (y_2 / jet_width)**2))) * &
-!           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+!           (2.0 * GV%g_prime(K+1) * US%T_to_s / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
     u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / jet_width) * &
            (sech(y_2 / jet_width))**2 ) * &
-           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+           (2.0 * GV%g_prime(K+1) * US%T_to_s / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
   enddo ; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -249,7 +248,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
 

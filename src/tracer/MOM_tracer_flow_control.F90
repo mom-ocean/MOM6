@@ -202,9 +202,8 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "USE_OCMIP2_CFC", CS%use_OCMIP2_CFC, &
                  "If true, use the MOM_OCMIP2_CFC tracer package.", &
                  default=.false.)
-  call get_param(param_file, mdl, "USE_generic_tracer", &
-                                CS%use_MOM_generic_tracer, &
-                 "If true and _USE_GENERIC_TRACER is defined as a \n"//&
+  call get_param(param_file, mdl, "USE_generic_tracer", CS%use_MOM_generic_tracer, &
+                 "If true and _USE_GENERIC_TRACER is defined as a "//&
                  "preprocessor macro, use the MOM_generic_tracer packages.", &
                  default=.false.)
   call get_param(param_file, mdl, "USE_PSEUDO_SALT_TRACER", CS%use_pseudo_salt_tracer, &

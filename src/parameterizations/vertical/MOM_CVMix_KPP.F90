@@ -201,7 +201,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVMix:KPP\n' // &
             'See http://cvmix.github.io/')
   call get_param(paramFile, mdl, "USE_KPP", KPP_init, &
-                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "// &
                  "to calculate diffusivities and non-local transport in the OBL.",     &
                  default=.false.)
   ! Forego remainder of initialization if not using this scheme
@@ -216,22 +216,22 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   if (present(passive)) passive=CS%passiveMode ! This is passed back to the caller so
                                                ! the caller knows to not use KPP output
   call get_param(paramFile, mdl, 'APPLY_NONLOCAL_TRANSPORT', CS%applyNonLocalTrans,  &
-                 'If True, applies the non-local transport to heat and scalars.\n'//  &
-                 'If False, calculates the non-local transport and tendencies but\n'//&
+                 'If True, applies the non-local transport to heat and scalars. '//  &
+                 'If False, calculates the non-local transport and tendencies but '//&
                  'purely for diagnostic purposes.',                                   &
                  default=.not. CS%passiveMode)
   call get_param(paramFile, mdl, 'N_SMOOTH', CS%n_smooth,  &
-                 'The number of times the 1-1-4-1-1 Laplacian filter is applied on\n'//  &
+                 'The number of times the 1-1-4-1-1 Laplacian filter is applied on '//  &
                  'OBL depth.',   &
                  default=0)
   if (CS%n_smooth > 0) then
     call get_param(paramFile, mdl, 'DEEPEN_ONLY_VIA_SMOOTHING', CS%deepen_only,  &
-                   'If true, apply OBLdepth smoothing at a cell only if the OBLdepth.\n'// &
+                   'If true, apply OBLdepth smoothing at a cell only if the OBLdepth '// &
                    'gets deeper via smoothing.',   &
                    default=.false.)
   endif
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
-                 'Critical bulk Richardson number used to define depth of the\n'// &
+                 'Critical bulk Richardson number used to define depth of the '// &
                  'surface Ocean Boundary Layer (OBL).',                            &
                  units='nondim', default=0.3)
   call get_param(paramFile, mdl, 'VON_KARMAN', CS%vonKarman, &
@@ -252,7 +252,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'If True, limit OBL depth to be no deeper than Ekman depth.', &
                  default=.False.)
   call get_param(paramFile, mdl, 'COMPUTE_MONIN_OBUKHOV', CS%computeMoninObukhov, &
-                 'If True, limit the OBL depth to be no deeper than\n'//          &
+                 'If True, limit the OBL depth to be no deeper than '//          &
                  'Monin-Obukhov depth.',                                          &
                  default=.False.)
   call get_param(paramFile, mdl, 'CS', CS%cs,                        &
@@ -262,47 +262,47 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'Parameter for computing non-local term.', &
                  units='nondim', default=6.32739901508)
   call get_param(paramFile, mdl, 'DEEP_OBL_OFFSET', CS%deepOBLoffset,                             &
-                 'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
+                 'If non-zero, the distance above the bottom to which the OBL is clipped '//     &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
                  units='m',default=0.)
   call get_param(paramFile, mdl, 'FIXED_OBLDEPTH', CS%fixedOBLdepth,       &
-                 'If True, fix the OBL depth to FIXED_OBLDEPTH_VALUE\n'//  &
-                 'rather than using the OBL depth from CVMix.\n'//         &
+                 'If True, fix the OBL depth to FIXED_OBLDEPTH_VALUE '//  &
+                 'rather than using the OBL depth from CVMix. '//         &
                  'This option is just for testing purposes.',              &
                  default=.False.)
   call get_param(paramFile, mdl, 'FIXED_OBLDEPTH_VALUE', CS%fixedOBLdepth_value,  &
-                 'Value for the fixed OBL depth when fixedOBLdepth==True. \n'//   &
-                 'This parameter is for just for testing purposes. \n'//          &
+                 'Value for the fixed OBL depth when fixedOBLdepth==True. '//   &
+                 'This parameter is for just for testing purposes. '//          &
                  'It will over-ride the OBLdepth computed from CVMix.',           &
                  units='m',default=30.0)
   call get_param(paramFile, mdl, 'SURF_LAYER_EXTENT', CS%surf_layer_ext,   &
                  'Fraction of OBL depth considered in the surface layer.', &
                  units='nondim',default=0.10)
   call get_param(paramFile, mdl, 'MINIMUM_OBL_DEPTH', CS%minOBLdepth,                            &
-                 'If non-zero, a minimum depth to use for KPP OBL depth. Independent of\n'//     &
+                 'If non-zero, a minimum depth to use for KPP OBL depth. Independent of '//     &
                  'this parameter, the OBL depth is always at least as deep as the first layer.', &
                  units='m',default=0.)
   call get_param(paramFile, mdl, 'MINIMUM_VT2', CS%minVtsqr,                                   &
-                 'Min of the unresolved velocity Vt2 used in Rib CVMix calculation.     \n'//  &
+                 'Min of the unresolved velocity Vt2 used in Rib CVMix calculation.\n'//  &
                  'Scaling: MINIMUM_VT2 = const1*d*N*ws, with d=1m, N=1e-5/s, ws=1e-6 m/s.',    &
                  units='m2/s2',default=1e-10)
 
 ! smg: for removal below
   call get_param(paramFile, mdl, 'CORRECT_SURFACE_LAYER_AVERAGE', CS%correctSurfLayerAvg,   &
-                 'If true, applies a correction step to the averaging of surface layer\n'// &
+                 'If true, applies a correction step to the averaging of surface layer '// &
                  'properties. This option is obsolete.', default=.False.)
   if (CS%correctSurfLayerAvg) &
     call MOM_error(FATAL,'Correct surface layer average disabled in code.  To recover \n'// &
                        ' feature will require code intervention.')
   call get_param(paramFile, mdl, 'FIRST_GUESS_SURFACE_LAYER_DEPTH', CS%surfLayerDepth,              &
-                 'The first guess at the depth of the surface layer used for averaging\n'//         &
-                 'the surface layer properties. If =0, the top model level properties\n'//          &
-                 'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a\n'// &
+                 'The first guess at the depth of the surface layer used for averaging '//         &
+                 'the surface layer properties. If =0, the top model level properties '//          &
+                 'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a '// &
                  'subsequent correction is applied. This parameter is obsolete', units='m', default=0.)
 ! smg: for removal above
 
   call get_param(paramFile, mdl, 'NLT_SHAPE', string, &
-                 'MOM6 method to set nonlocal transport profile.\n'//                          &
+                 'MOM6 method to set nonlocal transport profile. '//                          &
                  'Over-rides the result from CVMix.  Allowed values are: \n'//                 &
                  '\t CVMix     - Uses the profiles from CVMix specified by MATCH_TECHNIQUE\n'//&
                  '\t LINEAR    - A linear profile, 1-sigma\n'//                                &
@@ -320,7 +320,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                    "Unrecognized NLT_SHAPE option"//trim(string))
   end select
   call get_param(paramFile, mdl, 'MATCH_TECHNIQUE', CS%MatchTechnique,                                    &
-                 'CVMix method to set profile function for diffusivity and NLT,\n'//                      &
+                 'CVMix method to set profile function for diffusivity and NLT, '//                      &
                  'as well as matching across OBL base. Allowed values are: \n'//                          &
                  '\t SimpleShapes      = sigma*(1-sigma)^2 for both diffusivity and NLT\n'//              &
                  '\t MatchGradient     = sigma*(1-sigma)^2 for NLT; diffusivity profile from matching\n'//&
@@ -328,19 +328,19 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
   if (CS%MatchTechnique == 'ParabolicNonLocal') then
-     ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
-     !  May be used during CVMix initialization.
-     Cs_is_one=.true.
+    ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
+    !  May be used during CVMix initialization.
+    Cs_is_one=.true.
   endif
   if (CS%MatchTechnique == 'ParabolicNonLocal' .or. CS%MatchTechnique == 'SimpleShapes') then
-     ! if gradient won't be matched, lnoDGat1=.true.
-     lnoDGat1=.true.
+    ! if gradient won't be matched, lnoDGat1=.true.
+    lnoDGat1=.true.
   endif
 
   ! safety check to avoid negative diff/visc
   if (CS%MatchTechnique == 'MatchBoth' .and. (CS%interpType2 == 'cubic' .or. &
-     CS%interpType2 == 'quadratic')) then
-     call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
+      CS%interpType2 == 'quadratic')) then
+    call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
                "linear or LMD94 (recommended) to avoid negative viscosity and diffusivity.\n"//&
                "Please select one of these valid options." )
   endif
@@ -349,15 +349,15 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
   call get_param(paramFile, mdl, 'KPP_IS_ADDITIVE', CS%KPPisAdditive,                &
-                 'If true, adds KPP diffusivity to diffusivity from other schemes.'//&
+                 'If true, adds KPP diffusivity to diffusivity from other schemes.\n'//&
                  'If false, KPP is the only diffusivity wherever KPP is non-zero.',  &
                  default=.True.)
   call get_param(paramFile, mdl, 'KPP_SHORTWAVE_METHOD',string,                      &
                  'Determines contribution of shortwave radiation to KPP surface '// &
                  'buoyancy flux.  Options include:\n'//                             &
                  '  ALL_SW: use total shortwave radiation\n'//                      &
-                 '  MXL_SW:  use shortwave radiation absorbed by mixing layer\n'//  &
-                 '  LV1_SW:  use shortwave radiation absorbed by top model layer',  &
+                 '  MXL_SW: use shortwave radiation absorbed by mixing layer\n'//  &
+                 '  LV1_SW: use shortwave radiation absorbed by top model layer',  &
                  default='MXL_SW')
   select case ( trim(string) )
     case ("ALL_SW") ; CS%SW_METHOD = SW_METHOD_ALL_SW
@@ -367,7 +367,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                    "Unrecognized KPP_SHORTWAVE_METHOD option"//trim(string))
   end select
   call get_param(paramFile, mdl, 'CVMix_ZERO_H_WORK_AROUND', CS%min_thickness,                           &
-                 'A minimum thickness used to avoid division by small numbers in the vicinity\n'//       &
+                 'A minimum thickness used to avoid division by small numbers in the vicinity '//       &
                  'of vanished layers. This is independent of MIN_THICKNESS used in other parts of MOM.', &
                  units='m', default=0.)
 
@@ -381,7 +381,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
        'mixing coefficient.', units="", Default=.false.)
   if (CS%LT_K_Enhancement) then
     call get_param(paramFile, mdl, 'KPP_LT_K_SHAPE', string,                 &
-                 'Vertical dependence of LT enhancement of mixing. \n'//     &
+                 'Vertical dependence of LT enhancement of mixing. '//     &
                  'Valid options are: \n'//                                   &
                  '\t CONSTANT = Constant value for full OBL\n'//             &
                  '\t SCALED   = Varies based on normalized shape function.', &
@@ -393,7 +393,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                     "Unrecognized KPP_LT_K_SHAPE option: "//trim(string))
     end select
     call get_param(paramFile, mdl, "KPP_LT_K_METHOD", string ,                   &
-                   'Method to enhance mixing coefficient in KPP. \n'//           &
+                   'Method to enhance mixing coefficient in KPP. '//           &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_K_ENH_FAC) \n'//           &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
@@ -418,7 +418,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
        'in Bulk Richardson Number.', units="", Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
     call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
-                   'Method to enhance Vt2 in KPP. \n'//                          &
+                   'Method to enhance Vt2 in KPP. '//                          &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_VT2_ENH_FAC) \n'//         &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
@@ -959,8 +959,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
       enddo
 
       ! things independent of position within the column
-      Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
-                       +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
+      Coriolis = 0.25*US%s_to_T*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) + &
+                                  (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = US%Z_to_m * uStar(i,j)
 
       ! Bullk Richardson number computed for each cell in a column,

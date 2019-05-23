@@ -1621,8 +1621,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity [ppt]
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 s-1 ~> m2 s-1]
-  real,                                     intent(in)  :: dt    !< Time increment [s]
+  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 T-1 ~> m2 s-1]
+  real,                                     intent(in)  :: dt    !< Time increment [T ~> s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity [ppt]
   integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
@@ -1718,13 +1718,13 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "THICKNESSDIFFUSE", CS%thickness_diffuse, &
-                 "If true, interface heights are diffused with a \n"//&
+                 "If true, interface heights are diffused with a "//&
                  "coefficient of KHTH.", default=.false.)
   call get_param(param_file, mdl, "KHTH", CS%Khth, &
                  "The background horizontal thickness diffusivity.", &
                  units = "m2 s-1", default=0.0)
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
-                 "The nondimensional coefficient in the Visbeck formula \n"//&
+                 "The nondimensional coefficient in the Visbeck formula "//&
                  "for the interface depth diffusivity", units="nondim", &
                  default=0.0)
   call get_param(param_file, mdl, "KHTH_MIN", CS%KHTH_Min, &
@@ -1734,45 +1734,45 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "The maximum horizontal thickness diffusivity.", &
                  units = "m2 s-1", default=0.0)
   call get_param(param_file, mdl, "KHTH_MAX_CFL", CS%max_Khth_CFL, &
-                 "The maximum value of the local diffusive CFL ratio that \n"//&
-                 "is permitted for the thickness diffusivity. 1.0 is the \n"//&
-                 "marginally unstable value in a pure layered model, but \n"//&
-                 "much smaller numbers (e.g. 0.1) seem to work better for \n"//&
+                 "The maximum value of the local diffusive CFL ratio that "//&
+                 "is permitted for the thickness diffusivity. 1.0 is the "//&
+                 "marginally unstable value in a pure layered model, but "//&
+                 "much smaller numbers (e.g. 0.1) seem to work better for "//&
                  "ALE-based models.", units = "nondimensional", default=0.8)
   if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
   call get_param(param_file, mdl, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
-                 "If defined add 3-d structured enhanced interface height \n"//&
-                 "diffusivities to horizonally smooth jagged layers.", &
+                 "If defined add 3-d structured enhanced interface height "//&
+                 "diffusivities to horizontally smooth jagged layers.", &
                  default=.false.)
   CS%detangle_time = 0.0
   if (CS%detangle_interfaces) &
     call get_param(param_file, mdl, "DETANGLE_TIMESCALE", CS%detangle_time, &
-                 "A timescale over which maximally jagged grid-scale \n"//&
-                 "thickness variations are suppressed.  This must be \n"//&
+                 "A timescale over which maximally jagged grid-scale "//&
+                 "thickness variations are suppressed.  This must be "//&
                  "longer than DT, or 0 to use DT.", units = "s", default=0.0)
   call get_param(param_file, mdl, "KHTH_SLOPE_MAX", CS%slope_max, &
-                 "A slope beyond which the calculated isopycnal slope is \n"//&
+                 "A slope beyond which the calculated isopycnal slope is "//&
                  "not reliable and is scaled away.", units="nondim", default=0.01)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
-                 "A diapycnal diffusivity that is used to interpolate \n"//&
+                 "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
                  default=1.0e-6, scale=US%m_to_Z**2)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", CS%use_FGNV_streamfn, &
-                 "If true, use the streamfunction formulation of\n"//    &
-                 "Ferrari et al., 2010, which effectively emphasizes\n"//&
+                 "If true, use the streamfunction formulation of "//&
+                 "Ferrari et al., 2010, which effectively emphasizes "//&
                  "graver vertical modes by smoothing in the vertical.",  &
                  default=.false.)
   call get_param(param_file, mdl, "FGNV_FILTER_SCALE", CS%FGNV_scale, &
-                 "A coefficient scaling the vertical smoothing term in the\n"//&
+                 "A coefficient scaling the vertical smoothing term in the "//&
                  "Ferrari et al., 2010, streamfunction formulation.", &
                  default=1., do_not_log=.not.CS%use_FGNV_streamfn)
   call get_param(param_file, mdl, "FGNV_C_MIN", CS%FGNV_c_min, &
-                 "A minium wave speed used in the Ferrari et al., 2010,\n"//&
+                 "A minium wave speed used in the Ferrari et al., 2010, "//&
                  "streamfunction formulation.", &
                  default=0., units="m s-1", do_not_log=.not.CS%use_FGNV_streamfn)
   call get_param(param_file, mdl, "FGNV_STRAT_FLOOR", strat_floor, &
-                 "A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010,\n"//&
-                 "streamfunction formulation, expressed as a fraction of planetary\n"//&
+                 "A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010, "//&
+                 "streamfunction formulation, expressed as a fraction of planetary "//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
   call get_param(param_file, mdl, "OMEGA",omega, &

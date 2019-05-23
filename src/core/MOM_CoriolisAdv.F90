@@ -13,6 +13,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : uppercase
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -107,7 +108,7 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 contains
 
 !> Calculates the Coriolis and momentum advection contributions to the acceleration.
-subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< Ocen grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< Zonal velocity [m s-1]
@@ -122,8 +123,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
                                                                   !! and momentum advection [m s-2].
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  type(accel_diag_ptrs),                     intent(inout) :: AD !< Storage for acceleration diagnostics
-  type(CoriolisAdv_CS),                      pointer       :: CS !< Control structure for MOM_CoriolisAdv
+  type(accel_diag_ptrs),                     intent(inout) :: AD  !< Storage for acceleration diagnostics
+  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
+  type(CoriolisAdv_CS),                      pointer       :: CS  !< Control structure for MOM_CoriolisAdv
 
   ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -410,7 +412,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         relative_vorticity = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * &
                              G%IareaBu(I,J)
       endif
-      absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
+      absolute_vorticity = US%s_to_T*G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
       if (Area_q(i,j) > 0.0) then
         hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
@@ -949,23 +951,23 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
-                 "If true, no slip boundary conditions are used; otherwise \n"//&
-                 "free slip boundary conditions are assumed. The \n"//&
-                 "implementation of the free slip BCs on a C-grid is much \n"//&
-                 "cleaner than the no slip BCs. The use of free slip BCs \n"//&
-                 "is strongly encouraged, and no slip BCs are not used with \n"//&
+                 "If true, no slip boundary conditions are used; otherwise "//&
+                 "free slip boundary conditions are assumed. The "//&
+                 "implementation of the free slip BCs on a C-grid is much "//&
+                 "cleaner than the no slip BCs. The use of free slip BCs "//&
+                 "is strongly encouraged, and no slip BCs are not used with "//&
                  "the biharmonic viscosity.", default=.false.)
 
   call get_param(param_file, mdl, "CORIOLIS_EN_DIS", CS%Coriolis_En_Dis, &
-                 "If true, two estimates of the thickness fluxes are used \n"//&
-                 "to estimate the Coriolis term, and the one that \n"//&
+                 "If true, two estimates of the thickness fluxes are used "//&
+                 "to estimate the Coriolis term, and the one that "//&
                  "dissipates energy relative to the other one is used.", &
                  default=.false.)
 
   ! Set %Coriolis_Scheme
   ! (Select the baseline discretization for the Coriolis term)
   call get_param(param_file, mdl, "CORIOLIS_SCHEME", tmpstr, &
-                 "CORIOLIS_SCHEME selects the discretization for the \n"//&
+                 "CORIOLIS_SCHEME selects the discretization for the "//&
                  "Coriolis terms. Valid values are: \n"//&
                  "\t SADOURNY75_ENERGY - Sadourny, 1975; energy cons. \n"//&
                  "\t ARAKAWA_HSU90     - Arakawa & Hsu, 1990 \n"//&
@@ -996,16 +998,16 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
   end select
   if (CS%Coriolis_Scheme == AL_BLEND) then
     call get_param(param_file, mdl, "CORIOLIS_BLEND_WT_LIN", CS%wt_lin_blend, &
-                 "A weighting value for the ratio of inverse thicknesses, \n"//&
-                 "beyond which the blending between Sadourny Energy and \n"//&
-                 "Arakawa & Hsu goes linearly to 0 when CORIOLIS_SCHEME \n"//&
+                 "A weighting value for the ratio of inverse thicknesses, "//&
+                 "beyond which the blending between Sadourny Energy and "//&
+                 "Arakawa & Hsu goes linearly to 0 when CORIOLIS_SCHEME "//&
                  "is ARAWAKA_LAMB_BLEND. This must be between 1 and 1e-16.", &
                  units="nondim", default=0.125)
     call get_param(param_file, mdl, "CORIOLIS_BLEND_F_EFF_MAX", CS%F_eff_max_blend, &
-                 "The factor by which the maximum effective Coriolis \n"//&
-                 "acceleration from any point can be increased when \n"//&
-                 "blending different discretizations with the \n"//&
-                 "ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be \n"//&
+                 "The factor by which the maximum effective Coriolis "//&
+                 "acceleration from any point can be increased when "//&
+                 "blending different discretizations with the "//&
+                 "ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be "//&
                  "greater than 2.0 (the max value for Sadourny energy).", &
                  units="nondim", default=4.0)
     CS%wt_lin_blend = min(1.0, max(CS%wt_lin_blend,1e-16))
@@ -1013,16 +1015,16 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
            "CORIOLIS_BLEND_F_EFF_MAX should be at least 2.")
   endif
 
-  mesg = "If true, the Coriolis terms at u-points are bounded by \n"//&
-         "the four estimates of (f+rv)v from the four neighboring \n"//&
+  mesg = "If true, the Coriolis terms at u-points are bounded by "//&
+         "the four estimates of (f+rv)v from the four neighboring "//&
          "v-points, and similarly at v-points."
   if (CS%Coriolis_En_Dis .and. (CS%Coriolis_Scheme == SADOURNY75_ENERGY)) then
-    mesg = trim(mesg)//"  This option is \n"//&
-                 "always effectively false with CORIOLIS_EN_DIS defined and \n"//&
+    mesg = trim(mesg)//"  This option is "//&
+                 "always effectively false with CORIOLIS_EN_DIS defined and "//&
                  "CORIOLIS_SCHEME set to "//trim(SADOURNY75_ENERGY_STRING)//"."
   else
-    mesg = trim(mesg)//"  This option would \n"//&
-                 "have no effect on the SADOURNY Coriolis scheme if it \n"//&
+    mesg = trim(mesg)//"  This option would "//&
+                 "have no effect on the SADOURNY Coriolis scheme if it "//&
                  "were possible to use centered difference thickness fluxes."
   endif
   call get_param(param_file, mdl, "BOUND_CORIOLIS", CS%bound_Coriolis, mesg, &
@@ -1032,7 +1034,7 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
 
   ! Set KE_Scheme (selects discretization of KE)
   call get_param(param_file, mdl, "KE_SCHEME", tmpstr, &
-                 "KE_SCHEME selects the discretization for acceleration \n"//&
+                 "KE_SCHEME selects the discretization for acceleration "//&
                  "due to the kinetic energy gradient. Valid values are: \n"//&
                  "\t KE_ARAKAWA, KE_SIMPLE_GUDONOV, KE_GUDONOV", &
                  default=KE_ARAKAWA_STRING)
@@ -1049,7 +1051,7 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
 
   ! Set PV_Adv_Scheme (selects discretization of PV advection)
   call get_param(param_file, mdl, "PV_ADV_SCHEME", tmpstr, &
-                 "PV_ADV_SCHEME selects the discretization for PV \n"//&
+                 "PV_ADV_SCHEME selects the discretization for PV "//&
                  "advection. Valid values are: \n"//&
                  "\t PV_ADV_CENTERED - centered (aka Sadourny, 75) \n"//&
                  "\t PV_ADV_UPWIND1  - upwind, first order", &
