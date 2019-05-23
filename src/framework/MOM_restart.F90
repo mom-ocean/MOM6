@@ -16,7 +16,7 @@ use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : file_exists
-use MOM_io, only : get_dimension_features
+use MOM_io, only : get_var_dimension_features
 use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
@@ -1044,7 +1044,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         ! note: 4d variables are lon x lat x vertical level x time
         num_axes = 0
 
-        call get_dimension_features(hor_grid, z_grid, t_grid, G, &
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, G, &
                                      axis_names, axis_lengths, num_axes, GV)
         
         ! register all of the restart variable axes to the file if they do not exist
@@ -1119,7 +1119,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         
         num_axes = 0
 
-        call get_dimension_features(hor_grid, z_grid, t_grid, G, &
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, G, &
                                     axis_names, axis_lengths, num_axes, GV)
         
         ! register and write the restart variables to the file

@@ -69,7 +69,7 @@ public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 
 public :: FmsNetcdfDomainFile_t
-public :: get_dimension_features
+public :: get_var_dimension_features
 public :: get_variable_byte_size
 public :: get_horizontal_grid_position
 public :: get_time_units
@@ -100,24 +100,25 @@ end type vardesc
 type p1d
   real, dimension(:), pointer :: p => NULL() !< A pointer to a 1d array
 end type p1d
-!> A structure with information about a single axis
+!> A structure with information about a single axis variable
 type axis_atts
-  character(len=64) :: name   !< Names of the axis
-  character(len=48)  :: units              !< Physical dimensions of the axis
-  character(len=240) :: longname           !< Long name of the axis
-  character(len=8)  :: cartesian_axis       !< Name of the cartesian axis: X,Y,Z,T
-  character(len=8)  :: positive              !< Positive-definite direction: up, down, east, west, north, south
-  integer :: horgrid_position             !< Horizontal grid position
-  logical :: is_domain_decomposed     !< if .true. the axis data are domain-decomposed
+  character(len=64)  :: name                    !< Names of the axis
+  character(len=48)  :: units                   !< Physical dimensions of the axis
+  character(len=240) :: longname                !< Long name of the axis
+  character(len=8)   :: cartesian_axis          !< Name of the cartesian axis: X,Y,Z,T
+  character(len=8)   :: positive                !< Positive-definite direction: 
+                                                !! up, down, east, west, north, south
+  integer            :: horgrid_position        !< Horizontal grid position
+  logical            :: is_domain_decomposed    !< if .true. the axis data are domain-decomposed
                                                 !! and need to be indexed by the compute domain
                                                 !! before passing to fms2_write_data
 end type axis_atts
 
-!> Type for describing a variable axis
+!> Type for describing an axis variable (e.g., lath, lonh, Time)
 type, public :: axis_data_type
   !> An array of descriptions of the registered axes
-  type(axis_atts), pointer :: axis(:) => NULL()
-  type(p1d), pointer :: data(:) => NULL()  !< pointer to the axis data
+  type(axis_atts), pointer :: axis(:) => NULL()  !< structure with axis attributes
+  type(p1d), pointer       :: data(:) => NULL()  !< pointer to the axis data
 end type axis_data_type
 
 !> Indicate whether a file exists, perhaps with domain decomposition
@@ -633,8 +634,8 @@ subroutine MOM_write_data_0d(fileObjWrite, field_name, field_data)
 end subroutine MOM_write_data_0d
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
-!! from the grid ids returned by a prior call to query_vardesc
-subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, &
+!! for a single variable from the grid ids returned by a prior call to query_vardesc
+subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, G, &
                                   dim_names, dim_length, num_axes, GV)
   character(len=*), intent(in) :: hor_grid !< horizontal grid
   character(len=*), intent(in) :: z_grid !< vertical grid
@@ -689,7 +690,7 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, &
      case ('Cv') ; use_latq = .true. ; use_lonh = .true.
      case ('1') ; 
      case default
-        call MOM_error(FATAL, "MOM_io:get_dimension_features "//&
+        call MOM_error(FATAL, "MOM_io:get_var_dimension_features "//&
                         "Unrecognized hor_grid argument "//trim(hor_grid))
   end select
   
@@ -734,7 +735,7 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, &
         dim_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
      case ('1') ! Do nothing.
      case default
-        call MOM_error(FATAL, "MOM_io: get_dimension_features: "//&
+        call MOM_error(FATAL, "MOM_io: get_dimension_var_features: "//&
                       " has an unrecognized z_grid argument"//trim(z_grid))
   end select
   
@@ -748,7 +749,7 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, &
         dim_length(num_axes) = unlimited
      case ('p')
         if (len_trim(t_grid(2:8)) <= 0) then
-            call MOM_error(FATAL,"MOM_io:get_dimension_features: "//&
+            call MOM_error(FATAL,"MOM_io:get_var_dimension_features: "//&
                            "No periodic axis length was specified in "//trim(t_grid))
         endif
         num_axes = num_axes+1
@@ -757,11 +758,11 @@ subroutine get_dimension_features(hor_grid, z_grid, t_grid_in, G, &
         dim_length(num_axes) = unlimited
      case ('1') ! Do nothing.
      case default
-           call MOM_error(WARNING, "MOM_io: get_dimension_features: "//&
+           call MOM_error(WARNING, "MOM_io: get_var_dimension_features: "//&
                        "Unrecognized t_grid "//trim(t_grid))
   end select
 
-end subroutine get_dimension_features
+end subroutine get_var_dimension_features
 
 !> get the position parameter value from the horizontal grid (hor_grid) string id
 function get_horizontal_grid_position(grid_string_id) result(grid_position)
@@ -1396,8 +1397,8 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G,&
-                              dim_names, dim_lengths, num_axes, GV)
+  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G,&
+                                  dim_names, dim_lengths, num_axes, GV)
 
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_4d: num_axes is an invalid value.")
@@ -1538,7 +1539,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
+  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
                               dim_names, dim_lengths, num_axes, GV)
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_3d: num_axes is an invalid value.")
@@ -1677,7 +1678,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
+  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
                               dim_names, dim_lengths, num_axes, GV)
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_2d: num_axes is an invalid value.")
@@ -1816,7 +1817,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
 
   horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
-  call get_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
+  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, G, &
                               dim_names, dim_lengths, num_axes, GV)
   if (num_axes <= 0) then
      call MOM_error(FATAL,"MOM_io::write_IC_data_1d: num_axes is an invalid value.")
