@@ -302,9 +302,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     case (INPUT_STRING)! A method to input the Stokes band (globally uniform)
       DataSource = Input
       call get_param(param_file,mdl,"SURFBAND_NB",NumBands,                 &
-         "Prescribe number of wavenumber bands for Stokes drift. \n"//      &
-         " Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and \n"// &
-         " STOKES_Y, there are no safety checks in the code.",              &
+         "Prescribe number of wavenumber bands for Stokes drift. "//      &
+         "Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and "// &
+         "STOKES_Y, there are no safety checks in the code.",              &
          units='', default=1)
       allocate( CS%WaveNum_Cen(1:NumBands) )
       CS%WaveNum_Cen(:) = 0.0
@@ -351,16 +351,16 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
-         "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-         " Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
+         "The depth (normalized by BLD) to average Stokes drift over in "//&
+         "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
          units="nondim",default=0.04)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", LA_Misalignment,    &
          "Flag (logical) if using misalignment bt shear and waves in LA",&
          default=.false.)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
-         "A minimum value for all Langmuir numbers that is not physical, \n"//&
-         " but is likely only encountered when the wind is very small and \n"//&
-         " therefore its effects should be mostly benign.",units="nondim",&
+         "A minimum value for all Langmuir numbers that is not physical, "//&
+         "but is likely only encountered when the wind is very small and "//&
+         "therefore its effects should be mostly benign.",units="nondim",&
          default=0.05)
 
   ! Allocate and initialize
@@ -407,8 +407,8 @@ subroutine MOM_wave_interface_init_lite(param_file)
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
-       "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-       " Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
+       "The depth (normalized by BLD) to average Stokes drift over in "//&
+       "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
        units="nondim",default=0.04)
 
   if (WaveMethod==NULL_WaveMethod) then

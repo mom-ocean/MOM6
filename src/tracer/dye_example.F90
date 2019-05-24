@@ -4,7 +4,6 @@ module regional_dyes
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,      only : diag_ctrl
-use MOM_diag_to_Z,          only : diag_to_Z_CS
 use MOM_error_handler,      only : MOM_error, FATAL, WARNING
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,       only : forcing
@@ -100,7 +99,7 @@ function register_dye_tracer(HI, GV, G,  US, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", CS%ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate region.", default=0)
   allocate(CS%dye_source_minlon(CS%ntr), &
            CS%dye_source_maxlon(CS%ntr), &
@@ -185,8 +184,7 @@ end function register_dye_tracer
 
 !> This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
-subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_CSp, &
-                                       diag_to_Z_CSp)
+subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already been
                                                             !! read from a restart file.
   type(time_type), target,            intent(in) :: day  !< Time of the start of the run.
@@ -201,8 +199,6 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
                                                          !! call to register_dye_tracer.
   type(sponge_CS),                    pointer    :: sponge_CSp    !< A pointer to the control structure
                                                                   !! for the sponges, if they are in use.
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                  !! for diagnostics in depth space.
 
 ! Local variables
   character(len=24) :: name     ! A variable's name in a NetCDF file.

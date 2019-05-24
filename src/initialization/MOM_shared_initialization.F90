@@ -72,7 +72,7 @@ subroutine MOM_initialize_rotation(f, G, PF, US)
                  "This specifies how the Coriolis parameter is specified: \n"//&
                  " \t 2omegasinlat - Use twice the planetary rotation rate \n"//&
                  " \t\t times the sine of latitude.\n"//&
-                 " \t betaplane - Use a beta-plane or f-plane. \n"//&
+                 " \t betaplane - Use a beta-plane or f-plane.\n"//&
                  " \t USER - call a user modified routine.", &
                  default="2omegasinlat")
   select case (trim(config))
@@ -349,7 +349,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 !   call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
 !                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mdl, "TOPOG_SLOPE_SCALE", expdecay, &
-                   "The exponential decay scale used in defining some of \n"//&
+                   "The exponential decay scale used in defining some of "//&
                    "the named topographies.", units="m", default=400000.0)
   endif
 
@@ -426,9 +426,9 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
   m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
-                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
-                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "If MASKING_DEPTH is unspecified, then anything shallower than "//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than "//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
@@ -511,10 +511,10 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   T_to_s = 1.0 ; if (present(US)) T_to_s = US%T_to_s
 
   call get_param(param_file, mdl, "F_0", f_0, &
-                 "The reference value of the Coriolis parameter with the \n"//&
+                 "The reference value of the Coriolis parameter with the "//&
                  "betaplane option.", units="s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "BETA", beta, &
-                 "The northward gradient of the Coriolis parameter with \n"//&
+                 "The northward gradient of the Coriolis parameter with "//&
                  "the betaplane option.", units="m-1 s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
@@ -554,8 +554,8 @@ subroutine initialize_grid_rotation_angle(G, PF)
   integer :: i, j, m, n
 
   call get_param(PF, mdl, "GRID_ROTATION_ANGLE_BUGS", use_bugs, &
-                 "If true, use an older algorithm to calculate the sine and \n"//&
-                 "cosines needed rotate between grid-oriented directions and \n"//&
+                 "If true, use an older algorithm to calculate the sine and "//&
+                 "cosines needed rotate between grid-oriented directions and "//&
                  "true north and east.  Differences arise at the tripolar fold.", &
                  default=.True.)
 
@@ -842,7 +842,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   filename = trim(inputdir)//trim(chan_file)
   call log_param(param_file, mdl, "INPUTDIR/CHANNEL_LIST_FILE", filename)
   call get_param(param_file, mdl, "CHANNEL_LIST_360_LON_CHECK", check_360, &
-                 "If true, the channel configuration list works for any \n"//&
+                 "If true, the channel configuration list works for any "//&
                  "longitudes in the range of -360 to 360.", default=.true.)
 
   if (is_root_pe()) then
@@ -1241,7 +1241,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   out_q(:,:) = 0.0
 
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
-                 "If true, each processor writes its own restart file, \n"//&
+                 "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
   file_threading = SINGLE_FILE

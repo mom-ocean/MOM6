@@ -20,17 +20,16 @@ module MOM_generic_tracer
   use g_tracer_utils,   only: g_tracer_get_name,g_tracer_set_values,g_tracer_set_common,g_tracer_get_common
   use g_tracer_utils,   only: g_tracer_get_next,g_tracer_type,g_tracer_is_prog,g_tracer_flux_init
   use g_tracer_utils,   only: g_tracer_send_diag,g_tracer_get_values
-  use g_tracer_utils,   only: g_tracer_get_pointer,g_tracer_get_alias,g_diag_type,g_tracer_set_csdiag
+  use g_tracer_utils,   only: g_tracer_get_pointer,g_tracer_get_alias,g_tracer_set_csdiag
 
   use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
   use MOM_diag_mediator, only : diag_ctrl, get_diag_time_end
-  use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
   use MOM_hor_index, only : hor_index_type
-  use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc
+  use MOM_io, only : file_exists, MOM_read_data, slasher
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -74,9 +73,6 @@ module MOM_generic_tracer
      !   The following pointer will be directed to the first element of the
      ! linked list of generic tracers.
      type(g_tracer_type), pointer :: g_tracer_list => NULL()
-     !   The following pointer will be directed to the first element of the
-     ! linked list of generic diagnostics fields that must be Z registered by MOM.
-     type(g_diag_type), pointer :: g_diag_list => NULL()
 
      integer :: H_to_m !Auxiliary to access GV%H_to_m in routines that do not have access to GV
 
@@ -135,7 +131,7 @@ contains
   ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, sub_name, version, "")
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE", CS%IC_file, &
-                 "The file in which the generic trcer initial values can \n"//&
+                 "The file in which the generic trcer initial values can "//&
                  "be found, or an empty string for internal initialization.", &
                  default=" ")
     if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -145,12 +141,12 @@ contains
       call log_param(param_file, sub_name, "INPUTDIR/GENERIC_TRACER_IC_FILE", CS%IC_file)
     endif
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE_IS_Z", CS%Z_IC_file, &
-                 "If true, GENERIC_TRACER_IC_FILE is in depth space, not \n"//&
+                 "If true, GENERIC_TRACER_IC_FILE is in depth space, not "//&
                  "layer space.",default=.false.)
     call get_param(param_file, sub_name, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
     CS%restart_CSp => restart_CS
@@ -225,7 +221,7 @@ contains
   !!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
   !! and it sets up the tracer output.
   subroutine initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, CS, &
-                                          sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
+                                          sponge_CSp, ALE_sponge_CSp)
     logical,                               intent(in) :: restart !< .true. if the fields have already been
                                                                  !! read from a restart file.
     type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
@@ -241,15 +237,12 @@ contains
     type(sponge_CS),                       pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
     type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< Pointer  to the control structure for the
                                                                  !! ALE sponges.
-    type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp  !< A pointer to the control structure
-                                                                 !! for diagnostics in depth space.
 
     character(len=fm_string_len), parameter :: sub_name = 'initialize_MOM_generic_tracer'
     logical :: OK
     integer :: i, j, k, isc, iec, jsc, jec, nk
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
-    type(g_diag_type)  , pointer    :: g_diag,g_diag_next
-    character(len=fm_string_len)      :: g_tracer_name, longname, units
+    character(len=fm_string_len)      :: g_tracer_name
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
     real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
@@ -379,48 +372,6 @@ contains
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
 #endif
-
-
-    ! Register Z diagnostic output.
-    !Get the tracer list
-    if (.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
-         ": No tracer in the list.")
-    !For each tracer name get its  fields
-    g_tracer=>CS%g_tracer_list
-    do
-       call g_tracer_get_alias(g_tracer,g_tracer_name)
-
-       call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
-       tr_ptr => tr_field(:,:,:,1)
-       call g_tracer_get_values(g_tracer,g_tracer_name,'longname', longname)
-       call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
-
-       call register_Z_tracer(tr_ptr, trim(g_tracer_name),longname , units, &
-            day, G, diag_to_Z_CSp)
-
-       !traverse the linked list till hit NULL
-       call g_tracer_get_next(g_tracer, g_tracer_next)
-       if (.NOT. associated(g_tracer_next)) exit
-       g_tracer=>g_tracer_next
-
-    enddo
-
-    !For each special diagnostics name get its  fields
-    !Get the diag list
-    call generic_tracer_get_diag_list(CS%g_diag_list)
-    if (associated(CS%g_diag_list)) then
-       g_diag=>CS%g_diag_list
-       do
-          if (g_diag%Z_diag /= 0) &
-               call register_Z_tracer(g_diag%field_ptr, trim(g_diag%name),g_diag%longname , g_diag%units, &
-               day, G, diag_to_Z_CSp)
-
-          !traverse the linked list till hit NULL
-          g_diag=>g_diag%next
-          if (.NOT. associated(g_diag)) exit
-
-       enddo
-    endif
 
     CS%H_to_m = GV%H_to_m
 

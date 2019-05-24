@@ -144,12 +144,12 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
     "Adding static vertical background mixing coefficients")
 
   call get_param(param_file, mdl, "KD", CS%Kd, &
-                 "The background diapycnal diffusivity of density in the \n"//&
-                 "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
+                 "The background diapycnal diffusivity of density in the "//&
+                 "interior. Zero or the molecular value, ~1e-7 m2 s-1, "//&
                  "may be used.", units="m2 s-1", scale=US%m_to_Z**2, fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KV", Kv, &
-                 "The background kinematic viscosity in the interior. \n"//&
+                 "The background kinematic viscosity in the interior. "//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
@@ -172,13 +172,13 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                     ! cannot be a NaN.
   else
     call get_param(param_file, mdl, "KDML", CS%Kdml, &
-                 "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
-                 "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
+                 "If BULKMIXEDLAYER is false, KDML is the elevated "//&
+                 "diapycnal diffusivity in the topmost HMIX of fluid. "//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
                  units="m2 s-1", default=CS%Kd*US%Z_to_m**2, scale=US%m_to_Z**2)
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
-                 "The prescribed depth over which the near-surface \n"//&
-                 "viscosity and diffusivity are elevated when the bulk \n"//&
+                 "The prescribed depth over which the near-surface "//&
+                 "viscosity and diffusivity are elevated when the bulk "//&
                  "mixed layer is not used.", units="m", scale=US%m_to_Z, fail_if_missing=.true.)
   endif
 
@@ -186,10 +186,9 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
 !  call openParameterBlock(param_file,'MOM_BACKGROUND_MIXING')
 
-  call get_param(param_file, mdl, "BRYAN_LEWIS_DIFFUSIVITY", &
-                                CS%Bryan_Lewis_diffusivity, &
-                 "If true, use a Bryan & Lewis (JGR 1979) like tanh \n"//&
-                 "profile of background diapycnal diffusivity with depth. \n"//&
+  call get_param(param_file, mdl, "BRYAN_LEWIS_DIFFUSIVITY", CS%Bryan_Lewis_diffusivity, &
+                 "If true, use a Bryan & Lewis (JGR 1979) like tanh "//&
+                 "profile of background diapycnal diffusivity with depth. "//&
                  "This is done via CVMix.", default=.false.)
 
   if (CS%Bryan_Lewis_diffusivity) then
@@ -219,7 +218,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "HORIZ_VARYING_BACKGROUND", &
                                 CS%horiz_varying_background, &
-                 "If true, apply vertically uniform, latitude-dependent background\n"//&
+                 "If true, apply vertically uniform, latitude-dependent background "//&
                  "diffusivity, as described in Danabasoglu et al., 2012", &
                  default=.false.)
 
@@ -248,7 +247,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
   call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
-                 "Turbulent Prandtl number used to convert vertical \n"//&
+                 "Turbulent Prandtl number used to convert vertical "//&
                  "background diffusivities into viscosities.", &
                  units="nondim", default=1.0)
 
@@ -265,18 +264,16 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   endif
 
-  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", &
-                                CS%Henyey_IGW_background, &
-                 "If true, use a latitude-dependent scaling for the near \n"//&
-                 "surface background diffusivity, as described in \n"//&
+  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", CS%Henyey_IGW_background, &
+                 "If true, use a latitude-dependent scaling for the near "//&
+                 "surface background diffusivity, as described in "//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
   if (CS%Henyey_IGW_background) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND")
 
 
-  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", &
-                                CS%Henyey_IGW_background_new, &
-                 "If true, use a better latitude-dependent scaling for the\n"//&
-                 "background diffusivity, as described in \n"//&
+  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", CS%Henyey_IGW_background_new, &
+                 "If true, use a better latitude-dependent scaling for the "//&
+                 "background diffusivity, as described in "//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
   if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
 
@@ -288,22 +285,21 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%Henyey_IGW_background) &
     call get_param(param_file, mdl, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
-                  "The ratio of the typical Buoyancy frequency to twice \n"//&
-                  "the Earth's rotation period, used with the Henyey \n"//&
+                  "The ratio of the typical Buoyancy frequency to twice "//&
+                  "the Earth's rotation period, used with the Henyey "//&
                   "scaling from the mixing.", units="nondim", default=20.0)
 
   call get_param(param_file, mdl, "KD_TANH_LAT_FN", &
                   CS%Kd_tanh_lat_fn, &
-                 "If true, use a tanh dependence of Kd_sfc on latitude, \n"//&
-                 "like CM2.1/CM2M.  There is no physical justification \n"//&
-                 "for this form, and it can not be used with \n"//&
+                 "If true, use a tanh dependence of Kd_sfc on latitude, "//&
+                 "like CM2.1/CM2M.  There is no physical justification "//&
+                 "for this form, and it can not be used with "//&
                  "HENYEY_IGW_BACKGROUND.", default=.false.)
 
   if (CS%Kd_tanh_lat_fn) &
-  call get_param(param_file, mdl, "KD_TANH_LAT_SCALE", &
-                 CS%Kd_tanh_lat_scale, &
-                 "A nondimensional scaling for the range ofdiffusivities \n"//&
-                 "with KD_TANH_LAT_FN. Valid values are in the range of \n"//&
+    call get_param(param_file, mdl, "KD_TANH_LAT_SCALE", CS%Kd_tanh_lat_scale, &
+                 "A nondimensional scaling for the range ofdiffusivities "//&
+                 "with KD_TANH_LAT_FN. Valid values are in the range of "//&
                  "-2 to 2; 0.4 reproduces CM2M.", units="nondim", default=0.0)
 
   if (CS%Henyey_IGW_background .and. CS%Kd_tanh_lat_fn) call MOM_error(FATAL, &

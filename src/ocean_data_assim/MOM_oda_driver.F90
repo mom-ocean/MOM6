@@ -150,7 +150,7 @@ subroutine init_oda(Time, G, GV, CS)
   call unit_scaling_init(PF, CS%US)
 
   call get_param(PF, "MOM", "ASSIM_METHOD", assim_method,  &
-       "String which determines the data assimilation method" // &
+       "String which determines the data assimilation method "//&
        "Valid methods are: \'EAKF\',\'OI\', and \'NO_ASSIM\'", default='NO_ASSIM')
   call get_param(PF, "MOM", "ASSIM_FREQUENCY", CS%assim_frequency,  &
        "data assimilation frequency in hours")
@@ -163,14 +163,14 @@ subroutine init_oda(Time, G, GV, CS)
        "If true, the domain is meridionally reentrant.", &
        default=.false.)
   call get_param(PF,"MOM", "TRIPOLAR_N", CS%tripolar_N, &
-       "Use tripolar connectivity at the northern edge of the \n"//&
+       "Use tripolar connectivity at the northern edge of the "//&
        "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
        default=.false.)
   call get_param(PF,"MOM", "NIGLOBAL", CS%ni, &
-       "The total number of thickness grid points in the \n"//&
+       "The total number of thickness grid points in the "//&
        "x-direction in the physical domain.")
   call get_param(PF,"MOM", "NJGLOBAL", CS%nj, &
-       "The total number of thickness grid points in the \n"//&
+       "The total number of thickness grid points in the "//&
        "y-direction in the physical domain.")
   call get_param(PF, 'MOM', "INPUTDIR", inputdir)
   inputdir = slasher(inputdir)

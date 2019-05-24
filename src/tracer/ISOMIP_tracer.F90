@@ -11,7 +11,6 @@ module ISOMIP_tracer
 ! Adapted to the ISOMIP test case by Gustavo Marques, May 2016
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -98,8 +97,8 @@ function register_ISOMIP_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the ISOMIP tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the ISOMIP tracers, or blank to initialize "//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -109,8 +108,8 @@ function register_ISOMIP_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_CS)
                    CS%tracer_IC_file)
   endif
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
@@ -147,7 +146,7 @@ end function register_ISOMIP_tracer
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                    ALE_sponge_CSp, diag_to_Z_CSp)
+                                    ALE_sponge_CSp)
 
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
@@ -165,8 +164,6 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< A pointer to the control structure for
                                                        !! the sponges, if they are in use.  Otherwise this
                                                        !! may be unassociated.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                       !! for diagnostics in depth space.
 
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &

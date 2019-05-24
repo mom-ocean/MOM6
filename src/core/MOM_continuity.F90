@@ -148,7 +148,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CONTINUITY_SCHEME", tmpstr, &
-                 "CONTINUITY_SCHEME selects the discretization for the \n"//&
+                 "CONTINUITY_SCHEME selects the discretization for the "//&
                  "continuity solver. The only valid value currently is: \n"//&
                  "\t PPM - use a positive-definite (or monotonic) \n"//&
                  "\t       piecewise parabolic reconstruction solver.", &
