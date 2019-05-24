@@ -926,10 +926,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 end function mixedlayer_restrat_init
 
 !> Allocate and register fields in the mixed layer restratification structure for restarts
-subroutine mixedlayer_restrat_register_restarts(HI, G, param_file, CS, restart_CS)
+subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
   ! Arguments
-  type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
-  type(ocean_grid_type),       intent(in)    :: G          !< The ocean's grid structure                                
+  type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure                             
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
   type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure
@@ -956,7 +955,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, G, param_file, CS, restart_C
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
-    call register_restart_field(CS%MLD_filtered, vd%name, .false., restart_CS, G, &
+    call register_restart_field(CS%MLD_filtered, vd%name, .false., restart_CS, &
                               longname=vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif
@@ -965,7 +964,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, G, param_file, CS, restart_C
     allocate(CS%MLD_filtered_slow(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered_slow(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered_slow","m","c Slower time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
-    call register_restart_field(CS%MLD_filtered_slow, vd%name, .false., restart_CS, G, &
+    call register_restart_field(CS%MLD_filtered_slow, vd%name, .false., restart_CS, &
                               longname=vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif

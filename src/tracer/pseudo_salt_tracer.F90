@@ -56,10 +56,9 @@ end type pseudo_salt_tracer_CS
 contains
 
 !> Register the pseudo-salt tracer with MOM6
-function register_pseudo_salt_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_CS)
+function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
-  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(pseudo_salt_tracer_CS),  pointer  :: CS !< The control structure returned by a previous
                                                !! call to register_pseudo_salt_tracer.
@@ -101,7 +100,7 @@ function register_pseudo_salt_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_
   tr_ptr => CS%ps(:,:,:)
   call query_vardesc(CS%tr_desc, name=var_name, caller="register_pseudo_salt_tracer")
   ! Register the tracer for horizontal advection, diffusion, and restarts.
-  call register_tracer(tr_ptr, tr_Reg, param_file, G, HI, GV, name="pseudo_salt", &
+  call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, name="pseudo_salt", &
                        longname="Pseudo salt passive tracer", units="psu", &
                        registry_diags=.true., restart_CS=restart_CS, &
                        mandatory=.not.CS%pseudo_salt_may_reinit)

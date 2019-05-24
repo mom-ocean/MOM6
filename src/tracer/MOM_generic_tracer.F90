@@ -86,10 +86,9 @@ contains
   !> Initializes the generic tracer packages and adds their tracers to the list
   !! Adds the tracers in the list of generic tracers to the set of MOM tracers (i.e., MOM-register them)
   !! Register these tracers for restart
-  function register_MOM_generic_tracer(HI, GV, G, param_file, CS, tr_Reg, restart_CS)
+  function register_MOM_generic_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     type(hor_index_type),       intent(in)   :: HI         !< Horizontal index ranges
     type(verticalGrid_type),    intent(in)   :: GV         !< The ocean's vertical grid structure
-    type(ocean_grid_type),      intent(in)   :: G          !< The ocean's grid structure
     type(param_file_type),      intent(in)   :: param_file !< A structure to parse for run-time parameters
     type(MOM_generic_tracer_CS), pointer     :: CS         !< Pointer to the control structure for this module
     type(tracer_registry_type), pointer      :: tr_Reg     !< Pointer to the control structure for the tracer
@@ -192,13 +191,13 @@ contains
        tr_ptr => tr_field(:,:,:,1)
        ! Register prognastic tracer for horizontal advection, diffusion, and restarts.
        if (g_tracer_is_prog(g_tracer)) then
-         call register_tracer(tr_ptr, tr_Reg, param_file, G, HI, GV, &
+         call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                               name=g_tracer_name, longname=longname, units=units, &
                               registry_diags=.false., &   !### CHANGE TO TRUE?
                               restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
        else
          call register_restart_field(tr_ptr, g_tracer_name, .not.CS%tracers_may_reinit, &
-                                     restart_CS, G, longname=longname, units=units)
+                                     restart_CS, longname=longname, units=units)
        endif
 
        !traverse the linked list till hit NULL

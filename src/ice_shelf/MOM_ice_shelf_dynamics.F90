@@ -240,19 +240,19 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     allocate( CS%float_frac(isd:ied,jsd:jed) )  ; CS%float_frac(:,:) = 0.0
 
     ! additional restarts for ice shelf state
-    call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, G, &
+    call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
                                 longname="ice sheet/shelf u-velocity", units="m s-1", hor_grid='Bu')
-    call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, G, &
+    call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, &
                                 longname="ice sheet/shelf v-velocity", units="m s-1", hor_grid='Bu')
-    call register_restart_field(CS%t_shelf, "t_shelf", .true., restart_CS, G, &
+    call register_restart_field(CS%t_shelf, "t_shelf", .true., restart_CS, &
                                 longname="ice sheet/shelf vertically averaged temperature", units="deg C")
-    call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, G, &
+    call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, &
                                 longname="Average open ocean depth in a cell",units="m")
-    call register_restart_field(CS%float_frac, "float_frac", .true., restart_CS, G, &
+    call register_restart_field(CS%float_frac, "float_frac", .true., restart_CS, &
                                 longname="fractional degree of grounding", units="nondim")
-    call register_restart_field(CS%ice_visc, "viscosity", .true., restart_CS, G, &
+    call register_restart_field(CS%ice_visc, "viscosity", .true., restart_CS, &
                                 longname="Glens law ice viscosity", units="m (seems wrong)")
-    call register_restart_field(CS%taub_beta_eff, "tau_b_beta", .true., restart_CS, G, &
+    call register_restart_field(CS%taub_beta_eff, "tau_b_beta", .true., restart_CS, &
                                 longname="Coefficient of basal traction", units="m (seems wrong)")
   endif
 

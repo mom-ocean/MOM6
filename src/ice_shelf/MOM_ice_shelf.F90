@@ -1403,16 +1403,16 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
 
   ! Set up the restarts.
   call restart_init(param_file, CS%restart_CSp,  "Shelf.res")
-  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, G, &
+  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
                               longname="Ice shelf mass", units="kg m-2")
-  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, G,  &
+  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
                               longname="Ice shelf area in cell", units="m2")
-  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, G, &
+  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
                               longname="ice sheet/shelf thickness", units="m")
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, G, &
+  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
                               longname="Height unit conversion factor", units="Z meter-1")
   if (CS%active_shelf_dynamics) then
-    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, G, &
+    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
                                 longname="ice sheet/shelf thickness mask" ,units="none")
   endif
 
@@ -1423,9 +1423,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
 
   !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
   !if (.not. CS%solo_ice_sheet) then
-  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, G, &
+  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
   !                              longname="Friction velocity under ice shelves", units="m s-1")
-  !  call register_restart_field(fluxes%iceshelf_melt, "iceshelf_melt", .false., CS%restart_CSp, G, &
+  !  call register_restart_field(fluxes%iceshelf_melt, "iceshelf_melt", .false., CS%restart_CSp, &
   !                              longname"Ice Shelf Melt Rate", units="m year-1")
   !endif
 

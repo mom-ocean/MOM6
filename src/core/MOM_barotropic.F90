@@ -4382,10 +4382,9 @@ end subroutine barotropic_end
 
 !> This subroutine is used to register any fields from MOM_barotropic.F90
 !! that should be written to or read from the restart file.
-subroutine register_barotropic_restarts(HI, GV, G, param_file, CS, restart_CS)
+subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
-  type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(barotropic_CS),     pointer    :: CS         !< A pointer that is set to point to the control
                                                     !! structure for this module.
@@ -4416,11 +4415,11 @@ subroutine register_barotropic_restarts(HI, GV, G, param_file, CS, restart_CS)
                 hor_grid='u', z_grid='1')
   vd(3) = var_desc("vbtav","m s-1","Time mean barotropic meridional velocity",&
                 hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubtav, vd(2)%name, .false., restart_CS, G, &
+  call register_restart_field(CS%ubtav, vd(2)%name, .false., restart_CS, &
                               longname = vd(2)%longname, units=vd(2)%units, &
                               hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vbtav, vd(3)%name, .false., restart_CS, G, &
+  call register_restart_field(CS%vbtav, vd(3)%name, .false., restart_CS, &
                               longname=vd(3)%longname, units=vd(3)%units, &
                               hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
   vd(2) = var_desc("ubt_IC", "m s-1", &
@@ -4429,11 +4428,11 @@ subroutine register_barotropic_restarts(HI, GV, G, param_file, CS, restart_CS)
   vd(3) = var_desc("vbt_IC", "m s-1", &
               longname="Next initial condition for the barotropic meridional velocity",&
               hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, G, &
+  call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, &
                               longname = vd(2)%longname, units=vd(2)%units, &
                               hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, G, &
+  call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, &
                               longname = vd(3)%longname, units=vd(3)%units, &
                               hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
 
@@ -4452,15 +4451,15 @@ subroutine register_barotropic_restarts(HI, GV, G, param_file, CS, restart_CS)
                 longname="Next initial condition for the barotropic meridional transport",&
                 hor_grid='v', z_grid='1')
   endif
-  call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, G, &
+  call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, &
                               longname = vd(2)%longname, units=vd(2)%units, &
                               hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vhbt_IC, vd(3)%name, .false., restart_CS, G, &
+  call register_restart_field(CS%vhbt_IC, vd(3)%name, .false., restart_CS, &
                               longname = vd(3)%longname, units=vd(3)%units, &
                               hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
 
-  call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, G, &
+  call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
                               longname="Barotropic timestep", units="seconds")
 
 end subroutine register_barotropic_restarts

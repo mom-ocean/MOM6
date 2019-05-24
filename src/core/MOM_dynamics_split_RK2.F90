@@ -874,10 +874,9 @@ end subroutine step_MOM_dyn_split_RK2
 !> This subroutine sets up any auxiliary restart variables that are specific
 !! to the unsplit time stepping scheme.  All variables registered here should
 !! have the ability to be recreated if they are not present in a restart file.
-subroutine register_restarts_dyn_split_RK2(HI, GV, G, param_file, CS, restart_CS, uh, vh)
+subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, uh, vh)
   type(hor_index_type),          intent(in)    :: HI         !< Horizontal index structure
   type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
-  type(ocean_grid_type),         intent(in)    :: G          !< The ocean's grid structure
   type(param_file_type),         intent(in)    :: param_file !< parameter file
   type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
   type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
@@ -922,47 +921,47 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, G, param_file, CS, restart_CS
   else
     vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
   endif
-  call register_restart_field(CS%eta, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%eta, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
-  call register_restart_field(CS%u_av, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%u_av, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
-  call register_restart_field(CS%v_av, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%v_av, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
-  call register_restart_field(CS%h_av, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%h_av, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
-  call register_restart_field(uh, vd%name, .false., restart_CS, G, &
+  call register_restart_field(uh, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
-  call register_restart_field(vh, vd%name, .false., restart_CS, G, &
+  call register_restart_field(vh, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
   vd = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
-  call register_restart_field(CS%diffu, vd%name, .false., restart_CS, G, &
+  call register_restart_field(CS%diffu, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
 
   vd = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
-  call register_restart_field(CS%diffv, vd%name, .false., restart_CS, G,  &
+  call register_restart_field(CS%diffv, vd%name, .false., restart_CS, &
                               longname = vd%longname, units=vd%units, &
                               hor_grid=vd%hor_grid, z_grid=vd%z_grid)
 
-  call register_barotropic_restarts(HI, GV, G, param_file, CS%barotropic_CSp, &
+  call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
                                     restart_CS)
 
 end subroutine register_restarts_dyn_split_RK2
