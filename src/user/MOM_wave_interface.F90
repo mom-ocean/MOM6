@@ -181,6 +181,7 @@ integer, parameter :: TESTPROF = 0, SURFBANDS = 1, &
 ! Options For Test Prof
 Real    :: TP_STKX0, TP_STKY0, TP_WVL
 logical :: WaveAgePeakFreq ! Flag to use W
+logical :: StaticWaves, DHH85_Is_Set
 real    :: WaveAge, WaveWind
 real    :: PI
 !!@}
@@ -269,7 +270,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        units='', default=NULL_STRING)
   select case (TRIM(TMPSTRING1))
   case (NULL_STRING)! No Waves
-    call MOM_error(FATAL, "wave_interface_init called with no specified"//&
+    call MOM_error(FATAL, "wave_interface_init called with no specified "//&
                            "WAVE_METHOD.")
   case (TESTPROF_STRING)! Test Profile
     WaveMethod = TESTPROF
@@ -343,6 +344,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     call get_param(param_file,mdl,"DHH85_WIND",WaveWind,   &
          "Wind speed for DHH85 spectrum.", &
          units='', default=10.0)
+    call get_param(param_file,mdl,"STATIC_DHH85",StaticWaves,   &
+         "Flag to disable updating DHH85 Stokes drift.", &
+          default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     WaveMethod = LF17
    case default
@@ -404,6 +408,10 @@ end subroutine MOM_wave_interface_init
 !! with the wind-speed dependent Stokes drift formulation of LF17
 subroutine MOM_wave_interface_init_lite(param_file)
   type(param_file_type), intent(in) :: param_file !< Input parameter structure
+  character*(5), parameter  :: NULL_STRING      = "EMPTY"
+  character*(4), parameter  :: LF17_STRING      = "LF17"
+  character*(13) :: TMPSTRING1
+  logical :: StatisticalWaves
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
@@ -411,11 +419,15 @@ subroutine MOM_wave_interface_init_lite(param_file)
        "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
        units="nondim",default=0.04)
 
-  if (WaveMethod==NULL_WaveMethod) then
-    ! Wave not initialized.  Check for WaveMethod.  Only allow LF17.
-    WaveMethod=LF17
+  ! Check if using LA_LI2016
+  call get_param(param_file,mdl,"USE_LA_LI2016",StatisticalWaves,     &
+                 do_not_log=.true.,default=.false.)
+  if (StatisticalWaves) then
+    WaveMethod = LF17
     PI=4.0*atan(1.0)
-  endif
+  else
+    WaveMethod = NULL_WaveMethod
+  end if
 
   return
 end subroutine MOM_wave_interface_init_lite
@@ -608,45 +620,48 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       enddo
     enddo
   elseif (WaveMethod==DHH85) then
-    do II = G%isdB,G%iedB
-      do jj = G%jsd,G%jed
-        bottom = 0.0
-        do kk = 1,G%ke
-          Top = Bottom
-          IIm1 = max(II-1,1)
-          MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
-          Bottom = Bottom - GV%H_to_Z*0.5*(h(II,jj,kk)+h(IIm1,jj,kk))
-          !bgr note that this is using a u-point ii on h-point ustar
-          !    this code has only been previous used for uniform
-          !    grid cases.  This needs fixed if DHH85 is used for non
-          !    uniform cases.
-          call DHH85_mid(GV, US, MidPoint, UStokes)
-          ! Putting into x-direction (no option for direction
-          CS%US_x(II,jj,kk) = UStokes
+    if (.not.(StaticWaves .and. DHH85_is_set)) then
+      do II = G%isdB,G%iedB
+        do jj = G%jsd,G%jed
+          bottom = 0.0
+          do kk = 1,G%ke
+            Top = Bottom
+            IIm1 = max(II-1,1)
+            MidPoint = Bottom - GV%H_to_Z*0.25*(h(II,jj,kk)+h(IIm1,jj,kk))
+            Bottom = Bottom - GV%H_to_Z*0.5*(h(II,jj,kk)+h(IIm1,jj,kk))
+            !bgr note that this is using a u-point ii on h-point ustar
+            !    this code has only been previous used for uniform
+            !    grid cases.  This needs fixed if DHH85 is used for non
+            !    uniform cases.
+            call DHH85_mid(GV, US, MidPoint, UStokes)
+            ! Putting into x-direction (no option for direction
+            CS%US_x(II,jj,kk) = UStokes
+          enddo
         enddo
       enddo
-    enddo
-    do ii = G%isd,G%ied
-      do JJ = G%jsdB,G%jedB
-        Bottom = 0.0
-        do kk=1, G%ke
-          Top = Bottom
-          JJm1 = max(JJ-1,1)
-          MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
-          Bottom = Bottom - GV%H_to_Z*0.5*(h(ii,JJ,kk)+h(ii,JJm1,kk))
-          !bgr note that this is using a v-point jj on h-point ustar
-          !    this code has only been previous used for uniform
-          !    grid cases.  This needs fixed if DHH85 is used for non
-          !    uniform cases.
-          ! call DHH85_mid(GV, US, Midpoint, UStokes)
-          ! Putting into x-direction, so setting y direction to 0
-          CS%US_y(ii,JJ,kk) = 0.0 !### Note that =0 should be =US - RWH
-                                  !    bgr - see note above, but this is true
-                                  !          if this is used for anything
-                                  !          other than simple LES comparison
+      do ii = G%isd,G%ied
+        do JJ = G%jsdB,G%jedB
+          Bottom = 0.0
+          do kk=1, G%ke
+            Top = Bottom
+            JJm1 = max(JJ-1,1)
+            MidPoint = Bottom - GV%H_to_Z*0.25*(h(ii,JJ,kk)+h(ii,JJm1,kk))
+            Bottom = Bottom - GV%H_to_Z*0.5*(h(ii,JJ,kk)+h(ii,JJm1,kk))
+            !bgr note that this is using a v-point jj on h-point ustar
+            !    this code has only been previous used for uniform
+            !    grid cases.  This needs fixed if DHH85 is used for non
+            !    uniform cases.
+            ! call DHH85_mid(GV, US, Midpoint, UStokes)
+            ! Putting into x-direction, so setting y direction to 0
+            CS%US_y(ii,JJ,kk) = 0.0 !### Note that =0 should be =US - RWH
+            !    bgr - see note above, but this is true
+            !          if this is used for anything
+            !          other than simple LES comparison
+          enddo
         enddo
       enddo
-    enddo
+      DHH85_is_set = .true.
+    endif
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,G%ke
       do II = G%isdB,G%iedB
@@ -669,7 +684,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     do jj = G%jsc, G%jec
       Top = h(ii,jj,1)*GV%H_to_Z
       call get_Langmuir_Number( La, G, GV, US, Top, US%Z_to_m*ustar(ii,jj), ii, jj, &
-             Override_MA=.false.,WAVES=CS)
+             H(ii,jj,:),Override_MA=.false.,WAVES=CS)
       CS%La_turb(ii,jj) = La
     enddo
   enddo
@@ -943,6 +958,11 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
   elseif (WaveMethod==LF17) then
     call get_StokesSL_LiFoxKemper(ustar, hbl*LA_FracHBL, GV, US, LA_STK, LA)
+  elseif (WaveMethod==Null_WaveMethod) then
+    call MOM_error(FATAL, "Get_Langmuir_number called without defining a WaveMethod. "//&
+                          "Suggest to make sure USE_LT is set/overridden to False or "//&
+                          "choose a wave method (or set USE_LA_LI2016 to use statistical "//&
+                          "waves.")
   endif
 
   if (.not.(WaveMethod==LF17)) then
@@ -1146,9 +1166,10 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   !/
   omega_min = 0.1 ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 6.5 ! ~sqrt(0.2*(GV%g_Earth*US%m_to_Z)*2*pi/0.3)
-  domega = 0.05
-  NOmega = (omega_max-omega_min)/domega
+  omega_max = 10. ! ~sqrt(0.2*(GV%g_Earth*US%m_to_Z)*2*pi/0.3)
+  NOmega = 1000
+  domega = (omega_max-omega_min)/real(NOmega)
+
   !
   if (WaveAgePeakFreq) then
     omega_peak = (GV%g_Earth*US%m_to_Z) / (WA * u10)
