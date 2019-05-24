@@ -31,8 +31,8 @@ subroutine register_obsolete_diagnostics(param_file, diag)
 
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "OBSOLETE_DIAGNOSTIC_IS_FATAL", causeFatal,              &
-                 "If an obsolete diagnostic variable appears in the diag_table\n"//        &
-                 "then cause a FATAL error rather than issue a WARNING.", default=.true.)
+                 "If an obsolete diagnostic variable appears in the diag_table, "//        &
+                 "cause a FATAL error rather than issue a WARNING.", default=.true.)
 
   foundEntry = .false.
   ! Each obsolete entry, with replacement name is available.

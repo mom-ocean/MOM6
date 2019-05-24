@@ -12,7 +12,6 @@ use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : diag_ctrl, register_diag_field, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_grid_storage
 use MOM_diag_mediator, only : diag_copy_storage_to_diag, diag_save_grids, diag_restore_grids
-use MOM_diag_to_Z,     only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_hor_index,     only : hor_index_type
@@ -321,7 +320,7 @@ end subroutine lock_tracer_registry
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
-subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_to_Z_CSp)
+subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
@@ -331,8 +330,6 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
   logical,                    intent(in) :: use_ALE !< If true active diagnostics that only
                                                  !! apply to ALE configurations
-  type(diag_to_Z_CS),         pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                 !! for diagnostics in depth space.
 
   character(len=24) :: name     ! A variable's name in a NetCDF file.
   character(len=24) :: shortnm  ! A shortened version of a variable's name for
@@ -526,14 +523,6 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       do k=1,nz ; do j=js,je ; do i=is,ie
         Tr%Trxh_prev(i,j,k) = Tr%t(i,j,k) * h(i,j,k)
       enddo ; enddo ; enddo
-    endif
-
-    if (len_trim(cmorname) == 0) then
-      call register_Z_tracer(Tr%t, name, longname, units, Time, G, diag_to_Z_CSp)
-    else
-      call register_Z_tracer(Tr%t, name, longname, units, Time, G, diag_to_Z_CSp, &
-               cmor_field_name=cmorname, cmor_standard_name=cmor_long_std(cmor_longname), &
-               cmor_long_name=cmor_longname)
     endif
 
     ! Vertical regridding/remapping tendencies

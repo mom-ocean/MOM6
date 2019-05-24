@@ -134,7 +134,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   !   This call sets the topography at velocity points.
   if (G%bathymetry_at_vel) then
     call get_param(PF, mdl, "VELOCITY_DEPTH_CONFIG", config, &
-                   "A string that determines how the topography is set at \n"//&
+                   "A string that determines how the topography is set at "//&
                    "velocity points. This may be 'min' or 'max'.", &
                    default="max")
     select case ( trim(config) )
