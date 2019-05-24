@@ -411,34 +411,23 @@ subroutine MOM_wave_interface_init_lite(param_file)
   character*(5), parameter  :: NULL_STRING      = "EMPTY"
   character*(4), parameter  :: LF17_STRING      = "LF17"
   character*(13) :: TMPSTRING1
+  logical :: StatisticalWaves
+
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
        "The depth (normalized by BLD) to average Stokes drift over in \n"//&
        " Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
        units="nondim",default=0.04)
 
-  ! Get Wave Method and write to integer WaveMethod
-  ! At this point only LF17 is a valid choice, since the Waves module isn't initialized.
-  call get_param(param_file,mdl,"WAVE_METHOD",TMPSTRING1,             &
-       "Choice of wave method, valid options include: \n"//           &
-       " TEST_PROFILE  - Prescribed from surface Stokes drift \n"//   &
-       "                 and a decay wavelength.\n"//                 &
-       " SURFACE_BANDS - Computed from multiple surface values \n"//  &
-       "                 and decay wavelengths.\n"//                  &
-       " DHH85         - Uses Donelan et al. 1985 empirical \n"//     &
-       "                 wave spectrum with prescribed values. \n"//  &
-       " LF17          - Infers Stokes drift profile from wind \n"//  &
-       "                 speed following Li and Fox-Kemper 2017.\n",  &
-       units='', default=NULL_STRING)
-  select case (TRIM(TMPSTRING1))
-  case (NULL_STRING)! No Waves
-    WaveMethod = NULL_WaveMethod
-  case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
+  ! Check if using LA_LI2016
+  call get_param(param_file,mdl,"USE_LA_LI2016",StatisticalWaves,     &
+                 do_not_log=.true.,default=.false.)
+  if (StatisticalWaves) then
     WaveMethod = LF17
     PI=4.0*atan(1.0)
-   case default
+  else
     WaveMethod = NULL_WaveMethod
-  end select
+  end if
 
   return
 end subroutine MOM_wave_interface_init_lite
@@ -969,10 +958,11 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
   elseif (WaveMethod==LF17) then
     call get_StokesSL_LiFoxKemper(ustar, hbl*LA_FracHBL, GV, US, LA_STK, LA)
-  else
-    LA_STK = 0.0
-    LA = 1.e8
-    return
+  elseif (WaveMethod==Null_WaveMethod) then
+    call MOM_error(FATAL, "Get_Langmuir_number called without defining a WaveMethod. "//&
+                          "Suggest to make sure USE_LT is set/overridden to False or "//&
+                          "choose a wave method (or set USE_LA_LI2016 to use statistical "//&
+                          "waves.")
   endif
 
   if (.not.(WaveMethod==LF17)) then
