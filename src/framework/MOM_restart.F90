@@ -1248,6 +1248,10 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   !Open the restart file.
   file_open_success = MOM_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", G, is_restart=.true.)
+  
+  if (is_root_pe() .and. file_open_success) then
+     call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "trim(directory)//trim(base_file_name))
+  endif
 
   call fms2_get_dimension_size(fileObjRead, "Time", ntime)
   if (ntime .lt. 1) then
