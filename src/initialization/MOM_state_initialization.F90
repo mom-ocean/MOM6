@@ -51,7 +51,7 @@ use DOME_initialization, only : DOME_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_thickness
 use ISOMIP_initialization, only : ISOMIP_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
-use Elizabeth_initialization, only : Elizabeth_initialize_sponges
+use RGC_initialization, only : RGC_initialize_sponges
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -514,7 +514,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t file - read sponge properties from the file \n"//&
                  " \t\t specified by (SPONGE_FILE).\n"//&
                  " \t ISOMIP - apply ale sponge in the ISOMIP case \n"//&
-                 " \t Elizabeth - apply sponge in the Elizabeth case \n"//&
+                 " \t RGC - apply sponge in the rotating_gravity_current case \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t BFB - Sponge at the southern boundary of the domain\n"//&
@@ -526,7 +526,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, useALE, &
                                                      sponge_CSp, ALE_sponge_CSp)
-      case("Elizabeth"); call Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
+      case("RGC"); call RGC_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
                                                      sponge_CSp, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)

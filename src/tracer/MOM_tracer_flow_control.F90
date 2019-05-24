@@ -30,9 +30,9 @@ use DOME_tracer, only : DOME_tracer_end, DOME_tracer_CS
 use ISOMIP_tracer, only : register_ISOMIP_tracer, initialize_ISOMIP_tracer
 use ISOMIP_tracer, only : ISOMIP_tracer_column_physics, ISOMIP_tracer_surface_state
 use ISOMIP_tracer, only : ISOMIP_tracer_end, ISOMIP_tracer_CS
-use Elizabeth_tracer, only : register_Elizabeth_tracer, initialize_Elizabeth_tracer
-use Elizabeth_tracer, only : Elizabeth_tracer_column_physics
-use Elizabeth_tracer, only : Elizabeth_tracer_end, Elizabeth_tracer_CS
+use RGC_tracer, only : register_RGC_tracer, initialize_RGC_tracer
+use RGC_tracer, only : RGC_tracer_column_physics
+use RGC_tracer, only : RGC_tracer_end, RGC_tracer_CS
 use ideal_age_example, only : register_ideal_age_tracer, initialize_ideal_age_tracer
 use ideal_age_example, only : ideal_age_tracer_column_physics, ideal_age_tracer_surface_state
 use ideal_age_example, only : ideal_age_stock, ideal_age_example_end, ideal_age_tracer_CS
@@ -76,7 +76,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_USER_tracer_example = .false.     !< If true, use the USER_tracer_example package
   logical :: use_DOME_tracer = .false.             !< If true, use the DOME_tracer package
   logical :: use_ISOMIP_tracer = .false.           !< If true, use the ISOMPE_tracer package
-  logical :: use_Elizabeth_tracer =.false.         !< If true, use the Elizabeth_tracer package
+  logical :: use_RGC_tracer =.false.               !< If true, use the RGC_tracer package
   logical :: use_ideal_age = .false.               !< If true, use the ideal age tracer package
   logical :: use_regional_dyes = .false.           !< If true, use the regional dyes tracer package
   logical :: use_oil = .false.                     !< If true, use the oil tracer package
@@ -90,7 +90,7 @@ type, public :: tracer_flow_control_CS ; private
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
-  type(Elizabeth_tracer_CS), pointer :: Elizabeth_tracer_CSp => NULL() 
+  type(RGC_tracer_CS), pointer :: RGC_tracer_CSp => NULL() 
   type(ideal_age_tracer_CS), pointer :: ideal_age_tracer_CSp => NULL()
   type(dye_tracer_CS), pointer :: dye_tracer_CSp => NULL()
   type(oil_tracer_CS), pointer :: oil_tracer_CSp => NULL()
@@ -190,8 +190,8 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "USE_ISOMIP_TRACER", CS%use_ISOMIP_tracer, &
                  "If true, use the ISOMIP_tracer tracer package.", &
                  default=.false.)
-  call get_param(param_file, mdl, "USE_ELIZABETH_TRACER", CS%use_Elizabeth_tracer, &
-                 "If true, use the Elizabeth_tracer tracer package.", &
+  call get_param(param_file, mdl, "USE_RGC_TRACER", CS%use_RGC_tracer, &
+                 "If true, use the RGC_tracer tracer package.", &
                  default=.false.)
   call get_param(param_file, mdl, "USE_IDEAL_AGE_TRACER", CS%use_ideal_age, &
                  "If true, use the ideal_age_example tracer package.", &
@@ -241,8 +241,8 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (CS%use_ISOMIP_tracer) CS%use_ISOMIP_tracer = &
     register_ISOMIP_tracer(HI, GV, param_file, CS%ISOMIP_tracer_CSp, &
                            tr_Reg, restart_CS)
-  if (CS%use_Elizabeth_tracer) CS%use_Elizabeth_tracer = &
-    register_Elizabeth_tracer(HI, GV, param_file, CS%Elizabeth_tracer_CSp, &
+  if (CS%use_RGC_tracer) CS%use_RGC_tracer = &
+    register_RGC_tracer(HI, GV, param_file, CS%RGC_tracer_CSp, &
                            tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
     register_ideal_age_tracer(HI, GV, param_file,  CS%ideal_age_tracer_CSp, &
@@ -324,9 +324,9 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   if (CS%use_ISOMIP_tracer) &
     call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
                                 ALE_sponge_CSp, diag_to_Z_CSp)
-  if (CS%use_Elizabeth_tracer) &
-    call initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, &
-                  CS%Elizabeth_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
+  if (CS%use_RGC_tracer) &
+    call initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, &
+                  CS%RGC_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
@@ -507,9 +507,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                         G, GV, CS%ISOMIP_tracer_CSp, &
                                         evap_CFL_limit=evap_CFL_limit, &
                                         minimum_forcing_depth=minimum_forcing_depth)
-    if (CS%use_Elizabeth_tracer) &
-      call Elizabeth_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                        G, GV, CS%Elizabeth_tracer_CSp, &
+    if (CS%use_RGC_tracer) &
+      call RGC_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                        G, GV, CS%RGC_tracer_CSp, &
                                         evap_CFL_limit=evap_CFL_limit, &
                                         minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_ideal_age) &
@@ -572,9 +572,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
     if (CS%use_ISOMIP_tracer) &
       call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                       G, GV, CS%ISOMIP_tracer_CSp)
-    if (CS%use_Elizabeth_tracer) &
-      call Elizabeth_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%Elizabeth_tracer_CSp)
+    if (CS%use_RGC_tracer) &
+      call RGC_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%RGC_tracer_CSp)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                            G, GV, CS%ideal_age_tracer_CSp)
@@ -867,7 +867,7 @@ subroutine tracer_flow_control_end(CS)
     call USER_tracer_example_end(CS%USER_tracer_example_CSp)
   if (CS%use_DOME_tracer) call DOME_tracer_end(CS%DOME_tracer_CSp)
   if (CS%use_ISOMIP_tracer) call ISOMIP_tracer_end(CS%ISOMIP_tracer_CSp)
-  if (CS%use_Elizabeth_tracer) call Elizabeth_tracer_end(CS%Elizabeth_tracer_CSp)
+  if (CS%use_RGC_tracer) call RGC_tracer_end(CS%RGC_tracer_CSp)
   if (CS%use_ideal_age) call ideal_age_example_end(CS%ideal_age_tracer_CSp)
   if (CS%use_regional_dyes) call regional_dyes_end(CS%dye_tracer_CSp)
   if (CS%use_oil) call oil_tracer_end(CS%oil_tracer_CSp)
@@ -886,6 +886,7 @@ end subroutine tracer_flow_control_end
 !> \namespace MOM_tracer_flow_control
 !!
 !!  By Will Cooke, April 2003
+!!  Edited by Elizabeth Yankovsky, May 2019
 !!
 !!    This module contains two subroutines into which calls to other
 !!  tracer initialization (call_tracer_init_fns) and column physics

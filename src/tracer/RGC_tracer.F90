@@ -2,17 +2,17 @@
 !! dynamically passive tracers. For now, three passive tracers can be injected in
 !! the domain
 !! Set up and use passive tracers requires the following:
-!! (1) register_Elizabeth_tracer
+!! (1) register_RGC_tracer
 !! (2) apply diffusion, physics/chemistry and advect the tracer
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
 !*  By Robert Hallberg, 2002                                           *
 !*  Adapted to the IDEAL_IS test case by Gustavo Marques, Oct 2016
-!*  Edited by Elizabeth Yankovsky, May 2018     *
+!*  Adapted for the rotating_gravity_current case by Elizabeth Yankovsky, May 2018     *
 !*********+*********+*********+*********+*********+*********+***********
 
-module Elizabeth_tracer
+module RGC_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -41,8 +41,8 @@ implicit none ; private
 #include <MOM_memory.h>
 
 !< Publicly available functions
-public register_Elizabeth_tracer, initialize_Elizabeth_tracer
-public Elizabeth_tracer_column_physics, Elizabeth_tracer_end
+public register_RGC_tracer, initialize_RGC_tracer
+public RGC_tracer_column_physics, RGC_tracer_end
 
 !< ntr is the number of tracers in this module.
 integer, parameter :: NTR = 1
@@ -52,7 +52,7 @@ type p3d
 end type p3d
 
 !> tracer control structure
-type, public :: Elizabeth_tracer_CS ; private
+type, public :: RGC_tracer_CS ; private
   logical :: coupled_tracers = .false.  !< These tracers are not offered to the
                                         !< coupler.
   character(len = 200) :: tracer_IC_file !< The full path to the IC file, or " "
@@ -82,32 +82,32 @@ type, public :: Elizabeth_tracer_CS ; private
   integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
   type(vardesc) :: tr_desc(NTR)
-end type Elizabeth_tracer_CS
+end type RGC_tracer_CS
 
 contains
 
 
 !> This subroutine is used to register tracer fields
-function register_Elizabeth_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI    !<A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse for model parameter values.
-  type(Elizabeth_tracer_CS),  pointer    :: CS !<A pointer that is set to point to the control structure for this module (in/out).
+  type(RGC_tracer_CS),  pointer    :: CS !<A pointer that is set to point to the control structure for this module (in/out).
   type(tracer_registry_type), pointer    :: tr_Reg !<A pointer to the tracer registry.
   type(MOM_restart_CS),       pointer    :: restart_CS !<A pointer to the restart control structure.
 
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "Elizabeth_tracer" ! This module's name.
+  character(len=40)  :: mdl = "RGC_tracer" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  logical :: register_Elizabeth_tracer
+  logical :: register_RGC_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "Elizabeth_register_tracer called with an "// &
+    call MOM_error(WARNING, "RGC_register_tracer called with an "// &
                             "associated control structure.")
     return
   endif
@@ -115,15 +115,15 @@ function register_Elizabeth_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "Elizabeth_TRACER_IC_FILE", CS%tracer_IC_file, &
+  call get_param(param_file, mdl, "RGC_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
-                 "conditions for the Elizabeth tracers, or blank to initialize \n"//&
+                 "conditions for the RGC tracers, or blank to initialize \n"//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     CS%tracer_IC_file = trim(inputdir)//trim(CS%tracer_IC_file)
-    call log_param(param_file, mdl, "INPUTDIR/Elizabeth_TRACER_IC_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/RGC_TRACER_IC_FILE", &
                    CS%tracer_IC_file)
   endif
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
@@ -155,7 +155,7 @@ function register_Elizabeth_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
-    write(longname,'("Concentration of Elizabeth Tracer ",I2.2)') m
+    write(longname,'("Concentration of RGC Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
@@ -171,12 +171,12 @@ function register_Elizabeth_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   enddo
 
   CS%tr_Reg => tr_Reg
-  register_Elizabeth_tracer = .true.
-end function register_Elizabeth_tracer
+  register_RGC_tracer = .true.
+end function register_RGC_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
-subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                     layer_CSp, sponge_CSp, diag_to_Z_CSp)
 
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
@@ -186,7 +186,7 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
   type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies whether, where, and what open boundary conditions are used. This is not being used for now.
-  type(Elizabeth_tracer_CS),             pointer    :: CS !< The control structure returned by a previous call to Elizabeth_register_tracer.
+  type(RGC_tracer_CS),             pointer    :: CS !< The control structure returned by a previous call to RGC_register_tracer.
   type(sponge_CS),                       pointer    :: layer_CSp    !< A pointer to the control structure
   type(ALE_sponge_CS),                   pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure for diagnostics in depth space.
@@ -226,10 +226,10 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     if (len_trim(CS%tracer_IC_file) >= 1) then
       !  Read the tracer concentrations from a netcdf file.
       if (.not.file_exists(CS%tracer_IC_file, G%Domain)) &
-        call MOM_error(FATAL, "Elizabeth_initialize_tracer: Unable to open "// &
+        call MOM_error(FATAL, "RGC_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
       do m=1,NTR
-        call query_vardesc(CS%tr_desc(m), name, caller="initialize_Elizabeth_tracer")
+        call query_vardesc(CS%tr_desc(m), name, caller="initialize_RGC_tracer")
         call read_data(CS%tracer_IC_file, trim(name), &
                        CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
       enddo
@@ -289,7 +289,7 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       endif
 !    endif !Layer mode
     else
-      call MOM_error(FATAL, "Elizabeth_initialize_tracer: "// &
+      call MOM_error(FATAL, "RGC_initialize_tracer: "// &
         "The pointer to sponge_CSp must be associated if SPONGE is defined.")
     endif !selecting mode/calling error if no pointer
   endif !using sponge
@@ -301,24 +301,24 @@ subroutine initialize_Elizabeth_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   do m=1,NTR
     ! Register the tracer for the restart file.
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_Elizabeth_tracer")
+                       caller="initialize_RGC_tracer")
     call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
                            day, G, diag_to_Z_CSp)
   enddo
 
-end subroutine initialize_Elizabeth_tracer
+end subroutine initialize_RGC_tracer
 
 !> This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
-subroutine Elizabeth_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
                               aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G
   type(verticalGrid_type),               intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
-  type(Elizabeth_tracer_CS),                  pointer    :: CS
+  type(RGC_tracer_CS),                  pointer    :: CS
   logical,                          optional,intent(in)  :: aggregate_FW_forcing
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
@@ -337,7 +337,7 @@ subroutine Elizabeth_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
-!                 Elizabeth_register_tracer.
+!                 RGC_register_tracer.
 !
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
@@ -411,10 +411,10 @@ subroutine Elizabeth_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G
       call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
   enddo
 
-end subroutine Elizabeth_tracer_column_physics
+end subroutine RGC_tracer_column_physics
 
-subroutine Elizabeth_tracer_end(CS)
-  type(Elizabeth_tracer_CS), pointer :: CS
+subroutine RGC_tracer_end(CS)
+  type(RGC_tracer_CS), pointer :: CS
   integer :: m
 
   if (associated(CS)) then
@@ -429,6 +429,6 @@ subroutine Elizabeth_tracer_end(CS)
 
     deallocate(CS)
   endif
-end subroutine Elizabeth_tracer_end
+end subroutine RGC_tracer_end
 
-end module Elizabeth_tracer
+end module RGC_tracer

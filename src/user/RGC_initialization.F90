@@ -1,4 +1,4 @@
-module Elizabeth_initialization
+module RGC_initialization
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -46,12 +46,12 @@ implicit none ; private
 ! Private (module-wise) parameters
 ! -----------------------------------------------------------------------------
 
-character(len=40) :: mod = "Elizabeth_initialization" ! This module's name.
+character(len=40) :: mod = "RGC_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public Elizabeth_initialize_sponges
+public RGC_initialize_sponges
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -61,7 +61,7 @@ contains
 !> Sets up the the inverse restoration time (Idamp), and
 ! the values towards which the interface heights and an arbitrary
 ! number of tracers should be restored within each sponge.
-subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
+subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
@@ -103,7 +103,7 @@ subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   character(len=40) :: filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 
-  character(len=40)  :: mod = "Elizabeth_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mod = "RGC_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -136,9 +136,9 @@ subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
    if (associated(CSp)) call MOM_error(FATAL, &
-          "Elizabeth_initialize_sponges called with an associated control structure.")
+          "RGC_initialize_sponges called with an associated control structure.")
    if (associated(ACSp)) call MOM_error(FATAL, &
-          "Elizabeth_initialize_sponges called with an associated ALE-sponge control structure.")
+          "RGC_initialize_sponges called with an associated ALE-sponge control structure.")
 
   !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
   !  wherever there is no sponge, and the subroutines that are called  !
@@ -195,7 +195,7 @@ subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
    !read temp and eta
    filename = trim(inputdir)//trim(state_file)
    if (.not.file_exists(filename, G%Domain)) &
-       call MOM_error(FATAL, " Elizabeth_initialize_sponges: Unable to open "//trim(filename))
+       call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
    call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
    call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
 
@@ -250,9 +250,9 @@ subroutine Elizabeth_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
   endif
 
-end subroutine Elizabeth_initialize_sponges
+end subroutine RGC_initialize_sponges
 
-!> \class Elizabeth_initialization
+!> \class RGC_initialization
 !!
 !!  The module configures the ISOMIP test case.
-end module Elizabeth_initialization
+end module RGC_initialization
