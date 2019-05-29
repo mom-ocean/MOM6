@@ -13,6 +13,7 @@ use MOM_dyn_horgrid,           only : dyn_horgrid_type
 use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data
 use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
 use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_variables,             only : thermo_var_ptrs
@@ -109,11 +110,12 @@ subroutine call_OBC_register(param_file, CS, OBC)
 end subroutine call_OBC_register
 
 !> Calls appropriate routine to update the open boundary conditions.
-subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
+subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
   type(ocean_grid_type),                    intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
+  type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),                    intent(in)    :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< layer thicknesses [H ~> m or kg m-2]
   type(ocean_OBC_type),                     pointer       :: OBC  !< Open boundary structure
   type(update_OBC_CS),                      pointer       :: CS   !< Control structure for OBCs
   type(time_type),                          intent(in)    :: Time !< Model time
@@ -138,7 +140,7 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
   if (CS%use_tidal_bay) &
       call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC_CSp, G, h, Time)
   if (CS%use_Kelvin)  &
-      call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, h, Time)
+      call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, GV, US, h, Time)
   if (CS%use_shelfwave) &
       call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, h, Time)
   if (CS%use_dyed_channel) &

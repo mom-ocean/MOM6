@@ -26,6 +26,7 @@ use MOM_io,               only : slasher, mom_read_data
 use MOM_io,               only : file_exists, field_size
 use MOM_string_functions, only : lowercase, extractWord
 use MOM_grid,             only : ocean_grid_type
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
@@ -136,10 +137,11 @@ end subroutine diag_remap_set_active
 
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration parameters to determine coordinate generation.
-subroutine diag_remap_configure_axes(remap_cs, GV, param_file)
+subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
   type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
-  type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
-  type(param_file_type),      intent(in) :: param_file !< Parameter file structure
+  type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file structure
   ! Local variables
   integer :: nzi(4), nzl(4), k
   character(len=200) :: inputdir, string, filename, int_varname, layer_varname
@@ -152,7 +154,7 @@ subroutine diag_remap_configure_axes(remap_cs, GV, param_file)
 
   real, allocatable, dimension(:) :: interfaces, layers
 
-  call initialize_regridding(remap_cs%regrid_cs, GV, GV%max_depth, param_file, mod, &
+  call initialize_regridding(remap_cs%regrid_cs, GV, US, GV%max_depth, param_file, mod, &
            trim(remap_cs%vertical_coord_name), "DIAG_COORD", trim(remap_cs%diag_coord_name))
   call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
 
@@ -223,10 +225,11 @@ end function
 !! height or layer thicknesses changes. In the case of density-based
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
-subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
+subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in) :: US !< A dimensional unit scaling type
   real, dimension(:, :, :), intent(in) :: h  !< New thickness
   real, dimension(:, :, :), intent(in) :: T  !< New T
   real, dimension(:, :, :), intent(in) :: S  !< New S
@@ -269,22 +272,22 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
 
     if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
       call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), &
-                              G%bathyT(i,j)*GV%m_to_H, sum(h(i,j,:)), &
-                              zInterfaces, zScale=GV%m_to_H)
+                              GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), &
+                              zInterfaces, zScale=GV%Z_to_H)
     elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
-                              GV%m_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+                              GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
-                            G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
+                            US%Z_to_m*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
 !     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
-!                           G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+!                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
     elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
 !     call build_hycom1_column(remap_cs%regrid_cs, nz, &
-!                           G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+!                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
     endif
     remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)

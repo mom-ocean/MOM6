@@ -31,15 +31,15 @@ type, public :: opacity_CS ; private
                              !! water properties into the opacity (i.e., the e-folding depth) and
                              !! (perhaps) the number of bands of penetrating shortwave radiation to use.
   real :: pen_sw_scale       !<   The vertical absorption e-folding depth of the
-                             !! penetrating shortwave radiation, in m.
+                             !! penetrating shortwave radiation [m].
   real :: pen_sw_scale_2nd   !<   The vertical absorption e-folding depth of the
-                             !! (2nd) penetrating shortwave radiation, in m.
+                             !! (2nd) penetrating shortwave radiation [m].
   real :: SW_1ST_EXP_RATIO   !< Ratio for 1st exp decay in Two Exp decay opacity
   real :: pen_sw_frac        !<   The fraction of shortwave radiation that is
                              !! penetrating with a constant e-folding approach.
   real :: blue_frac          !<   The fraction of the penetrating shortwave
-                             !! radiation that is in the blue band, ND.
-  real :: opacity_land_value !< The value to use for opacity over land, in m-1.
+                             !! radiation that is in the blue band [nondim].
+  real :: opacity_land_value !< The value to use for opacity over land [m-1].
                              !! The default is 10 m-1 - a value for muddy water.
   integer :: sbc_chl         !< An integer handle used in time interpolation of
                              !! chlorophyll read from a file.
@@ -79,25 +79,16 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
   type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by
                                                    !! opacity_init.
 
-! Arguments: (inout) opacity - The inverse of the vertical absorption decay
-!                     scale for penetrating shortwave radiation, in m-1.
-!            (inout) fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!            (in)    G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!            (in)    CS - The control structure earlier set up by opacity_init.
-
 ! local variables
   integer :: i, j, k, n, is, ie, js, je, nz
-  real :: inv_sw_pen_scale  ! The inverse of the e-folding scale, in m-1.
+  real :: inv_sw_pen_scale  ! The inverse of the e-folding scale [m-1].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation.
   logical :: call_for_surface  ! if horizontal slice is the surface layer
   real :: tmp(SZI_(G),SZJ_(G),SZK_(G))  ! A 3-d temporary array.
-  real :: chl(SZI_(G),SZJ_(G),SZK_(G))  ! The concentration of chlorophyll-A
-                                        ! in mg m-3.
+  real :: chl(SZI_(G),SZJ_(G),SZK_(G))  ! The concentration of chlorophyll-A [mg m-3].
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
-                                        ! summed across all bands, in W m-2.
+                                        ! summed across all bands [W m-2].
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_opacity: "// &
@@ -115,14 +106,14 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
 
     ! Make sure there is no division by 0.
-    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
+    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_m, &
                                  GV%H_to_m*GV%H_subroundoff)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
-             0.1*GV%Angstrom_z,GV%H_to_m*GV%H_subroundoff)
+             0.1*GV%Angstrom_m,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
       if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)
@@ -210,18 +201,17 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
                optional, intent(in)     :: chl_in !< A 3-d field of chlorophyll A,
                                                   !! in mg m-3.
 
-  real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in
-                                    ! a layer, in mg/m^3.
+  real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in a layer [mg m-3].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation.
   real :: Inv_nbands_nir    ! The inverse of the number of bands of penetrating
                             ! near-infrafed radiation.
   real :: SW_pen_tot        ! The sum across the bands of the penetrating
-                            ! shortwave radiation, in W m-2.
+                            ! shortwave radiation [W m-2].
   real :: SW_vis_tot        ! The sum across the visible bands of shortwave
-                            ! radiation, in W m-2.
+                            ! radiation [W m-2].
   real :: SW_nir_tot        ! The sum across the near infrared bands of shortwave
-                            ! radiation, in W m-2.
+                            ! radiation [W m-2].
   type(time_type) :: day
   character(len=128) :: mesg
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
@@ -487,15 +477,15 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 
 ! parameters for CHL_A routines
   call get_param(param_file, mdl, "VAR_PEN_SW", CS%var_pen_sw, &
-                 "If true, use one of the CHL_A schemes specified by \n"//&
-                 "OPACITY_SCHEME to determine the e-folding depth of \n"//&
+                 "If true, use one of the CHL_A schemes specified by "//&
+                 "OPACITY_SCHEME to determine the e-folding depth of "//&
                  "incoming short wave radiation.", default=.false.)
 
   CS%opacity_scheme = NO_SCHEME ; scheme_string = ''
   if (CS%var_pen_sw) then
     call get_param(param_file, mdl, "OPACITY_SCHEME", tmpstr, &
-                 "This character string specifies how chlorophyll \n"//&
-                 "concentrations are translated into opacities. Currently \n"//&
+                 "This character string specifies how chlorophyll "//&
+                 "concentrations are translated into opacities. Currently "//&
                  "valid options include:\n"//&
                  " \t\t  MANIZZA_05 - Use Manizza et al., GRL, 2005. \n"//&
                  " \t\t  MOREL_88 - Use Morel, JGR, 1988.", &
@@ -526,8 +516,8 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 
       call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
       call get_param(param_file, mdl, "CHL_FILE", chl_file, &
-                 "CHL_FILE is the file containing chl_a concentrations in \n"//&
-                 "the variable CHL_A. It is used when VAR_PEN_SW and \n"//&
+                 "CHL_FILE is the file containing chl_a concentrations in "//&
+                 "the variable CHL_A. It is used when VAR_PEN_SW and "//&
                  "CHL_FROM_FILE are true.", fail_if_missing=.true.)
       filename = trim(slasher(inputdir))//trim(chl_file)
       call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", filename)
@@ -537,12 +527,12 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
     endif
 
     call get_param(param_file, mdl, "BLUE_FRAC_SW", CS%blue_frac, &
-                 "The fraction of the penetrating shortwave radiation \n"//&
+                 "The fraction of the penetrating shortwave radiation "//&
                  "that is in the blue band.", default=0.5, units="nondim")
   else
     call get_param(param_file, mdl, "EXP_OPACITY_SCHEME", tmpstr, &
-                 "This character string specifies which exponential \n"//&
-                 "opacity scheme to utilize. Currently \n"//&
+                 "This character string specifies which exponential "//&
+                 "opacity scheme to utilize. Currently "//&
                  "valid options include:\n"//&
                  " \t\t  SINGLE_EXP - Single Exponent decay. \n"//&
                  " \t\t  DOUBLE_EXP - Double Exponent decay.", &
@@ -558,17 +548,17 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       call MOM_mesg('opacity_init: opacity scheme set to "'//trim(tmpstr)//'".', 5)
     endif
     call get_param(param_file, mdl, "PEN_SW_SCALE", CS%pen_sw_scale, &
-                 "The vertical absorption e-folding depth of the \n"//&
+                 "The vertical absorption e-folding depth of the "//&
                  "penetrating shortwave radiation.", units="m", default=0.0)
     !BGR/ Added for opacity_scheme==double_exp read in 2nd exp-decay and fraction
     if (CS%Opacity_scheme == DOUBLE_EXP ) then
       call get_param(param_file, mdl, "PEN_SW_SCALE_2ND", CS%pen_sw_scale_2nd, &
-                 "The (2nd) vertical absorption e-folding depth of the \n"//&
-                 "penetrating shortwave radiation \n"//&
+                 "The (2nd) vertical absorption e-folding depth of the "//&
+                 "penetrating shortwave radiation "//&
                  "(use if SW_EXP_MODE==double.)",&
                  units="m", default=0.0)
       call get_param(param_file, mdl, "SW_1ST_EXP_RATIO", CS%sw_1st_exp_ratio, &
-                 "The fraction of 1st vertical absorption e-folding depth \n"//&
+                 "The fraction of 1st vertical absorption e-folding depth "//&
                  "penetrating shortwave radiation if SW_EXP_MODE==double.",&
                   units="m", default=0.0)
     elseif (CS%OPACITY_SCHEME == Single_Exp) then
@@ -577,7 +567,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       CS%sw_1st_exp_ratio = 1.0
     endif
     call get_param(param_file, mdl, "PEN_SW_FRAC", CS%pen_sw_frac, &
-                 "The fraction of the shortwave radiation that penetrates \n"//&
+                 "The fraction of the shortwave radiation that penetrates "//&
                  "below the surface.", units="nondim", default=0.0)
 
   endif
@@ -616,7 +606,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   endif
 
   call get_param(param_file, mdl, "OPACITY_LAND_VALUE", CS%opacity_land_value, &
-                 "The value to use for opacity over land. The default is \n"//&
+                 "The value to use for opacity over land. The default is "//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
 
   if (.not.associated(optics%opacity_band)) &

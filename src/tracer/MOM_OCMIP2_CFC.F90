@@ -4,7 +4,6 @@ module MOM_OCMIP2_CFC
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -18,6 +17,7 @@ use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -44,24 +44,28 @@ type, public :: OCMIP2_CFC_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM6 tracer registry
   real, pointer, dimension(:,:,:) :: &
-    CFC11 => NULL(), &     !< The CFC11 concentration in mol m-3.
-    CFC12 => NULL()        !< The CFC12 concentration in mol m-3.
+    CFC11 => NULL(), &     !< The CFC11 concentration [mol m-3].
+    CFC12 => NULL()        !< The CFC12 concentration [mol m-3].
   ! In the following variables a suffix of _11 refers to CFC11 and _12 to CFC12.
   !>@{ Coefficients used in the CFC11 and CFC12 solubility calculation
-  real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
-  real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
-                                       ! units of ND, degC-1, degC-2, degC-3.
-  real :: d1_11, d2_11, d3_11, d4_11   ! Coefficients in the calculation of the
-  real :: d1_12, d2_12, d3_12, d4_12   ! CFC11 and CFC12 solubilities, in units
-                                       ! of ND, K-1, log(K)^-1, K-2.
-  real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
-  real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
-                                       ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+  real :: a1_11, a1_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [nondim]
+  real :: a2_11, a2_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [degC-1]
+  real :: a3_11, a3_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [degC-2]
+  real :: a4_11, a4_12   ! Coefficients for calculating CFC11 and CFC12 Schmidt numbers [degC-3]
+
+  real :: d1_11, d1_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [nondim]
+  real :: d2_11, d2_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-1]
+  real :: d3_11, d3_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [log(hectoKelvin)-1]
+  real :: d4_11, d4_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-2]
+
+  real :: e1_11, e1_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1]
+  real :: e2_11, e2_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1 hectoKelvin-1]
+  real :: e3_11, e3_12   ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-2 hectoKelvin-2]
   !!@}
-  real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11.
-  real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12.
-  real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out.
-  real :: CFC12_land_val = -1.0 !< The value of CFC12 used where land is masked out.
+  real :: CFC11_IC_val = 0.0    !< The initial value assigned to CFC11 [mol m-3].
+  real :: CFC12_IC_val = 0.0    !< The initial value assigned to CFC12 [mol m-3].
+  real :: CFC11_land_val = -1.0 !< The value of CFC11 used where land is masked out [mol m-3].
+  real :: CFC12_land_val = -1.0 !< The value of CFC12 used where land is masked out [mol m-3].
   logical :: tracers_may_reinit !< If true, tracers may be reset via the initialization code
                                 !! if they are not found in the restart files.
   character(len=16) :: CFC11_name !< CFC11 variable name
@@ -135,7 +139,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CFC_IC_FILE", CS%IC_file, &
-                 "The file in which the CFC initial values can be \n"//&
+                 "The file in which the CFC initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -148,9 +152,9 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
                  default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
   !   The following vardesc types contain a package of metadata about each tracer,
@@ -308,16 +312,16 @@ subroutine flux_init_OCMIP2_CFC(CS, verbosity)
 end subroutine flux_init_OCMIP2_CFC
 
 !> Initialize the OCMP2 CFC tracer fields and set up the tracer output.
-subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
-                                 sponge_CSp, diag_to_Z_CSp)
+subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
+                                 sponge_CSp)
   logical,                        intent(in) :: restart    !< .true. if the fields have already been
                                                            !! read from a restart file.
   type(time_type), target,        intent(in) :: day        !< Time of the start of the run.
   type(ocean_grid_type),          intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),          intent(in) :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                  intent(in) :: h          !< Layer thicknesses, in H
-                                                           !! (usually m or kg m-2).
+                                  intent(in) :: h          !< Layer thicknesses [H ~> m or kg m-2].
   type(diag_ctrl), target,        intent(in) :: diag       !< A structure that is used to regulate
                                                            !! diagnostic output.
   type(ocean_OBC_type),           pointer    :: OBC        !< This open boundary condition type
@@ -328,8 +332,6 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   type(sponge_CS),                pointer    :: sponge_CSp !< A pointer to the control structure for
                                                            !! the sponges, if they are in use.
                                                            !! Otherwise this may be unassociated.
-  type(diag_to_Z_CS),             pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                           !! for diagnostics in depth space.
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -343,12 +345,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) &
     call init_tracer_CFC(h, CS%CFC11, CS%CFC11_name, CS%CFC11_land_val, &
-                         CS%CFC11_IC_val, G, CS)
+                         CS%CFC11_IC_val, G, US, CS)
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp))) &
     call init_tracer_CFC(h, CS%CFC12, CS%CFC12_name, CS%CFC12_land_val, &
-                         CS%CFC12_IC_val, G, CS)
+                         CS%CFC12_IC_val, G, US, CS)
 
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.
@@ -357,9 +359,10 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine initialize_OCMIP2_CFC
 
 !>This subroutine initializes a tracer array.
-subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
+subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: tr   !< The tracer concentration array
   character(len=*),                         intent(in)  :: name !< The tracer name
   real,                                     intent(in)  :: land_val !< A value the tracer takes over land
@@ -378,9 +381,9 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
     if (.not.file_exists(CS%IC_file, G%Domain)) &
       call MOM_error(FATAL, "initialize_OCMIP2_CFC: Unable to open "//CS%IC_file)
     if (CS%Z_IC_file) then
-      OK = tracer_Z_init(tr, h, CS%IC_file, name, G)
+      OK = tracer_Z_init(tr, h, CS%IC_file, name, G, US)
       if (.not.OK) then
-        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G)
+        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G, US)
         if (.not.OK) call MOM_error(FATAL,"initialize_OCMIP2_CFC: "//&
                 "Unable to read "//trim(name)//" from "//&
                 trim(CS%IC_file)//".")
@@ -408,33 +411,33 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(OCMIP2_CFC_CS),     pointer    :: CS   !< The control structure returned by a
                                               !! previous call to register_OCMIP2_CFC.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! CFCs are relatively simple, as they are passive tracers. with only a surface
 ! flux as a source.
 
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
@@ -493,11 +496,9 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                   intent(in)    :: h      !< Layer thicknesses, in H
-                                                           !! (usually m or kg m-2).
-  real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount
-                                                           !! of each tracer, in kg times
-                                                           !! concentration units.
+                                   intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount of each
+                                                           !! tracer, in kg times concentration units [kg conc].
   type(OCMIP2_CFC_CS),             pointer       :: CS     !< The control structure returned by a
                                                            !! previous call to register_OCMIP2_CFC.
   character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
@@ -545,21 +546,21 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(OCMIP2_CFC_CS),    pointer       :: CS !< The control structure returned by a previous
                                               !! call to register_OCMIP2_CFC.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    CFC11_Csurf, &  ! The CFC-11 and CFC-12 surface concentrations times the
-    CFC12_Csurf, &  ! Schmidt number term, both in mol m-3.
-    CFC11_alpha, &  ! The CFC-11 solubility in mol m-3 pptv-1.
-    CFC12_alpha     ! The CFC-12 solubility in mol m-3 pptv-1.
-  real :: ta        ! Absolute sea surface temperature in units of dekaKelvin!?!
-  real :: sal       ! Surface salinity in PSU.
-  real :: SST       ! Sea surface temperature in degrees Celsius.
-  real :: alpha_11  ! The solubility of CFC 11 in mol m-3 pptv-1.
-  real :: alpha_12  ! The solubility of CFC 12 in mol m-3 pptv-1.
+    CFC11_Csurf, &  ! The CFC-11 surface concentrations times the Schmidt number term [mol m-3].
+    CFC12_Csurf, &  ! The CFC-12 surface concentrations times the Schmidt number term [mol m-3].
+    CFC11_alpha, &  ! The CFC-11 solubility [mol m-3 pptv-1].
+    CFC12_alpha     ! The CFC-12 solubility [mol m-3 pptv-1].
+  real :: ta        ! Absolute sea surface temperature [hectoKelvin] (Why use such bizzare units?)
+  real :: sal       ! Surface salinity [PSU].
+  real :: SST       ! Sea surface temperature [degC].
+  real :: alpha_11  ! The solubility of CFC 11 [mol m-3 pptv-1].
+  real :: alpha_12  ! The solubility of CFC 12 [mol m-3 pptv-1].
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
   integer :: i, j, m, is, ie, js, je, idim(4), jdim(4)

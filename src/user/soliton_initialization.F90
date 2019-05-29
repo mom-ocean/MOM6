@@ -7,6 +7,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -27,11 +28,12 @@ public soliton_initialize_velocity
 contains
 
 !> Initialization of thicknesses in Equatorial Rossby soliton test
-subroutine soliton_initialize_thickness(h, G, GV)
+subroutine soliton_initialize_thickness(h, G, GV, US)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h    !< The thickness that is being initialized, in H.
+                           intent(out) :: h    !< The thickness that is being initialized [H ~> m or kg m-2].
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0
@@ -45,15 +47,15 @@ subroutine soliton_initialize_thickness(h, G, GV)
   x0 = 2.0*G%len_lon/3.0
   y0 = 0.0
   val1 = 0.395
-  val2 = 0.771*(val1*val1)
+  val2 = US%m_to_Z * 0.771*(val1*val1)
 
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
     do k = 1, nz
       x = G%geoLonT(i,j)-x0
       y = G%geoLatT(i,j)-y0
       val3 = exp(-val1*x)
-      val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
-      h(i,j,k) = GV%m_to_H * (0.25*val4 * (6.0*y*y+3.0) * exp(-0.5*y*y) + G%bathyT(i,j))
+      val4 = val2 * ( 2.0*val3 / (1.0 + (val3*val3)) )**2
+      h(i,j,k) = GV%Z_to_H * (0.25*val4*(6.0*y*y + 3.0) * exp(-0.5*y*y) + G%bathyT(i,j))
     enddo
   enddo ; enddo
 
@@ -63,9 +65,9 @@ end subroutine soliton_initialize_thickness
 !> Initialization of u and v in the equatorial Rossby soliton test
 subroutine soliton_initialize_velocity(u, v, h, G)
   type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m s-1]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
 
   real    :: x, y, x0, y0
   real    :: val1, val2, val3, val4
@@ -87,8 +89,7 @@ subroutine soliton_initialize_velocity(u, v, h, G)
       y = 0.5*(G%geoLatT(i+1,j)+G%geoLatT(i,j))-y0
       val3 = exp(-val1*x)
       val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
-      u(I,j,k) = 0.25*val4*(6.0*y*y-9.0)*         &
-                      exp(-0.5*y*y)
+      u(I,j,k) = 0.25*val4*(6.0*y*y-9.0) * exp(-0.5*y*y)
     enddo
   enddo ; enddo
   do j = G%jsc-1,G%jec+1 ; do I = G%isc,G%iec
@@ -97,8 +98,7 @@ subroutine soliton_initialize_velocity(u, v, h, G)
       y = 0.5*(G%geoLatT(i,j+1)+G%geoLatT(i,j))-y0
       val3 = exp(-val1*x)
       val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
-      v(i,J,k) = 2.0*val4*y*(-2.0*val1*tanh(val1*x))*        &
-                     exp(-0.5*y*y)
+      v(i,J,k) = 2.0*val4*y*(-2.0*val1*tanh(val1*x)) * exp(-0.5*y*y)
     enddo
   enddo ; enddo
 

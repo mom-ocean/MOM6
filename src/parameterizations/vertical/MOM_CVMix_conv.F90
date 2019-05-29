@@ -3,16 +3,17 @@ module MOM_CVMix_conv
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,      only : hchksum
 use MOM_diag_mediator,  only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,  only : post_data
 use MOM_EOS,            only : calculate_density
-use MOM_variables,      only : thermo_var_ptrs
 use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
-use MOM_debugging,      only : hchksum
-use MOM_grid,           only : ocean_grid_type
-use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_file_parser,    only : get_param, log_version, param_file_type
+use MOM_grid,           only : ocean_grid_type
+use MOM_unit_scaling,   only : unit_scale_type
+use MOM_variables,      only : thermo_var_ptrs
+use MOM_verticalGrid,   only : verticalGrid_type
 use CVMix_convection,   only : CVMix_init_conv, CVMix_coeffs_conv
 use CVMix_kpp,          only : CVMix_kpp_compute_kOBL_depth
 
@@ -26,11 +27,11 @@ public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_end, CVMix_conv_is_used
 type, public :: CVMix_conv_cs
 
   ! Parameters
-  real    :: kd_conv_const !< diffusivity constant used in convective regime (m2/s)
-  real    :: kv_conv_const !< viscosity constant used in convective regime (m2/s)
+  real    :: kd_conv_const !< diffusivity constant used in convective regime [m2 s-1]
+  real    :: kv_conv_const !< viscosity constant used in convective regime [m2 s-1]
   real    :: bv_sqr_conv   !< Threshold for squared buoyancy frequency
-                           !! needed to trigger Brunt-Vaisala parameterization (1/s^2)
-  real    :: min_thickness !< Minimum thickness allowed (m)
+                           !! needed to trigger Brunt-Vaisala parameterization [s-2]
+  real    :: min_thickness !< Minimum thickness allowed [m]
   logical :: debug         !< If true, turn on debugging
 
   ! Daignostic handles and pointers
@@ -40,9 +41,9 @@ type, public :: CVMix_conv_cs
   !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection (m2/s)
-  real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection (m2/s)
+  real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency [s-2]
+  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection [m2 s-1]
+  real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection [m2 s-1]
 
 end type CVMix_conv_cs
 
@@ -51,14 +52,15 @@ character(len=40)  :: mdl = "MOM_CVMix_conv"     !< This module's name.
 contains
 
 !> Initialized the CVMix convection mixing routine.
-logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_conv_cs),    pointer        :: CS         !< This module's control structure.
+  type(CVMix_conv_cs),     pointer       :: CS         !< This module's control structure.
   ! Local variables
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
@@ -77,9 +79,9 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of enhanced mixing due to convection via CVMix")
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, &
-                 "If true, turns on the enhanced mixing due to convection  \n"// &
-                 "via CVMix. This scheme increases diapycnal diffs./viscs. \n"// &
-                 " at statically unstable interfaces. Relevant parameters are \n"// &
+                 "If true, turns on the enhanced mixing due to convection "//&
+                 "via CVMix. This scheme increases diapycnal diffs./viscs. "//&
+                 "at statically unstable interfaces. Relevant parameters are "//&
                  "contained in the CVMix_CONVECTION% parameter block.", &
                  default=.false.)
 
@@ -103,17 +105,17 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   call openParameterBlock(param_file,'CVMix_CONVECTION')
 
   call get_param(param_file, mdl, "PRANDTL_CONV", prandtl_conv, &
-                 "The turbulent Prandtl number applied to convective \n"//&
+                 "The turbulent Prandtl number applied to convective "//&
                  "instabilities (i.e., used to convert KD_CONV into KV_CONV)", &
                  units="nondim", default=1.0)
 
   call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv_const, &
-                 "Diffusivity used in convective regime. Corresponding viscosity \n" // &
+                 "Diffusivity used in convective regime. Corresponding viscosity "//&
                  "(KV_CONV) will be set to KD_CONV * PRANDTL_TURB.", &
                  units='m2/s', default=1.00)
 
   call get_param(param_file, mdl, 'BV_SQR_CONV', CS%bv_sqr_conv, &
-                 "Threshold for squared buoyancy frequency needed to trigger \n" // &
+                 "Threshold for squared buoyancy frequency needed to trigger "//&
                  "Brunt-Vaisala parameterization.", &
                  units='1/s^2', default=0.0)
 
@@ -132,9 +134,9 @@ logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
-      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s')
+      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
-      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s')
+      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
 
   call CVMix_init_conv(convect_diff=CS%kd_conv_const, &
                        convect_visc=CS%kv_conv_const, &
@@ -145,28 +147,31 @@ end function CVMix_conv_init
 
 !> Subroutine for calculating enhanced diffusivity/viscosity
 !! due to convection via CVMix
-subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
+subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
 
   type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
+  type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
   type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
-  real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer (m)
+  real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer [m]
   ! local variables
   real, dimension(SZK_(G)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
                                       !! variable since here convection is always
                                       !! computed based on Brunt Vaisala.
   real, dimension(SZK_(G)) :: rho_1d  !< water density in a column, this is also
                                       !! a dummy variable, same reason as above.
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
-  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
+  real, dimension(SZK_(G)+1) :: kv_col !< Viscosities at interfaces in the column [m2 s-1]
+  real, dimension(SZK_(G)+1) :: kd_col !< Diffusivities at interfaces in the column [m2 s-1]
+  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
+  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers [m]
   integer :: kOBL                        !< level of OBL extent
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = GV%g_Earth / GV%Rho0
+  g_o_rho0 = (GV%g_Earth*US%m_to_Z) / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
@@ -215,8 +220,9 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
       ! gets index of the level and interface above hbl
       kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
-      call CVMix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
-                               Tdiff_out=CS%kd_conv(i,j,:), &
+      kv_col(:) = 0.0 ; kd_col(:) = 0.0
+      call CVMix_coeffs_conv(Mdiff_out=kv_col(:), &
+                               Tdiff_out=kd_col(:), &
                                Nsqr=CS%N2(i,j,:), &
                                dens=rho_1d(:), &
                                dens_lwr=rho_lwr(:), &
@@ -224,11 +230,15 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
                                max_nlev=G%ke, &
                                OBL_ind=kOBL)
 
-    ! Do not apply mixing due to convection within the boundary layer
-    do k=1,kOBL
-      CS%kv_conv(i,j,k) = 0.0
-      CS%kd_conv(i,j,k) = 0.0
-    enddo
+      do K=1,G%ke+1
+        CS%kv_conv(i,j,K) = US%m_to_Z**2 * kv_col(K)
+        CS%kd_conv(i,j,K) = US%m_to_Z**2 * kd_col(K)
+      enddo
+      ! Do not apply mixing due to convection within the boundary layer
+      do k=1,kOBL
+        CS%kv_conv(i,j,k) = 0.0
+        CS%kd_conv(i,j,k) = 0.0
+      enddo
 
     enddo
   enddo

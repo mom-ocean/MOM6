@@ -4,7 +4,6 @@ module ideal_age_example
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -18,6 +17,7 @@ use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -49,8 +49,7 @@ type, public :: ideal_age_tracer_CS ; private
   real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
   real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface.
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value,
-                                              !! in units of year-1.
+  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
   real, dimension(NTR_MAX) :: tracer_start_year !< The year in which tracers start aging, or at which the
                                               !! surface value equals young_val, in years.
   logical :: tracers_may_reinit  !< If true, these tracers be set up via the initialization code if
@@ -102,23 +101,23 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DO_IDEAL_AGE", do_ideal_age, &
-                 "If true, use an ideal age tracer that is set to 0 age \n"//&
+                 "If true, use an ideal age tracer that is set to 0 age "//&
                  "in the mixed layer and ages at unit rate in the interior.", &
                  default=.true.)
   call get_param(param_file, mdl, "DO_IDEAL_VINTAGE", do_vintage, &
-                 "If true, use an ideal vintage tracer that is set to an \n"//&
-                 "exponentially increasing value in the mixed layer and \n"//&
+                 "If true, use an ideal vintage tracer that is set to an "//&
+                 "exponentially increasing value in the mixed layer and "//&
                  "is conserved thereafter.", default=.false.)
   call get_param(param_file, mdl, "DO_IDEAL_AGE_DATED", do_ideal_age_dated, &
-                 "If true, use an ideal age tracer that is everywhere 0 \n"//&
-                 "before IDEAL_AGE_DATED_START_YEAR, but the behaves like \n"//&
-                 "the standard ideal age tracer - i.e. is set to 0 age in \n"//&
+                 "If true, use an ideal age tracer that is everywhere 0 "//&
+                 "before IDEAL_AGE_DATED_START_YEAR, but the behaves like "//&
+                 "the standard ideal age tracer - i.e. is set to 0 age in "//&
                  "the mixed layer and ages at unit rate in the interior.", &
                  default=.false.)
 
 
   call get_param(param_file, mdl, "AGE_IC_FILE", CS%IC_file, &
-                 "The file in which the age-tracer initial values can be \n"//&
+                 "The file in which the age-tracer initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -131,9 +130,9 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "If true, AGE_IC_FILE is in depth space, not layer space", &
                  default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if the tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if the tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
   CS%ntr = 0
@@ -193,15 +192,16 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_ideal_age_tracer
 
 !> Sets the ideal age traces to their initial values and sets up the tracer output
-subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                       sponge_CSp, diag_to_Z_CSp)
+subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
+                                       sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                      intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                                      intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
                                                          !! diagnostic output.
   type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
@@ -210,8 +210,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(ideal_age_tracer_CS),          pointer    :: CS !< The control structure returned by a previous
                                                        !! call to register_ideal_age_tracer.
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                  !! for diagnostics in depth space.
+
 !   This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -250,10 +249,10 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
         if (CS%Z_IC_file) then
           OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name,&
-                             G, -1e34, 0.0) ! CS%land_val(m))
+                             G, US, -1e34, 0.0) ! CS%land_val(m))
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
-                     trim(name), G, -1e34, 0.0) ! CS%land_val(m))
+                     trim(name), G, US, -1e34, 0.0) ! CS%land_val(m))
             if (.not.OK) call MOM_error(FATAL,"initialize_ideal_age_tracer: "//&
                     "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
@@ -286,32 +285,32 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(ideal_age_tracer_CS), pointer  :: CS   !< The control structure returned by a previous
                                               !! call to register_ideal_age_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
 
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   real :: sfc_val  ! The surface value for the tracers.
@@ -373,9 +372,9 @@ end subroutine ideal_age_tracer_column_physics
 function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                      intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                                      intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                            !! tracer, in kg times concentration units.
+                                                            !! tracer, in kg times concentration units [kg conc].
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   type(ideal_age_tracer_CS),          pointer       :: CS   !< The control structure returned by a previous
                                                             !! call to register_ideal_age_tracer.
@@ -424,7 +423,7 @@ subroutine ideal_age_tracer_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(ideal_age_tracer_CS), pointer    :: CS !< The control structure returned by a previous
                                               !! call to register_ideal_age_tracer.
 

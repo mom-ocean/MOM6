@@ -112,8 +112,8 @@ type, public :: offline_transport_CS ; private
   integer :: num_off_iter   !< Number of advection iterations per offline step
   integer :: num_vert_iter  !< Number of vertical iterations per offline step
   integer :: off_ale_mod    !< Sets how frequently the ALE step is done during the advection
-  real :: dt_offline        !< Timestep used for offline tracers
-  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics
+  real :: dt_offline        !< Timestep used for offline tracers [s]
+  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics [s]
   real :: evap_CFL_limit    !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
@@ -158,17 +158,17 @@ type, public :: offline_transport_CS ; private
   ! Fields at T-point
   real, allocatable, dimension(:,:,:) :: eatr
                    !< Amount of fluid entrained from the layer above within
-                   !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                   !! one time step [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: ebtr
                    !< Amount of fluid entrained from the layer below within
-                   !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+                   !! one time step [H ~> m or kg m-2]
   ! Fields at T-points on interfaces
   real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity
   real, allocatable, dimension(:,:,:) :: h_end  !< Thicknesses at the end of offline timestep
 
   real, allocatable, dimension(:,:) :: netMassIn  !< Freshwater fluxes into the ocean
   real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
-  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points, in H.
+  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [H ~> m or kg m-2].
 
   ! Allocatable arrays to read in entire fields during initialization
   real, allocatable, dimension(:,:,:,:) :: uhtr_all !< Entire field of zonal transport
@@ -205,11 +205,12 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   type(offline_transport_CS), pointer  :: CS            !< control structure for offline module
   integer,          intent(in)         :: id_clock_ALE  !< Clock for ALE routines
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: h_pre         !< layer thicknesses before advection in m or kg m-2
+                    intent(inout)      :: h_pre         !< layer thicknesses before advection
+                                                        !! [H ~> m or kg m-2]
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: uhtr          !< Zonal mass transport in m3 or kg
+                    intent(inout)      :: uhtr          !< Zonal mass transport [H m2 ~> m3 or kg]
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: vhtr          !< Meridional mass transport in m3 or kg
+                    intent(inout)      :: vhtr          !< Meridional mass transport [H m2 ~> m3 or kg]
   logical,          intent(  out)      :: converged     !< True if the iterations have converged
 
   ! Local pointers
@@ -450,7 +451,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   if (CS%id_eta_pre_distribute>0) then
     eta_work(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_pre(i,j,k)>GV%Angstrom) then
+      if (h_pre(i,j,k)>GV%Angstrom_H) then
         eta_work(i,j) = eta_work(i,j) + h_pre(i,j,k)
       endif
     enddo ; enddo ; enddo
@@ -583,7 +584,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   if (CS%id_eta_post_distribute>0) then
     eta_work(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_pre(i,j,k)>GV%Angstrom) then
+      if (h_pre(i,j,k)>GV%Angstrom_H) then
         eta_work(i,j) = eta_work(i,j) + h_pre(i,j,k)
       endif
     enddo ; enddo ; enddo
@@ -646,11 +647,11 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   type(time_type),  intent(in)         :: Time_end   !< time interval
   type(offline_transport_CS), pointer  :: CS         !< control structure from initialize_MOM
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: h_pre      !< layer thicknesses before advection in m or kg m-2
+                    intent(inout)      :: h_pre      !< layer thicknesses before advection [H ~> m or kg m-2]
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: eatr       !< Entrainment from layer above in m or kg-2
+                    intent(inout)      :: eatr       !< Entrainment from layer above [H ~> m or kg m-2]
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), &
-                    intent(inout)      :: ebtr       !< Entrainment from layer below in m or kg-2
+                    intent(inout)      :: ebtr       !< Entrainment from layer below [H ~> m or kg m-2]
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G))    :: sw, sw_vis, sw_nir !< Save old value of shortwave radiation
   real :: hval
@@ -749,7 +750,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
   type(verticalGrid_type),    intent(in)    :: GV !< ocean vertical grid structure
   type(forcing),              intent(inout) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: h  !< Layer thickness in H units
+                              intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in)    :: in_flux_optional !< The total time-integrated amount
                                                   !! of tracer that leaves with freshwater
@@ -799,7 +800,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
   type(verticalGrid_type),    intent(in)    :: GV !< ocean vertical grid structure
   type(forcing),              intent(inout) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                              intent(inout) :: h  !< Layer thickness in H units
+                              intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in)    :: out_flux_optional !< The total time-integrated amount
                                                   !! of tracer that leaves with freshwater
@@ -1057,7 +1058,7 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   ! Apply masks/factors at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (CS%G%mask2dT(i,j)<1.0) then
-      CS%h_end(i,j,k) = CS%GV%Angstrom
+      CS%h_end(i,j,k) = CS%GV%Angstrom_H
     endif
   enddo ; enddo ; enddo
 
@@ -1186,18 +1187,20 @@ subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_t
                                 dt_offline, dt_offline_vertical, skip_diffusion)
   type(offline_transport_CS), target, intent(in   ) :: CS !< Offline control structure
   ! Returned optional arguments
-  real, dimension(:,:,:), optional, pointer       :: uhtr !< Remaining zonal mass transport
-  real, dimension(:,:,:), optional, pointer       :: vhtr !< Remaining meridional mass transport
+  real, dimension(:,:,:), optional, pointer       :: uhtr !< Remaining zonal mass transport [H m2 ~> m3 or kg]
+  real, dimension(:,:,:), optional, pointer       :: vhtr !< Remaining meridional mass transport [H m2 ~> m3 or kg]
   real, dimension(:,:,:), optional, pointer       :: eatr !< Amount of fluid entrained from the layer above within
-                                                          !! one time step (m for Bouss, kg/m^2 for non-Bouss)
+                                                          !! one time step [H ~> m or kg m-2]
   real, dimension(:,:,:), optional, pointer       :: ebtr !< Amount of fluid entrained from the layer below within
-                                                          !! one time step (m for Bouss, kg/m^2 for non-Bouss)
-  real, dimension(:,:,:), optional, pointer       :: h_end !< Thicknesses at the end of offline timestep in m or kg m-2
+                                                          !! one time step [H ~> m or kg m-2]
+  real, dimension(:,:,:), optional, pointer       :: h_end !< Thicknesses at the end of offline timestep
+                                                          !! [H ~> m or kg m-2]
+  !### Why are the following variables integers?
   integer,                optional, pointer       :: accumulated_time !< Length of time accumulated in the
-                                                          !! current offline interval
-  integer,                optional, intent(  out) :: dt_offline !< Timestep used for offline tracers
+                                                          !! current offline interval [s]
+  integer,                optional, intent(  out) :: dt_offline !< Timestep used for offline tracers [s]
   integer,                optional, intent(  out) :: dt_offline_vertical !< Timestep used for calls to tracer
-                                                          !! vertical physics
+                                                          !! vertical physics [s]
   logical,                optional, intent(  out) :: skip_diffusion !< Skips horizontal diffusion of tracers
 
   ! Pointers to 3d members
@@ -1310,27 +1313,27 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   call get_param(param_file, mdl, "DT_OFFLINE", CS%dt_offline, &
     "Length of time between reading in of input fields",      fail_if_missing = .true.)
   call get_param(param_file, mdl, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
-    "Length of the offline timestep for tracer column sources/sinks\n" //&
-    "This should be set to the length of the coupling timestep for \n" //&
+    "Length of the offline timestep for tracer column sources/sinks " //&
+    "This should be set to the length of the coupling timestep for " //&
     "tracers which need shortwave fluxes",                    fail_if_missing = .true.)
   call get_param(param_file, mdl, "START_INDEX", CS%start_index, &
     "Which time index to start from", default=1)
   call get_param(param_file, mdl, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
-    "True if the time-averaged fields and snapshot fields\n"//&
+    "True if the time-averaged fields and snapshot fields "//&
     "are offset by one time level", default=.false.)
   call get_param(param_file, mdl, "REDISTRIBUTE_METHOD", redistribute_method, &
-    "Redistributes any remaining horizontal fluxes throughout\n"    //&
-    "the rest of water column. Options are 'barotropic' which\n"    //&
-    "evenly distributes flux throughout the entire water column,\n" //&
-    "'upwards' which adds the maximum of the remaining flux in\n"   //&
-    "each layer above, both which first applies upwards and then\n" //&
+    "Redistributes any remaining horizontal fluxes throughout "    //&
+    "the rest of water column. Options are 'barotropic' which "    //&
+    "evenly distributes flux throughout the entire water column, " //&
+    "'upwards' which adds the maximum of the remaining flux in "   //&
+    "each layer above, both which first applies upwards and then " //&
     "barotropic, and 'none' which does no redistribution", &
     default='barotropic')
   call get_param(param_file, mdl, "NUM_OFF_ITER", CS%num_off_iter, &
     "Number of iterations to subdivide the offline tracer advection and diffusion", &
     default = 60)
   call get_param(param_file, mdl, "OFF_ALE_MOD", CS%off_ale_mod, &
-    "Sets how many horizontal advection steps are taken before an ALE\n" //&
+    "Sets how many horizontal advection steps are taken before an ALE " //&
     "remapping step is done. 1 would be x->y->ALE, 2 would be"           //&
     "x->y->x->y->ALE", default = 1)
   call get_param(param_file, mdl, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
@@ -1347,21 +1350,21 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
     "Name of the variable containing the depth of active mixing",&
     default='ePBL_h_ML')
   call get_param(param_file, mdl, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
-    "Adds a synthetic diurnal cycle in the same way that the ice\n" // &
-    "model would have when time-averaged fields of shortwave\n"    // &
+    "Adds a synthetic diurnal cycle in the same way that the ice " // &
+    "model would have when time-averaged fields of shortwave "    // &
     "radiation are read in", default=.false.)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
-    "The maximum permitted increment for the diapycnal \n"//&
-    "diffusivity from TKE-based parameterizations, or a \n"//&
+    "The maximum permitted increment for the diapycnal "//&
+    "diffusivity from TKE-based parameterizations, or a "//&
     "negative value for no limit.", units="m2 s-1", default=-1.0)
   call get_param(param_file, mdl, "MIN_RESIDUAL_TRANSPORT", CS%min_residual, &
-    "How much remaining transport before the main offline advection\n"// &
-    "is exited. The default value corresponds to about 1 meter of\n"  // &
+    "How much remaining transport before the main offline advection "// &
+    "is exited. The default value corresponds to about 1 meter of "  // &
     "difference in a grid cell", default = 1.e9)
   call get_param(param_file, mdl, "READ_ALL_TS_UVH", CS%read_all_ts_uvh,  &
-    "Reads all time levels of a subset of the fields necessary to run \n"    //      &
-    "the model offline. This can require a large amount of memory\n"//      &
-    "and will make initialization very slow. However, for offline\n"//      &
+    "Reads all time levels of a subset of the fields necessary to run "    //      &
+    "the model offline. This can require a large amount of memory "//      &
+    "and will make initialization very slow. However, for offline "//      &
     "runs spanning more than a year this can reduce total I/O overhead",    &
     default = .false.)
 

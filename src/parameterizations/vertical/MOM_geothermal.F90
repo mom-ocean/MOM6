@@ -24,10 +24,10 @@ public geothermal, geothermal_init, geothermal_end
 type, public :: geothermal_CS ; private
   real    :: dRcv_dT_inplace !<   The value of dRcv_dT above which (dRcv_dT is
                              !! negative) the water is heated in place instead
-                             !! of moving upward between layers, in kg m-3 K-1.
-  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux, in W m-2.
+                             !! of moving upward between layers [kg m-3 degC-1].
+  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [W m-2].
   real    :: geothermal_thick !< The thickness over which geothermal heating is
-                             !! applied, in m.
+                             !! applied [m] (not [H]).
   logical :: apply_geothermal !< If true, geothermal heating will be applied
                              !! otherwise GEOTHERMAL_SCALE has been set to 0 and
                              !! there is no heat to apply.
@@ -47,59 +47,58 @@ contains
 !! be applied to the ocean is returned (WHERE)?
 subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid
-                                                                !! structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses, in H
-                                                                !! (usually m or kg m-2).
+  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
                                                                 !! to any available thermodynamic
                                                                 !! fields. Absent fields have NULL
                                                                 !! ptrs.
-  real,                                     intent(in)    :: dt !< Time increment, in s.
+  real,                                     intent(in)    :: dt !< Time increment [s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The amount of fluid moved
                                                                 !! downward into a layer; this
                                                                 !! should be increased due to mixed
-                                                                !! layer detrainment, in the same
-                                                                !! units as h - usually m or kg m-2
-                                                                !! (i.e., H).
+                                                                !! layer detrainment [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: eb !< The amount of fluid moved upward
                                                                 !! into a layer; this should be
                                                                 !! increased due to mixed layer
-                                                                !! entrainment, in the same units as
-                                                                !! h - usually m or kg m-2 (i.e., H)
+                                                                !! entrainment [H ~> m or kg m-2].
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
                                                                 !! a previous call to
                                                                 !! geothermal_init.
   integer,                        optional, intent(in)    :: halo !< Halo width over which to work
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    heat_rem,  & ! remaining heat (H * degC)
-    h_geo_rem, & ! remaining thickness to apply geothermal heating (units of H)
-    Rcv_BL,    & ! coordinate density in the deepest variable density layer (kg/m3)
-    p_ref        ! coordiante densities reference pressure (Pa)
+    heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
+    h_geo_rem, & ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
+    Rcv_BL,    & ! coordinate density in the deepest variable density layer [kg m-3]
+    p_ref        ! coordiante densities reference pressure [Pa]
 
   real, dimension(2) :: &
-    T2, S2, &   ! temp and saln in the present and target layers (degC and ppt)
-    dRcv_dT_, & ! partial derivative of coordinate density wrt temp (kg m-3 K-1)
-    dRcv_dS_    ! partial derivative of coordinate density wrt saln (kg m-3 ppt-1)
+    T2, S2, &   ! temp and saln in the present and target layers [degC] and [ppt]
+    dRcv_dT_, & ! partial derivative of coordinate density wrt temp [kg m-3 degC-1]
+    dRcv_dS_    ! partial derivative of coordinate density wrt saln [kg m-3 ppt-1]
 
-  real :: Angstrom, H_neglect  ! small thicknesses in H
-  real :: Rcv           ! coordinate density of present layer (kg m-3)
-  real :: Rcv_tgt       ! coordinate density of target layer (kg m-3)
-  real :: dRcv          ! difference between Rcv and Rcv_tgt (kg m-3)
+  real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
+  real :: Rcv           ! coordinate density of present layer [kg m-3]
+  real :: Rcv_tgt       ! coordinate density of target layer [kg m-3]
+  real :: dRcv          ! difference between Rcv and Rcv_tgt [kg m-3]
   real :: dRcv_dT       ! partial derivative of coordinate density wrt temp
-                        ! in the present layer (kg m-3 K-1); usually negative
-  real :: h_heated      ! thickness that is being heated (units of H)
-  real :: heat_avail    ! heating available for the present layer (units of Kelvin * H)
-  real :: heat_in_place ! heating to warm present layer w/o movement between layers (K * H)
-  real :: heat_trans    ! heating available to move water from present layer to target layer (K * H)
-  real :: heating       ! heating used to move water from present layer to target layer (K * H)
+                        ! in the present layer [kg m-3 degC-1]; usually negative
+  real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
+  real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
+  real :: heat_in_place ! heating to warm present layer w/o movement between layers
+                        ! [degC H ~> degC m or degC kg m-2]
+  real :: heat_trans    ! heating available to move water from present layer to target
+                        ! layer [degC H ~> degC m or degC kg m-2]
+  real :: heating       ! heating used to move water from present layer to target layer
+                        ! [degC H ~> degC m or degC kg m-2]
                         ! 0 <= heating <= heat_trans
-  real :: h_transfer    ! thickness moved between layers (units of H)
-  real :: wt_in_place   ! relative weighting that goes from 0 to 1 (non-dim)
-  real :: I_h           ! inverse thickness (units of 1/H)
-  real :: dTemp         ! temperature increase in a layer (Kelvin)
-  real :: Irho_cp       ! inverse of heat capacity per unit layer volume (units K H m2 J-1)
+  real :: h_transfer    ! thickness moved between layers [H ~> m or kg m-2]
+  real :: wt_in_place   ! relative weighting that goes from 0 to 1 [nondim]
+  real :: I_h           ! inverse thickness [H-1 ~> m-1 or m2 kg-1]
+  real :: dTemp         ! temperature increase in a layer [degC]
+  real :: Irho_cp       ! inverse of heat capacity per unit layer volume
+                        ! [degC H m2 J-1 ~> degC m3 J-1 or degC kg J-1]
 
   logical :: do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
@@ -117,7 +116,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 
   nkmb      = GV%nk_rho_varies
   Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
-  Angstrom  = GV%Angstrom
+  Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
@@ -315,7 +314,7 @@ end subroutine geothermal
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
@@ -342,8 +341,8 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   ! write parameters to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "GEOTHERMAL_SCALE", scale, &
-                 "The constant geothermal heat flux, a rescaling \n"//&
-                 "factor for the heat flux read from GEOTHERMAL_FILE, or \n"//&
+                 "The constant geothermal heat flux, a rescaling "//&
+                 "factor for the heat flux read from GEOTHERMAL_FILE, or "//&
                  "0 to disable the geothermal heating.", &
                  units="W m-2 or various", default=0.0)
   CS%apply_geothermal = .not.(scale == 0.0)
@@ -352,14 +351,14 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   call safe_alloc_ptr(CS%geo_heat, isd, ied, jsd, jed) ; CS%geo_heat(:,:) = 0.0
 
   call get_param(param_file, mdl, "GEOTHERMAL_FILE", geo_file, &
-                 "The file from which the geothermal heating is to be \n"//&
+                 "The file from which the geothermal heating is to be "//&
                  "read, or blank to use a constant heating rate.", default=" ")
   call get_param(param_file, mdl, "GEOTHERMAL_THICKNESS", CS%geothermal_thick, &
                  "The thickness over which to apply geothermal heating.", &
                  units="m", default=0.1)
   call get_param(param_file, mdl, "GEOTHERMAL_DRHO_DT_INPLACE", CS%dRcv_dT_inplace, &
-                 "The value of drho_dT above which geothermal heating \n"//&
-                 "simply heats water in place instead of moving it between \n"//&
+                 "The value of drho_dT above which geothermal heating "//&
+                 "simply heats water in place instead of moving it between "//&
                  "isopycnal layers.  This must be negative.", &
                  units="kg m-3 K-1",  default=-0.01)
   if (CS%dRcv_dT_inplace >= 0.0) call MOM_error(FATAL, "geothermal_init: "//&
@@ -371,7 +370,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     filename = trim(inputdir)//trim(geo_file)
     call log_param(param_file, mdl, "INPUTDIR/GEOTHERMAL_FILE", filename)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
-                 "The name of the geothermal heating variable in \n"//&
+                 "The name of the geothermal heating variable in "//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
     call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
     do j=jsd,jed ; do i=isd,ied
@@ -406,10 +405,11 @@ end subroutine geothermal_end
 
 !> \namespace mom_geothermal
 !!
-!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density of the layer to the
-!! target density of the layer above, and then moves the water into that layer, or in a simple Eulerian mode, in which the bottommost
-!! GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also provide a buoyant source of bottom TKE that can be used to further
-!! mix the near-bottom water. In cold fresh water lakes where heating increases density, water should be moved into deeper layers, but
-!! this is not implemented yet.
+!! Geothermal heating can be added either in a layered isopycnal mode, in which the heating raises the density
+!! of the layer to the target density of the layer above, and then moves the water into that layer, or in a
+!! simple Eulerian mode, in which the bottommost GEOTHERMAL_THICKNESS are heated.  Geothermal heating will also
+!! provide a buoyant source of bottom TKE that can be used to further mix the near-bottom water. In cold fresh
+!! water lakes where heating increases density, water should be moved into deeper layers, but this is not
+!! implemented yet.
 
 end module MOM_geothermal

@@ -18,7 +18,6 @@ module RGC_tracer
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -162,7 +161,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
-!    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
+    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
@@ -177,7 +176,7 @@ end function register_RGC_tracer
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                    layer_CSp, sponge_CSp, diag_to_Z_CSp)
+                                    layer_CSp, sponge_CSp)
 
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
@@ -189,7 +188,6 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(RGC_tracer_CS),             pointer    :: CS !< The control structure returned by a previous call to RGC_register_tracer.
   type(sponge_CS),                       pointer    :: layer_CSp    !< A pointer to the control structure
   type(ALE_sponge_CS),                   pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure for diagnostics in depth space.
 
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
@@ -294,17 +292,6 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     endif !selecting mode/calling error if no pointer
   endif !using sponge
 
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
-  else ; flux_units = "kg s-1" ; endif
-
-  do m=1,NTR
-    ! Register the tracer for the restart file.
-    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_RGC_tracer")
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
-                           day, G, diag_to_Z_CSp)
-  enddo
 
 end subroutine initialize_RGC_tracer
 

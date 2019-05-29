@@ -13,6 +13,7 @@ use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher
 use MOM_time_manager, only : time_type, operator(+), operator(/)
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -31,9 +32,9 @@ type, public :: Neverland_surface_forcing_CS ; private
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq
-                             !! approximation, in kg m-3.
-  real :: G_Earth            !< The gravitational acceleration in m s-2.
-  real :: flux_const         !<  The restoring rate at the surface, in m s-1.
+                             !! approximation [kg m-3].
+  real :: G_Earth            !< The gravitational acceleration [m s-2].
+  real :: flux_const         !<  The restoring rate at the surface [m s-1].
   real, dimension(:,:), pointer :: &
     buoy_restore(:,:) => NULL() !< The pattern to restore buoyancy to.
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
@@ -46,12 +47,13 @@ contains
 
 !> Sets the surface wind stresses, forces%taux and forces%tauy for the
 !! Neverland forcing configuration.
-subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
+subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                          !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day    !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G      !< Grid structure.
+  type(unit_scale_type),         intent(in)    :: US     !< A dimensional unit scaling type
   type(Neverland_surface_forcing_CS), pointer  :: CS     !< Control structure for this module.
 
   ! Local variables
@@ -102,7 +104,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
   !  is always positive.
 ! if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
 !   !  This expression can be changed if desired, but need not be.
-!   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+!   forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
 !      sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
 !           0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
 ! enddo ; enddo ; endif
@@ -143,7 +145,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [m5 s-3 kg-1].
   real :: density_restore  ! De
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -177,7 +179,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       "Temperature/salinity restoring not coded!" )
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
@@ -195,7 +197,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
+       ! density [kg m-3] that is being restored toward.
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
@@ -218,7 +220,7 @@ subroutine Neverland_surface_forcing_init(Time, G, param_file, diag, CS)
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40)  :: mod = "Neverland_surface_forcing" ! This module's name.
+  character(len=40) :: mdl = "Neverland_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "Neverland_surface_forcing_init called with an associated "// &
@@ -229,33 +231,33 @@ subroutine Neverland_surface_forcing_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
 
-  call get_param(param_file, mod, "G_EARTH", CS%G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-! call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+! call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
 !                "The background gustiness in the winds.", units="Pa", &
 !                default=0.02)
 
-  call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
-                 "If true, the buoyancy fluxes drive the model back \n"//&
-                 "toward some specified surface state with a rate \n"//&
+  call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
+                 "If true, the buoyancy fluxes drive the model back "//&
+                 "toward some specified surface state with a rate "//&
                  "given by FLUXCONST.", default= .false.)
 
   if (CS%restorebuoy) then
-    call get_param(param_file, mod, "FLUXCONST", CS%flux_const, &
-                 "The constant that relates the restoring surface fluxes \n"//&
-                 "to the relative surface anomalies (akin to a piston \n"//&
+    call get_param(param_file, mdl, "FLUXCONST", CS%flux_const, &
+                 "The constant that relates the restoring surface fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
     ! Convert CS%flux_const from m day-1 to m s-1.
