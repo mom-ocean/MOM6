@@ -11,6 +11,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains,       only : create_group_pass, do_group_pass
 use MOM_domains,       only : group_pass_type
+use MOM_domains,       only : pass_var, pass_vector
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser,   only : read_param, get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
@@ -43,6 +44,8 @@ type, public :: MEKE_CS ; private
   real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression [nondim]
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: Jansen15_drag  !< If true use the bottom drag formulation from Jansen et al. (2015)
+  logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
+                        !! framework (Marshall et al., 2012)
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                         !! than the streamfunction for the MEKE GM source term.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
@@ -57,8 +60,11 @@ type, public :: MEKE_CS ; private
   real :: MEKE_K4       !< Background bi-harmonic diffusivity (of MEKE) [m4 s-1]
   real :: KhMEKE_Fac    !< A factor relating MEKE%Kh to the diffusivity used for
                         !! MEKE itself [nondim].
-  real :: viscosity_coeff !< The scaling coefficient in the expression for
-                        !! viscosity used to parameterize lateral momentum mixing
+  real :: viscosity_coeff_Ku !< The scaling coefficient in the expression for
+                        !! viscosity used to parameterize lateral harmonic momentum mixing
+                        !! by unresolved eddies represented by MEKE.
+  real :: viscosity_coeff_Au !< The scaling coefficient in the expression for
+                        !! viscosity used to parameterize lateral biharmonic momentum mixing
                         !! by unresolved eddies represented by MEKE.
   real :: Lfixed        !< Fixed mixing length scale [m].
   real :: aDeform       !< Weighting towards deformation scale of mixing length [nondim]
@@ -89,6 +95,7 @@ type, public :: MEKE_CS ; private
   integer :: id_clock_pass !< Clock for group pass calls
   type(group_pass_type) :: pass_MEKE !< Type for group halo pass calls
   type(group_pass_type) :: pass_Kh   !< Type for group halo pass calls
+  type(group_pass_type) :: pass_Kh_diff   !< Type for group halo pass calls
   type(group_pass_type) :: pass_Ku   !< Type for group halo pass calls
   type(group_pass_type) :: pass_Au   !< Type for group halo pass calls
   type(group_pass_type) :: pass_del2MEKE !< Type for group halo pass calls
@@ -104,8 +111,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points [s-1].
-  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [s-1].
+  real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: SN_u !< Eady growth rate at u-points [s-1].
+  real, dimension(SZI_(G),SZJB_(G)),        intent(inout) :: SN_v !< Eady growth rate at v-points [s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [s].
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
@@ -126,6 +133,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     LmixScale, &    ! Square of eddy mixing length, in m2.
     barotrFac2, &   ! Ratio of EKE_barotropic / EKE (nondim)/
     bottomFac2      ! Ratio of EKE_bottom / EKE (nondim)/
+
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     MEKE_uflux, &   ! The zonal diffusive flux of MEKE [kg m2 s-3].
     Kh_u, &         ! The zonal diffusivity that is actually used [m2 s-1].
@@ -425,6 +433,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         ! Limit Kh to avoid CFL violations.
         if (associated(MEKE%Kh)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i+1,j))
+        if (associated(MEKE%Kh_diff)) &
+          Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i+1,j))
         Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
                      max(G%IareaT(i,j),G%IareaT(i+1,j)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
@@ -438,6 +448,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do J=js-1,je ; do i=is,ie
         if (associated(MEKE%Kh)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
+        if (associated(MEKE%Kh_diff)) &
+          Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i,j+1))
         Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
                      max(G%IareaT(i,j),G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
@@ -491,7 +503,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           if (CS%Jansen15_drag) then
             do j=js,je ; do i=is,ie
               ldamping = CS%MEKE_damping + drag_rate(i,j)
-              MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) - MIN(MEKE%MEKE(i,j),sdt_damp*drag_rate(i,j))
+              MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) -sdt_damp*drag_rate(i,j)
               MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
             enddo ; enddo
           else
@@ -508,6 +520,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 !$OMP do
       endif
     endif ! MEKE_KH>=0
+
+    do j=js,je ; do i=is,ie
+      MEKE%MEKE(i,j) =  MAX(MEKE%MEKE(i,j),0.0)
+    enddo ; enddo
+
 !$OMP end parallel
     call cpu_clock_begin(CS%id_clock_pass)
     call do_group_pass(CS%pass_MEKE, G%Domain)
@@ -515,42 +532,52 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
     ! Calculate diffusivity for main model to use
     if (CS%MEKE_KhCoeff>0.) then
-      if (CS%use_old_lscale) then
-        if (CS%Rd_as_max_scale) then
-          !$OMP parallel do default(shared)
-          do j=js,je ; do i=is,ie
-            MEKE%Kh(i,j) = (CS%MEKE_KhCoeff &
+      if (.not.CS%MEKE_GEOMETRIC) then
+        if (CS%use_old_lscale) then
+          if (CS%Rd_as_max_scale) then
+            !$OMP parallel do default(shared)
+            do j=js,je ; do i=is,ie
+              MEKE%Kh(i,j) = (CS%MEKE_KhCoeff &
                          * sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))) &
                          * min(MEKE%Rd_dx_h(i,j), 1.0)
-          enddo ; enddo
+            enddo ; enddo
+          else
+            !$OMP parallel do default(shared)
+            do j=js,je ; do i=is,ie
+              MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
+            enddo ; enddo
+          endif
         else
           !$OMP parallel do default(shared)
           do j=js,je ; do i=is,ie
-            MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
+            MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j)))*LmixScale(i,j))
           enddo ; enddo
         endif
-      else
-        !$OMP parallel do default(shared)
-        do j=js,je ; do i=is,ie
-          MEKE%Kh(i,j) = (CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j)))*LmixScale(i,j))
-        enddo ; enddo
-      endif
-      call cpu_clock_begin(CS%id_clock_pass)
-      call do_group_pass(CS%pass_Kh, G%Domain)
-      call cpu_clock_end(CS%id_clock_pass)
+        call cpu_clock_begin(CS%id_clock_pass)
+        call do_group_pass(CS%pass_Kh, G%Domain)
+        call cpu_clock_end(CS%id_clock_pass)
+     endif
     endif
 
     ! Calculate viscosity for the main model to use
-    if (CS%viscosity_coeff/=0.) then
+    if (CS%viscosity_coeff_Ku /=0.) then
       do j=js,je ; do i=is,ie
-        MEKE%Ku(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)
-        MEKE%Au(i,j) = CS%viscosity_coeff*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)**3
+        MEKE%Ku(i,j) = CS%viscosity_coeff_Ku*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)
       enddo ; enddo
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_Ku, G%Domain)
+      call cpu_clock_end(CS%id_clock_pass)
+    endif
+
+    if (CS%viscosity_coeff_Au /=0.) then
+      do j=js,je ; do i=is,ie
+        MEKE%Au(i,j) = CS%viscosity_coeff_Au*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)**3
+      enddo ; enddo
+      call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_Au, G%Domain)
       call cpu_clock_end(CS%id_clock_pass)
     endif
+
 
     ! Offer fields for averaging.
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
@@ -897,6 +924,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "into MEKE by the thickness mixing parameterization. \n"//&
                  "If MEKE_GMCOEFF is negative, this conversion is not \n"//&
                  "used or calculated.", units="nondim", default=-1.0)
+  call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
+                 "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation \n"//&
+                 "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
   call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
                  "The efficiency of the conversion of mean energy into \n"//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion \n"//&
@@ -955,9 +985,15 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "If true, the length scale used by MEKE is the minimum of\n"//&
                  "the deformation radius or grid-spacing. Only used if\n"//&
                  "MEKE_OLD_LSCALE=True", units="nondim", default=.false.)
-  call get_param(param_file, mdl, "MEKE_VISCOSITY_COEFF", CS%viscosity_coeff, &
+  call get_param(param_file, mdl, "MEKE_VISCOSITY_COEFF_KU", CS%viscosity_coeff_Ku, &
                  "If non-zero, is the scaling coefficient in the expression for\n"//&
-                 "viscosity used to parameterize lateral momentum mixing by\n"//&
+                 "viscosity used to parameterize harmonic lateral momentum mixing by\n"//&
+                 "unresolved eddies represented by MEKE. Can be negative to\n"//&
+                 "represent backscatter from the unresolved eddies.", &
+                 units="nondim", default=0.0)
+  call get_param(param_file, mdl, "MEKE_VISCOSITY_COEFF_AU", CS%viscosity_coeff_Au, &
+                 "If non-zero, is the scaling coefficient in the expression for\n"//&
+                 "viscosity used to parameterize biharmonic lateral momentum mixing by\n"//&
                  "unresolved eddies represented by MEKE. Can be negative to\n"//&
                  "represent backscatter from the unresolved eddies.", &
                  units="nondim", default=0.0)
@@ -989,7 +1025,7 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
                  "If true, initialize EKE to zero. Otherwise a local equilibrium solution\n"//&
                  "is used as an initial condition for EKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_BACKSCAT_RO_C", MEKE%backscatter_Ro_c, &
-                 "The coefficient in the Rossby number function for scaling the buharmonic\n"//&
+                 "The coefficient in the Rossby number function for scaling the biharmonic\n"//&
                  "frictional energy source. Setting to non-zero enables the Rossby number function.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_BACKSCAT_RO_POW", MEKE%backscatter_Ro_pow, &
@@ -1014,8 +1050,11 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
 
-  if (CS%viscosity_coeff/=0. .and. .not. laplacian .and. .not. biharmonic) call MOM_error(FATAL, &
-                 "Either LAPLACIAN or BIHARMONIC must be true if MEKE_VISCOSITY_COEFF is true.")
+  if (CS%viscosity_coeff_Ku/=0. .and. .not. laplacian) call MOM_error(FATAL, &
+                 "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF_KU is true.")
+
+  if (CS%viscosity_coeff_Au/=0. .and. .not. biharmonic) call MOM_error(FATAL, &
+                 "BIHARMONIC must be true if MEKE_VISCOSITY_COEFF_AU is true.")
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
@@ -1032,6 +1071,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   if (associated(MEKE%Kh)) then
     call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
     call do_group_pass(CS%pass_Kh, G%Domain)
+  endif
+  if (associated(MEKE%Kh_diff)) then
+    call create_group_pass(CS%pass_Kh_diff, MEKE%Kh_diff, G%Domain)
+    call do_group_pass(CS%pass_Kh_diff, G%Domain)
   endif
   if (associated(MEKE%Ku)) then
     call create_group_pass(CS%pass_Ku, MEKE%Ku, G%Domain)
@@ -1118,7 +1161,8 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 ! Local variables
   type(vardesc) :: vd
-  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_GMECoeff, MEKE_KHCoeff, MEKE_viscCoeff
+  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_GMECoeff, MEKE_KHCoeff, MEKE_viscCoeff_Ku, MEKE_viscCoeff_Au
+  logical :: Use_KH_in_MEKE
   logical :: useMEKE
   integer :: isd, ied, jsd, jed
 
@@ -1130,8 +1174,9 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   MEKE_FrCoeff =-1.; call read_param(param_file,"MEKE_FRCOEFF",MEKE_FrCoeff)
   MEKE_GMEcoeff =-1.; call read_param(param_file,"MEKE_GMECOEFF",MEKE_GMEcoeff)
   MEKE_KhCoeff =1.; call read_param(param_file,"MEKE_KHCOEFF",MEKE_KhCoeff)
-  MEKE_viscCoeff =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF",MEKE_viscCoeff)
-
+  MEKE_viscCoeff_Ku =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF_KU",MEKE_viscCoeff_Ku)
+  MEKE_viscCoeff_Au =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF_AU",MEKE_viscCoeff_Au)
+  Use_KH_in_MEKE = .false.; call read_param(param_file,"USE_KH_IN_MEKE", Use_KH_in_MEKE)
 ! Allocate control structure
   if (associated(MEKE)) then
     call MOM_error(WARNING, "MEKE_alloc_register_restart called with an associated "// &
@@ -1150,8 +1195,8 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
   if (MEKE_GMcoeff>=0.) then
     allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
-  endif
-  if (MEKE_FrCoeff>=0.) then
+  endif 
+  if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.)  then
     allocate(MEKE%mom_src(isd:ied,jsd:jed)) ; MEKE%mom_src(:,:) = 0.0
   endif
   if (MEKE_GMECoeff>=0.) then
@@ -1164,12 +1209,20 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
     call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
   endif
   allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
-  if (MEKE_viscCoeff/=0.) then
+  if (MEKE_viscCoeff_Ku/=0.) then
     allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
     vd = var_desc("MEKE_Ku", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
+  endif
+  if (Use_Kh_in_MEKE) then
+    allocate(MEKE%Kh_diff(isd:ied,jsd:jed)) ; MEKE%Kh_diff(:,:) = 0.0
+    vd = var_desc("MEKE_Kh_diff", "m2 s-1",hor_grid='h',z_grid='1', &
+             longname="Copy of thickness diffusivity for diffusing MEKE")
+    call register_restart_field(MEKE%Kh_diff, vd, .false., restart_CS)
+  endif
 
+  if (MEKE_viscCoeff_Au/=0.) then
     allocate(MEKE%Au(isd:ied,jsd:jed)) ; MEKE%Au(:,:) = 0.0
     vd = var_desc("MEKE_Au", "m4 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral biharmonic viscosity from Mesoscale Eddy Kinetic Energy")
@@ -1193,6 +1246,7 @@ subroutine MEKE_end(MEKE, CS)
   if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
   if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
   if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
+  if (associated(MEKE%Kh_diff)) deallocate(MEKE%Kh_diff)
   if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
   if (associated(MEKE%Au)) deallocate(MEKE%Au)
   if (allocated(CS%del2MEKE)) deallocate(CS%del2MEKE)

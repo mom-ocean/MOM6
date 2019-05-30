@@ -13,6 +13,7 @@ type, public :: MEKE_type
     mom_src => NULL(),& !< MEKE source from lateral friction in the momentum equations, in W m-2.
     GME_snk => NULL(),& !< MEKE sink from GME backscatter in the momentum equations, in W m-2.
     Kh => NULL(), &     !< The MEKE-derived lateral mixing coefficient in m2 s-1.
+    Kh_diff => NULL(), & !< Uses the non-MEKE-derived thickness diffusion coefficient to diffuse MEKE, in m2 s-1.
     Rd_dx_h => NULL()   !< The deformation radius compared with the grid spacing, nondim.
                         !! Rd_dx_h is copied from VarMix_CS.
   real, dimension(:,:), pointer :: Ku => NULL() !< The MEKE-derived lateral viscosity coefficient [m2 s-1].

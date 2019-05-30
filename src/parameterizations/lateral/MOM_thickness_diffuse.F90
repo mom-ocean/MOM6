@@ -61,6 +61,11 @@ type, public :: thickness_diffuse_CS ; private
   logical :: debug               !< write verbose checksums for debugging purposes
   logical :: use_GME_thickness_diffuse !< If true, passes GM coefficients to MOM_hor_visc for use
                                  !! with GME closure.
+  logical :: MEKE_GEOMETRIC      !< If true, uses the GM coefficient formulation from the GEOMETRIC
+                                 !! framework (Marshall et al., 2012)
+  real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of
+                                 !! the GEOMETRIC thickness difussion [nondim]
+  logical :: Use_KH_in_MEKE      !! If true, uses the thickness diffusivity calculated here to diffuse MEKE.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
@@ -139,6 +144,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
+  real :: epsilon 
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -169,6 +175,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   else
     cg1 => null()
   endif
+
+  epsilon = 1.e-6
 
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
   do j=js,je ; do I=is-1,ie
@@ -205,9 +213,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
 !$OMP do
-    do j=js,je ; do I=is-1,ie
-      Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
-    enddo ; enddo
+    if (CS%MEKE_GEOMETRIC) then
+      do j=js,je ; do I=is-1,ie
+        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) +  G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
+                          (VarMix%SN_u(I,j) + epsilon)
+      enddo ; enddo
+    else
+      do j=js,je ; do I=is-1,ie
+        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+      enddo ; enddo
+    endif
   endif ; endif
 
   if (Resoln_scaled) then
@@ -276,9 +291,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
 !$OMP do
-    do J=js-1,je ; do i=is,ie
-      Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
-    enddo ; enddo
+    if (CS%MEKE_GEOMETRIC) then
+      do j=js-1,je ; do I=is,ie
+        Khth_Loc(I,j) = Khth_Loc(I,j) +  G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
+                     (VarMix%SN_v(i,J) + epsilon)
+      enddo ; enddo
+    else
+      do J=js-1,je ; do i=is,ie
+        Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+      enddo ; enddo
+    endif
   endif ; endif
 
   if (Resoln_scaled) then
@@ -334,6 +356,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       CS%KH_v_GME(I,j,k) = KH_v(I,j,k)
     enddo ; enddo ; enddo
   endif
+
+  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+!$OMP do
+    if (CS%MEKE_GEOMETRIC) then
+      do j=js,je ; do I=is,ie
+        MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
+                         (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)+VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1)) + epsilon)
+      enddo ; enddo
+    endif
+  endif ; endif
+
 
 !$OMP do
   do K=1,nz+1 ; do j=js,je ; do I=is-1,ie ; int_slope_u(I,j,K) = 0.0 ; enddo ; enddo ; enddo
@@ -394,7 +427,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     ! in the case where KH_u and KH_v are depth independent.  Otherwise,
     ! if use thickness weighted average, the variations of thickness with
     ! depth will place a spurious depth dependence to the diagnosed KH_t.
-    if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0) then
+    if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0 .or. CS%Use_KH_in_MEKE) then
+      MEKE%Kh_diff(:,:) = 0.0
       do k=1,nz
         ! thicknesses across u and v faces, converted to 0/1 mask
         ! layer average of the interface diffusivities KH_u and KH_v
@@ -413,8 +447,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
           KH_t(i,j,k) = ((hu(I-1,j)*KH_u_lay(i-1,j)+hu(I,j)*KH_u_lay(I,j))  &
                         +(hv(i,J-1)*KH_v_lay(i,J-1)+hv(i,J)*KH_v_lay(i,J))) &
                        / (hu(I-1,j)+hu(I,j)+hv(i,J-1)+hv(i,J)+h_neglect)
+          MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) + KH_t(i,j,k) * h(i,j,k)          
         enddo ; enddo
       enddo
+
+      do j=js,je ; do i=is,ie
+        MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) / MAX(1.0,G%bathyT(i,j))
+      enddo ; enddo
 
       if (CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
       if (CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
@@ -1869,12 +1908,23 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
 
-  call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
-                 "If true, use the GM+E backscatter scheme in association \n"//&
-                 "with the Gent and McWilliams parameterization.", default=.false.)
   call get_param(param_file, mdl, "MEKE_GM_SRC_ALT", CS%GM_src_alt, &
                  "If true, use the GM energy conversion form S^2*N^2*kappa rather \n"//&
                  "than the streamfunction for the GM source term.", default=.false.)
+  call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
+                 "If true, uses the GM coefficient formulation \n"//&
+                 "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+  call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
+                 "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
+                 "thickness diffusion.", units="nondim", default=0.05)
+  call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &
+                 "If true, uses the thickness diffusivity calculated here to diffuse \n"//&
+                 "MEKE.", default=.false.)
+
+  call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
+                 "If true, use the GM+E backscatter scheme in association \n"//&
+                 "with the Gent and McWilliams parameterization.", default=.false.)
+
   if (CS%use_GME_thickness_diffuse) then
     call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,G%ke+1)
     call safe_alloc_ptr(CS%KH_v_GME,G%isd,G%ied,G%JsdB,G%JedB,G%ke+1)
