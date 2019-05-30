@@ -228,7 +228,7 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
        ! Set the inverse damping rates so that the model will know where to
        ! apply the sponges, along with the interface heights.
-       call initialize_sponge(Idamp, eta, G, PF, CSp)
+       call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
 
        if ( GV%nkml>0 ) then
        !   This call to set_up_sponge_ML_density registers the target values of the

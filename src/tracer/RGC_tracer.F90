@@ -371,11 +371,7 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-          CS%tr_aux(i,j,k,m) = CS%land_val(m)
-        else
-          CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
-        endif
+        CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
       enddo ; enddo ; enddo
     endif ; enddo
   endif
