@@ -144,7 +144,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
-  real :: epsilon 
+  real :: epsilon
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -428,7 +428,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     ! if use thickness weighted average, the variations of thickness with
     ! depth will place a spurious depth dependence to the diagnosed KH_t.
     if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0 .or. CS%Use_KH_in_MEKE) then
-      MEKE%Kh_diff(:,:) = 0.0
       do k=1,nz
         ! thicknesses across u and v faces, converted to 0/1 mask
         ! layer average of the interface diffusivities KH_u and KH_v
@@ -447,13 +446,21 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
           KH_t(i,j,k) = ((hu(I-1,j)*KH_u_lay(i-1,j)+hu(I,j)*KH_u_lay(I,j))  &
                         +(hv(i,J-1)*KH_v_lay(i,J-1)+hv(i,J)*KH_v_lay(i,J))) &
                        / (hu(I-1,j)+hu(I,j)+hv(i,J-1)+hv(i,J)+h_neglect)
-          MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) + KH_t(i,j,k) * h(i,j,k)          
         enddo ; enddo
       enddo
 
-      do j=js,je ; do i=is,ie
-        MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) / MAX(1.0,G%bathyT(i,j))
-      enddo ; enddo
+      if (CS%Use_KH_in_MEKE) then
+        MEKE%Kh_diff(:,:) = 0.0
+        do k=1,nz
+          do j=js,je ; do i=is,ie
+            MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) + KH_t(i,j,k) * h(i,j,k)
+          enddo; enddo
+        enddo
+
+        do j=js,je ; do i=is,ie
+          MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) / MAX(1.0,G%bathyT(i,j))
+        enddo ; enddo
+      endif
 
       if (CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
       if (CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
