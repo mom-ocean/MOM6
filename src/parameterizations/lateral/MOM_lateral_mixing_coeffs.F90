@@ -127,8 +127,8 @@ type, public :: VarMix_CS
   real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate [nondim].
 
   ! Leith parameters
-  logical :: use_QG_Leith_GM      !! If true, uses the QG Leith viscosity as the GM coefficient
-  logical :: use_beta_in_QG_Leith !! If true, includes the beta term in the QG Leith GM coefficient
+  logical :: use_QG_Leith_GM      !< If true, uses the QG Leith viscosity as the GM coefficient
+  logical :: use_beta_in_QG_Leith !< If true, includes the beta term in the QG Leith GM coefficient
 
   ! Diagnostics
   !>@{

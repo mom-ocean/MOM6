@@ -65,7 +65,7 @@ type, public :: thickness_diffuse_CS ; private
                                  !! framework (Marshall et al., 2012)
   real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of
                                  !! the GEOMETRIC thickness difussion [nondim]
-  logical :: Use_KH_in_MEKE      !! If true, uses the thickness diffusivity calculated here to diffuse MEKE.
+  logical :: Use_KH_in_MEKE      !< If true, uses the thickness diffusivity calculated here to diffuse MEKE.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
