@@ -1195,7 +1195,7 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
   if (MEKE_GMcoeff>=0.) then
     allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
-  endif 
+  endif
   if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.)  then
     allocate(MEKE%mom_src(isd:ied,jsd:jed)) ; MEKE%mom_src(:,:) = 0.0
   endif
