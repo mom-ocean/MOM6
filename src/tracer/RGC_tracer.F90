@@ -59,9 +59,9 @@ type, public :: RGC_tracer_CS ; private
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this
-                                           !< subroutine, in g m-3?
+                                           !< subroutine
   real, pointer :: tr_aux(:,:,:,:) => NULL() !< The masked tracer concentration
-                                             !< for output, in g m-3.
+                                             !< for output
   type(p3d), dimension(NTR) :: &
     tr_adx, &!< Tracer zonal advective fluxes in g m-3 m3 s-1.
     tr_ady, &!< Tracer meridional advective fluxes in g m-3 m3 s-1.
@@ -152,8 +152,8 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   endif
 
   do m=1,NTR
-    if (m < 10) then ; write(name,'("tr_D",I1.1)') m
-    else ; write(name,'("tr_D",I2.2)') m ; endif
+    if (m < 10) then ; write(name,'("tr_RGC",I1.1)') m
+    else ; write(name,'("tr_RGC",I2.2)') m ; endif
     write(longname,'("Concentration of RGC Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
@@ -161,7 +161,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
+    !call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
@@ -291,7 +291,6 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         "The pointer to sponge_CSp must be associated if SPONGE is defined.")
     endif !selecting mode/calling error if no pointer
   endif !using sponge
-
 
 end subroutine initialize_RGC_tracer
 
