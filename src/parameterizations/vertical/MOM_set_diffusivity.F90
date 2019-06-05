@@ -81,9 +81,6 @@ type, public :: set_diffusivity_CS ; private
                              !! Set to a negative value to have no limit.
   real    :: Kd_add          !< uniform diffusivity added everywhere without
                              !! filtering or scaling [Z2 T-1 ~> m2 s-1].
-  real    :: Kdml            !< mixed layer diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
-                             !! when bulkmixedlayer==.false.
-  real    :: Hmix            !< mixed layer thickness [meter] when BULKMIXEDLAYER==.false.
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostic output timing
 
   logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
@@ -1903,7 +1900,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.
-  CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0
+  CS%cdrag = 0.003 ; CS%BBL_effic = 0.0
   CS%bulkmixedlayer = (GV%nkml > 0)
 
   ! Read all relevant parameters and write them to the model log.
@@ -2057,27 +2054,6 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "set_diffusivity_init: KD_MAX must be set (positive) when "// &
                  "USE_LOTW_BBL_DIFFUSIVITY=True.")
 
-  if (CS%bulkmixedlayer) then
-    ! Check that Kdml is not set when using bulk mixed layer
-    call get_param(param_file, mdl, "KDML", CS%Kdml, default=-1.)
-    if (CS%Kdml>0.) call MOM_error(FATAL, &
-                 "set_diffusivity_init: KDML cannot be set when using"// &
-                 "bulk mixed layer.")
-    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
-                    ! cannot be a NaN.
-  else
-    ! ### This parameter is unused and is staged for deletion
-    call get_param(param_file, mdl, "KDML", CS%Kdml, &
-                 "If BULKMIXEDLAYER is false, KDML is the elevated "//&
-                 "diapycnal diffusivity in the topmost HMIX of fluid. "//&
-                 "KDML is only used if BULKMIXEDLAYER is false.", &
-                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, &
-                 scale=US%m2_s_to_Z2_T)
-    call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
-                 "The prescribed depth over which the near-surface "//&
-                 "viscosity and diffusivity are elevated when the bulk "//&
-                 "mixed layer is not used.", units="m", fail_if_missing=.true.)
-  endif
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
