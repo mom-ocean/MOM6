@@ -364,7 +364,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
           !### I think that CS%utide**1 should be CS%utide**2
           fluxes%ustar_shelf(i,j) = MAX(CS%ustar_bg, US%m_to_Z * &
-              sqrt(CS%cdrag*((u_at_h**2.0 + v_at_h**2.0) + CS%utide(i,j)**1)))
+              sqrt(CS%cdrag*((u_at_h**2 + v_at_h**2) + CS%utide(i,j)**1)))
 
           ustar_h = US%Z_to_m*fluxes%ustar_shelf(i,j)
 

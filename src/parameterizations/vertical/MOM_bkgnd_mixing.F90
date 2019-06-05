@@ -464,15 +464,16 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
     enddo ; enddo
 
   elseif (CS%horiz_varying_background) then
+    !### Note that there are lots of hrad-coded parameters here.
     do i=is,ie
-      bckgrnd_vdc_psis= CS%bckgrnd_vdc_psim*exp(-(0.4*(G%geoLatT(i,j)+28.9))**2.0)
-      bckgrnd_vdc_psin= CS%bckgrnd_vdc_psim*exp(-(0.4*(G%geoLatT(i,j)-28.9))**2.0)
+      bckgrnd_vdc_psis= CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)+28.9))**2)
+      bckgrnd_vdc_psin= CS%bckgrnd_vdc_psim * exp(-(0.4*(G%geoLatT(i,j)-28.9))**2)
       CS%kd_bkgnd(i,j,:) = CS%bckgrnd_vdc_eq + bckgrnd_vdc_psin + bckgrnd_vdc_psis
 
       if (G%geoLatT(i,j) < -10.0) then
         CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
       elseif (G%geoLatT(i,j) <= 10.0) then
-        CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2.0
+        CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1 * (G%geoLatT(i,j)/10.0)**2
       else
         CS%kd_bkgnd(i,j,:) = CS%kd_bkgnd(i,j,:) + CS%bckgrnd_vdc1
       endif

@@ -739,7 +739,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
             Kviscosity(k)     = Kviscosity(k)   * LangEnhK
           elseif (CS%LT_K_SHAPE == LT_K_SCALED) then
             sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
-            SigmaRatio = sigma * (1. - sigma)**2. / 0.148148037
+            SigmaRatio = sigma * (1. - sigma)**2 / 0.148148037
             if (CS%id_EnhK > 0) CS%EnhK(i,j,k) = (1.0 + (LangEnhK - 1.)*sigmaRatio)
             Kdiffusivity(k,1) = Kdiffusivity(k,1) * ( 1. + &
                                 ( LangEnhK - 1.)*sigmaRatio)

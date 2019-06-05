@@ -352,7 +352,7 @@ subroutine idealized_hurricane_wind_profile(CS, absf, YY, XX, UOCN, VOCN, Tx, Ty
 
   ! Implementing Holland (1980) parameteric wind profile
 
-  Radius = SQRT(XX**2.+YY**2.)
+  Radius = SQRT(XX**2 + YY**2)
 
   !/ BGR
   ! rkm - r converted to km for Holland prof.
@@ -493,7 +493,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   !/ BR
   ! Calculate x position as a function of time.
   xx = ( t0 - time_type_to_real(day)) * CS%hurr_translation_spd * cos(transdir)
-  r = sqrt(xx**2.+CS%DY_from_center**2.)
+  r = sqrt(xx**2 + CS%DY_from_center**2)
   !/ BR
   ! rkm - r converted to km for Holland prof.
   !       used in km due to error, correct implementation should

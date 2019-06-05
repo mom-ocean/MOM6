@@ -1427,7 +1427,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: Ri_crit       !   The critical shear Richardson number for shear-
                         ! driven mixing. The theoretical value is 0.25.
   real :: q0            !   The background level of TKE [m2 s-2].
-  real :: Ilambda2      ! 1.0 / CS%lambda**2.
+  real :: Ilambda2      ! 1.0 / CS%lambda**2 [nondim]
   real :: TKE_min       !   The minimum value of shear-driven TKE that can be
                         ! solved for [m2 s-2].
   real :: kappa0        ! The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
