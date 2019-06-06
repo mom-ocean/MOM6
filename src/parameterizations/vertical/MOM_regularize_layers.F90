@@ -899,23 +899,23 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
-                 "If defined, vertically restructure the near-surface \n"//&
-                 "layers when they have too much lateral variations to \n"//&
+                 "If defined, vertically restructure the near-surface "//&
+                 "layers when they have too much lateral variations to "//&
                  "allow for sensible lateral barotropic transports.", &
                  default=.false.)
   if (CS%regularize_surface_layers) then
     call get_param(param_file, mdl, "REGULARIZE_SURFACE_DETRAIN", CS%reg_sfc_detrain, &
-                 "If true, allow the buffer layers to detrain into the \n"//&
-                 "interior as a part of the restructuring when \n"//&
+                 "If true, allow the buffer layers to detrain into the "//&
+                 "interior as a part of the restructuring when "//&
                  "REGULARIZE_SURFACE_LAYERS is true.", default=.true.)
   endif
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if the mixed layer depth \n"//&
+                 "The minimum mixed layer depth if the mixed layer depth "//&
                  "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H)
   call get_param(param_file, mdl, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
-                 "The value of the relative thickness deficit at which \n"//&
-                 "to start modifying the layer structure when \n"//&
+                 "The value of the relative thickness deficit at which "//&
+                 "to start modifying the layer structure when "//&
                  "REGULARIZE_SURFACE_LAYERS is true.", units="nondim", &
                  default=0.5)
   CS%h_def_tol2 = 0.2 + 0.8*CS%h_def_tol1
@@ -927,9 +927,8 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
 !    call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debug, &
 !                 "If true, monitor conservation and extrema.", default=.false.)
 
-  call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
-                 CS%allow_clocks_in_omp_loops, &
-                 "If true, clocks can be called from inside loops that can \n"//&
+  call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", CS%allow_clocks_in_omp_loops, &
+                 "If true, clocks can be called from inside loops that can "//&
                  "be threaded. To run with multiple threads, set to False.", &
                  default=.true.)
 

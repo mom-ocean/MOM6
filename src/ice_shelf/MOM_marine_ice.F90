@@ -185,8 +185,7 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_marine_ice"  ! This module's name.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "marine_ice_init called with an "// &
-                            "associated control structure.")
+    call MOM_error(WARNING, "marine_ice_init called with an associated control structure.")
     return
   else ; allocate(CS) ; endif
 
@@ -200,8 +199,8 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
   call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", CS%berg_area_threshold, &
-                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
-                 "below berg are set to zero. Not applied for negative \n"//&
+                 "Fraction of grid cell which iceberg must occupy, so that fluxes "//&
+                 "below berg are set to zero. Not applied for negative "//&
                  "values.", units="non-dim", default=-1.0)
 
 end subroutine marine_ice_init

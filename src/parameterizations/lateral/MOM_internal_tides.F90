@@ -2191,13 +2191,13 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "INTERNAL_TIDE_FREQS", num_freq, &
-                 "The number of distinct internal tide frequency bands \n"//&
+                 "The number of distinct internal tide frequency bands "//&
                  "that will be calculated.", default=1)
   call get_param(param_file, mdl, "INTERNAL_TIDE_MODES", num_mode, &
-                 "The number of distinct internal tide modes \n"//&
+                 "The number of distinct internal tide modes "//&
                  "that will be calculated.", default=1)
   call get_param(param_file, mdl, "INTERNAL_TIDE_ANGLES", num_angle, &
-                 "The number of angular resolution bands for the internal \n"//&
+                 "The number of angular resolution bands for the internal "//&
                  "tide calculations.", default=24)
 
   if (use_int_tides) then
@@ -2227,34 +2227,34 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   CS%diag => diag
 
   call get_param(param_file, mdl, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
-                 "The rate at which internal tide energy is lost to the \n"//&
+                 "The rate at which internal tide energy is lost to the "//&
                  "interior ocean internal wave field.", units="s-1", default=0.0)
   call get_param(param_file, mdl, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
-                 "If true, use the ratio of the open face lengths to the \n"//&
-                 "tracer cell areas when estimating CFL numbers in the \n"//&
+                 "If true, use the ratio of the open face lengths to the "//&
+                 "tracer cell areas when estimating CFL numbers in the "//&
                  "internal tide code.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_CORNER_ADVECT", CS%corner_adv, &
-                 "If true, internal tide ray-tracing advection uses a \n"//&
-                 " corner-advection scheme rather than PPM.\n", default=.false.)
+                 "If true, internal tide ray-tracing advection uses a "//&
+                 "corner-advection scheme rather than PPM.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
-                 "If true, CONTINUITY_PPM uses a simple 2nd order \n"//&
-                 "(arithmetic mean) interpolation of the edge values. \n"//&
-                 "This may give better PV conservation properties. While \n"//&
-                 "it formally reduces the accuracy of the continuity \n"//&
-                 "solver itself in the strongly advective limit, it does \n"//&
-                 "not reduce the overall order of accuracy of the dynamic \n"//&
+                 "If true, CONTINUITY_PPM uses a simple 2nd order "//&
+                 "(arithmetic mean) interpolation of the edge values. "//&
+                 "This may give better PV conservation properties. While "//&
+                 "it formally reduces the accuracy of the continuity "//&
+                 "solver itself in the strongly advective limit, it does "//&
+                 "not reduce the overall order of accuracy of the dynamic "//&
                  "core.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_UPWIND_1ST", CS%upwind_1st, &
-                 "If true, the internal tide ray-tracing advection uses \n"//&
-                 "1st-order upwind advection.  This scheme is highly \n"//&
-                 "continuity solver.  This scheme is highly \n"//&
+                 "If true, the internal tide ray-tracing advection uses "//&
+                 "1st-order upwind advection.  This scheme is highly "//&
+                 "continuity solver.  This scheme is highly "//&
                  "diffusive but may be useful for debugging.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", &
-                 CS%apply_background_drag, "If true, the internal tide \n"//&
+                 CS%apply_background_drag, "If true, the internal tide "//&
                  "ray-tracing advection uses a background drag term as a sink.",&
                  default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
-                 "If true, the internal tide ray-tracing advection uses \n"//&
+                 "If true, the internal tide ray-tracing advection uses "//&
                  "a quadratic bottom drag term as a sink.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
@@ -2263,22 +2263,22 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, apply wave breaking as a sink.", &
                  default=.false.)
   call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of \n"//&
+                 "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
   call get_param(param_file, mdl, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
-                 "If positive, only one angular band of the internal tides \n"//&
+                 "If positive, only one angular band of the internal tides "//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
   call get_param(param_file, mdl, "USE_PPM_ANGULAR", CS%use_PPMang, &
-                 "If true, use PPM for advection of energy in angular  \n"//&
-                 "space.", default=.false.)
+                 "If true, use PPM for advection of energy in angular space.", &
+                 default=.false.)
   call get_param(param_file, mdl, "GAMMA_ITIDES", CS%q_itides, &
-                 "The fraction of the internal tidal energy that is \n"//&
-                 "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
+                 "The fraction of the internal tidal energy that is "//&
+                 "dissipated locally with INT_TIDE_DISSIPATION. "//&
                  "THIS NAME COULD BE BETTER.", &
                  units="nondim", default=0.3333)
   call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
-               "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
+               "A topographic wavenumber used with INT_TIDE_DISSIPATION. "//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0))
   call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
@@ -2304,7 +2304,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
-          "The path to the file containing the sub-grid-scale \n"//&
+          "The path to the file containing the sub-grid-scale "//&
           "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
@@ -2323,7 +2323,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Read in prescribed coast/ridge/shelf angles from file
   call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
-               "The path to the file containing the local angle of \n"//&
+               "The path to the file containing the local angle of "//&
                "the coastline/ridge/shelf with respect to the equator.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
@@ -2437,7 +2437,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  Time, 'Interior and bottom drag internal tide decay timescale', 's-1')
   !Register 2-D energy input into internal tides
   CS%id_TKE_itidal_input = register_diag_field('ocean_model', 'TKE_itidal_input', diag%axesT1, &
-                 Time, 'Conversion from barotropic to baroclinic tide, \n'//&
+                 Time, 'Conversion from barotropic to baroclinic tide, '//&
                  'a fraction of which goes into rays', 'W m-2')
   ! Register 2-D energy losses (summed over angles, freq, modes)
   CS%id_tot_leak_loss = register_diag_field('ocean_model', 'ITide_tot_leak_loss', diag%axesT1, &

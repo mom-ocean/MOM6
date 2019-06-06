@@ -4,7 +4,6 @@ module boundary_impulse_tracer
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -99,14 +98,14 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "IMPULSE_SOURCE_TIME", CS%remaining_source_time, &
-                 "Length of time for the boundary tracer to be injected\n"//&
-                 "into the mixed layer. After this time has elapsed, the\n"//&
+                 "Length of time for the boundary tracer to be injected "//&
+                 "into the mixed layer. After this time has elapsed, the "//&
                  "surface becomes a sink for the boundary impulse tracer.", &
                  default=31536000.0)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if the tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if the tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
   CS%ntr = NTR_MAX
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
@@ -149,7 +148,7 @@ end function register_boundary_impulse_tracer
 
 !> Initialize tracer from restart or set to 1 at surface to initialize
 subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp, tv)
+                                  sponge_CSp, tv)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
@@ -165,8 +164,6 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
   type(boundary_impulse_tracer_CS),   pointer    :: CS   !< The control structure returned by a previous
                                                          !! call to register_boundary_impulse_tracer.
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                         !! for diagnostics in depth space.
   type(thermo_var_ptrs),              intent(in) :: tv   !< A structure pointing to various
                                                          !! thermodynamic variables
   ! Local variables

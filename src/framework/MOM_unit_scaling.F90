@@ -58,15 +58,15 @@ subroutine unit_scaling_init( param_file, US )
   call log_version(param_file, mdl, version, &
                    "Parameters for doing unit scaling of variables.")
   call get_param(param_file, mdl, "Z_RESCALE_POWER", Z_power, &
-                 "An integer power of 2 that is used to rescale the model's \n"//&
+                 "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of depths and heights.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
   call get_param(param_file, mdl, "L_RESCALE_POWER", L_power, &
-                 "An integer power of 2 that is used to rescale the model's \n"//&
+                 "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of lateral distances.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
   call get_param(param_file, mdl, "T_RESCALE_POWER", T_power, &
-                 "An integer power of 2 that is used to rescale the model's \n"//&
+                 "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of time.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
   if (abs(Z_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&

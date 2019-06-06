@@ -575,19 +575,19 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   CS%diag => diag
 
   call get_param(param_file, mdl, "BE", CS%be, &
-                 "If SPLIT is true, BE determines the relative weighting \n"//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
-                 "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
-                 "used for the Coriolis and inertial terms.  BE may be \n"//&
-                 "from 0.5 to 1, but instability may occur near 0.5. \n"//&
-                 "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
+                 "If SPLIT is true, BE determines the relative weighting "//&
+                 "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
+                 "scheme (0.5) and a backward Euler scheme (1) that is "//&
+                 "used for the Coriolis and inertial terms.  BE may be "//&
+                 "from 0.5 to 1, but instability may occur near 0.5. "//&
+                 "BE is also applicable if SPLIT is false and USE_RK2 "//&
                  "is true.", units="nondim", default=0.6)
   call get_param(param_file, mdl, "BEGW", CS%begw, &
-                 "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
-                 "controls the extent to which the treatment of gravity \n"//&
-                 "waves is forward-backward (0) or simulated backward \n"//&
-                 "Euler (1).  0 is almost always used.\n"//&
-                 "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
+                 "If SPLIT is true, BEGW is a number from 0 to 1 that "//&
+                 "controls the extent to which the treatment of gravity "//&
+                 "waves is forward-backward (0) or simulated backward "//&
+                 "Euler (1).  0 is almost always used. "//&
+                 "If SPLIT is false and USE_RK2 is true, BEGW can be "//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &

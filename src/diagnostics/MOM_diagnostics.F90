@@ -13,7 +13,6 @@ use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
 use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
 use MOM_diag_mediator,     only : diag_grid_storage
 use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
-use MOM_diag_to_Z,         only : calculate_Z_transport, diag_to_Z_CS
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, int_density_dz
@@ -1077,16 +1076,21 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
 end subroutine calculate_energy_diagnostics
 
 !> This subroutine registers fields to calculate a diagnostic time derivative.
-subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
-  real, dimension(:,:,:), target :: f_ptr     !< Field whose derivative is taken.
-  real, dimension(:,:,:), target :: deriv_ptr !< Field in which the calculated time derivatives
-                                              !! will be placed.
+subroutine register_time_deriv(lb, f_ptr, deriv_ptr, CS)
+  integer, intent(in), dimension(3) :: lb     !< Lower index bound of f_ptr
+  real, dimension(lb(1):,lb(2):,:), target :: f_ptr
+                                              !< Time derivative operand
+  real, dimension(lb(1):,lb(2):,:), target :: deriv_ptr
+                                              !< Time derivative of f_ptr
   type(diagnostics_CS),  pointer :: CS        !< Control structure returned by previous call to
                                               !! diagnostics_init.
 
   ! This subroutine registers fields to calculate a diagnostic time derivative.
+  ! NOTE: Lower bound is required for grid indexing in calculate_derivs().
+  !       We assume that the vertical axis is 1-indexed.
 
-  integer :: m
+  integer :: m      !< New index of deriv_ptr in CS%deriv
+  integer :: ub(3)  !< Upper index bound of f_ptr, based on shape.
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_time_deriv: Module must be initialized before it is used.")
@@ -1099,9 +1103,11 @@ subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
 
   m = CS%num_time_deriv+1 ; CS%num_time_deriv = m
 
-  CS%nlay(m) = size(f_ptr(:,:,:),3)
+  ub(:) = lb(:) + shape(f_ptr) - 1
+
+  CS%nlay(m) = size(f_ptr, 3)
   CS%deriv(m)%p => deriv_ptr
-  allocate(CS%prev_val(m)%p(size(f_ptr(:,:,:),1), size(f_ptr(:,:,:),2), CS%nlay(m)) )
+  allocate(CS%prev_val(m)%p(lb(1):ub(1), lb(2):ub(2), CS%nlay(m)))
 
   CS%var_ptr(m)%p => f_ptr
   CS%prev_val(m)%p(:,:,:) = f_ptr(:,:,:)
@@ -1313,8 +1319,8 @@ end subroutine post_surface_thermo_diags
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, &
-                                      diag_to_Z_CSp, Reg)
+subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, &
+                                      diag, dt_trans, Reg)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
@@ -1327,8 +1333,6 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
   type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
   real,                     intent(in)    :: dt_trans !< total time step associated with the transports [s].
-  type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< A control structure for remapping
-                                                           !! the transports to depth space
   type(tracer_registry_type), pointer     :: Reg !< Pointer to the tracer registry
 
   ! Local variables
@@ -1346,8 +1350,6 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, d
 
   Idt = 1. / dt_trans
   H_to_kg_m2_dt = GV%H_to_kg_m2 * Idt
-
-  call calculate_Z_transport(uhtr, vhtr, h, dt_trans, G, GV, diag_to_Z_CSp)
 
   call diag_save_grids(diag)
   call diag_copy_storage_to_diag(diag, diag_pre_dyn)
@@ -1450,11 +1452,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
-                 "The lower fraction of water column over which N2 is limited as monotonic\n"// &
+                 "The lower fraction of water column over which N2 is limited as monotonic "// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
                  units='nondim', default=0.)
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
-                 "The depth below which N2 is limited as monotonic for the\n"// &
+                 "The depth below which N2 is limited as monotonic for the "// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
                  units='m', default=-1.)
 
@@ -1556,21 +1558,21 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Zonal Acceleration', 'm s-2')
   if ((CS%id_du_dt>0) .and. .not.associated(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-    call register_time_deriv(MIS%u, CS%du_dt, CS)
+    call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', diag%axesCvL, Time, &
       'Meridional Acceleration', 'm s-2')
   if ((CS%id_dv_dt>0) .and. .not.associated(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-    call register_time_deriv(MIS%v, CS%dv_dt, CS)
+    call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', diag%axesTL, Time, &
       'Thickness tendency', trim(thickness_units)//" s-1", v_extensive = .true.)
   if ((CS%id_dh_dt>0) .and. .not.associated(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-    call register_time_deriv(MIS%h, CS%dh_dt, CS)
+    call register_time_deriv(lbound(MIS%h), MIS%h, CS%dh_dt, CS)
   endif
 
   ! layer thickness variables
@@ -2014,15 +2016,15 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   if (associated(CS%dKE_dt)) then
     if (.not.associated(CS%du_dt)) then
       call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
-      call register_time_deriv(MIS%u, CS%du_dt, CS)
+      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
     endif
     if (.not.associated(CS%dv_dt)) then
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
-      call register_time_deriv(MIS%v, CS%dv_dt, CS)
+      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
     endif
     if (.not.associated(CS%dh_dt)) then
       call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
-      call register_time_deriv(MIS%h, CS%dh_dt, CS)
+      call register_time_deriv(lbound(MIS%h), MIS%h, CS%dh_dt, CS)
     endif
   endif
 

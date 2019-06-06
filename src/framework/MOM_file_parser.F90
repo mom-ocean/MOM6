@@ -275,26 +275,26 @@ subroutine close_param_file(CS, quiet_close, component)
                  "If true, all log messages are also sent to stdout.", &
                  default=log_to_stdout_default)
   call log_param(CS, mdl, "REPORT_UNUSED_PARAMS", CS%report_unused, &
-                 "If true, report any parameter lines that are not used \n"//&
+                 "If true, report any parameter lines that are not used "//&
                  "in the run.", default=report_unused_default, &
                  debuggingParam=.true.)
   call log_param(CS, mdl, "FATAL_UNUSED_PARAMS", CS%unused_params_fatal, &
-                 "If true, kill the run if there are any unused \n"//&
+                 "If true, kill the run if there are any unused "//&
                  "parameters.", default=unused_params_fatal_default, &
                  debuggingParam=.true.)
   docfile_default = "MOM_parameter_doc"
   if (present(component)) docfile_default = trim(component)//"_parameter_doc"
   call log_param(CS, mdl, "DOCUMENT_FILE", CS%doc_file, &
-                 "The basename for files where run-time parameters, their\n"//&
-                 "settings, units and defaults are documented. Blank will\n"//&
+                 "The basename for files where run-time parameters, their "//&
+                 "settings, units and defaults are documented. Blank will "//&
                  "disable all parameter documentation.", default=docfile_default)
   if (len_trim(CS%doc_file) > 0) then
     call log_param(CS, mdl, "COMPLETE_DOCUMENTATION",  CS%complete_doc, &
-                  "If true, all run-time parameters are\n"//&
+                  "If true, all run-time parameters are "//&
                   "documented in "//trim(CS%doc_file)//&
                   ".all .", default=complete_doc_default)
     call log_param(CS, mdl, "MINIMAL_DOCUMENTATION", CS%minimal_doc, &
-                  "If true, non-default run-time parameters are\n"//&
+                  "If true, non-default run-time parameters are "//&
                   "documented in "//trim(CS%doc_file)//&
                   ".short .", default=minimal_doc_default)
   endif

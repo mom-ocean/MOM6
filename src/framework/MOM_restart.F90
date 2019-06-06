@@ -1439,7 +1439,7 @@ subroutine restart_init(param_file, CS, restart_root)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
-                 "If true, each processor writes its own restart file, \n"//&
+                 "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
 
@@ -1451,16 +1451,16 @@ subroutine restart_init(param_file, CS, restart_root)
                  "The name-root of the restart file.", default="MOM.res")
   endif
   call get_param(param_file, mdl, "LARGE_FILE_SUPPORT", CS%large_file_support, &
-                 "If true, use the file-size limits with NetCDF large \n"//&
+                 "If true, use the file-size limits with NetCDF large "//&
                  "file support (4Gb), otherwise the limit is 2Gb.", &
                  default=.true.)
   call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
   call get_param(param_file, mdl, "RESTART_CHECKSUMS_REQUIRED", CS%checksum_required, &
-                 "If true, require the restart checksums to match and error out otherwise. \n"//&
-                 "Users may want to avoid this comparison if for example the restarts are  \n"//&
-                 "made from a run with a different mask_table than the current run,  \n"//&
+                 "If true, require the restart checksums to match and error out otherwise. "//&
+                 "Users may want to avoid this comparison if for example the restarts are "//&
+                 "made from a run with a different mask_table than the current run, "//&
                  "in which case the checksums will not match and cause crash.",&
                  default=.true.)
 

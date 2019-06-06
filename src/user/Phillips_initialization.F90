@@ -73,7 +73,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -147,7 +147,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -248,7 +248,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
 
