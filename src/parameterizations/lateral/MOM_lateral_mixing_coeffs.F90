@@ -55,8 +55,6 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
-  logical :: use_GME_VarMix       !< If true, calculates slopes and Brunt-Vaisala frequency for use with
-                                  !! the GME closure.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   !< S*N at u-points [s-1]
     SN_v => NULL(), &  !< S*N at v-points [s-1]
@@ -1120,14 +1118,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0
     endif
-
-    call get_param(param_file, mdl, "USE_GME", CS%use_GME_VarMix, &
-                 "If true, use the GM+E backscatter scheme in association \n"//&
-                 "with the Gent and McWilliams parameterization.", default=.false.)
-
-    if (CS%use_GME_VarMix .and. .not. CS%use_stored_slopes) &
-              call MOM_error(FATAL,"ERROR: use_stored_slopes must be TRUE when "// &
-                                   "using GME.")
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
