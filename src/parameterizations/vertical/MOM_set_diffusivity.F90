@@ -1282,8 +1282,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
           elseif (Kd_lay(i,j,k) + (TKE_to_layer + TKE_Ray) * TKE_to_Kd(i,k) > &
                   maxTKE(i,k) * TKE_to_Kd(i,k)) then
             TKE_here = ((TKE_to_layer + TKE_Ray) + Kd_lay(i,j,k) / TKE_to_Kd(i,k)) - maxTKE(i,k)
-            ! ### Non-bracketed ternary sum
-            TKE(i) = TKE(i) - TKE_here + TKE_Ray
+            TKE(i) = (TKE(i) - TKE_here) + TKE_Ray
           else
             TKE_here = TKE_to_layer + TKE_Ray
             TKE(i) = TKE(i) - TKE_to_layer
