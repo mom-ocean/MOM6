@@ -662,16 +662,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
           if (fluxes%frac_shelf_h(i,j) > 0.0) &
             U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
                      fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
-          endif
-          if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-          if (CS%omega_frac >= 1.0) then
-            absf(i) = 2.0*CS%omega
-          else
-            absf(i) = 0.25*US%s_to_T*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                      (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
-            if (CS%omega_frac > 0.0) &
-              absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
-          endif
+        endif
+        if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+        if (CS%omega_frac >= 1.0) then
+          absf(i) = 2.0*CS%omega
+        else
+          absf(i) = 0.25*US%s_to_T*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+                    (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+          if (CS%omega_frac > 0.0) &
+            absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
+        endif
 
 !    endif ; enddo
 
@@ -723,13 +723,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
          min_MLD = 0.0
 
          !/BGR: Add MLD_guess based on stored previous value.
-         !      note that this is different from ML_Depth already
-         !      computed by EPBL, need to figure out why.
          if (CS%MLD_iteration_guess .and. (CS%ML_Depth2(i,j) > 1.0*US%m_to_Z)) then
            !If prev value is present use for guess.
            MLD_guess = CS%ML_Depth2(i,j)
          else
-           !Otherwise guess middle of water column (or Stab_Scale if smaller).
+           !Otherwise guess middle of water column
            MLD_guess = 0.5 * (min_MLD+max_MLD)
          endif
 
