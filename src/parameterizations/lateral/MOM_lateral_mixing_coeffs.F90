@@ -416,15 +416,12 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  if (CS%calculate_Eady_growth_rate .or. CS%use_stored_slopes &
-      .or. CS%use_GME_VarMix) then
+  if (CS%calculate_Eady_growth_rate) then
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
-                                  CS%slope_x, CS%slope_y, CS%N2_u, CS%N2_v, 1)
-      if (CS%calculate_Eady_growth_rate) then
-        call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, CS%N2_u, CS%N2_v, G, GV, CS)
-      endif
+                                  CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
+      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
