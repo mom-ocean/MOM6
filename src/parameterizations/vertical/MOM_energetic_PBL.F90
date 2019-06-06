@@ -414,9 +414,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: vstar     ! An in-situ turbulent velocity [m s-1].
   real :: mstar_total ! The value of mstar used in ePBL
   real :: enhance_mstar ! An ehhancement to mstar (output for diagnostic)
-  real :: mstar_LT ! An addition to mstar (output for diagnostic)
-  real :: LA ! The value of the Langmuir number
-  real :: LAmod !
+  real :: mstar_LT  ! An addition to mstar (output for diagnostic)
+  real :: LA        ! The value of the Langmuir number
+  real :: LAmod     ! The modified Langmuir number by convection
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
                     ! conversion factor from H to Z [Z H-1 ~> 1 or m3 kg-1].
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing [nondim].
@@ -767,7 +767,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
              endif
 
              !/ Apply MStar to get mech_TKE
-             !This bit of code preserves answers but should be eliminated.
+             !THIS BIT OF CODE IS NEEDED TO PRESERVE ANSWERS, BUT SHOULD BE DELETED
              if (CS%mstar_mode==0) then
                mech_TKE(i) = (dt*MSTAR_total*GV%Rho0) * US%Z_to_m**3 * U_star**3
              else
@@ -1829,30 +1829,18 @@ end subroutine find_PE_chg_orig
 subroutine Find_Mstar(CS,US, Buoyancy_Flux, UStar, UStar_Mean,&
                       BLD, Abs_Coriolis, MStar, Langmuir_Number,&
                       MStar_LT, Enhance_MStar, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer ::&
-       CS !< Energetic_PBL control structure.
-  type(unit_scale_type), intent(in) ::&
-       US !< A dimensional unit scaling type
-  real, intent(in) :: &
-       UStar !< ustar w/ gustiness
-  real, intent(in) ::&
-       UStar_Mean !< ustar w/o gustiness
-  real, intent(in) ::&
-       Abs_Coriolis !< abolute value of Coriolis parameter
-  real, intent(in) ::&
-       Buoyancy_Flux !< Buoyancy flux
-  real, intent(in) ::&
-       BLD !< boundary layer depth
-  real, intent(out) ::&
-       Mstar !< Ouput mstar (Mixing/ustar**3)
-  real, optional, intent(in) ::&
-       Langmuir_Number !Langmuir number
-  real, optional, intent(out) ::&
-       MStar_LT !< Additive mstar increase due to Langmuir turbulence
-  real, optional, intent(out) ::&
-       Enhance_MStar !< Multiplicative mstar increase due to Langmuir turbulence
-  real, optional, intent(out) ::&
-       Convect_Langmuir_number !< Langmuir number including buoyancy flux
+  type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure.
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  real, intent(in) :: UStar !< ustar w/ gustiness
+  real, intent(in) :: UStar_Mean !< ustar w/o gustiness
+  real, intent(in) :: Abs_Coriolis !< abolute value of Coriolis parameter
+  real, intent(in) :: Buoyancy_Flux !< Buoyancy flux
+  real, intent(in) :: BLD !< boundary layer depth
+  real, intent(out) :: Mstar !< Ouput mstar (Mixing/ustar**3)
+  real, optional, intent(in) :: Langmuir_Number !Langmuir number
+  real, optional, intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence
+  real, optional, intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to Langmuir turbulence
+  real, optional, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux
 
   !/ Variables used in computing mstar
   real :: MStar_Conv_Red ! Adjustment made to mstar due to convection reducing mechanical mixing.
@@ -1959,14 +1947,16 @@ end subroutine Find_Mstar
 subroutine Mstar_Langmuir(CS,US,abs_Coriolis,buoyancy_flux,ustar,BLD,Langmuir_Number,&
                           mstar,enhance_mstar,mstar_lt, Convect_Langmuir_Number)
   type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure.
-  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
-  real, intent(in) :: Abs_Coriolis
-  real, intent(in) :: Buoyancy_Flux
-  real, intent(in) :: UStar
-  real, intent(in) :: BLD
-  real, intent(in) :: Langmuir_Number
-  real, intent(inout) :: mstar
-  real, intent(out) :: enhance_mstar, mstar_LT, Convect_Langmuir_Number
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  real, intent(in) :: Abs_Coriolis !< abolute value of Coriolis parameter
+  real, intent(in) :: Buoyancy_Flux !< Buoyancy flux
+  real, intent(in) :: UStar !< ustar
+  real, intent(in) :: BLD !< boundary layer depth
+  real, intent(inout) :: Mstar !< Input/output mstar (Mixing/ustar**3)
+  real, intent(in) :: Langmuir_Number !Langmuir number
+  real, intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence
+  real, intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to Langmuir turbulence
+  real, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux
 
   !/
   real :: iL_Ekman    ! Inverse of Ekman length scale [Z-1 ~> m-1].
@@ -2397,7 +2387,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MIX_LEN_EXPONENT", CS%MixLenExponent, &
                  "The exponent applied to the ratio of the distance to the MLD "//&
                  "and the MLD depth which determines the shape of the mixing length. "//&
-                 "This is only used if",& !BGR-finish comment "
+                 "This is only used if USE_MLD_ITERATION is True.",&
                  "units=nondim", default=2.0)
 
 
