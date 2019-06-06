@@ -176,7 +176,7 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_forcing, & !< The TKE sink required to mix surface penetrating shortwave heating [J m-2].
     diag_TKE_mech_decay, & !< The decay of mechanical TKE [J m-2].
     diag_TKE_conv_decay, & !< The decay of convective TKE [J m-2].
-    diag_TKE_mixing,&  !< The work done by TKE to deepen the mixed layer [J m-2].
+    diag_TKE_mixing, & !< The work done by TKE to deepen the mixed layer [J m-2].
     ! Additional output parameters also 2d
     ML_depth, &        !< The mixed layer depth [Z ~> m]. (result after iteration step)
     ML_depth2, &       !< The mixed layer depth [Z ~> m]. (guess for iteration step)
@@ -564,7 +564,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   h_tt_min = 0.0
   vonKar = 0.41
-  mstar_mix=CS%MSTAR!Initialize to mstar
+  mstar_mix = CS%MSTAR !Initialize to mstar
   I_dtrho = 0.0 ; if (dt*GV%Rho0 > 0.0) I_dtrho = 1.0 / (dt*GV%Rho0)
 
   ! Determine whether to zero out diagnostics before accumulation.
@@ -590,34 +590,34 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   endif
 
 
-!!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
-!!OMP                                  CS,G,GV,US,fluxes,IdtdR0,                 &
-!!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
-!!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar,      &
-!!OMP                                  max_itt,Kd_int)                           &
+!!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt, &
+!!OMP                                  CS,G,GV,US,fluxes,IdtdR0, &
+!!OMP                                  TKE_forced,debug,H_neglect,dSV_dT, &
+!!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar, &
+!!OMP                                  max_itt,Kd_int) &
 !!OMP                           private(i,j,k,h,u,v,T,S,Kd,mech_TKE_k,conv_PErel_k, &
 !!OMP                                   U_Star,absf,mech_TKE,conv_PErel,nstar_k, &
-!!OMP                                   h_sum,I_hs,h_bot,hb_hs,T0,S0,num_itts,   &
+!!OMP                                   h_sum,I_hs,h_bot,hb_hs,T0,S0,num_itts, &
 !!OMP                                   pres,pres_Z,dMass,dPres,dT_to_dPE,dS_to_dPE, &
-!!OMP                                   dT_to_dColHt,dS_to_dColHt,Kddt_h,hp_a,   &
-!!OMP                                   Th_a,Sh_a,Th_b,Sh_b,dT_to_dPE_a,htot,    &
+!!OMP                                   dT_to_dColHt,dS_to_dColHt,Kddt_h,hp_a, &
+!!OMP                                   Th_a,Sh_a,Th_b,Sh_b,dT_to_dPE_a,htot, &
 !!OMP                                   dT_to_dColHt_a,dS_to_dColHt_a,uhtot,vhtot, &
-!!OMP                                   Idecay_len_TKE,exp_kh,nstar_FC,tot_TKE,  &
-!!OMP                                   TKE_reduc,dTe_t2,dSe_t2,dTe,dSe,dt_h,    &
-!!OMP                                   Convectively_stable,sfc_disconnect,b1,   &
-!!OMP                                   c1,dT_km1_t2,dS_km1_t2,dTe_term,         &
-!!OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,h_rsum,   &
-!!OMP                                   Kd_guess0,Kddt_h_g0,dPEc_dKd_Kd0,        &
-!!OMP                                   PE_chg_max,dPEa_dKd_g0,PE_chg_g0,        &
-!!OMP                                   MKE_src,dPE_conv,Kddt_h_max,Kddt_h_min,  &
-!!OMP                                   dTKE_conv, dTKE_forcing, dTKE_mixing,    &
+!!OMP                                   Idecay_len_TKE,exp_kh,nstar_FC,tot_TKE, &
+!!OMP                                   TKE_reduc,dTe_t2,dSe_t2,dTe,dSe,dt_h, &
+!!OMP                                   Convectively_stable,sfc_disconnect,b1, &
+!!OMP                                   c1,dT_km1_t2,dS_km1_t2,dTe_term, &
+!!OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,h_rsum, &
+!!OMP                                   Kd_guess0,Kddt_h_g0,dPEc_dKd_Kd0, &
+!!OMP                                   PE_chg_max,dPEa_dKd_g0,PE_chg_g0, &
+!!OMP                                   MKE_src,dPE_conv,Kddt_h_max,Kddt_h_min, &
+!!OMP                                   dTKE_conv, dTKE_forcing, dTKE_mixing, &
 !!OMP                                   dTKE_MKE,dTKE_mech_decay,dTKE_conv_decay,&
-!!OMP                                   TKE_left_max,TKE_left_min,Kddt_h_guess,  &
-!!OMP                                   TKE_left_itt,dPEa_dKd_itt,PE_chg_itt,    &
-!!OMP                                   MKE_src_itt,Kddt_h_itt,dPEc_dKd,PE_chg,  &
-!!OMP                                   dMKE_src_dK,TKE_left,use_Newt,           &
-!!OMP                                   dKddt_h_Newt,Kddt_h_Newt,Kddt_h_next,    &
-!!OMP                                   dKddt_h,Te,Se,Hsfc_used,dS_to_dPE_a,     &
+!!OMP                                   TKE_left_max,TKE_left_min,Kddt_h_guess, &
+!!OMP                                   TKE_left_itt,dPEa_dKd_itt,PE_chg_itt, &
+!!OMP                                   MKE_src_itt,Kddt_h_itt,dPEc_dKd,PE_chg, &
+!!OMP                                   dMKE_src_dK,TKE_left,use_Newt, &
+!!OMP                                   dKddt_h_Newt,Kddt_h_Newt,Kddt_h_next, &
+!!OMP                                   dKddt_h,Te,Se,Hsfc_used,dS_to_dPE_a, &
 !!OMP                                   dMKE_max,sfc_connected,TKE_here)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
@@ -767,7 +767,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       OBL_CONVERGED = .false.
 
       ! Initialize ENHANCE_M to 1 and mstar_lt to 0
-      ENHANCE_M=1.e0
+      ENHANCE_M = 1.0
       MSTAR_LT = 0.0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
 
@@ -777,6 +777,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
         sfc_connected(i) = .true.
 
+        ! Determine mech_TKE and conv_PErel.
         if (CS%Mstar_Mode > 0) then
         ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
         ! First solve for the TKE to PE length scale
@@ -797,8 +798,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                 else
                   !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
                   MSTAR_mix = CS%MSTAR_CAP - &
-                       (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)&
-                       +CS%MSTAR_A2)**(CS%MSTAR_N)
+                       (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP) + CS%MSTAR_A2)**(CS%MSTAR_N)
                 endif
               else
                 !No cap if negative cap value given.
@@ -820,22 +820,27 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             MSTAR_MIX = max(mstar_STAB, min(1.25, mstar_ROT))
             if (CS%MSTAR_CAP > 0.0) MSTAR_MIX = min(CS%MSTAR_CAP, MSTAR_MIX)
           elseif (CS%MSTAR_MODE.eq.CS%MSTAR_RH18) then
-            MSTAR_ROT = CS%RH18_MST_CN1 * ( 1.0 - ( 1.+CS%RH18_MST_CN2 * &
+            MSTAR_ROT = CS%RH18_MST_CN1 * ( 1.0 - ( 1. + CS%RH18_MST_CN2 * &
                  exp( CS%RH18_MST_CN3 * MLD_GUESS * absf(i) / u_star) )**-1.0 )
-            MSTAR_STAB = CS%RH18_MST_CS1 * (bf_stable**2*MLD_GUESS &
-                 / ( u_star**5 * absf(i) ) ) **CS%RH18_MST_CS2
+            ! Msr_term = CS%RH18_MST_CN2 * exp( CS%RH18_MST_CN3 * MLD_GUESS * absf(i) / u_star) )
+            ! MStar_Rot =  CS%RH18_MST_CN1 * (Msr_term / (1.0 + Msr_term))
+            MSTAR_STAB = CS%RH18_MST_CS1 * &
+                (bf_stable**2 * MLD_GUESS  / ( u_star**5 * absf(i) ) )**CS%RH18_MST_CS2
             MSTAR_MIX = MSTAR_ROT + MSTAR_STAB
           endif!mstar_mode==1 or ==2 or ==3
           ! Adjustment for unstable buoyancy flux.
           !  Convection reduces mechanical mixing because there
           !  is less density gradient to mix. (Statically unstable near surface)
           MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * (-BF_Unstable + 1.e-10*US%m_to_Z**2) / &
-                                 ( (-Bf_Unstable + 1.e-10*US%m_to_Z**2) +                 &
+                                 ( (-Bf_Unstable + 1.e-10*US%m_to_Z**2) + &
                                    2.0 *MSTAR_MIX * U_star**3 / MLD_guess )
           ! MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * ((-BF_Unstable + 1.e-10*US%m_to_Z**2)*MLD_guess) / &
           !                       ( (-Bf_Unstable + 1.e-10*US%m_to_Z**2)*MLD_guess + &
           !                         2.0*MSTAR_MIX * U_star**3 )
+
           if (CS%USE_LT) then
+            ! Determine MSTAR_LT and ENHANCE_M (otherwise they remain 0.0 and 1.0),
+            ! along with LAmod for diagnostics.
             call get_Langmuir_Number( LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, &
                                       H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
             ! 2. Get parameters for modified LA
@@ -845,7 +850,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             ! 3. Adjust LA based on various parameters.
             !    Assumes linear factors based on length scale ratios to adjust LA
             !    Note when these coefficients are set to 0 recovers simple LA.
-            LAmod = LA * (1.0 + max(-0.5,CS%LaC_MLDoEK * MLD_o_Ekman) +   &
+            LAmod = LA * (1.0 + max(-0.5,CS%LaC_MLDoEK * MLD_o_Ekman) + &
                  CS%LaC_EKoOB_stab * Ekman_o_Obukhov_stab + &
                  CS%LaC_EKoOB_un * Ekman_o_Obukhov_un + &
                  CS%LaC_MLDoOB_stab * MLD_o_Obukhov_stab  + &
@@ -864,10 +869,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
               ENHANCE_M = 1.0
             endif
           endif
-          !Reset mech_tke and conv_perel values (based on new mstar)
+
+          !Reset mech_TKE and conv_PErel values (based on new mstar)
           mech_TKE(i) = ( MSTAR_mix * MSTAR_conv_adj * ENHANCE_M + MSTAR_LT) * &
                         US%Z_to_m**3 * (dt*GV%Rho0*U_star**3)
-          conv_PErel(i) = 0.0
+
+          !### I suspect that these TKE_diagnostics are incorrectly summing over iterations. -RWH
           if (CS%TKE_diagnostics) then
             CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
             if (TKE_forced(i,j,1) <= 0.0) then
@@ -883,8 +890,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
           if (TKE_forced(i,j,1) <= 0.0) then
             mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
             if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
+            conv_PErel(i) = 0.0
           else
-            conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
+            conv_PErel(i) = TKE_forced(i,j,1)
           endif
         else
           mech_TKE(i) = mech_TKE_top(i)*ENHANCE_M ; conv_PErel(i) = conv_PErel_top(i)
@@ -902,6 +910,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         enddo
         if (.not.CS%Use_MLD_Iteration) OBL_CONVERGED = .true.
 
+        ! Determine the mixing shape function, MixLen_shape.
         if ((.not.CS%Use_MLD_Iteration) .or. &
             (CS%transLay_scale >= 1.0) .or. (CS%transLay_scale < 0.0) ) then
           do K=1,nz+1 ; MixLen_shape(K) = 1.0 ; enddo
@@ -920,7 +929,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             h_rsum = h_rsum + h(i,k-1)*GV%H_to_Z
             if (CS%MixLenExponent==2.0)then
               MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                   (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2!CS%MixLenExponent
+                   (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 !CS%MixLenExponent
             else
               MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
                    (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**CS%MixLenExponent
@@ -1128,9 +1137,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                  Kd_guess0 = vstar * vonKar * Mixing_Length_Used(k)
               endif
               ! Compute the local enhnacement of K (perhaps due to Langmuir)
-              if (CS%LT_ENH_K_R16) then
+              if (CS%LT_ENH_K_R16) then !### K_Enhancement is not used, and this option is uncommon.
                 Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
-                K_Enhancement = ( min( Max_K_Enhancement,1.+1./La ) - 1. )
+                K_Enhancement = ( min( Max_K_Enhancement, 1. + 1./La ) - 1. )
                 Kd_guess0 = Kd_guess0 * Shape_Function / Max_Shape_Function
               endif
             else
@@ -1193,7 +1202,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                     Kd(i,k) = vstar * vonKar * Mixing_Length_Used(k)
                   endif
                   ! Compute the local enhnacement of K (perhaps due to Langmuir)
-                  if (CS%LT_ENH_K_R16) then
+                  if (CS%LT_ENH_K_R16) then !### K_Enhancement is not used, and this option is uncommon.
                     Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
                     K_Enhancement = ( min( Max_K_Enhancement,1.+1./La ) - 1. )
                     Kd(i,k) = Kd(i,K) * Shape_Function / Max_Shape_Function
@@ -1278,7 +1287,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
               ! As a starting guess, take the minimum of a false position estimate
               ! and a Newton's method estimate starting from Kddt_h = 0.0.
               Kddt_h_guess = tot_TKE * Kddt_h_max / max( N2_DISSIPATION*PE_chg_g0 &
-                                 - MKE_src, Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max *        &
+                                 - MKE_src, Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max * &
                                  MKE2_Hharm) )
               ! The above expression is mathematically the same as the following
               ! except it is not susceptible to division by zero when
@@ -1460,13 +1469,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                   min_MLD = MLD_guess
                 elseif ((MLD_guess - MLD_found) < max(CS%MLD_tol,h(i,k-1)*GV%H_to_Z)) then
                   OBL_CONVERGED = .true.!Break convergence loop
-                  if (OBL_IT_STATS) then !Compute iteration statistics
-                    MAXIT = max(MAXIT,obl_it)
-                    MINIT = min(MINIT,obl_it)
-                    SUMIT = SUMIT+obl_it
-                    NUMIT = NUMIT+1
-                    print*,MAXIT,MINIT,SUMIT/NUMIT
-                  endif
+                ! if (OBL_IT_STATS) then !Compute iteration statistics
+                !   MAXIT = max(MAXIT,obl_it)
+                !   MINIT = min(MINIT,obl_it)
+                !   SUMIT = SUMIT+obl_it
+                !   NUMIT = NUMIT+1
+                !   print*,MAXIT,MINIT,SUMIT/NUMIT
+                ! endif
                   CS%ML_Depth2(i,j) = MLD_guess
                 else
                   max_MLD = MLD_guess !We know this guess was too deep
@@ -1481,13 +1490,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             min_MLD = MLD_guess
           elseif (abs(MLD_guess - MLD_found) < CS%MLD_tol) then
             OBL_CONVERGED = .true.!Break convergence loop
-            if (OBL_IT_STATS) then !Compute iteration statistics
-              MAXIT = max(MAXIT,obl_it)
-              MINIT = min(MINIT,obl_it)
-              SUMIT = SUMIT+obl_it
-              NUMIT = NUMIT+1
-              print*,MAXIT,MINIT,SUMIT/NUMIT
-            endif
+          !  if (OBL_IT_STATS) then !Compute iteration statistics
+          !    MAXIT = max(MAXIT,obl_it)
+          !    MINIT = min(MINIT,obl_it)
+          !    SUMIT = SUMIT+obl_it
+          !    NUMIT = NUMIT+1
+          !    print*,MAXIT,MINIT,SUMIT/NUMIT
+          !  endif
             CS%ML_Depth2(i,j) = MLD_guess
           else
             max_MLD = MLD_guess !We know this guess was too deep
@@ -1510,7 +1519,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         !{
         !print*,'Min/Max: ',ITmin(50),ITmax(50)
         !print*,'Guess/result: ',ITguess(50),ITresult(50)
-        !print*,'Stats on CPU: ',CONVERGED,NOTCONVERGED,&
+        !print*,'Stats on CPU: ',CONVERGED,NOTCONVERGED, &
         !     real(NOTCONVERGED)/real(CONVERGED)
         !}
         !stop !Kill if not converged during testing.
@@ -1935,6 +1944,8 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
 
 end subroutine energetic_PBL_get_MLD
 
+!### The following two subroutines, ust_2_u10_coare3p5 and get_LA_windsea, appear not to be in use.
+
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
 subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
   real,                    intent(in)  :: USTair !< Ustar in the air [m s-1].
@@ -1964,7 +1975,7 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
     alpha = min(0.028,0.0017 * u10 - 0.005)
     z0rough = alpha * USTair**2/(GV%g_Earth*US%m_to_Z) ! Compute z0rough from ustar guess
     z0=z0sm+z0rough
-    CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
+    CD = ( vonkar / log(10.0/z0) )**2 ! Compute CD from derived roughness
     u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
                        ! ends and checks for convergence...CT counter
                        ! makes sure loop doesn't run away if function
@@ -2071,7 +2082,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, US, LA)
   else
     LA=1.e8
   endif
-endsubroutine Get_LA_windsea
+end subroutine Get_LA_windsea
 
 !> This subroutine initializes the energetic_PBL module
 subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
@@ -2094,7 +2105,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "mixedlayer_init called with an associated"// &
+    call MOM_error(WARNING, "mixedlayer_init called with an associated"//&
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
@@ -2110,74 +2121,74 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "    0 for constant MSTAR\n"//&
                  "    1 for MSTAR w/ MLD in stabilizing limit\n"//&
                  "    2 for MSTAR w/ L_E/L_O in stabilizing limit\n"//&
-                 "    3 for MSTAR as in RH18.",&
-                 "units=nondim",default=0)
+                 "    3 for MSTAR as in RH18.", &
+                 "units=nondim", default=0)
   call get_param(param_file, mdl, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE "//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
   call get_param(param_file, mdl, "MIX_LEN_EXPONENT", CS%MixLenExponent, &
                  "The exponent applied to the ratio of the distance to the MLD "//&
-                 "and the MLD depth which determines the shape of the mixing length.",&
+                 "and the MLD depth which determines the shape of the mixing length.", &
                  "units=nondim", default=2.0)
   call get_param(param_file, mdl, "MSTAR_CAP", CS%mstar_cap, &
                  "Maximum value of mstar allowed in model if non-negative "//&
-                 "(used if MSTAR_MODE>0).",&
+                 "(used if MSTAR_MODE>0).", &
                  "units=nondim", default=-1.0)
   call get_param(param_file, mdl, "MSTAR_CONV_ADJ", CS%cnv_mst_fac, &
                  "Factor used for reducing mstar during convection "//&
-                 "due to reduction of stable density gradient.",&
+                 "due to reduction of stable density gradient.", &
                  "units=nondim", default=0.0)
   call get_param(param_file, mdl, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar "//&
-                 "and the length scale ratio (used if MSTAR_MODE=1).",&
+                 "and the length scale ratio (used if MSTAR_MODE=1).", &
                  "units=nondim", default=0.85)
   call get_param(param_file, mdl, "MSTAR_XINT", CS%mstar_xint, &
                  "The value of the length scale ratio where the mstar "//&
-                 "is linear above (used if MSTAR_MODE=1).",&
+                 "is linear above (used if MSTAR_MODE=1).", &
                  "units=nondim", default=-0.3)
   call get_param(param_file, mdl, "MSTAR_AT_XINT", CS%mstar_at_xint, &
                  "The value of mstar at MSTAR_XINT "//&
-                 "(used if MSTAR_MODE=1).",&
+                 "(used if MSTAR_MODE=1).", &
                  "units=nondim", default=0.095)
   call get_param(param_file, mdl, "MSTAR_FLATCAP", CS%MSTAR_FLATCAP, &
                  "Set false to use asymptotic cap, defaults to true. "//&
                  "(used only if MSTAR_MODE=1)"&
-                 ,"units=nondim",default=.true.)
+                 ,"units=nondim", default=.true.)
   call get_param(param_file, mdl, "MSTAR2_COEF1", CS%MSTAR_COEF, &
                  "Coefficient in computing mstar when rotation and "//&
                  "stabilizing effects are both important (used if MSTAR_MODE=2)"&
-                  ,"units=nondim",default=0.3)
+                  ,"units=nondim", default=0.3)
   call get_param(param_file, mdl, "MSTAR2_COEF2", CS%C_EK, &
                  "Coefficient in computing mstar when only rotation limits "//&
                  "the total mixing. (used only if MSTAR_MODE=2)"&
-                  ,"units=nondim",default=0.085)
-  call get_param(param_file, mdl, "RH18_MST_CN1", CS%RH18_MST_CN1,&
+                  ,"units=nondim", default=0.085)
+  call get_param(param_file, mdl, "RH18_MST_CN1", CS%RH18_MST_CN1, &
                  "MSTAR_N coefficient 1 (outter-most coefficient for fit). \n"//&
                  " The value of 0.275 is given in RH18.  Increasing this \n"//&
                  "coefficient increases MSTAR for all values of Hf/ust, but more \n"//&
-                 "effectively at low values (weakly developed OSBLs).",&
+                 "effectively at low values (weakly developed OSBLs).", &
                  units="nondim", default=0.275)
-  call get_param(param_file, mdl, "RH18_MST_CN2", CS%RH18_MST_CN2,&
+  call get_param(param_file, mdl, "RH18_MST_CN2", CS%RH18_MST_CN2, &
                  "MSTAR_N coefficient 2 (coefficient outside of exponential decay). \n"//&
                  "The value of 8.0 is given in RH18.  Increasing this coefficient \n"//&
                  "increases MSTAR for all values of HF/ust, with a much more even \n"//&
-                 "effect across a wide range of Hf/ust than CN1.",&
-                 units="nondim",default=8.0)
-  call get_param(param_file, mdl, "RH18_MST_CN3", CS%RH18_MST_CN3,&
+                 "effect across a wide range of Hf/ust than CN1.", &
+                 units="nondim", default=8.0)
+  call get_param(param_file, mdl, "RH18_MST_CN3", CS%RH18_MST_CN3, &
                  "MSTAR_N coefficient 3 (exponential decay coefficient). \n"//&
                  "The value of -5.0 is given in RH18.  Increasing this increases how \n"//&
-                 "quickly the value of MSTAR decreases as Hf/ust increases.",&
-                  units="nondim",default=-5.0)
-  call get_param(param_file, mdl, "RH18_MST_CS1", CS%RH18_MST_CS1,&
+                 "quickly the value of MSTAR decreases as Hf/ust increases.", &
+                  units="nondim", default=-5.0)
+  call get_param(param_file, mdl, "RH18_MST_CS1", CS%RH18_MST_CS1, &
                  "MSTAR_S coefficient for RH18 in stabilizing limit. \n"//&
                  "The value of 0.2 is given in RH18 and increasing it increases \n"//&
-                 "MSTAR in the presence of a stabilizing surface buoyancy flux.",&
-                 units="nondim",default=0.2)
-  call get_param(param_file, mdl, "RH18_MST_CS2", CS%RH18_MST_CS2,&
+                 "MSTAR in the presence of a stabilizing surface buoyancy flux.", &
+                 units="nondim", default=0.2)
+  call get_param(param_file, mdl, "RH18_MST_CS2", CS%RH18_MST_CS2, &
                  "MSTAR_S exponent for RH18 in stabilizing limit. \n"//&
                  "The value of 0.4 is given in RH18 and increasing it increases MSTAR \n"//&
-                 "exponentially in the presence of a stabilizing surface buoyancy flux.",&
-                 Units="nondim",default=0.4)
+                 "exponentially in the presence of a stabilizing surface buoyancy flux.", &
+                 Units="nondim", default=0.4)
   call get_param(param_file, mdl, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by "//&
                  "surface fluxes that is available to drive entrainment "//&
@@ -2196,96 +2207,96 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 !                 "The minimum mixed layer depth if the mixed layer depth "//&
 !                 "is determined dynamically.", units="m", default=0.0)
 
-  call get_param(param_file, mdl, "OMEGA",CS%omega,              &
+  call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
-  call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega,                  &
+  call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the "//&
-                 "vertical component of rotation when setting the decay "// &
+                 "vertical component of rotation when setting the decay "//&
                  "scale for turbulence.", default=.false., do_not_log=.true.)
   omega_frac_dflt = 0.0
   if (use_omega) then
     call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
     omega_frac_dflt = 1.0
   endif
-  call get_param(param_file, mdl, "ML_OMEGA_FRAC", CS%omega_frac,              &
-                 "When setting the decay scale for turbulence, use this "//  &
+  call get_param(param_file, mdl, "ML_OMEGA_FRAC", CS%omega_frac, &
+                 "When setting the decay scale for turbulence, use this "//&
                  "fraction of the absolute rotation rate blended with the "//&
-                 "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).",      &
+                 "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
                  units="nondim", default=omega_frac_dflt)
   call get_param(param_file, mdl, "VSTAR_MODE", CS%vstar_mode, &
                  "An integer switch for how to compute VSTAR. \n"//&
                  "    0 for old  vstar (TKE Remaining)^(1/3)\n"//&
-                 "    1 for vstar from u* and w* (see Reichl & Hallberg 2018).",&
-                 "units=nondim",default=0)
-  call get_param(param_file, mdl, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef,     &
+                 "    1 for vstar from u* and w* (see Reichl & Hallberg 2018).", &
+                 "units=nondim", default=0)
+  call get_param(param_file, mdl, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef, &
                  "A ratio relating the efficiency with which convectively "//&
-                 "released energy is converted to a turbulent velocity, "//  &
+                 "released energy is converted to a turbulent velocity, "//&
                  "relative to mechanically forced TKE. Making this larger "//&
                  "increases the BL diffusivity", units="nondim", default=1.0)
   call get_param(param_file, mdl, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
-                 "An overall nondimensional scaling factor for v*. "//    &
-                 "Making this larger decreases the PBL diffusivity.",       &
+                 "An overall nondimensional scaling factor for v*. "//&
+                 "Making this larger decreases the PBL diffusivity.", &
                  units="nondim", default=1.0, scale=US%m_to_Z)
-  call get_param(param_file, mdl, "VSTAR_SURF_FAC", CS%vstar_surf_fac,&
-                 "The proportionality times ustar to set vstar to at the surface.",&
+  call get_param(param_file, mdl, "VSTAR_SURF_FAC", CS%vstar_surf_fac, &
+                 "The proportionality times ustar to set vstar to at the surface.", &
                  "units=nondim", default=1.2)
   call get_param(param_file, mdl, "LT_ENHANCE_K_R16",CS%LT_ENH_K_R16, &
                  "Logical flag to toggle on enhancing mixing coefficient in\n"//&
                  "boundary layer due to Langmuir turbulence following Reichl\n"//&
                  "et al., 2016. \n"//&
                  "This approach is not recommended for use, as it is based\n"//&
-                 "on a hurricane LES configuration and not known if it is general.",&
-                 units="nondim",default=.false.)
-  call get_param(param_file, mdl, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef,           &
-                 "A nondimensional scaling factor controlling the inhibition "//   &
+                 "on a hurricane LES configuration and not known if it is general.", &
+                 units="nondim", default=.false.)
+  call get_param(param_file, mdl, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef, &
+                 "A nondimensional scaling factor controlling the inhibition "//&
                  "of the diffusive length scale by rotation. Making this larger "//&
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
-  call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%USE_MLD_ITERATION,    &
-                 "A logical that specifies whether or not to use the "//      &
+  call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%USE_MLD_ITERATION, &
+                 "A logical that specifies whether or not to use the "//&
                  "distance to the bottom of the actively turbulent boundary "//&
                  "layer to help set the EPBL length scale.", default=.false.)
-  call get_param(param_file, mdl, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION,  &
-                 "A logical that specifies whether or not to use the "//      &
+  call get_param(param_file, mdl, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION, &
+                 "A logical that specifies whether or not to use the "//&
                  "old method for determining MLD depth in iteration, which "//&
                  "is limited to resolution.", default=.true.)
-  call get_param(param_file, mdl, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS,       &
-                 "A logical that specifies whether or not to use the "//             &
-                 "previous timestep MLD as a first guess in the MLD iteration. "//    &
+  call get_param(param_file, mdl, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
+                 "A logical that specifies whether or not to use the "//&
+                 "previous timestep MLD as a first guess in the MLD iteration. "//&
                  "The default is false to facilitate reproducibility.", default=.false.)
-  call get_param(param_file, mdl, "EPBL_MLD_TOLERANCE", CS%MLD_tol,         &
-                 "The tolerance for the iteratively determined mixed "//  &
+  call get_param(param_file, mdl, "EPBL_MLD_TOLERANCE", CS%MLD_tol, &
+                 "The tolerance for the iteratively determined mixed "//&
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
                  units="meter", default=1.0, scale=US%m_to_Z)
-  call get_param(param_file, mdl, "EPBL_MIN_MIX_LEN", CS%min_mix_len,    &
+  call get_param(param_file, mdl, "EPBL_MIN_MIX_LEN", CS%min_mix_len, &
                  "The minimum mixing length scale that will be used "//&
-                 "by ePBL.  The default (0) does not set a minimum.",    &
+                 "by ePBL.  The default (0) does not set a minimum.", &
                  units="meter", default=0.0, scale=US%m_to_Z)
-  call get_param(param_file, mdl, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc,         &
-                 "If true, the ePBL code uses the original form of the "//        &
-                 "potential energy change code.  Otherwise, the newer "//         &
-                 "version that can work with successive increments to the "//     &
+  call get_param(param_file, mdl, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc, &
+                 "If true, the ePBL code uses the original form of the "//&
+                 "potential energy change code.  Otherwise, the newer "//&
+                 "version that can work with successive increments to the "//&
                  "diffusivity in upward or downward passes is used.", default=.true.)
   call get_param(param_file, mdl, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
-                 "A scale for the mixing length in the transition layer "// &
+                 "A scale for the mixing length in the transition layer "//&
                  "at the edge of the boundary layer as a fraction of the "//&
                  "boundary layer thickness.  The default is 0.1.", &
                  units="nondim", default=0.1)
   if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5) >= 0.5) then
-    call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//       &
+    call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//&
                  "EPBL_TRANSITION should be greater than 0 and less than 1.")
   endif
   call get_param(param_file, mdl, "N2_DISSIPATION_POS", CS%N2_Dissipation_Scale_Pos, &
-                 "A scale for the dissipation of TKE due to stratification "//     &
-                 "in the boundary layer, applied when local stratification "//     &
-                 "is positive.  The default is 0, but should probably be ~0.4.",     &
+                 "A scale for the dissipation of TKE due to stratification "//&
+                 "in the boundary layer, applied when local stratification "//&
+                 "is positive.  The default is 0, but should probably be ~0.4.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mdl, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg,&
-                 "A scale for the dissipation of TKE due to stratification "//    &
-                 "in the boundary layer, applied when local stratification "//    &
-                 "is negative.  The default is 0, but should probably be ~1.",      &
+  call get_param(param_file, mdl, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg, &
+                 "A scale for the dissipation of TKE due to stratification "//&
+                 "in the boundary layer, applied when local stratification "//&
+                 "is negative.  The default is 0, but should probably be ~1.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mdl, "USE_LA_LI2016", USE_LA_Windsea,      &
+  call get_param(param_file, mdl, "USE_LA_LI2016", USE_LA_Windsea, &
        "A logical to use the Li et al. 2016 (submitted) formula to "//&
        "determine the Langmuir number.", units="nondim", default=.false.)
   ! Note this can be activated in other ways, but this preserves the old method.
@@ -2293,43 +2304,43 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
     CS%USE_LT = .true.
   else
     call get_param(param_file, mdl, "EPBL_LT", CS%USE_LT, &
-         "A logical to use a LT parameterization.",              &
+         "A logical to use a LT parameterization.", &
          units="nondim", default=.false.)
   endif
   if (CS%USE_LT) then
     call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM, &
-         "Integer for Langmuir number mode. \n"//                     &
-         " *Requires USE_LA_LI2016 to be set to True. \n"//           &
-         "Options: 0 - No Langmuir \n"//                              &
-         "         1 - Van Roekel et al. 2014/Li et al., 2016  \n"//  &
-         "         2 - Multiplied w/ adjusted La. \n"//               &
-         "         3 - Added w/ adjusted La.",                        &
+         "Integer for Langmuir number mode. \n"//&
+         " *Requires USE_LA_LI2016 to be set to True. \n"//&
+         "Options: 0 - No Langmuir \n"//&
+         "         1 - Van Roekel et al. 2014/Li et al., 2016  \n"//&
+         "         2 - Multiplied w/ adjusted La. \n"//&
+         "         3 - Added w/ adjusted La.", &
          units="nondim", default=0)
     call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
-         "Coefficient for Langmuir enhancement if LT_ENHANCE > 1",         &
+         "Coefficient for Langmuir enhancement if LT_ENHANCE > 1", &
          units="nondim", default=0.447)
     call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
-         "Exponent for Langmuir enhancement if LT_ENHANCE > 1",          &
+         "Exponent for Langmuir enhancement if LT_ENHANCE > 1", &
          units="nondim", default=-1.33)
-    call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK,    &
+    call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK, &
          "Coefficient for modification of Langmuir number due to "//&
-         "MLD approaching Ekman depth if LT_ENHANCE=2.",            &
+         "MLD approaching Ekman depth if LT_ENHANCE=2.", &
          units="nondim", default=-0.87)
     call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab, &
-         "Coefficient for modification of Langmuir number due to "//  &
-         "MLD approaching stable Obukhov depth if LT_ENHANCE=2.",     &
+         "Coefficient for modification of Langmuir number due to "//&
+         "MLD approaching stable Obukhov depth if LT_ENHANCE=2.", &
          units="nondim", default=0.0)
     call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un, &
          "Coefficient for modification of Langmuir number due to "//&
          "MLD approaching unstable Obukhov depth if LT_ENHANCE=2.", &
          units="nondim", default=0.0)
     call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab, &
-         "Coefficient for modification of Langmuir number due to "// &
-         "ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.",  &
+         "Coefficient for modification of Langmuir number due to "//&
+         "ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.", &
          units="nondim", default=0.95)
-    call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un,   &
-         "Coefficient for modification of Langmuir number due to "// &
-         "ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.",&
+    call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un, &
+         "Coefficient for modification of Langmuir number due to "//&
+         "ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.", &
          units="nondim", default=0.95)
   endif
   ! This gives a minimum decay scale that is typically much less than Angstrom.
