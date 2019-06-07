@@ -7,9 +7,7 @@
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, 2002                                           *
-!*  Adapted to the IDEAL_IS test case by Gustavo Marques, Oct 2016
-!*  Adapted for the rotating_gravity_current case by Elizabeth Yankovsky, May 2018     *
+!*  By Elizabeth Yankovsky, May 2018     *
 !*********+*********+*********+*********+*********+*********+***********
 
 module RGC_tracer
@@ -158,10 +156,8 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
-    ! calls.  Curses on the designers and implementers of Fortran90.
+    ! calls.
     tr_ptr => CS%tr(:,:,:,m)
-    ! Register the tracer for the restart file.
-    !call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &

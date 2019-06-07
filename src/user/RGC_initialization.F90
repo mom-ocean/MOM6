@@ -17,6 +17,7 @@ module RGC_initialization
 !* write to: Free Software Foundation, Inc.,                           *
 !*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
+!* By Elizabeth Yankovsky, May 2018				       *
 !***********************************************************************
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
@@ -252,7 +253,4 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
 end subroutine RGC_initialize_sponges
 
-!> \class RGC_initialization
-!!
-!!  The module configures the ISOMIP test case.
 end module RGC_initialization
