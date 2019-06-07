@@ -508,6 +508,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
             enddo ; enddo
           else
             do j=js,je ; do i=is,ie
+              drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 &
+              + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+            enddo ; enddo
+            do j=js,je ; do i=is,ie
               ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
               if (MEKE%MEKE(i,j)<0.) ldamping = 0.
               ! notice that the above line ensures a damping only if MEKE is positive,
@@ -521,9 +525,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       endif
     endif ! MEKE_KH>=0
 
-    do j=js,je ; do i=is,ie
-      MEKE%MEKE(i,j) =  MAX(MEKE%MEKE(i,j),0.0)
-    enddo ; enddo
+ !   do j=js,je ; do i=is,ie
+ !     MEKE%MEKE(i,j) =  MAX(MEKE%MEKE(i,j),0.0)
+ !   enddo ; enddo
 
 !$OMP end parallel
     call cpu_clock_begin(CS%id_clock_pass)
@@ -738,8 +742,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     else
       EKE = 0.
     endif
-!    MEKE%MEKE(i,j) = EKE
-    MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+    MEKE%MEKE(i,j) = EKE
+!    MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
   enddo ; enddo
 
 end subroutine MEKE_equilibrium
