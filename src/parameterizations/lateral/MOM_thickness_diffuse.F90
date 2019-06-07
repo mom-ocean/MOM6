@@ -1261,7 +1261,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   endif
 
 
-  if (find_work) then ; do j=js,je ; do i=is,ie ; do k=nz,1,-1
+  !if (find_work) then ; do j=js,je ; do i=is,ie ; do k=nz,1,-1
+  if (find_work) then ; do j=js,je ; do i=is,ie 
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
@@ -1277,7 +1278,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
       endif
     endif ; endif
-  enddo ; enddo ; enddo ; endif
+  !enddo ; enddo ; enddo ; endif
+  enddo ; enddo ; endif
 
   if (CS%id_slope_x > 0) call post_data(CS%id_slope_x, CS%diagSlopeX, CS%diag)
   if (CS%id_slope_y > 0) call post_data(CS%id_slope_y, CS%diagSlopeY, CS%diag)
