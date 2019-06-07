@@ -2748,10 +2748,10 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%SST(i,j) = CS%tv%T(i,j,1)
       sfc_state%SSS(i,j) = CS%tv%S(i,j,1)
     enddo ; enddo ; endif
-    do j=js,je ; do I=IscB,IecB
+    do j=js,je ; do I=is-1,ie
       sfc_state%u(I,j) = u(I,j,1)
     enddo ; enddo
-    do J=JscB,JecB ; do i=is,ie
+    do J=js-1,je ; do i=is,ie
       sfc_state%v(i,J) = v(i,J,1)
     enddo ; enddo
 
@@ -2803,12 +2803,15 @@ subroutine extract_surface_state(CS, sfc_state)
     enddo ! end of j loop
 
 !   Determine the mean velocities in the uppermost depth_ml fluid.
+    ! NOTE: Velocity loops start on `[ij]s-1` in order to update halo values
+    !       required by the speed diagnostic on the non-symmetric grid.
+    !       This assumes that u and v halos have already been updated.
     if (CS%Hmix_UV>0.) then
       !### This calculation should work in thickness (H) units instead of Z, but that
       !### would change answers at roundoff in non-Boussinesq cases.
       depth_ml = CS%Hmix_UV
       !$OMP parallel do default(shared) private(depth,dh,hv)
-      do J=jscB,jecB
+      do J=js-1,ie
         do i=is,ie
           depth(i) = 0.0
           sfc_state%v(i,J) = 0.0
@@ -2835,11 +2838,11 @@ subroutine extract_surface_state(CS, sfc_state)
 
       !$OMP parallel do default(shared) private(depth,dh,hu)
       do j=js,je
-        do I=iscB,iecB
+        do I=is-1,ie
           depth(I) = 0.0
           sfc_state%u(I,j) = 0.0
         enddo
-        do k=1,nz ; do I=iscB,iecB
+        do k=1,nz ; do I=is-1,ie
           hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_Z
           if (depth(i) + hu < depth_ml) then
             dh = hu
@@ -2852,17 +2855,17 @@ subroutine extract_surface_state(CS, sfc_state)
           depth(I) = depth(I) + dh
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
-        do I=iscB,iecB
+        do I=is-1,ie
           if (depth(I) < GV%H_subroundoff*GV%H_to_Z) &
               depth(I) = GV%H_subroundoff*GV%H_to_Z
           sfc_state%u(I,j) = sfc_state%u(I,j) / depth(I)
         enddo
       enddo ! end of j loop
     else ! Hmix_UV<=0.
-      do j=js,je ; do I=IscB,IecB
+      do j=js,je ; do I=is-1,ie
         sfc_state%u(I,j) = u(I,j,1)
       enddo ; enddo
-      do J=JscB,JecB ; do i=is,ie
+      do J=js-1,je ; do i=is,ie
         sfc_state%v(i,J) = v(i,J,1)
       enddo ; enddo
     endif
