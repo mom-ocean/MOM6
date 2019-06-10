@@ -412,11 +412,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: U_Star_Mean ! The surface friction without gustiness [Z s-1 ~> m s-1].
   real :: B_Flux    ! The surface buoyancy flux [Z2 s-3 ~> m2 s-3]
   real :: vstar     ! An in-situ turbulent velocity [m s-1].
-  real :: mstar_total ! The value of mstar used in ePBL
+  real :: mstar_total ! The value of mstar used in ePBL [nondim]
   real :: enhance_mstar ! An ehhancement to mstar (output for diagnostic)
-  real :: mstar_LT  ! An addition to mstar (output for diagnostic)
-  real :: LA        ! The value of the Langmuir number
-  real :: LAmod     ! The modified Langmuir number by convection
+  real :: mstar_LT  ! An addition to mstar [nondim] (output for diagnostic)
+  real :: LA        ! The value of the Langmuir number [nondim]
+  real :: LAmod     ! The modified Langmuir number by convection [nondim]
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
                     ! conversion factor from H to Z [Z H-1 ~> 1 or m3 kg-1].
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing [nondim].
@@ -516,18 +516,20 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                            !    e.g. M=12 for DEPTH=4000m and DZ=1m
   real, dimension(SZK_(GV)+1) :: Vstar_Used, &      ! 1D arrays used to store
                                Mixing_Length_Used   ! Vstar and Mixing_Length
+
   !/BGR - remaining variables are related to tracking iteration statistics.
-  logical :: OBL_IT_STATS=.false. ! Flag for computing OBL iteration statistics
-  REAL :: ITguess(20), ITresult(20),ITmax(20),ITmin(20) ! Flag for storing guess/result
+  ! logical :: OBL_IT_STATS=.false. ! Flag for computing OBL iteration statistics
+  ! real :: ITguess(20), ITresult(20),ITmax(20),ITmin(20) ! Flag for storing guess/result
                                                         ! should have dim=MAX_OBL_IT
-  integer, save :: MAXIT=0   ! Stores maximum number of iterations
-  integer, save :: MINIT=1e8 ! Stores minimum number of iterations
-  integer, save :: SUMIT=0   ! Stores total iterations (summed over all)
-  integer, save :: NUMIT=0   ! Stores number of times iterated
+  ! integer, save :: MAXIT=0   ! Stores maximum number of iterations
+  ! integer, save :: MINIT=1e8 ! Stores minimum number of iterations
+  ! integer, save :: SUMIT=0   ! Stores total iterations (summed over all)
+  ! integer, save :: NUMIT=0   ! Stores number of times iterated
                              !e.g. Average iterations = SUMIT/NUMIT
-  integer, save :: CONVERGED!
-  integer, save :: NOTCONVERGED!
+  ! integer, save :: CONVERGED!
+  ! integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
+
   real :: N2_dissipation
   real :: Surface_Scale ! Surface decay scale for vstar
   real :: K_Enhancement ! A local enhancement of K, perhaps due to Langmuir turbulence
@@ -652,192 +654,172 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     ! homogenizing the shortwave heating within that cell.  This sets the energy
     ! and ustar and wstar available to drive mixing at the first interior
     ! interface.
-    do i=is,ie
-      if (G%mask2dT(i,j) > 0.5) then
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-        U_star = fluxes%ustar(i,j)
-        U_Star_Mean = fluxes%ustar_gustless(i,j)
-        B_Flux = buoy_flux(i,j)
-        if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
-          if (fluxes%frac_shelf_h(i,j) > 0.0) &
-            U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                     fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
-        endif
-        if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-        if (CS%omega_frac >= 1.0) then
-          absf(i) = 2.0*CS%omega
-        else
-          absf(i) = 0.25*US%s_to_T*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                    (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
-          if (CS%omega_frac > 0.0) &
-            absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
-        endif
+      U_star = fluxes%ustar(i,j)
+      U_Star_Mean = fluxes%ustar_gustless(i,j)
+      B_Flux = buoy_flux(i,j)
+      if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
+        if (fluxes%frac_shelf_h(i,j) > 0.0) &
+          U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
+                   fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
+      endif
+      if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+      if (CS%omega_frac >= 1.0) then
+        absf(i) = 2.0*CS%omega
+      else
+        absf(i) = 0.25*US%s_to_T*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+                  (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+        if (CS%omega_frac > 0.0) &
+          absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
+      endif
 
 !    endif ; enddo
 
 !    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-        h_sum(i) = H_neglect
-        do k=1,nz
-          h_sum(i) = h_sum(i) + h(i,k)
-        enddo
-        I_hs = 0.0
-        if (h_sum(i) > 0.0) I_hs = 1.0 / h_sum(i)
-        h_bot = 0.0
-        hb_hs(i,nz+1) = 0.0
-        do k=nz,1,-1
-          h_bot = h_bot + h(i,k)
-          hb_hs(i,K) = h_bot * I_hs
-        enddo
+      h_sum(i) = H_neglect
+      do k=1,nz
+        h_sum(i) = h_sum(i) + h(i,k)
+      enddo
+      I_hs = 0.0
+      if (h_sum(i) > 0.0) I_hs = 1.0 / h_sum(i)
+      h_bot = 0.0
+      hb_hs(i,nz+1) = 0.0
+      do k=nz,1,-1
+        h_bot = h_bot + h(i,k)
+        hb_hs(i,K) = h_bot * I_hs
+      enddo
 
-        pres(i,1) = 0.0
-        pres_Z(i,1) = 0.0
-        do k=1,nz
-          dMass = GV%H_to_kg_m2 * h(i,k)
-          dPres = (GV%g_Earth*US%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(i,k)
-          dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
-          dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
-          dT_to_dColHt(i,k) = dMass * US%m_to_Z * dSV_dT(i,j,k)
-          dS_to_dColHt(i,k) = dMass * US%m_to_Z * dSV_dS(i,j,k)
+      pres(i,1) = 0.0
+      pres_Z(i,1) = 0.0
+      do k=1,nz
+        dMass = GV%H_to_kg_m2 * h(i,k)
+        dPres = (GV%g_Earth*US%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(i,k)
+        dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
+        dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
+        dT_to_dColHt(i,k) = dMass * US%m_to_Z * dSV_dT(i,j,k)
+        dS_to_dColHt(i,k) = dMass * US%m_to_Z * dSV_dS(i,j,k)
 
-          pres(i,K+1) = pres(i,K) + dPres
-          pres_Z(i,K+1) = US%Z_to_m * pres(i,K+1)
-        enddo
+        pres(i,K+1) = pres(i,K) + dPres
+        pres_Z(i,K+1) = US%Z_to_m * pres(i,K+1)
+      enddo
 
 !    endif ; enddo
 
     ! Note the outer i-loop and inner k-loop loop order!!!
 !    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        do k=1,nz
-          T0(k) = T(i,k)
-          S0(k) = S(i,k)
-        enddo
+      do k=1,nz ; T0(k) = T(i,k) ; S0(k) = S(i,k) ; enddo
 
-        !/The following lines are for the iteration over MLD
-        ! max_MLD will initialized as ocean bottom depth
-        max_MLD = 0.0
-        do k=1,nz
-          max_MLD = max_MLD + h(i,k)*GV%H_to_Z
-        enddo
-        !min_MLD will initialize as 0.
-        min_MLD = 0.0
+      !/The following lines are for the iteration over MLD
+      ! max_MLD will initialized as ocean bottom depth
+      max_MLD = 0.0 ; do k=1,nz ; max_MLD = max_MLD + h(i,k)*GV%H_to_Z ; enddo
+      !min_MLD will initialize as 0.
+      min_MLD = 0.0
 
-        !/BGR: Add MLD_guess based on stored previous value.
-        if (CS%MLD_iteration_guess .and. (CS%ML_Depth2(i,j) > 1.0*US%m_to_Z)) then
-          !If prev value is present use for guess.
-          MLD_guess = CS%ML_Depth2(i,j)
-        else
-          !Otherwise guess middle of water column
-          MLD_guess = 0.5 * (min_MLD+max_MLD)
-        endif
+      !/BGR: Add MLD_guess based on stored previous value.
+      if (CS%MLD_iteration_guess .and. (CS%ML_Depth2(i,j) > 1.0*US%m_to_Z)) then
+        !If prev value is present use for guess.
+        MLD_guess = CS%ML_Depth2(i,j)
+      else
+        !Otherwise guess middle of water column
+        MLD_guess = 0.5 * (min_MLD + max_MLD)
+      endif
 
-        ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
-        OBL_CONVERGED = .false.
+      ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
+      OBL_CONVERGED = .false.
 
-         do OBL_IT=1,MAX_OBL_IT
+      do OBL_IT=1,MAX_OBL_IT
 
-           if (.not. OBL_CONVERGED) then
-             ! If not using MLD_Iteration flag loop to only execute once.
-             if (.not.CS%Use_MLD_Iteration) OBL_CONVERGED = .true.
+        if (.not. OBL_CONVERGED) then
+          ! If not using MLD_Iteration flag loop to only execute once.
+          if (.not.CS%Use_MLD_Iteration) OBL_CONVERGED = .true.
 
-             ! Reset ML_depth
-             CS%ML_depth(i,j) = h(i,1)*GV%H_to_Z
-             sfc_connected(i) = .true.
+          ! Reset ML_depth
+          CS%ML_depth(i,j) = h(i,1)*GV%H_to_Z
+          sfc_connected(i) = .true.
 
-             !/ Here we get MStar, which is the ratio of convective TKE driven
-             !   mixing to UStar**3
-             if (CS%Use_LT) then
-               call get_Langmuir_Number( LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, &
-                                         H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
-               call find_mstar(CS,&
-                               US,&
-                               Buoyancy_Flux = b_flux,&
-                               UStar = U_Star,&
-                               UStar_Mean = U_Star_Mean,&
-                               BLD = MLD_Guess,&
-                               Abs_Coriolis = AbsF(i),&
-                               MStar = MStar_total,&
-                               Langmuir_Number = La,&
-                               Convect_Langmuir_Number = LAmod,&
-                               Enhance_MStar = Enhance_MStar,&
-                               mstar_LT = mstar_LT)
-             else
-               call find_mstar(CS,US, b_flux, u_star, u_star_mean,&
-                               mld_guess, absf(i), mstar_total)
-             endif
+          !/ Here we get MStar, which is the ratio of convective TKE driven
+          !   mixing to UStar**3
+          if (CS%Use_LT) then
+            call get_Langmuir_Number( LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, &
+                                      H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
+            call find_mstar(CS, US, b_flux, U_Star, U_Star_Mean, MLD_Guess, AbsF(i), &
+                            MStar_total, Langmuir_Number = La, Convect_Langmuir_Number = LAmod,&
+                            Enhance_MStar = Enhance_MStar, mstar_LT = mstar_LT)
+          else
+            call find_mstar(CS, US, b_flux, u_star, u_star_mean, MLD_guess, absf(i), mstar_total)
+          endif
 
-             !/ Apply MStar to get mech_TKE
-             !THIS BIT OF CODE IS NEEDED TO PRESERVE ANSWERS, BUT SHOULD BE DELETED
-             if (CS%mstar_mode==0) then
-               mech_TKE(i) = (dt*MSTAR_total*GV%Rho0) * US%Z_to_m**3 * U_star**3
-             else
-               mech_TKE(i) = MSTAR_total * US%Z_to_m**3 * (dt*GV%Rho0*U_star**3)
-             endif
+          !/ Apply MStar to get mech_TKE
+          !THIS BIT OF CODE IS NEEDED TO PRESERVE ANSWERS, BUT SHOULD BE DELETED
+          ! if ((CS%old_answers) .and. (CS%mstar_mode==0)) then
+          if (CS%mstar_mode==0) then
+            mech_TKE(i) = (dt*MSTAR_total*GV%Rho0) * US%Z_to_m**3 * U_star**3
+          else
+            mech_TKE(i) = MSTAR_total * US%Z_to_m**3 * (dt*GV%Rho0*U_star**3)
+          endif
 
-             !### I suspect that these diagnostics are inconsistently summing over iterations.
-             if (CS%TKE_diagnostics) then
-               CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
-               if (TKE_forced(i,j,1) <= 0.0) then
-                 CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
-                                            max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
-                 ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
-                 !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
-               else
-                 CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
-               endif
-             endif
+          !### I suspect that these diagnostics are inconsistently summing over iterations.
+          if (CS%TKE_diagnostics) then
+            CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
+            if (TKE_forced(i,j,1) <= 0.0) then
+              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
+                                         max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
+              ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+              !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
+            else
+              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
+            endif
+          endif
 
-             if (TKE_forced(i,j,1) <= 0.0) then
-               mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
-               if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
-               conv_PErel(i) = 0.0
-             else
-               conv_PErel(i) = TKE_forced(i,j,1)
-             endif
+          if (TKE_forced(i,j,1) <= 0.0) then
+            mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
+            if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
+            conv_PErel(i) = 0.0
+          else
+            conv_PErel(i) = TKE_forced(i,j,1)
+          endif
 
-             if (CS%TKE_diagnostics) then
-               dTKE_conv = 0.0 ; dTKE_forcing = 0.0 ; dTKE_mixing = 0.0
-               dTKE_MKE = 0.0 ; dTKE_mech_decay = 0.0 ; dTKE_conv_decay = 0.0
-             endif
+          if (CS%TKE_diagnostics) then
+            dTKE_conv = 0.0 ; dTKE_forcing = 0.0 ; dTKE_mixing = 0.0
+            dTKE_MKE = 0.0 ; dTKE_mech_decay = 0.0 ; dTKE_conv_decay = 0.0
+          endif
 
-             ! Store in 1D arrays for output.
-             do k=1,nz
-               Vstar_Used(k) = 0.
-               Mixing_Length_Used(k) = 0.
-             enddo
+          ! Store in 1D arrays for output.
+          do k=1,nz
+            Vstar_Used(k) = 0.
+            Mixing_Length_Used(k) = 0.
+          enddo
 
-             ! Determine the mixing shape function MixLen_shape.
-             if ((.not.CS%Use_MLD_Iteration) .or. &
-                 (CS%transLay_scale >= 1.0) .or. (CS%transLay_scale < 0.0) ) then
-               do K=1,nz+1
-                 MixLen_shape(K) = 1.0
-               enddo
-             elseif (MLD_guess <= 0.0) then
-               if (CS%transLay_scale > 0.0) then
-                 do K=1,nz+1
-                   MixLen_shape(K) = CS%transLay_scale
-                 enddo
-               else
-                 do K=1,nz+1
-                   MixLen_shape(K) = 1.0
-                 enddo
-               endif
-             else
-             ! Reduce the mixing length based on MLD, with a quadratic
-             ! expression that follows KPP.
-             I_MLD = 1.0 / MLD_guess
-             h_rsum = 0.0
-             MixLen_shape(1) = 1.0
-             do K=2,nz+1
-               h_rsum = h_rsum + h(i,k-1)*GV%H_to_Z
-               if (CS%MixLenExponent==2.0) then
-                 MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                      (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 ! CS%MixLenExponent
-               else
-                 MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                      (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**CS%MixLenExponent
-               endif
-             enddo
+          ! Determine the mixing shape function MixLen_shape.
+          if ((.not.CS%Use_MLD_Iteration) .or. &
+              (CS%transLay_scale >= 1.0) .or. (CS%transLay_scale < 0.0) ) then
+            do K=1,nz+1
+              MixLen_shape(K) = 1.0
+            enddo
+          elseif (MLD_guess <= 0.0) then
+            if (CS%transLay_scale > 0.0) then ; do K=1,nz+1
+              MixLen_shape(K) = CS%transLay_scale
+            enddo ; else ; do K=1,nz+1
+              MixLen_shape(K) = 1.0
+            enddo ; endif
+          else
+            ! Reduce the mixing length based on MLD, with a quadratic
+            ! expression that follows KPP.
+            I_MLD = 1.0 / MLD_guess
+            h_rsum = 0.0
+            MixLen_shape(1) = 1.0
+            do K=2,nz+1
+              h_rsum = h_rsum + h(i,k-1)*GV%H_to_Z
+              if (CS%MixLenExponent==2.0) then
+                MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
+                     (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 ! CS%MixLenExponent
+              else
+                MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
+                     (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**CS%MixLenExponent
+              endif
+            enddo
           endif
 
           Kd(i,1) = 0.0 ; Kddt_h(1) = 0.0
@@ -1054,20 +1036,20 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
               if (CS%orig_PE_calc) then
                 call find_PE_chg_orig(Kddt_h_g0, h(i,k), hp_a(i), dTe_term, dSe_term, &
-                     dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                     dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
-                     pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
-                     dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
-                     PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
-                     dPEc_dKd_0=dPEc_dKd_Kd0 )
+                         dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
+                         dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
+                         pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                         dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                         PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
+                         dPEc_dKd_0=dPEc_dKd_Kd0 )
               else
                 call find_PE_chg(0.0, Kddt_h_g0, hp_a(i), h(i,k), &
-                     Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
-                     dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                     pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
-                     dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
-                     PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
-                     dPEc_dKd_0=dPEc_dKd_Kd0 )
+                         Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
+                         dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
+                         pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                         dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                         PE_chg=PE_chg_g0, dPEc_dKd=dPEa_dKd_g0, dPE_max=PE_chg_max, &
+                         dPEc_dKd_0=dPEc_dKd_Kd0 )
               endif
 
               MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
@@ -1080,6 +1062,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                 N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_POS
               endif
 
+              ! This block checks out different cases to determine Kd at the present interface.
               if ((PE_chg_g0 < 0.0) .or. ((vstar == 0.0) .and. (dPEc_dKd_Kd0 < 0.0))) then
                 ! This column is convectively unstable.
                 if (PE_chg_max <= 0.0) then
@@ -1100,46 +1083,46 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                     if (.not.CS%Use_MLD_Iteration) then
                     ! Note again (as prev) that using Mixing_Length_Used here
                     !  instead of redoing the computation will change answers...
-                      Kd(i,k) = vstar * CS%vonKar *  ((h_tt*hbs_here)*vstar) / &
+                      Kd(i,K) = vstar * CS%vonKar *  ((h_tt*hbs_here)*vstar) / &
                             ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar)
                     else
-                      Kd(i,k) = vstar * CS%vonKar * Mixing_Length_Used(k)
+                      Kd(i,K) = vstar * CS%vonKar * Mixing_Length_Used(k)
                     endif
                     ! Compute the local enhnacement of K (perhaps due to Langmuir)
                     if (CS%LT_ENH_K_R16) then !### K_Enhancement is not used, and this option is uncommon.
                       Shape_Function = htot(i)/MLD_guess*(1.-htot(i)/MLD_guess)**2
                       K_Enhancement = ( min( Max_K_Enhancement,1.+1./La ) - 1. )
-                      Kd(i,k) = Kd(i,K) * Shape_Function / Max_Shape_Function
+                      Kd(i,K) = Kd(i,K) * Shape_Function / Max_Shape_Function
                     endif
                   else
-                    vstar = 0.0 ; Kd(i,k) = 0.0
+                    vstar = 0.0 ; Kd(i,K) = 0.0
                   endif
                   Vstar_Used(k) = vstar
 
                   if (CS%orig_PE_calc) then
-                    call find_PE_chg_orig(Kd(i,k)*dt_h, h(i,k), hp_a(i), dTe_term, dSe_term, &
-                         dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                         dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
-                         pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
-                         dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
-                         PE_chg=dPE_conv)
+                    call find_PE_chg_orig(Kd(i,K)*dt_h, h(i,k), hp_a(i), dTe_term, dSe_term, &
+                             dT_km1_t2, dS_km1_t2, dT_to_dPE(i,k), dS_to_dPE(i,k), &
+                             dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), &
+                             pres_Z(i,K), dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                             dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                             PE_chg=dPE_conv)
                   else
-                    call find_PE_chg(0.0, Kd(i,k)*dt_h, hp_a(i), h(i,k), &
-                         Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
-                         dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
-                         pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
-                         dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
-                         PE_chg=dPE_conv)
+                    call find_PE_chg(0.0, Kd(i,K)*dt_h, hp_a(i), h(i,k), &
+                             Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
+                             dT_to_dPE_a(i,k-1), dS_to_dPE_a(i,k-1), dT_to_dPE(i,k), dS_to_dPE(i,k), &
+                             pres_Z(i,K), dT_to_dColHt_a(i,k-1), dS_to_dColHt_a(i,k-1), &
+                             dT_to_dColHt(i,k), dS_to_dColHt(i,k), &
+                             PE_chg=dPE_conv)
                   endif
                   ! Should this be iterated to convergence for Kd?
                   if (dPE_conv > 0.0) then
-                    Kd(i,k) = Kd_guess0 ; dPE_conv = PE_chg_g0
+                    Kd(i,K) = Kd_guess0 ; dPE_conv = PE_chg_g0
                   else
-                    MKE_src = dMKE_max*(1.0 - exp(-(Kd(i,k)*dt_h) * MKE2_Hharm))
+                    MKE_src = dMKE_max*(1.0 - exp(-(Kd(i,K)*dt_h) * MKE2_Hharm))
                   endif
                 else
                   ! The energy change does not vary monotonically with Kddt_h.  Find the maximum?
-                  Kd(i,k) = Kd_guess0 ; dPE_conv = PE_chg_g0
+                  Kd(i,K) = Kd_guess0 ; dPE_conv = PE_chg_g0
                 endif
 
                 conv_PErel(i) = conv_PErel(i) - dPE_conv
@@ -1153,10 +1136,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                   ! CS%ML_depth2(i,j) = CS%ML_depth2(i,J) + GV%H_to_Z * h(i,k)
                 endif
 
-                Kddt_h(K) = Kd(i,k)*dt_h
+                Kddt_h(K) = Kd(i,K)*dt_h
               elseif (tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) >= 0.0) then
-                ! There is energy to support the suggested mixing.  Keep that estimate.
-                Kd(i,k) = Kd_guess0
+                ! This column is convctively stable and there is energy to support the suggested
+                ! mixing.  Keep that estimate.
+                Kd(i,K) = Kd_guess0
                 Kddt_h(K) = Kddt_h_g0
 
                 ! Reduce the mechanical and convective TKE proportionately.
@@ -1178,8 +1162,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                 endif
 
               elseif (tot_TKE == 0.0) then
-                ! This can arise if nstar_FC = 0.
-                Kd(i,k) = 0.0 ; Kddt_h(K) = 0.0
+                ! This can arise if nstar_FC = 0, but it is not common.
+                Kd(i,K) = 0.0 ; Kddt_h(K) = 0.0
                 tot_TKE = 0.0 ; conv_PErel(i) = 0.0 ; mech_TKE(i) = 0.0
                 sfc_disconnect = .true.
               else
@@ -1264,7 +1248,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                   else
                     Kddt_h_guess = Kddt_h_next
                   endif
-                enddo
+                enddo ! Inner iteration loop on itt.
                 Kd(i,K) = Kddt_h_guess / dt_h ; Kddt_h(K) = Kd(i,K)*dt_h
 
                 ! All TKE should have been consumed.
@@ -1280,7 +1264,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
                 tot_TKE = 0.0 ; mech_TKE(i) = 0.0 ; conv_PErel(i) = 0.0
                 sfc_disconnect = .true.
-              endif
+              endif ! End of convective or forced mixing cases to determine Kd.
 
               Kddt_h(K) = Kd(i,K)*dt_h
               !   At this point, the final value of Kddt_h(K) is known, so the
@@ -1361,9 +1345,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
           ! is now dependent on the ML, and therefore the ML needs to be estimated
           ! more precisely than the grid spacing.
           !/
-          ITmax(obl_it) = max_MLD       ! Track max    }
-          ITmin(obl_it) = min_MLD       ! Track min    } For debug purpose
-          ITguess(obl_it) = MLD_guess   ! Track guess  }
+          ! ITmax(obl_it) = max_MLD       ! Track max    }
+          ! ITmin(obl_it) = min_MLD       ! Track min    } For debug purpose
+          ! ITguess(obl_it) = MLD_guess   ! Track guess  }
           !/
           MLD_found = 0.0 ; FIRST_OBL = .true.
           if (CS%Orig_MLD_iteration) then
@@ -1413,14 +1397,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
           endif
           ! For next pass, guess average of minimum and maximum values.
           MLD_guess = 0.5*(min_MLD + max_MLD)
-          ITresult(obl_it) = MLD_found
+          ! ITresult(obl_it) = MLD_found
         endif
       enddo ! Iteration loop for converged boundary layer thickness.
-      if (.not.OBL_CONVERGED) then
-        NOTCONVERGED=NOTCONVERGED+1
-      else
-        CONVERGED=CONVERGED+1
-      endif
+      ! if (.not.OBL_CONVERGED) then
+      !   NOTCONVERGED = NOTCONVERGED+1
+      ! else
+      !   CONVERGED = CONVERGED+1
+      ! endif
 
       if (CS%TKE_diagnostics) then
         CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + dTKE_MKE
@@ -1432,8 +1416,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
        ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + dTKE_unbalanced
       endif
       if (CS%Mixing_Diagnostics) then
-        !Write to 3-D for outputing Mixing length and
-        !  velocity scale.
+        ! Write to 3-D for outputing Mixing length and velocity scale.
         do k=1,nz
           CS%Mixing_Length(i,j,k) = Mixing_Length_Used(k)
           CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
@@ -1822,22 +1805,23 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 
 end subroutine find_PE_chg_orig
 
-!> !> This subroutine finds the Mstar value for ePBL
-subroutine Find_Mstar(CS,US, Buoyancy_Flux, UStar, UStar_Mean,&
+!> This subroutine finds the Mstar value for ePBL
+subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
                       BLD, Abs_Coriolis, MStar, Langmuir_Number,&
                       MStar_LT, Enhance_MStar, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure.
-  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
-  real, intent(in) :: UStar !< ustar w/ gustiness
-  real, intent(in) :: UStar_Mean !< ustar w/o gustiness
-  real, intent(in) :: Abs_Coriolis !< abolute value of Coriolis parameter
-  real, intent(in) :: Buoyancy_Flux !< Buoyancy flux
-  real, intent(in) :: BLD !< boundary layer depth
-  real, intent(out) :: Mstar !< Ouput mstar (Mixing/ustar**3)
-  real, optional, intent(in) :: Langmuir_Number !Langmuir number
-  real, optional, intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence
-  real, optional, intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to Langmuir turbulence
-  real, optional, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux
+  type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
+  type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
+  real,                  intent(in)  :: UStar !< ustar w/ gustiness [Z s-1 ~> m s-1]
+  real,                  intent(in)  :: UStar_Mean !< ustar w/o gustiness [Z s-1 ~> m s-1]
+  real,                  intent(in)  :: Abs_Coriolis !< abolute value of the Coriolis parameter [s-1]
+  real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 s-3 ~> m2 s-3]
+  real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
+  real,                  intent(out) :: Mstar !< Ouput mstar (Mixing/ustar**3) [nondim]
+  real,        optional, intent(in)  :: Langmuir_Number !< Langmuir number [nondim]
+  real,        optional, intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence [nondim]
+  real,        optional, intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to
+                                              !! Langmuir turbulence [nondim]
+  real,        optional, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
   !/ Variables used in computing mstar
   real :: MStar_Conv_Red ! Adjustment made to mstar due to convection reducing mechanical mixing.
@@ -1898,64 +1882,73 @@ subroutine Find_Mstar(CS,US, Buoyancy_Flux, UStar, UStar_Mean,&
   !delete<end
   elseif (CS%MSTAR_MODE == MStar_from_Ekman) then
 
-    !### Please refrain from using the construct A / B / C in place of A/(B*C).
-    ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
-    MStar_S = CS%MStar_coef*sqrt(max(0.0,Buoyancy_Flux) &
-              / UStar**2 / (Abs_Coriolis+1.e-10) )
-    !### Should be mstar_STAB = CS%MSTAR_COEF*sqrt(Bf_Stable / (U_star**2 * (absf(i)+1.e-10)))
-    ! The limit for rotation (Ekman length) limited mixin
-    MStar_N =  CS%C_Ek * log( max( 1.,UStar &
-               / (Abs_Coriolis+1.e-10) / BLD ) )
-    !### Consider rewriting the expression for mstar_ROT as:
-    ! mstar_Rot = 0.0
+    !if (CS%OldAnswers)
+      ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
+      MStar_S = CS%MStar_coef*sqrt(max(0.0,Buoyancy_Flux) / UStar**2 / (Abs_Coriolis+1.e-10) )
+      ! The limit for rotation (Ekman length) limited mixing
+      MStar_N =  CS%C_Ek * log( max( 1.,UStar / (Abs_Coriolis+1.e-10) / BLD ) )
+    !else
+      ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
+    ! mstar_S = CS%MSTAR_COEF*sqrt(Bf_Stable / (U_star**2 * (Abs_Coriolis+1.e-10)))
+      ! The limit for rotation (Ekman length) limited mixing
+    ! mstar_N = 0.0
     ! if (Ustar > absf(i) * MLD_guess) &
-    !   mstar_ROT = CS%C_EK * log(U_star / (absf(i) * MLD_guess))
+    !   mstar_N = CS%C_EK * log(U_star / (Abs_Coriolis * MLD_guess))
+    !endif
+
     ! Here 1.25 is .5/von Karman, which gives the Obukhov limit.
     MStar = max(MStar_S, min(1.25, MStar_N))
     if (CS%MStar_Cap > 0.0) MStar = min( CS%MStar_Cap,MStar )
-  elseif ( CS%MStar_Mode.eq.MStar_from_RH18 ) then
-    ! MSN_term = CS%RH18_MStar_cn2 * exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar)
-    ! MStar_N = (CS%RH18_MStar_cn1 *  MSN_term) / ( 1. + MSN_term)
+  elseif ( CS%MStar_Mode == MStar_from_RH18 ) then
+    !if (CS%OldAnswers) then
     MStar_N = CS%RH18_MStar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_MStar_cn2 * &
               exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar) ) )
-    MStar_S = CS%RH18_MStar_CS1 * ( max(0.0,Buoyancy_Flux)**2 * BLD &
-                 / ( UStar**5 * Abs_Coriolis ) )**CS%RH18_mstar_cs2
+    !else
+    ! MSN_term = CS%RH18_MStar_cn2 * exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar)
+    ! MStar_N = (CS%RH18_MStar_cn1 *  MSN_term) / ( 1. + MSN_term)
+    !endif
+    MStar_S = CS%RH18_MStar_CS1 * &
+             ( max(0.0,Buoyancy_Flux)**2 * BLD / ( UStar**5 * Abs_Coriolis ) )**CS%RH18_mstar_cs2
     MStar = MStar_N + MStar_S
-  endif!mstar_mode
+  endif !mstar_mode
 
   !/ 2. Adjust mstar to account for convective turbulence
+  !if (CS%OldAnswers) then
   MStar_Conv_Red = 1. - CS%MStar_Convect_coef * (-min(0.0,Buoyancy_Flux) + 1.e-10*US%m_to_Z**2) / &
                          ( (-min(0.0,Buoyancy_Flux) + 1.e-10*US%m_to_Z**2) + &
                          2.0 *MStar * ustar**3 / BLD )
-  ! MSTAR_Conv_Adj = 1. - CS%mstar_convect_coef * ((-BF_Unstable + 1.e-10*US%m_to_Z**2)*MLD_guess) / &
-  !                       ( (-Bf_Unstable + 1.e-10*US%m_to_Z**2)*MLD_guess + &
-  !                         2.0*MSTAR_MIX * U_star**3 )
+  !else
+  !  MSCR_term1 = (min(0.0,Buoyancy_Flux) + 1.e-10*US%m_to_Z**2)*BLD
+  !  MSCR_term2 = 2.0*MStar * U_star**3
+  !  MStar_Conv_Red = ((1.-CS%mstar_convect_coef) * MSCR_term1 + MSCR_term2) / (MSCR_term1 + MSCR_term2)
+  !endif
 
   !/3. Combine various mstar terms to get final value
-  MStar = MStar*MStar_Conv_Red
+  MStar = MStar * MStar_Conv_Red
 
   if (present(Langmuir_Number)) then
-    call mstar_Langmuir(CS,US,abs_Coriolis,buoyancy_flux,ustar,BLD,Langmuir_number,mstar, &
-                        Enhance_MStar, mstar_lt,Convect_Langmuir_Number)
+    !### In this call, ustar was previously ustar_mean.  Is this change deliberate?
+    call mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langmuir_number, mstar, &
+                        Enhance_MStar, mstar_lt, Convect_Langmuir_Number)
   endif
 
-  return
 end subroutine Find_Mstar
 
 !> This subroutine modifies the Mstar value if the Langmuir number is present
-subroutine Mstar_Langmuir(CS,US,abs_Coriolis,buoyancy_flux,ustar,BLD,Langmuir_Number,&
-                          mstar,enhance_mstar,mstar_lt, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure.
-  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
-  real, intent(in) :: Abs_Coriolis !< abolute value of Coriolis parameter
-  real, intent(in) :: Buoyancy_Flux !< Buoyancy flux
-  real, intent(in) :: UStar !< ustar
-  real, intent(in) :: BLD !< boundary layer depth
-  real, intent(inout) :: Mstar !< Input/output mstar (Mixing/ustar**3)
-  real, intent(in) :: Langmuir_Number !Langmuir number
-  real, intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence
-  real, intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to Langmuir turbulence
-  real, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux
+subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langmuir_Number, &
+                          mstar, enhance_mstar, mstar_lt, Convect_Langmuir_Number)
+  type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
+  type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
+  real,                  intent(in)  :: Abs_Coriolis !< abolute value of the Coriolis parameter [s-1]
+  real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 s-3 ~> m2 s-3]
+  real,                  intent(in)  :: UStar !< Surface friction velocity with? gustiness [Z s-1 ~> m s-1]
+  real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
+  real,                  intent(inout) :: Mstar !< Input/output mstar (Mixing/ustar**3) [nondim]
+  real,                  intent(in)  :: Langmuir_Number !Langmuir number [nondim]
+  real,                  intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence [nondim]
+  real,                  intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to
+                                              !! Langmuir turbulence [nondim]
+  real,                  intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
   !/
   real :: iL_Ekman    ! Inverse of Ekman length scale [Z-1 ~> m-1].
