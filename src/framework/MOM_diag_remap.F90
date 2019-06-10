@@ -14,6 +14,45 @@
 !! 5. diag_remap_do_remap() is called from within a diag post() to do the remapping before
 !!    the diagnostic is written out.
 
+
+! NOTE: In the following functions, the fields are passed using 1-based
+! indexing, which requires special handling within the grid index loops.
+!
+!   * diag_remap_do_remap
+!   * vertically_reintegrate_diag_field
+!   * vertically_interpolate_diag_field
+!   * horizontally_average_diag_field
+!
+! Symmetric grids add an additional row of western and southern points to u-
+! and v-grids.  Non-symmetric grids are 1-based and symmetric grids are
+! zero-based, allowing the same expressions to be used when accessing the
+! fields.  But if u- or v-points become 1-indexed, as in these functions, then
+! the stencils must be re-assessed.
+!
+! For interpolation between h and u grids, we use the following relations:
+!
+!   h->u: f_u[ig] = 0.5 * (f_h[ ig ] + f_h[ig+1])
+!         f_u[i1] = 0.5 * (f_h[i1-1] + f_h[ i1 ])
+!
+!   u->h: f_h[ig] = 0.5 * (f_u[ig-1] + f_u[ ig ])
+!         f_h[i1] = 0.5 * (f_u[ i1 ] + f_u[i1+1])
+!
+! where ig is the grid index and i1 is the 1-based index.  That is, a 1-based
+! u-point is ahead of its matching h-point in non-symmetric mode, but behind
+! its matching h-point in non-symmetric mode.
+!
+! We can combine these expressions by applying to ig a -1 shift on u-grids and
+! a +1 shift on h-grids in symmetric mode.
+!
+! We do not adjust the h-point indices, since they are assumed to be 1-based.
+! This is only correct when global indexing is disabled.  If global indexing is
+! enabled, then all indices will need to be defined relative to the data
+! domain.
+!
+! Finally, note that the mask input fields are pointers to arrays which are
+! zero-indexed, and do not need any corrections over grid index loops.
+
+
 module MOM_diag_remap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -313,7 +352,10 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   real, dimension(size(h,3)) :: h_src
   real :: h_neglect, h_neglect_edge
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k                !< Grid index
+  integer :: i1, j1                 !< 1-based index
+  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
+  integer :: shift                  !< Symmetric offset for 1-based indexing
 
   call assert(remap_cs%initialized, 'diag_remap_do_remap: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
@@ -330,31 +372,40 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   nz_dest = remap_cs%nz
   remapped_field(:,:,:) = 0.
 
+  ! Symmetric grid offset under 1-based indexing; see header for details.
+  shift = 0; if (G%symmetric) shift = 1
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
+        i1 = i - G%isdB + 1
+        i_lo = i1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:), &
+        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        call remapping_core_h(remap_cs%remap_cs, &
+                              nz_src, h_src(:), field(I1,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I1,j,:), &
                               h_neglect, h_neglect_edge)
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
+      j1 = j - G%jsdB + 1
+      j_lo = j1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:), &
+        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        call remapping_core_h(remap_cs%remap_cs, &
+                              nz_src, h_src(:), field(i,J1,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J1,:), &
                               h_neglect, h_neglect_edge)
       enddo
     enddo
@@ -363,11 +414,12 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j, 1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,j,:), &
+        call remapping_core_h(remap_cs%remap_cs, &
+                              nz_src, h_src(:), field(i,j,:), &
                               nz_dest, h_dest(:), remapped_field(i,j,:), &
                               h_neglect, h_neglect_edge)
       enddo
@@ -437,7 +489,10 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k                !< Grid index
+  integer :: i1, j1                 !< 1-based index
+  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
+  integer :: shift                  !< Symmetric offset for 1-based indexing
 
   call assert(remap_cs%initialized, 'vertically_reintegrate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
@@ -447,30 +502,37 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
   reintegrated_field(:,:,:) = 0.
 
+  ! Symmetric grid offset under 1-based indexing; see header for details.
+  shift = 0; if (G%symmetric) shift = 1
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
+        i1 = i - G%isdB + 1
+        i_lo = i1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
-        call reintegrate_column(nz_src, h_src, field(I,j,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(I,j,:))
+        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        call reintegrate_column(nz_src, h_src, field(I1,j,:), &
+                                nz_dest, h_dest, 0., reintegrated_field(I1,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
+      j1 = j - G%jsdB + 1
+      j_lo = j1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call reintegrate_column(nz_src, h_src, field(i,J,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(i,J,:))
+        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        call reintegrate_column(nz_src, h_src, field(i,J1,:), &
+                                nz_dest, h_dest, 0., reintegrated_field(i,J1,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -478,7 +540,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j, 1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
@@ -508,7 +570,10 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k                !< Grid index
+  integer :: i1, j1                 !< 1-based index
+  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
+  integer :: shift                  !< Symmetric offset for 1-based indexing
 
   call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3)+1, &
@@ -519,30 +584,37 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
 
+  ! Symmetric grid offset under 1-based indexing; see header for details.
+  shift = 0; if (G%symmetric) shift = 1
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
+        i1 = i - G%isdB + 1
+        i_lo = i1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
-        call interpolate_column(nz_src, h_src, field(I,j,:), &
-                                nz_dest, h_dest, 0., interpolated_field(I,j,:))
+        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        call interpolate_column(nz_src, h_src, field(I1,j,:), &
+                                nz_dest, h_dest, 0., interpolated_field(I1,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
+      j1 = j - G%jsdB + 1
+      j_lo = j1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call interpolate_column(nz_src, h_src, field(i,J,:), &
-                                nz_dest, h_dest, 0., interpolated_field(i,J,:))
+        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        call interpolate_column(nz_src, h_src, field(i,J1,:), &
+                                nz_dest, h_dest, 0., interpolated_field(i,J1,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -550,7 +622,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j, 1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
