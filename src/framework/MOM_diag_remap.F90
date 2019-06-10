@@ -379,10 +379,10 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
-        i1 = i - G%isdB + 1
-        i_lo = i1 - shift; i_hi = i_lo + 1
+        I1 = I - G%isdB + 1
+        i_lo = I1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(I,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
@@ -395,11 +395,11 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
-      j1 = j - G%jsdB + 1
-      j_lo = j1 - shift; j_hi = j_lo + 1
+      J1 = J - G%jsdB + 1
+      j_lo = J1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(i,J,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
@@ -509,10 +509,10 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
-        i1 = i - G%isdB + 1
-        i_lo = i1 - shift; i_hi = i_lo + 1
+        I1 = I - G%isdB + 1
+        i_lo = I1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(I,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
@@ -523,11 +523,11 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
-      j1 = j - G%jsdB + 1
-      j_lo = j1 - shift; j_hi = j_lo + 1
+      J1 = J - G%jsdB + 1
+      j_lo = J1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(i,J,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
@@ -591,10 +591,10 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
-        i1 = i - G%isdB + 1
-        i_lo = i1 - shift; i_hi = i_lo + 1
+        I1 = I - G%isdB + 1
+        i_lo = I1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(I,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
@@ -605,11 +605,11 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
-      j1 = j - G%jsdB + 1
-      j_lo = j1 - shift; j_hi = j_lo + 1
+      J1 = J - G%jsdB + 1
+      j_lo = J1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(i,J,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
