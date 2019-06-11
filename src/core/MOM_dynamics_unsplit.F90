@@ -50,7 +50,6 @@ module MOM_dynamics_unsplit
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-
 use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : mech_forcing
@@ -76,6 +75,7 @@ use MOM_time_manager, only : time_type, real_to_time, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
+use MOM_barotropic, only : barotropic_CS
 use MOM_boundary_update, only : update_OBC_data, update_OBC_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
@@ -91,6 +91,7 @@ use MOM_open_boundary, only : radiation_open_bdry_conds
 use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_ML, set_visc_CS
+use MOM_thickness_diffuse, only : thickness_diffuse_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_vert_friction, only : vertvisc, vertvisc_coef
@@ -182,7 +183,7 @@ contains
 !! 3rd order (for the inviscid momentum equations) order scheme
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
-                  VarMix, MEKE, Waves)
+                  VarMix, MEKE, Barotropic, thickness_diffuse, Waves)
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -217,6 +218,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                  !! that specify the spatially variable viscosities.
   type(MEKE_type),         pointer       :: MEKE   !< A pointer to a structure containing
                                  !! fields related to the Mesoscale Eddy Kinetic Energy.
+  type(barotropic_CS),      pointer       :: Barotropic!< Pointer to a structure containing
+                                                              !! barotropic velocities
+  type(thickness_diffuse_CS),  pointer       :: thickness_diffuse!< Pointer to a structure containing
+                                                              !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer :: Waves !< A pointer to a structure containing
                                  !! fields related to the surface wave conditions
 
@@ -255,7 +260,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call enable_averaging(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, &
-                            G, GV, US, CS%hor_visc_CSp)
+                            Barotropic, thickness_diffuse, G, GV, US, CS%hor_visc_CSp)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
 
