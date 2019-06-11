@@ -1262,7 +1262,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
 
   !if (find_work) then ; do j=js,je ; do i=is,ie ; do k=nz,1,-1
-  if (find_work) then ; do j=js,je ; do i=is,ie 
+  if (find_work) then ; do j=js,je ; do i=is,ie
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
