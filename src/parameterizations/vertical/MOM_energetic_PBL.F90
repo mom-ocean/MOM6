@@ -162,6 +162,9 @@ type, public :: energetic_PBL_CS ; private
   type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 
+  real, allocatable, dimension(:,:) :: &
+    ML_depth            !< The mixed layer depth determined by active mixing in ePBL [Z ~> m].
+
   ! These are terms in the mixed layer TKE budget, all in [J m-2] = [kg s-2].
   real, allocatable, dimension(:,:) :: &
     diag_TKE_wind, &   !< The wind source of TKE [J m-2].
@@ -172,8 +175,6 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_conv_decay, & !< The decay of convective TKE [J m-2].
     diag_TKE_mixing, & !< The work done by TKE to deepen the mixed layer [J m-2].
     ! Additional output parameters also 2d
-    ML_depth, &        !< The mixed layer depth [Z ~> m]. (result after iteration step)
-    ML_depth2, &       !< The mixed layer depth [Z ~> m]. (guess for iteration step)
     Enhance_M, &       !< The enhancement to the turbulent velocity scale [nondim]
     MSTAR_MIX, &       !< Mstar used in EPBL [nondim]
     MSTAR_LT, &        !< Mstar for Langmuir turbulence [nondim]
@@ -192,7 +193,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Hsfc_used = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
-  integer :: id_OSBL = -1, id_LT_Enhancement = -1, id_MSTAR_mix = -1
+  integer :: id_LT_Enhancement = -1, id_MSTAR_mix = -1
   integer :: id_mld_ekman = -1, id_mld_obukhov = -1, id_ekman_obukhov = -1
   integer :: id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
   !!@}
@@ -234,8 +235,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                                                    !! volume with salinity [m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: TKE_forced !< The forcing requirements to homogenize the
-                                                   !! forcing that has been applied to each layer
-                                                   !! through each layer [J m-2].
+                                                   !! forcing that has been applied to each layer [J m-2].
   type(thermo_var_ptrs),   intent(inout) :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
@@ -294,17 +294,23 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    h_2d, &         ! A 2-d version of the layer thickness [H ~> m or kg m-2].
-    T_2d, &         ! A 2-d version of the layer temperatures [degC].
-    S_2d, &         ! A 2-d version of the layer salinities [ppt].
-    u_2d, &         ! A 2-d version of the zonal velocity [m s-1].
-    v_2d            ! A 2-d version of the meridional velocity [m s-1].
+    h_2d, &         ! A 2-d slice of the layer thickness [H ~> m or kg m-2].
+    T_2d, &         ! A 2-d slice of the layer temperatures [degC].
+    S_2d, &         ! A 2-d slice of the layer salinities [ppt].
+    TKE_forced_2d, & ! A 2-d slice of TKE_forced [J m-2].
+    dSV_dT_2d, &    ! A 2-d slice of dSV_dT [m3 kg-1 degC-1].
+    dSV_dS_2d, &    ! A 2-d slice of dSV_dS [m3 kg-1 ppt-1].
+    u_2d, &         ! A 2-d slice of the zonal velocity [m s-1].
+    v_2d            ! A 2-d slice of the meridional velocity [m s-1].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd_2d           ! A 2-d version of the diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
   real, dimension(SZK_(GV)) :: &
     h, &            ! The layer thickness [H ~> m or kg m-2].
     T0, &           ! The initial layer temperatures [degC].
     S0, &           ! The initial layer salinities [ppt].
+    dSV_dT_1d, &    ! The partial derivatives of specific volume with temperature [m3 kg-1 degC-1].
+    dSV_dS_1d, &    ! The partial derivatives of specific volume with salinity [m3 kg-1 ppt-1].
+    TKE_forcing, &  ! Forcing of the TKE in the layer coming from TKE_forced [J m-2].
     u, &            ! The zonal velocity [m s-1].
     v               ! The meridional velocity [m s-1].
   real, dimension(SZK_(GV)+1) :: &
@@ -348,8 +354,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                     ! mixing effects with other yet higher layers [ppt H ~> ppt m or ppt kg m-2].
     Th_b, &         ! An effective temperature times a thickness in the layer below, including implicit
                     ! mixing effects with other yet lower layers [degC H ~> degC m or degC kg m-2].
-    Sh_b            ! An effective salinity times a thickness in the layer below, including implicit
+    Sh_b, &         ! An effective salinity times a thickness in the layer below, including implicit
                     ! mixing effects with other yet lower layers [ppt H ~> ppt m or ppt kg m-2].
+    dT_expect, &    ! The layer temperature change that should be expected when the returned
+                    ! diffusivities are applied [degC].
+    dS_expect       ! The layer salinity change that should be expected when the returned
+                    ! diffusivities are applied [ppt].
   real, dimension(SZK_(GV)+1) :: &
     MixLen_shape, & ! A nondimensional shape factor for the mixing length that
                     ! gives it an appropriate assymptotic value at the bottom of
@@ -393,7 +403,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: mstar_total ! The value of mstar used in ePBL [nondim]
   real :: enhance_mstar ! An ehhancement to mstar (output for diagnostic)
   real :: mstar_LT  ! An addition to mstar [nondim] (output for diagnostic)
-  real :: MLD_last  ! The final or previous value of the mixed layer depth [Z ~> m].
   real :: MLD_output ! The mixed layer depth output from this routine [Z ~> m].
   real :: LA        ! The value of the Langmuir number [nondim]
   real :: LAmod     ! The modified Langmuir number by convection [nondim]
@@ -560,15 +569,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
 
 !!OMP parallel do default(private) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt, &
-!!OMP                                  CS,G,GV,US,fluxes,IdtdR0, &
-!!OMP                                  TKE_forced,debug,H_neglect,dSV_dT, &
-!!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar, &
+!!OMP                                  CS,G,GV,US,fluxes,IdtdR0,debug,H_neglect, &
+!!OMP                                  TKE_forced,dSV_dT,dSV_dS,I_dtrho,C1_3,h_tt_min, &
 !!OMP                                  max_itt,Kd_int)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = u_3d(i,j,k) ; v_2d(i,k) = v_3d(i,j,k)
-      T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
+      T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k) ; TKE_forced_2d(i,k) = TKE_forced(i,j,k)
+      dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = dSV_dS(i,j,k)
     enddo ; enddo
 
     !   Determine the initial mech_TKE and conv_PErel, including the energy required
@@ -579,12 +588,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-      if (debug) then ; mech_TKE_k(:) = 0.0 ; conv_PErel_k(:) = 0.0 ; endif
-
       ! Copy the thicknesses and other fields to 1-d arrays.
       do k=1,nz
         h(k) = h_2d(i,k) + h_neglect ; u(k) = u_2d(i,k) ; v(k) = v_2d(i,k)
-        T0(k) = T_2d(i,k) ; S0(k) = S_2d(i,k)
+        T0(k) = T_2d(i,k) ; S0(k) = S_2d(i,k) ; TKE_forcing(k) =  TKE_forced_2d(i,k)
+        dSV_dT_1d(k) = dSV_dT_2d(i,k) ; dSV_dS_1d(k) = dSV_dS_2d(i,k)
       enddo
       do K=1,nz+1 ; Kd(K) = 0.0 ; enddo
 
@@ -607,20 +615,26 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
           absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
       endif
 
+      ! Perhaps provide a first guess for MLD based on a stored previous value.
+      MLD_guess = -1.0
+      if (CS%MLD_iteration_guess .and. (CS%ML_Depth(i,j) > 0.0))  MLD_guess = CS%ML_Depth(i,j)
+
+! call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
+!                  u_star, u_star_mean, dt, MLD_guess, Kd, GV, US, CS, MLD_output, col_diags)
+
       pres(1) = 0.0
       pres_Z(1) = 0.0
       do k=1,nz
         dMass = GV%H_to_kg_m2 * h(k)
         dPres = (GV%g_Earth*US%m_to_Z) * dMass  ! This is equivalent to GV%H_to_Pa * h(k)
-        dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT(i,j,k)
-        dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS(i,j,k)
-        dT_to_dColHt(k) = dMass * US%m_to_Z * dSV_dT(i,j,k)
-        dS_to_dColHt(k) = dMass * US%m_to_Z * dSV_dS(i,j,k)
+        dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT_1d(k)
+        dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS_1d(k)
+        dT_to_dColHt(k) = dMass * US%m_to_Z * dSV_dT_1d(k)
+        dS_to_dColHt(k) = dMass * US%m_to_Z * dSV_dS_1d(k)
 
         pres(K+1) = pres(K) + dPres
         pres_Z(K+1) = US%Z_to_m * pres(K+1)
       enddo
-
 
       ! Determine the total thickness (h_sum) and the fractional distance from the bottom (hb_hs).
       h_sum = H_neglect ; do k=1,nz ; h_sum = h_sum + h(k) ; enddo
@@ -640,14 +654,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       !min_MLD will initialize as 0.
       min_MLD = 0.0
 
-      !/BGR: Add MLD_guess based on stored previous value.
-      if (CS%MLD_iteration_guess .and. (CS%ML_Depth2(i,j) > 1.0*US%m_to_Z)) then
-        !If prev value is present use for guess.
-        MLD_guess = CS%ML_Depth2(i,j)
-      else
-        !Otherwise guess middle of water column
-        MLD_guess = 0.5 * (min_MLD + max_MLD)
-      endif
+      ! If no first guess is provided for MLD, try the middle of the water column
+      if (MLD_guess <= min_MLD) MLD_guess = 0.5 * (min_MLD + max_MLD)
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
       OBL_CONVERGED = .false.
@@ -658,6 +666,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         if (.not. OBL_CONVERGED) then
           ! If not using MLD_Iteration flag loop to only execute once.
           if (.not.CS%Use_MLD_Iteration) OBL_CONVERGED = .true.
+
+          if (debug) then ; mech_TKE_k(:) = 0.0 ; conv_PErel_k(:) = 0.0 ; endif
+
 
           ! Reset ML_depth
           MLD_output = h(1)*GV%H_to_Z
@@ -687,21 +698,21 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             dTKE_MKE = 0.0 ; dTKE_mech_decay = 0.0 ; dTKE_conv_decay = 0.0
 
             dTKE_wind = mech_TKE * IdtdR0
-            if (TKE_forced(i,j,1) <= 0.0) then
-              dTKE_forcing = max(-mech_TKE, TKE_forced(i,j,1)) * IdtdR0
-              ! dTKE_unbalanced = min(0.0, TKE_forced(i,j,1) + mech_TKE) * IdtdR0
+            if (TKE_forcing(1) <= 0.0) then
+              dTKE_forcing = max(-mech_TKE, TKE_forcing(1)) * IdtdR0
+              ! dTKE_unbalanced = min(0.0, TKE_forcing(1) + mech_TKE) * IdtdR0
             else
-              dTKE_forcing = CS%nstar*TKE_forced(i,j,1) * IdtdR0
+              dTKE_forcing = CS%nstar*TKE_forcing(1) * IdtdR0
               ! dTKE_unbalanced = 0.0
             endif
           endif
 
-          if (TKE_forced(i,j,1) <= 0.0) then
-            mech_TKE = mech_TKE + TKE_forced(i,j,1)
+          if (TKE_forcing(1) <= 0.0) then
+            mech_TKE = mech_TKE + TKE_forcing(1)
             if (mech_TKE < 0.0) mech_TKE = 0.0
             conv_PErel = 0.0
           else
-            conv_PErel = TKE_forced(i,j,1)
+            conv_PErel = TKE_forcing(1)
           endif
 
 
@@ -770,10 +781,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
             !   Accumulate any convectively released potential energy to contribute
             ! to wstar and to drive penetrating convection.
-            if (TKE_forced(i,j,k) > 0.0) then
-              conv_PErel = conv_PErel + TKE_forced(i,j,k)
+            if (TKE_forcing(k) > 0.0) then
+              conv_PErel = conv_PErel + TKE_forcing(k)
               if (CS%TKE_diagnostics) &
-                dTKE_forcing = dTKE_forcing + CS%nstar*TKE_forced(i,j,k) * IdtdR0
+                dTKE_forcing = dTKE_forcing + CS%nstar*TKE_forcing(k) * IdtdR0
             endif
 
             if (debug) then
@@ -796,27 +807,27 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
             !   For each interior interface, first discard the TKE to account for
             ! mixing of shortwave radiation through the next denser cell.
-            if (TKE_forced(i,j,k) < 0.0) then
-              if (TKE_forced(i,j,k) + tot_TKE < 0.0) then
+            if (TKE_forcing(k) < 0.0) then
+              if (TKE_forcing(k) + tot_TKE < 0.0) then
                 ! The shortwave requirements deplete all the energy in this layer.
                 if (CS%TKE_diagnostics) then
                   dTKE_mixing = dTKE_mixing + tot_TKE * IdtdR0
                   dTKE_forcing = dTKE_forcing - tot_TKE * IdtdR0
-                  ! dTKE_unbalanced = dTKE_unbalanced + (TKE_forced(i,j,k) + tot_TKE) * IdtdR0
+                  ! dTKE_unbalanced = dTKE_unbalanced + (TKE_forcing(k) + tot_TKE) * IdtdR0
                   dTKE_conv_decay = dTKE_conv_decay + &
                           (CS%nstar-nstar_FC) * conv_PErel * IdtdR0
                 endif
                 tot_TKE = 0.0 ; mech_TKE = 0.0 ; conv_PErel = 0.0
               else
                 ! Reduce the mechanical and convective TKE proportionately.
-                TKE_reduc = (tot_TKE + TKE_forced(i,j,k)) / tot_TKE
+                TKE_reduc = (tot_TKE + TKE_forcing(k)) / tot_TKE
                 if (CS%TKE_diagnostics) then
-                  dTKE_mixing = dTKE_mixing - TKE_forced(i,j,k) * IdtdR0
-                  dTKE_forcing = dTKE_forcing + TKE_forced(i,j,k) * IdtdR0
+                  dTKE_mixing = dTKE_mixing - TKE_forcing(k) * IdtdR0
+                  dTKE_forcing = dTKE_forcing + TKE_forcing(k) * IdtdR0
                   dTKE_conv_decay = dTKE_conv_decay + &
                       (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel * IdtdR0
                 endif
-                tot_TKE = TKE_reduc*tot_TKE   ! = tot_TKE + TKE_forced(i,j,k)
+                tot_TKE = TKE_reduc*tot_TKE   ! = tot_TKE + TKE_forcing(k)
                 mech_TKE = TKE_reduc*mech_TKE
                 conv_PErel = TKE_reduc*conv_PErel
               endif
@@ -1031,7 +1042,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                 endif
                 if (sfc_connected) then
                   MLD_output = MLD_output + GV%H_to_Z * h(k)
-                  ! MLD_last = MLD_last + GV%H_to_Z * h(k)
                 endif
 
                 Kddt_h(K) = Kd(K)*dt_h
@@ -1211,22 +1221,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             b1 = 1.0 / hp_a
             Te(nz) = b1 * (h(nz) * T0(nz) + Kddt_h(nz) * Te(nz-1))
             Se(nz) = b1 * (h(nz) * S0(nz) + Kddt_h(nz) * Se(nz-1))
+            dT_expect(nz) = Te(nz) - T0(nz) ; dS_expect(nz) = Se(nz) - S0(nz)
             do k=nz-1,1,-1
               Te(k) = Te(k) + c1(K+1)*Te(k+1)
               Se(k) = Se(k) + c1(K+1)*Se(k+1)
+              dT_expect(k) = Te(k) - T0(k) ; dS_expect(k) = Se(k) - S0(k)
             enddo
-          endif
-          if (present(dT_expected)) then
-            do k=1,nz
-              dT_expected(i,j,k) = Te(k) - T0(k)
-            enddo
-          endif
-          if (present(dS_expected)) then
-            do k=1,nz
-              dS_expected(i,j,k) = Se(k) - S0(k)
-            enddo
-          endif
-          if (debug) then
+
             dPE_debug = 0.0
             do k=1,nz
               dPE_debug = dPE_debug + (dT_to_dPE(k) * (Te(k) - T0(k)) + &
@@ -1254,7 +1255,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                     min_MLD = MLD_guess
                   elseif ((MLD_guess - MLD_found) < max(CS%MLD_tol, h(k-1)*GV%H_to_Z)) then
                     OBL_CONVERGED = .true. ! Break convergence loop
-                    MLD_last = MLD_guess
                   else
                     max_MLD = MLD_guess ! We know this guess was too deep
                   endif
@@ -1268,7 +1268,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
               min_MLD = MLD_guess
             elseif (abs(MLD_guess - MLD_found) < CS%MLD_tol) then
               OBL_CONVERGED = .true. ! Break convergence loop
-              MLD_last = MLD_guess
             else
               max_MLD = MLD_guess ! We know this guess was too deep
             endif
@@ -1282,8 +1281,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       do K=1,nz+1
         Kd_2d(i,K) = Kd(K)
       enddo
-      CS%ML_Depth2(i,j) = MLD_last
       CS%ML_depth(i,j) = MLD_output
+
+      if (present(dT_expected)) then
+        do k=1,nz ; dT_expected(i,j,k) = dT_expect(k) ; enddo
+      endif
+      if (present(dS_expected)) then
+        do k=1,nz ; dS_expected(i,j,k) = dS_expect(k) ; enddo
+      endif
 
       if (CS%TKE_diagnostics) then
         CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + dTKE_MKE
@@ -1324,7 +1329,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         Kd_2d(i,K) = 0.
       enddo
       CS%ML_depth(i,j) = 0.0
-      CS%ML_Depth2(i,j) = 0.0
 
       if (CS%id_Hsfc_used > 0) Hsfc_used(i,j) = 0.0
       if (present(dT_expected)) then
@@ -1364,8 +1368,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       call post_data(CS%id_Mixing_Length, CS%Mixing_Length, CS%diag)
     if (CS%id_Velocity_Scale >0) &
       call post_data(CS%id_Velocity_Scale, CS%Velocity_Scale, CS%diag)
-    if (CS%id_OSBL >0) &
-      call post_data(CS%id_OSBL, CS%ML_Depth2, CS%diag)
     if (CS%id_LT_Enhancement >0) &
       call post_data(CS%id_LT_Enhancement, CS%Enhance_M, CS%diag)
     if (CS%id_MSTAR_MIX >0) &
@@ -1733,8 +1735,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
       if (Ustar > Abs_Coriolis * BLD) mstar_N = CS%C_EK * log(Ustar / (Abs_Coriolis * BLD))
     endif
 
-    ! Here 1.25 is .5/von Karman, which gives the Obukhov limit.
-    !### Note the hard-code value here.
+    ! Here 1.25 is about .5/von Karman, which gives the Obukhov limit.
     MStar = max(MStar_S, min(1.25, MStar_N))
     if (CS%MStar_Cap > 0.0) MStar = min( CS%MStar_Cap,MStar )
   elseif ( CS%MStar_Mode == MStar_from_RH18 ) then
@@ -2189,10 +2190,6 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'MSTAR that is used.', 'nondim')
-  CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'ePBL Surface Boundary layer depth.', 'm', conversion=US%m_to_Z)
-  ! BGR (9/21/2017) Note that ePBL_OSBL is the guess for iteration step while ePBL_h_ML is
-  !                 result from iteration step.
   CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &
       Time, 'Boundary layer depth over Ekman length.', 'm')
   CS%id_mld_obukhov = register_diag_field('ocean_model', 'MLD_OBUKHOV', diag%axesT1, &
@@ -2231,7 +2228,6 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
     CS%mixing_diagnostics = .true.
   endif
   call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
-  call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
   if (max(CS%id_LT_Enhancement, CS%id_mstar_mix,CS%id_mld_ekman, &
        CS%id_ekman_obukhov, CS%id_mld_obukhov, CS%id_LA, CS%id_LA_mod, CS%id_MSTAR_LT ) >0) then
     call safe_alloc_alloc(CS%Mstar_mix, isd, ied, jsd, jed)
@@ -2254,7 +2250,6 @@ subroutine energetic_PBL_end(CS)
   if (.not.associated(CS)) return
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
-  if (allocated(CS%ML_depth2))           deallocate(CS%ML_depth2)
   if (allocated(CS%Enhance_M))           deallocate(CS%Enhance_M)
   if (allocated(CS%MLD_EKMAN))           deallocate(CS%MLD_EKMAN)
   if (allocated(CS%MLD_OBUKHOV))         deallocate(CS%MLD_OBUKHOV)
