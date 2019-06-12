@@ -29,34 +29,19 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
+use MOM_io, only : file_exists, read_data
+use MOM_io, only : slasher
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
-use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
-use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use MOM_domains, only: pass_var
 implicit none ; private
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! Private (module-wise) parameters
-! -----------------------------------------------------------------------------
-
 character(len=40) :: mod = "RGC_initialization" ! This module's name.
-
-! -----------------------------------------------------------------------------
-! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public RGC_initialize_sponges
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
 !> Sets up the the inverse restoration time (Idamp), and
@@ -70,8 +55,8 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
                                             !! fields, potential temperature and
                                             !! salinity or mixed layer density.
                                             !! Absent fields have NULL ptrs.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: u !< u velocity.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: v !< v velocity.
   type(param_file_type), intent(in) :: PF   !< A structure indicating the
                                             !! open file to parse for model
                                             !! parameter values.
@@ -90,12 +75,9 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points, in s-1.
   real :: TNUDG                     ! Nudging time scale, days
   real :: pres(SZI_(G))             ! An array of the reference pressure, in Pa
-
   real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
                                     ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
-
                                     ! positive upward, in m.
   logical :: sponge_uv              ! Nudge velocities (u and v) towards zero
   real :: min_depth, dummy1, z, delta_h
@@ -113,12 +95,12 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
   call get_param(PF,mod,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
 
-  call get_param(PF, mod, "IDEAL_IS_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
+  call get_param(PF, mod, "RGC_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
 
   call get_param(PF, mod, "LENLAT", lenlat, &
                   "The latitudinal or y-direction length of the domain", &
                  fail_if_missing=.true., do_not_log=.true.)
- 
+
   call get_param(PF, mod, "LENLON", lenlon, &
                   "The longitudinal or x-direction length of the domain", &
                  fail_if_missing=.true., do_not_log=.true.)
@@ -177,7 +159,7 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
    ! because of the FIT_SALINITY option. To get salt values right in the
    ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
    ! combined the *correct* temp and salt values in one file instead.
-   call get_param(PF, mod, "IDEAL_IS_SPONGE_FILE", state_file, &
+   call get_param(PF, mod, "RGC_SPONGE_FILE", state_file, &
               "The name of the file with temps., salts. and interfaces to \n"// &
               " damp toward.", fail_if_missing=.true.)
    call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
@@ -220,7 +202,7 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
        U1(:,:,:) = 0.0; V1(:,:,:) = 0.0
        call set_up_ALE_sponge_vel_field(U1,V1,G,u,v,ACSp)
     endif
-    
+
 
    else ! layer mode
 

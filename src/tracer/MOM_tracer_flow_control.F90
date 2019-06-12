@@ -90,7 +90,7 @@ type, public :: tracer_flow_control_CS ; private
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
-  type(RGC_tracer_CS), pointer :: RGC_tracer_CSp => NULL() 
+  type(RGC_tracer_CS), pointer :: RGC_tracer_CSp => NULL()
   type(ideal_age_tracer_CS), pointer :: ideal_age_tracer_CSp => NULL()
   type(dye_tracer_CS), pointer :: dye_tracer_CSp => NULL()
   type(oil_tracer_CS), pointer :: oil_tracer_CSp => NULL()
