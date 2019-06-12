@@ -156,9 +156,6 @@ type, public :: energetic_PBL_CS ; private
                              !! potential energy change code.  Otherwise, it uses a newer version
                              !! that can work with successive increments to the diffusivity in
                              !! upward or downward passes.
-  logical :: Mixing_Diagnostics = .false. !< Will be true when outputting mixing
-                             !! length and velocity scales
-  logical :: MSTAR_Diagnostics=.false. !< If true, utput diagnostics of the mstar calculation.
   type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 
@@ -174,13 +171,9 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_mech_decay, & !< The decay of mechanical TKE [J m-2].
     diag_TKE_conv_decay, & !< The decay of convective TKE [J m-2].
     diag_TKE_mixing, & !< The work done by TKE to deepen the mixed layer [J m-2].
-    ! Additional output parameters also 2d
-    Enhance_M, &       !< The enhancement to the turbulent velocity scale [nondim]
+    ! These additional diagnostics are also 2d.
     MSTAR_MIX, &       !< Mstar used in EPBL [nondim]
-    MSTAR_LT, &        !< Mstar for Langmuir turbulence [nondim]
-    MLD_EKMAN, &       !< MLD over Ekman length [nondim]
-    MLD_OBUKHOV, &     !< MLD over Obukhov length [nondim]
-    EKMAN_OBUKHOV, &   !< Ekman over Obukhov length [nondim]
+    MSTAR_LT, &        !< Mstar due to Langmuir turbulence [nondim]
     LA, &              !< Langmuir number [nondim]
     LA_MOD             !< Modified Langmuir number [nondim]
 
@@ -191,11 +184,8 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
   integer :: id_TKE_MKE = -1, id_TKE_conv = -1, id_TKE_forcing = -1
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
-  integer :: id_Hsfc_used = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
-  integer :: id_LT_Enhancement = -1, id_MSTAR_mix = -1
-  integer :: id_mld_ekman = -1, id_mld_obukhov = -1, id_ekman_obukhov = -1
-  integer :: id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
+  integer :: id_MSTAR_mix = -1, id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
   !!@}
 end type energetic_PBL_CS
 
@@ -401,8 +391,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: B_Flux    ! The surface buoyancy flux [Z2 s-3 ~> m2 s-3]
   real :: vstar     ! An in-situ turbulent velocity [m s-1].
   real :: mstar_total ! The value of mstar used in ePBL [nondim]
-  real :: enhance_mstar ! An ehhancement to mstar (output for diagnostic)
-  real :: mstar_LT  ! An addition to mstar [nondim] (output for diagnostic)
+  real :: mstar_LT  ! An addition to mstar due to Langmuir turbulence [nondim] (output for diagnostic)
   real :: MLD_output ! The mixed layer depth output from this routine [Z ~> m].
   real :: LA        ! The value of the Langmuir number [nondim]
   real :: LAmod     ! The modified Langmuir number by convection [nondim]
@@ -458,8 +447,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 ! The following are only used for diagnostics.
   real :: dt__diag  ! A copy of dt_diag (if present) or dt [s].
   real :: IdtdR0    !  = 1.0 / (dt__diag * Rho0) [m3 kg-1 s-1].
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    Hsfc_used       ! The thickness of the surface region [Z ~> m].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
   ! Local column copies of energy change diagnostics, all [J m-2].
@@ -507,9 +494,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                                Mixing_Length_Used   ! Vstar and Mixing_Length
 
   real :: Surface_Scale ! Surface decay scale for vstar
-  ! For output of MLD relations, if not using we should eliminate
-  real :: iL_Ekman    ! Inverse of Ekman length scale [Z-1 ~> m-1].
-  real :: iL_Obukhov  ! Inverse of Obukhov length scale [Z-1 ~> m-1].
 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 
@@ -561,12 +545,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       enddo ; enddo
     endif
 !!OMP parallel do default(none) shared(CS)
-    if (CS%Mixing_Diagnostics) then
-      CS%Mixing_Length(:,:,:) = 0.0
-      CS%Velocity_Scale(:,:,:) = 0.0
-    endif
   endif
-
+  ! if (CS%id_Mixing_Length>0) CS%Mixing_Length(:,:,:) = 0.0
+  ! if (CS%id_Velocity_Scale>0) CS%Velocity_Scale(:,:,:) = 0.0
 
 !!OMP parallel do default(private) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt, &
 !!OMP                                  CS,G,GV,US,fluxes,IdtdR0,debug,H_neglect, &
@@ -680,8 +661,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
             call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, &
                                      H=h, U_H=u, V_H=v, Waves=Waves)
             call find_mstar(CS, US, b_flux, U_Star, U_Star_Mean, MLD_Guess, absf, &
-                            MStar_total, Langmuir_Number = La, Convect_Langmuir_Number = LAmod,&
-                            Enhance_MStar = Enhance_MStar, mstar_LT = mstar_LT)
+                            MStar_total, Langmuir_Number=La, Convect_Langmuir_Number=LAmod,&
+                            mstar_LT=mstar_LT)
           else
             call find_mstar(CS, US, b_flux, u_star, u_star_mean, MLD_guess, absf, mstar_total)
           endif
@@ -1300,29 +1281,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + dTKE_conv_decay
        ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + dTKE_unbalanced
       endif
-      if (CS%Mixing_Diagnostics) then
-        ! Write to 3-D for outputing Mixing length and velocity scale.
-        do k=1,nz
-          CS%Mixing_Length(i,j,k) = Mixing_Length_Used(k)
-          CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
-        enddo
-      endif
-      if (allocated(CS%Enhance_M)) CS%Enhance_M(i,j) = Enhance_mstar
+      ! Write to 3-D for outputing Mixing length and velocity scale.
+      if (CS%id_Mixing_Length>0) then ; do k=1,nz
+        CS%Mixing_Length(i,j,k) = Mixing_Length_Used(k)
+      enddo ; endif
+      if (CS%id_Velocity_Scale>0) then ; do k=1,nz
+        CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
+      enddo ; endif
       if (allocated(CS%mstar_mix)) CS%mstar_mix(i,j) = mstar_total
       if (allocated(CS%mstar_lt)) CS%mstar_lt(i,j) = MSTAR_LT
-      iL_Ekman   = absf / u_star
-      iL_Obukhov = b_flux*CS%vonkar / (u_star**3)
-      if (allocated(CS%MLD_Obukhov)) CS%MLD_Obukhov(i,j) = MLD_guess * iL_Obukhov
-      if (allocated(CS%MLD_Ekman)) CS%MLD_Ekman(i,j) = MLD_guess * iL_Ekman
-      if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(i,j) = iL_Obukhov / (iL_Ekman + 1.e-10*US%Z_to_m)
       if (allocated(CS%La)) CS%La(i,j) = LA
       if (allocated(CS%La_mod)) CS%La_mod(i,j) = LAmod
-      if (CS%id_Hsfc_used > 0) then
-        Hsfc_used(i,j) = h(1)*GV%H_to_Z
-        do k=2,nz
-          if (Kd(K) > 0.0) Hsfc_used(i,j) = Hsfc_used(i,j) + h(k)*GV%H_to_Z
-        enddo
-      endif
     else ! End of the ocean-point part of the i-loop
       ! For masked points, Kd_int must still be set (to 0) because it has intent out.
       do K=1,nz+1
@@ -1330,7 +1299,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       enddo
       CS%ML_depth(i,j) = 0.0
 
-      if (CS%id_Hsfc_used > 0) Hsfc_used(i,j) = 0.0
       if (present(dT_expected)) then
         do k=1,nz ; dT_expected(i,j,k) = 0.0 ; enddo
       endif
@@ -1346,44 +1314,22 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   enddo ! j-loop
 
   if (write_diags) then
-    if (CS%id_ML_depth > 0) &
-      call post_data(CS%id_ML_depth, CS%ML_depth, CS%diag)
-    if (CS%id_TKE_wind > 0) &
-      call post_data(CS%id_TKE_wind, CS%diag_TKE_wind, CS%diag)
-    if (CS%id_TKE_MKE > 0) &
-      call post_data(CS%id_TKE_MKE, CS%diag_TKE_MKE, CS%diag)
-    if (CS%id_TKE_conv > 0) &
-      call post_data(CS%id_TKE_conv, CS%diag_TKE_conv, CS%diag)
-    if (CS%id_TKE_forcing > 0) &
-      call post_data(CS%id_TKE_forcing, CS%diag_TKE_forcing, CS%diag)
-    if (CS%id_TKE_mixing > 0) &
-      call post_data(CS%id_TKE_mixing, CS%diag_TKE_mixing, CS%diag)
+    if (CS%id_ML_depth > 0) call post_data(CS%id_ML_depth, CS%ML_depth, CS%diag)
+    if (CS%id_TKE_wind > 0) call post_data(CS%id_TKE_wind, CS%diag_TKE_wind, CS%diag)
+    if (CS%id_TKE_MKE > 0)  call post_data(CS%id_TKE_MKE, CS%diag_TKE_MKE, CS%diag)
+    if (CS%id_TKE_conv > 0) call post_data(CS%id_TKE_conv, CS%diag_TKE_conv, CS%diag)
+    if (CS%id_TKE_forcing > 0) call post_data(CS%id_TKE_forcing, CS%diag_TKE_forcing, CS%diag)
+    if (CS%id_TKE_mixing > 0) call post_data(CS%id_TKE_mixing, CS%diag_TKE_mixing, CS%diag)
     if (CS%id_TKE_mech_decay > 0) &
       call post_data(CS%id_TKE_mech_decay, CS%diag_TKE_mech_decay, CS%diag)
     if (CS%id_TKE_conv_decay > 0) &
       call post_data(CS%id_TKE_conv_decay, CS%diag_TKE_conv_decay, CS%diag)
-    if (CS%id_Hsfc_used > 0) &
-      call post_data(CS%id_Hsfc_used, Hsfc_used, CS%diag)
-    if (CS%id_Mixing_Length > 0) &
-      call post_data(CS%id_Mixing_Length, CS%Mixing_Length, CS%diag)
-    if (CS%id_Velocity_Scale >0) &
-      call post_data(CS%id_Velocity_Scale, CS%Velocity_Scale, CS%diag)
-    if (CS%id_LT_Enhancement >0) &
-      call post_data(CS%id_LT_Enhancement, CS%Enhance_M, CS%diag)
-    if (CS%id_MSTAR_MIX >0) &
-      call post_data(CS%id_MSTAR_MIX, CS%MSTAR_MIX, CS%diag)
-    if (CS%id_MLD_OBUKHOV >0) &
-      call post_data(CS%id_MLD_Obukhov, CS%MLD_OBUKHOV, CS%diag)
-    if (CS%id_MLD_EKMAN >0) &
-      call post_data(CS%id_MLD_Ekman, CS%MLD_EKMAN, CS%diag)
-    if (CS%id_Ekman_Obukhov >0) &
-      call post_data(CS%id_Ekman_Obukhov, CS%Ekman_Obukhov, CS%diag)
-    if (CS%id_LA >0) &
-      call post_data(CS%id_LA, CS%LA, CS%diag)
-    if (CS%id_LA_MOD >0) &
-      call post_data(CS%id_LA_MOD, CS%LA_MOD, CS%diag)
-    if (CS%id_MSTAR_LT > 0) &
-      call post_data(CS%id_MSTAR_LT, CS%MSTAR_LT, CS%diag)
+    if (CS%id_Mixing_Length > 0) call post_data(CS%id_Mixing_Length, CS%Mixing_Length, CS%diag)
+    if (CS%id_Velocity_Scale >0) call post_data(CS%id_Velocity_Scale, CS%Velocity_Scale, CS%diag)
+    if (CS%id_MSTAR_MIX > 0)     call post_data(CS%id_MSTAR_MIX, CS%MSTAR_MIX, CS%diag)
+    if (CS%id_LA > 0)       call post_data(CS%id_LA, CS%LA, CS%diag)
+    if (CS%id_LA_MOD > 0)   call post_data(CS%id_LA_MOD, CS%LA_MOD, CS%diag)
+    if (CS%id_MSTAR_LT > 0) call post_data(CS%id_MSTAR_LT, CS%MSTAR_LT, CS%diag)
   endif
 
 end subroutine energetic_PBL
@@ -1693,7 +1639,7 @@ end subroutine find_PE_chg_orig
 !> This subroutine finds the Mstar value for ePBL
 subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
                       BLD, Abs_Coriolis, MStar, Langmuir_Number,&
-                      MStar_LT, Enhance_MStar, Convect_Langmuir_Number)
+                      MStar_LT, Convect_Langmuir_Number)
   type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: UStar !< ustar w/ gustiness [Z s-1 ~> m s-1]
@@ -1703,9 +1649,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
   real,                  intent(out) :: Mstar !< Ouput mstar (Mixing/ustar**3) [nondim]
   real,        optional, intent(in)  :: Langmuir_Number !< Langmuir number [nondim]
-  real,        optional, intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence [nondim]
-  real,        optional, intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to
-                                              !! Langmuir turbulence [nondim]
+  real,        optional, intent(out) :: MStar_LT !< Mstar increase due to Langmuir turbulence [nondim]
   real,        optional, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
   !/ Variables used in computing mstar
@@ -1768,14 +1712,14 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   if (present(Langmuir_Number)) then
     !### In this call, ustar was previously ustar_mean.  Is this change deliberate?
     call mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langmuir_number, mstar, &
-                        Enhance_MStar, mstar_lt, Convect_Langmuir_Number)
+                        mstar_LT, Convect_Langmuir_Number)
   endif
 
 end subroutine Find_Mstar
 
 !> This subroutine modifies the Mstar value if the Langmuir number is present
 subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langmuir_Number, &
-                          mstar, enhance_mstar, mstar_lt, Convect_Langmuir_Number)
+                          mstar, mstar_LT, Convect_Langmuir_Number)
   type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: Abs_Coriolis !< abolute value of the Coriolis parameter [s-1]
@@ -1784,13 +1728,13 @@ subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langm
   real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
   real,                  intent(inout) :: Mstar !< Input/output mstar (Mixing/ustar**3) [nondim]
   real,                  intent(in)  :: Langmuir_Number !Langmuir number [nondim]
-  real,                  intent(out) :: MStar_LT !< Additive mstar increase due to Langmuir turbulence [nondim]
-  real,                  intent(out) :: Enhance_MStar !< Multiplicative mstar increase due to
-                                              !! Langmuir turbulence [nondim]
+  real,                  intent(out) :: MStar_LT !< Mstar increase due to Langmuir turbulence [nondim]
   real,                  intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
   !/
   real, parameter :: Max_ratio = 1.0e16  ! The maximum value of a nondimensional ratio.
+  real :: enhance_mstar ! A multiplicative scaling of mstar due to Langmuir turbulence.
+  real :: mstar_LT_add ! A value that is added to mstar due to Langmuir turbulence.
   real :: iL_Ekman    ! Inverse of Ekman length scale [Z-1 ~> m-1].
   real :: iL_Obukhov  ! Inverse of Obukhov length scale [Z-1 ~> m-1].
   real :: I_ustar     ! The Adcroft reciprocal of ustar [s Z-1 ~> s m-1]
@@ -1804,7 +1748,7 @@ subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langm
   real :: Ekman_Obukhov_un   ! >
 
   ! Set default values for no Langmuir effects.
-  enhance_mstar = 1.0 ; mstar_LT = 0.0
+  enhance_mstar = 1.0 ; mstar_LT_add = 0.0
 
   if (CS%LT_Enhance_Form > 0) then
     ! a. Get parameters for modified LA
@@ -1850,11 +1794,12 @@ subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langm
                           (1. + CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP) )
     elseif (CS%LT_ENHANCE_Form == 3) then
       ! or Enhancement is additive (multiplied enhance_m set to 1)
-      mstar_LT = CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP
+      mstar_LT_add = CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP
     endif
   endif
 
-  mstar = mstar*enhance_mstar + mstar_LT
+  mstar_LT = (enhance_mstar - 1.0)*mstar + mstar_LT_add  ! Diagnose the full increase in mstar.
+  mstar = mstar*enhance_mstar + mstar_LT_add
 
 end subroutine Mstar_Langmuir
 
@@ -2180,28 +2125,18 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
       Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3')
-  CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'm', conversion=US%m_to_Z)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'm', conversion=US%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
       Time, 'Velocity Scale that is used.', 'm s-1', conversion=US%Z_to_m)
-  CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
-      Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
-      Time, 'MSTAR that is used.', 'nondim')
-  CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &
-      Time, 'Boundary layer depth over Ekman length.', 'm')
-  CS%id_mld_obukhov = register_diag_field('ocean_model', 'MLD_OBUKHOV', diag%axesT1, &
-      Time, 'Boundary layer depth over Obukhov length.', 'm')
-  CS%id_ekman_obukhov = register_diag_field('ocean_model', 'EKMAN_OBUKHOV', diag%axesT1, &
-      Time, 'Ekman length over Obukhov length.', 'm')
+      Time, 'Total mstar that is used.', 'nondim')
   CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
       Time, 'Langmuir number.', 'nondim')
   CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
       Time, 'Modified Langmuir number.', 'nondim')
   CS%id_MSTAR_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
-      Time, 'MSTAR applied for LT effect.', 'nondim')
+      Time, 'Increase in mstar due to Langmuir Turbulence.', 'nondim')
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state "//&
@@ -2220,21 +2155,12 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 
     CS%TKE_diagnostics = .true.
   endif
-  if ((CS%id_Mixing_Length>0) .or. (CS%id_Velocity_Scale>0)) then
-    call safe_alloc_alloc(CS%Velocity_Scale,isd,ied,jsd,jed,GV%ke+1)
-    call safe_alloc_alloc(CS%Mixing_Length,isd,ied,jsd,jed,GV%ke+1)
-    CS%Velocity_Scale(:,:,:) = 0.0
-    CS%Mixing_Length(:,:,:) = 0.0
-    CS%mixing_diagnostics = .true.
-  endif
+  if (CS%id_Velocity_Scale>0) call safe_alloc_alloc(CS%Velocity_Scale, isd, ied, jsd, jed, GV%ke+1)
+  if (CS%id_Mixing_Length>0) call safe_alloc_alloc(CS%Mixing_Length, isd, ied, jsd, jed, GV%ke+1)
+
   call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
-  if (max(CS%id_LT_Enhancement, CS%id_mstar_mix,CS%id_mld_ekman, &
-       CS%id_ekman_obukhov, CS%id_mld_obukhov, CS%id_LA, CS%id_LA_mod, CS%id_MSTAR_LT ) >0) then
+  if (max(CS%id_mstar_mix, CS%id_LA, CS%id_LA_mod, CS%id_MSTAR_LT ) >0) then
     call safe_alloc_alloc(CS%Mstar_mix, isd, ied, jsd, jed)
-    call safe_alloc_alloc(CS%Enhance_M, isd, ied, jsd, jed)
-    call safe_alloc_alloc(CS%MLD_EKMAN, isd, ied, jsd, jed)
-    call safe_alloc_alloc(CS%MLD_OBUKHOV, isd, ied, jsd, jed)
-    call safe_alloc_alloc(CS%EKMAN_OBUKHOV, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%LA, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%LA_MOD, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%MSTAR_LT, isd, ied, jsd, jed)
@@ -2250,10 +2176,6 @@ subroutine energetic_PBL_end(CS)
   if (.not.associated(CS)) return
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
-  if (allocated(CS%Enhance_M))           deallocate(CS%Enhance_M)
-  if (allocated(CS%MLD_EKMAN))           deallocate(CS%MLD_EKMAN)
-  if (allocated(CS%MLD_OBUKHOV))         deallocate(CS%MLD_OBUKHOV)
-  if (allocated(CS%EKMAN_OBUKHOV))       deallocate(CS%EKMAN_OBUKHOV)
   if (allocated(CS%LA))                  deallocate(CS%LA)
   if (allocated(CS%LA_MOD))              deallocate(CS%LA_MOD)
   if (allocated(CS%MSTAR_MIX))           deallocate(CS%MSTAR_MIX)
