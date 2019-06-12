@@ -1,4 +1,4 @@
-!> This module contains the routines used to set up a 
+!> This module contains the routines used to set up a
 !! dynamically passive tracer.
 !! Set up and use passive tracers requires the following:
 !! (1) register_RGC_tracer
@@ -6,7 +6,7 @@
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Elizabeth Yankovsky, June 2019     *
+!*  By Elizabeth Yankovsky, June 2019                                  *
 !*********+*********+*********+*********+*********+*********+***********
 
 module RGC_tracer

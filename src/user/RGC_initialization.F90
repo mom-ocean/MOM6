@@ -17,7 +17,7 @@ module RGC_initialization
 !* write to: Free Software Foundation, Inc.,                           *
 !*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!* By Elizabeth Yankovsky, May 2018				       *
+!* By Elizabeth Yankovsky, May 2018                                    *
 !***********************************************************************
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
