@@ -49,10 +49,10 @@ type, public :: RGC_tracer_CS ; private
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package.
   real, pointer :: tr_aux(:,:,:,:) => NULL() !< The masked tracer concentration.
   real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
-  real :: lenlat           ! the latitudinal or y-direction length of the domain.
-  real :: lenlon           ! the longitudinal or x-direction length of the domain.
-  real :: CSL              ! The length of the continental shelf (x dir, km)
-  real :: lensponge        ! the length of the sponge layer.
+  real :: lenlat           !< the latitudinal or y-direction length of the domain.
+  real :: lenlon           !< the longitudinal or x-direction length of the domain.
+  real :: CSL              !< The length of the continental shelf (x dir, km)
+  real :: lensponge        !< the length of the sponge layer.
   logical :: mask_tracers  !< If true, tracers are masked out in massless layers.
   logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
