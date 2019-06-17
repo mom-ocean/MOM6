@@ -750,7 +750,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at h-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
       allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
-      do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+      do J=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
         if (h_axes%mask3d(i,j,1) > 0.) axes%mask3d(i,J,1) = 1.
         do K = 2, nk
           if (h_axes%mask3d(i,j,k-1) + h_axes%mask3d(i,j,k) > 0.) axes%mask3d(i,J,k) = 1.
