@@ -787,7 +787,6 @@ subroutine set_masks_for_axes(G, diag_cs)
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
             h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
       enddo ; enddo ; enddo
-
     endif
   enddo
 
@@ -1706,6 +1705,11 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
       endif
     endif
   endif
+
+  if (diag%fms_xyave_diag_id>0) then
+    call post_xy_average(diag_cs, diag, locfield)
+  endif
+
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.) .and. dl<2) &
     deallocate( locfield )
 
@@ -1718,6 +1722,7 @@ subroutine post_xy_average(diag_cs, diag, field)
   type(diag_ctrl),   intent(in) :: diag_cs !< Diagnostics mediator control structure
   ! Local variable
   real, dimension(size(field,3)) :: averaged_field
+  logical, dimension(size(field,3)) :: averaged_mask
   logical :: staggered_in_x, staggered_in_y, used
   integer :: nz, remap_nz, coord
 
@@ -1732,7 +1737,8 @@ subroutine post_xy_average(diag_cs, diag, field)
     call horizontally_average_diag_field(diag_cs%G, diag_cs%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
-                                         diag_cs%missing_value, field, averaged_field)
+                                         diag_cs%missing_value, field, &
+                                         averaged_field, averaged_mask)
   else
     nz = size(field, 3)
     coord = diag%axes%vertical_coordinate_number
@@ -1749,11 +1755,12 @@ subroutine post_xy_average(diag_cs, diag, field)
     call horizontally_average_diag_field(diag_cs%G, diag_cs%diag_remap_cs(coord)%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
-                                         diag_cs%missing_value, field, averaged_field)
+                                         diag_cs%missing_value, field, &
+                                         averaged_field, averaged_mask)
   endif
 
   used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
-                   weight=diag_cs%time_int)
+                   weight=diag_cs%time_int, mask=averaged_mask)
 end subroutine post_xy_average
 
 !> This subroutine enables the accumulation of time averages over the specified time interval.

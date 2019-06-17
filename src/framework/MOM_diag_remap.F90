@@ -57,7 +57,7 @@ module MOM_diag_remap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms,             only : sum_across_PEs
+use MOM_coms,             only : reproducing_sum
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
@@ -639,7 +639,8 @@ end subroutine vertically_interpolate_diag_field
 !> Horizontally average field
 subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y, &
                                            is_layer, is_extensive, &
-                                           missing_value, field, averaged_field)
+                                           missing_value, field, averaged_field, &
+                                           averaged_mask)
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
   real, dimension(:,:,:), intent(in) :: h !< The current thicknesses
   logical,                intent(in) :: staggered_in_x !< True if the x-axis location is at u or q points
@@ -649,12 +650,19 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
   real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged
+  logical, dimension(:), intent(inout) :: averaged_mask  !< Mask for horizontally averaged field
+
   ! Local variables
+  real, dimension(G%isc:G%iec, G%jsc:G%jec, size(field,3)) :: volume, stuff
   real, dimension(size(field, 3)) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
-  real :: v1, v2, total_volume, total_stuff, val
+  real :: height
   integer :: i, j, k, nz
+  integer :: i1, j1                 !< 1-based index
 
   nz = size(field, 3)
+
+  ! TODO: These averages could potentially be modified to use the function in
+  !       the MOM_spatial_means module.
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     if (is_layer) then
@@ -663,30 +671,26 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         if (is_extensive) then
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCu(I,j)
-            v2 = G%areaCu(I-1,j)
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+          do j=G%jsc, G%jec ; do I=G%isc, G%iec
+            I1 = I - G%isdB + 1
+            volume(I,j,k) = G%areaCu(I,j) * G%mask2dCu(I,j)
+            stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         else ! Intensive
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCu(I,j) * 0.5 * ( h(i,j,k) + h(i+1,j,k) )
-            v2 = G%areaCu(I-1,j) * 0.5 * ( h(i,j,k) + h(i-1,j,k) )
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+          do j=G%jsc, G%jec ; do I=G%isc, G%iec
+            I1 = i - G%isdB + 1
+            height = 0.5 * (h(i,j,k) + h(i+1,j,k))
+            volume(I,j,k) = G%areaCu(I,j) * height * G%mask2dCu(I,j)
+            stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
-        do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          v1 = G%areaCu(I,j)
-          v2 = G%areaCu(I-1,j)
-          vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-          stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+        do j=G%jsc, G%jec ; do I=G%isc, G%iec
+          I1 = I - G%isdB + 1
+          volume(I,j,k) = G%areaCu(I,j) * G%mask2dCu(I,j)
+          stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
         enddo ; enddo
       enddo
     endif
@@ -694,33 +698,27 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     if (is_layer) then
       ! V-points
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
         if (is_extensive) then
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCv(i,J)
-            v2 = G%areaCv(i,J-1)
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+          do J=G%jsc, G%jec ; do i=G%isc, G%iec
+            J1 = J - G%jsdB + 1
+            volume(i,J,k) = G%areaCv(i,J) * G%mask2dCv(i,J)
+            stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         else ! Intensive
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCv(i,J) * 0.5 * ( h(i,j,k) + h(i,j+1,k) )
-            v2 = G%areaCv(i,J-1) * 0.5 * ( h(i,j,k) + h(i,j-1,k) )
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+          do J=G%jsc, G%jec ; do i=G%isc, G%iec
+            J1 = J - G%jsdB + 1
+            height = 0.5 * (h(i,j,k) + h(i,j+1,k))
+            volume(i,J,k) = G%areaCv(i,J) * height * G%mask2dCv(i,J)
+            stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
-        do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          v1 = G%areaCv(i,J)
-          v2 = G%areaCv(i,J-1)
-          vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-          stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+        do J=G%jsc, G%jec ; do i=G%isc, G%iec
+          J1 = J - G%jsdB + 1
+          volume(i,J,k) = G%areaCv(i,J) * G%mask2dCv(i,J)
+          stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
         enddo ; enddo
       enddo
     endif
@@ -728,37 +726,28 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     if (is_layer) then
       ! H-points
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
         if (is_extensive) then
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            if (G%mask2dT(i,j)>0. .and. h(i,j,k)>0.) then
-              v1 = G%areaT(i,j)
-              vol_sum(k) = vol_sum(k) + v1
-              stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
+            if (h(i,j,k) > 0.) then
+              volume(i,j,k) = G%areaT(i,j) * G%mask2dT(i,j)
+              stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
+            else
+              volume(i,j,k) = 0.
+              stuff(i,j,k) = 0.
             endif
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            if (G%mask2dT(i,j)>0. .and. h(i,j,k)>0.) then
-              v1 = G%areaT(i,j) * h(i,j,k)
-              vol_sum(k) = vol_sum(k) + v1
-              stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
-            endif
+            volume(i,j,k) = G%areaT(i,j) * h(i,j,k) * G%mask2dT(i,j)
+            stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          val = field(i,j,k)
-          if (G%mask2dT(i,j)>0. .and. val/=missing_value) then
-            v1 = G%areaT(i,j)
-            vol_sum(k) = vol_sum(k) + v1
-            stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
-          endif
+          volume(i,j,k) = G%areaT(i,j) * G%mask2dT(i,j)
+          stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
         enddo ; enddo
       enddo
     endif
@@ -766,14 +755,18 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     call assert(.false., 'horizontally_average_diag_field: Q point averaging is not coded yet.')
   endif
 
-  call sum_across_PEs(vol_sum, nz)
-  call sum_across_PEs(stuff_sum, nz)
+  do k = 1,nz
+    vol_sum(k) = reproducing_sum(volume(:,:,k))
+    stuff_sum(k) = reproducing_sum(stuff(:,:,k))
+  enddo
 
+  averaged_mask(:) = .true.
   do k=1,nz
-    if (vol_sum(k)>0.) then
+    if (vol_sum(k) > 0.) then
       averaged_field(k) = stuff_sum(k) / vol_sum(k)
     else
-      averaged_field(k) = missing_value
+      averaged_field(k) = 0.
+      averaged_mask(k) = .false.
     endif
   enddo
 
