@@ -7,10 +7,11 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_RO
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -52,6 +53,8 @@ type, public :: energetic_PBL_CS ; private
   logical :: Orig_MLD_iteration=.false. !< False to use old MLD value
   logical :: MLD_iteration_guess=.false. !< False to default to guessing half the
                              !! ocean depth for the iteration.
+  integer :: max_MLD_its     !< The maximum number of iterations that can be used to find a
+                             !! self-consistent mixed layer depth with Use_MLD_iteration.
   real    :: MixLenExponent  !< Exponent in the mixing length shape-function.
                              !! 1 is law-of-the-wall at top and bottom,
                              !! 2 is more KPP like.
@@ -88,7 +91,7 @@ type, public :: energetic_PBL_CS ; private
                              !! the diffusivity.
 
   !mstar related options
-  integer :: MStar_mode = 0  !< An coded integer to determine which formula is used to set mstar
+  integer :: mstar_scheme    !< An encoded integer to determine which formula is used to set mstar
   logical :: MSTAR_FLATCAP=.true. !< Set false to use asymptotic mstar cap.
   real    :: mstar_cap       !< Since MSTAR is restoring undissipated energy to mixing,
                              !! there must be a cap on how large it can be.  This
@@ -98,19 +101,19 @@ type, public :: energetic_PBL_CS ; private
   !/ vertical decay related options
   real    :: TKE_decay       !< The ratio of the natural Ekman depth to the TKE decay scale [nondim].
 
-  !/ mstar_mode == 0
+  !/ mstar_scheme == 0
   real    :: fixed_mstar     !< Mstar is the ratio of the friction velocity cubed to the TKE available to
                              !! drive entrainment, nondimensional. This quantity is the vertically
                              !! integrated shear production minus the vertically integrated
                              !! dissipation of TKE produced by shear.  This value is used if the option
                              !! for using a fixed mstar is used.
 
-  !/ mstar_mode == 2
-  real :: C_EK = 0.17        !< MSTAR Coefficient in rotation limit for mstar_mode=2
-  real :: MSTAR_COEF = 0.3   !< MSTAR coefficient in rotation/stabilizing balance for mstar_mode=2
+  !/ mstar_scheme == 2
+  real :: C_EK = 0.17        !< MSTAR Coefficient in rotation limit for mstar_scheme=OM4
+  real :: MSTAR_COEF = 0.3   !< MSTAR coefficient in rotation/stabilizing balance for mstar_scheme=OM4
 
-  !/ mstar_mode == 3
-  real    :: RH18_mstar_cN1 !< MSTAR_N coefficient 1 (outter-most coefficient for fit).
+  !/ mstar_scheme == 3
+  real    :: RH18_mstar_cN1  !< MSTAR_N coefficient 1 (outter-most coefficient for fit).
                              !! Value of 0.275 in RH18.  Increasing this
                              !! coefficient increases mechanical mixing for all values of Hf/ust,
                              !! but is most effective at low values (weakly developed OSBLs).
@@ -192,10 +195,21 @@ type, public :: energetic_PBL_CS ; private
 end type energetic_PBL_CS
 
 !>@{ Enumeration values for mstar_Scheme
-integer, parameter :: Use_Fixed_MStar = 0  !< The value of MSTAR_MODE to use a constant mstar
-integer, parameter :: MStar_from_Ekman = 2 !< The value of MSTAR_MODE to base mstar on the ratio
+integer, parameter :: Use_Fixed_MStar = 0  !< The value of mstar_scheme to use a constant mstar
+integer, parameter :: MStar_from_Ekman = 2 !< The value of mstar_scheme to base mstar on the ratio
                                            !! of the Ekman layer depth to the Obukhov depth
-integer, parameter :: MStar_from_RH18 = 3  !< The value of MSTAR_MODE to base mstar of of RH18
+integer, parameter :: MStar_from_RH18 = 3  !< The value of mstar_scheme to base mstar of of RH18
+integer, parameter :: No_Langmuir = 0      !< The value of LT_ENHANCE_FORM not use Langmuir turbolence.
+integer, parameter :: Langmuir_rescale = 2 !< The value of LT_ENHANCE_FORM to use a multiplicative
+                                           !! rescaling of mstar to account for Langmuir turbulence.
+integer, parameter :: Langmuir_add = 3     !< The value of LT_ENHANCE_FORM to add a contribution to
+                                           !! mstar from Langmuir turblence to other contributions.
+character*(20), parameter :: CONSTANT_STRING = "CONSTANT"
+character*(20), parameter :: OM4_STRING = "OM4"
+character*(20), parameter :: RH18_STRING = "REICHL_H18"
+character*(20), parameter :: NONE_STRING = "NONE"
+character*(20), parameter :: RESCALED_STRING = "RESCALE"
+character*(20), parameter :: ADDITIVE_STRING = "ADDITIVE"
 !!@}
 
 !> A type for conveniently passing around ePBL diagnostics for a column.
@@ -287,15 +301,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 ! mixing.
 !
 !   The key parameters for the mixed layer are found in the control structure.
-!   To use the classic constant mstar mixied layers choose MSTAR_MODE=0.
+!   To use the classic constant mstar mixied layers choose MSTAR_SCHEME=CONSTANT.
 ! The key parameters then include mstar, nstar, TKE_decay, and conv_decay.
 ! For the Oberhuber (1993) mixed layer,the values of these are:
 !      mstar = 1.25,  nstar = 1, TKE_decay = 2.5, conv_decay = 0.5
 ! TKE_decay is 1/kappa in eq. 28 of Oberhuber (1993), while conv_decay is 1/mu.
 ! For a traditional Kraus-Turner mixed layer, the values are:
 !      mstar = 1.25, nstar = 0.4, TKE_decay = 0.0, conv_decay = 0.0
-!   To use the OM4 ePBL settings choose MSTAR_MODE=2.
-!   To use the Reichl and Hallberg, 2018
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -357,7 +369,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   h_neglect = GV%H_subroundoff
 
-!  if (.not.CS%Use_MLD_Iteration) MAX_OBL_IT=1
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
 
@@ -746,16 +757,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     !    within the boundary layer.  Likely, a new method e.g. surface_disconnect,
                     !    can improve this.
   logical :: FIRST_OBL     ! Flag for computing "found" Mixing layer depth
-  logical :: OBL_CONVERGED ! Flag for convergence of MLD
-  integer :: OBL_IT        ! Iteration counter
-!### This needs to be made into a run-time parameter.
-  integer :: MAX_OBL_IT=20 ! Set maximum number of iterations.  Probably best as an input parameter,
-                           ! but then may want to use allocatable arrays if storing guess/found
-                           ! (as diagnostic); skipping for now.
-                           ! In reality, the maximum number of guesses needed is set by:
-                           !    DEPTH/2^M < DZ
-                           ! where M is the number of guesses
-                           ! e.g. M=12 for DEPTH=4000m and DZ=1m
+  logical :: OBL_converged ! Flag for convergence of MLD
+  integer :: OBL_it        ! Iteration counter
 
   real :: Surface_Scale ! Surface decay scale for vstar
 
@@ -778,7 +781,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
 
   h_neglect = GV%H_subroundoff
 
-  if (.not.CS%Use_MLD_Iteration) MAX_OBL_IT=1
   C1_3 = 1.0 / 3.0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag * US%s_to_T
   I_dtdiag = 1.0 / dt__diag
@@ -832,18 +834,15 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   ! If no first guess is provided for MLD, try the middle of the water column
   if (MLD_guess <= min_MLD) MLD_guess = 0.5 * (min_MLD + max_MLD)
 
-  ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
-  OBL_CONVERGED = .false.
-  sfc_connected = .true.
+  ! Iterate to determine a converged EPBL depth.
+  OBL_converged = .false.
+  do OBL_it=1,CS%Max_MLD_Its
 
-  do OBL_IT=1,MAX_OBL_IT
-
-    if (.not. OBL_CONVERGED) then
+    if (.not. OBL_converged) then
       ! If not using MLD_Iteration flag loop to only execute once.
-      if (.not.CS%Use_MLD_Iteration) OBL_CONVERGED = .true.
+      if (.not.CS%Use_MLD_iteration) OBL_converged = .true.
 
       if (debug) then ; mech_TKE_k(:) = 0.0 ; conv_PErel_k(:) = 0.0 ; endif
-
 
       ! Reset ML_depth
       MLD_output = h(1)*GV%H_to_Z
@@ -861,7 +860,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       endif
 
       !/ Apply MStar to get mech_TKE
-      if ((CS%answers_2018) .and. (CS%mstar_mode==0)) then
+      if ((CS%answers_2018) .and. (CS%mstar_scheme==Use_Fixed_MStar)) then
         mech_TKE = (dt*MSTAR_total*GV%Rho0) * u_star**3
       else
         mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
@@ -894,7 +893,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       do K=1,nz+1 ; mixvel(K) = 0.0 ; mixlen(K) = 0.0 ; enddo
 
       ! Determine the mixing shape function MixLen_shape.
-      if ((.not.CS%Use_MLD_Iteration) .or. &
+      if ((.not.CS%Use_MLD_iteration) .or. &
           (CS%transLay_scale >= 1.0) .or. (CS%transLay_scale < 0.0) ) then
         do K=1,nz+1
           MixLen_shape(K) = 1.0
@@ -1114,7 +1113,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                 ((CS%Ekman_scale_coef * absf) * (h_tt*hbs_here) + vstar))
             !Note setting Kd_guess0 to vstar * CS%vonKar * mixlen(K) here will
             ! change the answers.  Therefore, skipping that.
-            if (.not.CS%Use_MLD_Iteration) then
+            if (.not.CS%Use_MLD_iteration) then
               Kd_guess0 = vstar * CS%vonKar * ((h_tt*hbs_here)*vstar) / &
                 ((CS%Ekman_scale_coef * absf) * (h_tt*hbs_here) + vstar)
             else
@@ -1163,7 +1162,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                 hbs_here = GV%H_to_Z * min(hb_hs(K), MixLen_shape(K))
                 mixlen(K) = max(CS%min_mix_len, ((h_tt*hbs_here)*vstar) / &
                     ((CS%Ekman_scale_coef * absf) * (h_tt*hbs_here) + vstar))
-                if (.not.CS%Use_MLD_Iteration) then
+                if (.not.CS%Use_MLD_iteration) then
                 ! Note again (as prev) that using mixlen here
                 !  instead of redoing the computation will change answers...
                   Kd(K) = vstar * CS%vonKar *  ((h_tt*hbs_here)*vstar) / &
@@ -1281,11 +1280,10 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
               dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
 
               TKE_left = tot_TKE + (MKE_src - PE_chg)
-              if (debug) then
+              if (debug .and. itt<=20) then
                 Kddt_h_itt(itt) = Kddt_h_guess ; MKE_src_itt(itt) = MKE_src
-                PE_chg_itt(itt) = PE_chg
+                PE_chg_itt(itt) = PE_chg ; dPEa_dKd_itt(itt) = dPEc_dKd
                 TKE_left_itt(itt) = TKE_left
-                dPEa_dKd_itt(itt) = dPEc_dKd
               endif
               ! Store the new bounding values, bearing in mind that min and max
               ! here refer to Kddt_h and dTKE_left/dKddt_h < 0:
@@ -1410,9 +1408,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       ! the TKE threshold (ML_DEPTH).  This is because the MSTAR
       ! is now dependent on the ML, and therefore the ML needs to be estimated
       ! more precisely than the grid spacing.
-      MLD_found = 0.0 ; FIRST_OBL = .true.
       if (CS%Orig_MLD_iteration) then
-        ! This is how the iteration was original conducted
+        ! This is how the iteration was originally conducted
+        MLD_found = 0.0 ; FIRST_OBL = .true.
         do k=2,nz
           if (FIRST_OBL) then ! Breaks when OBL found
             if ((mixvel(K) > 1.e-10*US%m_to_Z*US%T_to_s) .and. k < nz) then
@@ -1422,7 +1420,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
               if (MLD_found - CS%MLD_tol > MLD_guess) then
                 min_MLD = MLD_guess
               elseif ((MLD_guess - MLD_found) < max(CS%MLD_tol, h(k-1)*GV%H_to_Z)) then
-                OBL_CONVERGED = .true. ! Break convergence loop
+                OBL_converged = .true. ! Break convergence loop
               else
                 max_MLD = MLD_guess ! We know this guess was too deep
               endif
@@ -1435,12 +1433,13 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         if (MLD_found - CS%MLD_tol > MLD_guess) then
           min_MLD = MLD_guess
         elseif (abs(MLD_guess - MLD_found) < CS%MLD_tol) then
-          OBL_CONVERGED = .true. ! Break convergence loop
+          OBL_converged = .true. ! Break convergence loop
         else
           max_MLD = MLD_guess ! We know this guess was too deep
         endif
       endif
       ! For next pass, guess average of minimum and maximum values.
+      !### We should try using the false position method instead of simple bisection.
       MLD_guess = 0.5*(min_MLD + max_MLD)
     endif
   enddo ! Iteration loop for converged boundary layer thickness.
@@ -1779,10 +1778,10 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
 
   !/
 
-  if ( CS%MStar_Mode == Use_Fixed_MStar) then
+  if (CS%mstar_scheme == Use_Fixed_MStar) then
     MStar = CS%Fixed_MStar
   !/ 1. Get mstar
-  elseif (CS%MSTAR_MODE == MStar_from_Ekman) then
+  elseif (CS%mstar_scheme == MStar_from_Ekman) then
 
     if (CS%answers_2018) then
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
@@ -1801,7 +1800,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
     ! Here 1.25 is about .5/von Karman, which gives the Obukhov limit.
     MStar = max(MStar_S, min(1.25, MStar_N))
     if (CS%MStar_Cap > 0.0) MStar = min( CS%MStar_Cap,MStar )
-  elseif ( CS%MStar_Mode == MStar_from_RH18 ) then
+  elseif ( CS%mstar_scheme == MStar_from_RH18 ) then
     if (CS%answers_2018) then
       MStar_N = CS%RH18_MStar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_MStar_cn2 * &
                 exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar) ) )
@@ -1812,7 +1811,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
     MStar_S = CS%RH18_MStar_CS1 * ( max(0.0, Buoyancy_Flux)**2 * BLD / &
              ( Ustar**5 * max(Abs_Coriolis,1.e-20*US%T_to_s) ) )**CS%RH18_mstar_cs2
     MStar = MStar_N + MStar_S
-  endif !mstar_mode
+  endif
 
   !/ 2. Adjust mstar to account for convective turbulence
   if (CS%answers_2018) then
@@ -1869,7 +1868,7 @@ subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langm
   ! Set default values for no Langmuir effects.
   enhance_mstar = 1.0 ; mstar_LT_add = 0.0
 
-  if (CS%LT_Enhance_Form > 0) then
+  if (CS%LT_Enhance_Form /= No_Langmuir) then
     ! a. Get parameters for modified LA
     if (CS%answers_2018) then
       iL_Ekman   = Abs_Coriolis / Ustar
@@ -1907,11 +1906,11 @@ subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langm
                    ((CS%LaC_EKoOB_stab * Ekman_Obukhov_stab + CS%LaC_EKoOB_un * Ekman_Obukhov_un) + &
                     (CS%LaC_MLDoOB_stab * MLD_Obukhov_stab  + CS%LaC_MLDoOB_un * MLD_Obukhov_un)) )
 
-    if (CS%LT_Enhance_Form == 2) then
+    if (CS%LT_Enhance_Form == Langmuir_rescale) then
       ! Enhancement is multiplied (added mst_lt set to 0)
       Enhance_mstar = min(CS%Max_Enhance_M, &
                           (1. + CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP) )
-    elseif (CS%LT_ENHANCE_Form == 3) then
+    elseif (CS%LT_ENHANCE_Form == Langmuir_add) then
       ! or Enhancement is additive (multiplied enhance_m set to 1)
       mstar_LT_add = CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP
     endif
@@ -1958,9 +1957,11 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_energetic_PBL"  ! This module's name.
+  character(len=20)  :: tmpstr
   real :: omega_frac_dflt
   real :: Z3_T3_to_m3_s3 ! A conversion factor for work diagnostics [m3 T3 Z-3 s-3 ~> nondim]
   integer :: isd, ied, jsd, jed
+  integer :: mstar_mode, LT_enhance
   logical :: use_temperature, use_omega
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2024,65 +2025,94 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 
 
 !/2. Options related to setting MSTAR
-  !### Add new parameter MSTAR_SCHEME to replace MSTAR_MODE.
-  call get_param(param_file, mdl, "MSTAR_MODE", CS%mstar_mode, &
-                 "An integer switch for how to compute MSTAR.\n"//&
-                 "    0 for constant MSTAR\n"//&
-  !delete                 "    1 for MSTAR w/ MLD in stabilizing limit\n"//&
-                 "    2 for OM4 MSTAR, which uses L_E/L_O in stabilizing limit\n"//&
-                 "    3 for MSTAR as in RH18.", &
-                 default=0)
-  if (CS%mstar_mode==1) then
-    call MOM_error(FATAL, "You are using a legacy mstar mode in ePBL that has been "//&
-                          "phased out.  If you need to use this setting please "//&
-                          "report this error, as the code supporting this option "//&
-                          "is set to be deleted.")
-  end if
+  call get_param(param_file, mdl, "EPBL_MSTAR_SCHEME", tmpstr, &
+                 "EPBL_MSTAR_SCHEME selects the method for setting mstar.  Valid values are: \n"//&
+                 "\t CONSTANT   - Use a fixed mstar given by MSTAR \n"//&
+                 "\t OM4        - Use L_Ekman/L_Obukhov in the sabilizing limit, as in OM4 \n"//&
+                 "\t REICHL_H18 - Use the scheme documented in Reichl & Hallberg, 2018.", &
+                 default=CONSTANT_STRING, do_not_log=.true.)
+  call get_param(param_file, mdl, "MSTAR_MODE", mstar_mode, default=-1)
+  if (mstar_mode == 0) then
+    tmpstr = CONSTANT_STRING
+    call MOM_error(WARNING, "Use EPBL_MSTAR_SCHEME = CONSTANT instead of the archaic MSTAR_MODE = 0.")
+  elseif (mstar_mode == 1) then
+    call MOM_error(FATAL, "You are using a legacy mstar mode in ePBL that has been phased out. "//&
+                          "If you need to use this setting please report this error.  Also use "//&
+                          "EPBL_MSTAR_SCHEME to specify the scheme for mstar.")
+  elseif (mstar_mode == 2) then
+    tmpstr = OM4_STRING
+    call MOM_error(WARNING, "Use EPBL_MSTAR_SCHEME = OM4 instead of the archaic MSTAR_MODE = 2.")
+  elseif (mstar_mode == 3) then
+    tmpstr = RH18_STRING
+    call MOM_error(WARNING, "Use EPBL_MSTAR_SCHEME = REICHL_H18 instead of the archaic MSTAR_MODE = 3.")
+  elseif (mstar_mode > 3) then
+    call MOM_error(FATAL, "An unrecognized value of the obsolete parameter MSTAR_MODE was specified.")
+  endif
+  call log_param(param_file, mdl, "EPBL_MSTAR_SCHEME", tmpstr, &
+                 "EPBL_MSTAR_SCHEME selects the method for setting mstar.  Valid values are: \n"//&
+                 "\t CONSTANT   - Use a fixed mstar given by MSTAR \n"//&
+                 "\t OM4        - Use L_Ekman/L_Obukhov in the sabilizing limit, as in OM4 \n"//&
+                 "\t REICHL_H18 - Use the scheme documented in Reichl & Hallberg, 2018.", &
+                 default=CONSTANT_STRING)
+  tmpstr = uppercase(tmpstr)
+  select case (tmpstr)
+    case (CONSTANT_STRING)
+      CS%mstar_Scheme = Use_Fixed_MStar
+    case (OM4_STRING)
+      CS%mstar_Scheme = MStar_from_Ekman
+    case (RH18_STRING)
+      CS%mstar_Scheme = MStar_from_RH18
+    case default
+      call MOM_mesg('CoriolisAdv_init: EPBL_MSTAR_SCHEME ="'//trim(tmpstr)//'"', 0)
+      call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
+            "EPBL_MSTAR_SCHEME = "//trim(tmpstr)//" found in input file.")
+  end select
+
   call get_param(param_file, mdl, "MSTAR", CS%fixed_mstar, &
-                 "The ratio of the friction velocity cubed to the TKE "//&
-                 "input to the mixed layer.  This option is used if MSTAR_MODE "//&
-                 "is set to 0.", units="nondim", default=1.2)
+                 "The ratio of the friction velocity cubed to the TKE input to the "//&
+                 "mixed layer.  This option is used if EPBL_MSTAR_SCHEME = CONSTANT.", &
+                 units="nondim", default=1.2, do_not_log=(CS%mstar_scheme/=Use_Fixed_MStar))
   call get_param(param_file, mdl, "MSTAR_CAP", CS%mstar_cap, &
-                 "If this value is non-negative, it sets a maximum value of mstar "//&
-                 "allowed in model (used only if MSTAR_MODE>0).", &
-                 units="nondim", default=-1.0)
-  ! MSTAR_MODE==2 options
+                 "If this value is positive, it sets the maximum value of mstar "//&
+                 "allowed in ePBL.  (This is not used if EPBL_MSTAR_SCHEME = CONSTANT).", &
+                 units="nondim", default=-1.0, do_not_log=(CS%mstar_scheme==Use_Fixed_MStar))
+  ! mstar_scheme==MStar_from_Ekman options
   call get_param(param_file, mdl, "MSTAR2_COEF1", CS%MSTAR_COEF, &
-                 "Coefficient in computing mstar when rotation and "//&
-                 " stabilizing effects are both important (used if MSTAR_MODE=2).", &
-                 units="nondim", default=0.3, do_not_log=(CS%MStar_Mode/=MStar_from_Ekman))
+                 "Coefficient in computing mstar when rotation and stabilizing "//&
+                 "effects are both important (used if EPBL_MSTAR_SCHEME = OM4).", &
+                 units="nondim", default=0.3, do_not_log=(CS%mstar_scheme/=MStar_from_Ekman))
   call get_param(param_file, mdl, "MSTAR2_COEF2", CS%C_EK, &
                  "Coefficient in computing mstar when only rotation limits "// &
-                 "the total mixing. (used only if MSTAR_MODE=2)", &
-                 units="nondim", default=0.085, do_not_log=(CS%MStar_Mode/=MStar_from_Ekman))
-  ! MSTAR_MODE==3 options
+                 "the total mixing (used if EPBL_MSTAR_SCHEME = OM4)", &
+                 units="nondim", default=0.085, do_not_log=(CS%mstar_scheme/=MStar_from_Ekman))
+  ! mstar_scheme==MStar_from_RH18 options
   call get_param(param_file, mdl, "RH18_MSTAR_CN1", CS%RH18_mstar_cn1,&
                  "MSTAR_N coefficient 1 (outter-most coefficient for fit). "//&
                  "The value of 0.275 is given in RH18.  Increasing this "//&
                  "coefficient increases MSTAR for all values of Hf/ust, but more "//&
                  "effectively at low values (weakly developed OSBLs).", &
-                 units="nondim", default=0.275, do_not_log=(CS%MStar_Mode/=MStar_from_RH18))
+                 units="nondim", default=0.275, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CN2", CS%RH18_mstar_cn2,&
                  "MSTAR_N coefficient 2 (coefficient outside of exponential decay). "//&
                  "The value of 8.0 is given in RH18.  Increasing this coefficient "//&
                  "increases MSTAR for all values of HF/ust, with a much more even "//&
                  "effect across a wide range of Hf/ust than CN1.", &
-                 units="nondim", default=8.0, do_not_log=(CS%MStar_Mode/=MStar_from_RH18))
+                 units="nondim", default=8.0, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CN3", CS%RH18_mstar_CN3,&
                  "MSTAR_N coefficient 3 (exponential decay coefficient). "//&
                  "The value of -5.0 is given in RH18.  Increasing this increases how "//&
                  "quickly the value of MSTAR decreases as Hf/ust increases.", &
-                  units="nondim", default=-5.0, do_not_log=(CS%MStar_Mode/=MStar_from_RH18))
+                  units="nondim", default=-5.0, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CS1", CS%RH18_mstar_cs1,&
                  "MSTAR_S coefficient for RH18 in stabilizing limit. "//&
-                 "The value of 0.2 is given in RH18 and increasing it increases"//&
+                 "The value of 0.2 is given in RH18 and increasing it increases "//&
                  "MSTAR in the presence of a stabilizing surface buoyancy flux.", &
-                 units="nondim", default=0.2, do_not_log=(CS%MStar_Mode/=MStar_from_RH18))
+                 units="nondim", default=0.2, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CS2", CS%RH18_mstar_cs2,&
                  "MSTAR_S exponent for RH18 in stabilizing limit. "//&
                  "The value of 0.4 is given in RH18 and increasing it increases MSTAR "//&
                  "exponentially in the presence of a stabilizing surface buoyancy flux.", &
-                 Units="nondim", default=0.4, do_not_log=(CS%MStar_Mode/=MStar_from_RH18))
+                 Units="nondim", default=0.4, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
 
 
 !/ Convective turbulence related options
@@ -2092,22 +2122,21 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "at the base of mixed layer when that energy is positive.", &
                  units="nondim", default=0.2)
   call get_param(param_file, mdl, "MSTAR_CONV_ADJ", CS%mstar_convect_coef, &
-                 "Coefficient used for reducing mstar during convection"//&
-                 " due to reduction of stable density gradient.", &
+                 "Coefficient used for reducing mstar during convection "//&
+                 "due to reduction of stable density gradient.", &
                  units="nondim", default=0.0)
 
 !/ Mixing Length Options
   !### THIS DEFAULT SHOULD BECOME TRUE.
-  call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%USE_MLD_ITERATION, &
+  call get_param(param_file, mdl, "USE_MLD_ITERATION", CS%Use_MLD_iteration, &
                  "A logical that specifies whether or not to use the "//&
                  "distance to the bottom of the actively turbulent boundary "//&
                  "layer to help set the EPBL length scale.", default=.false.)
   call get_param(param_file, mdl, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
                  "A scale for the mixing length in the transition layer "//&
                  "at the edge of the boundary layer as a fraction of the "//&
-                 "boundary layer thickness.  The default is 0.1.", &
-                 units="nondim", default=0.1)
-  if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5) >= 0.5) then
+                 "boundary layer thickness.", units="nondim", default=0.1)
+  if ( CS%Use_MLD_iteration .and. abs(CS%transLay_scale-0.5) >= 0.5) then
     call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//&
                  "EPBL_TRANSITION should be greater than 0 and less than 1.")
   endif
@@ -2131,6 +2160,12 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "The tolerance for the iteratively determined mixed "//&
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
                  units="meter", default=1.0, scale=US%m_to_Z)
+  call get_param(param_file, mdl, "EPBL_MLD_MAX_ITS", CS%max_MLD_its, &
+                 "The maximum number of iterations that can be used to find a self-consistent "//&
+                 "mixed layer depth.  For now, due to the use of bisection, the maximum number "//&
+                 "iteractions needed is set by Depth/2^MAX_ITS < EPBL_MLD_TOLERANCE.", &
+                 default=20, do_not_log=.not.CS%Use_MLD_iteration)
+  if (.not.CS%Use_MLD_iteration) CS%Max_MLD_Its = 1
   call get_param(param_file, mdl, "EPBL_MIN_MIX_LEN", CS%min_mix_len, &
                  "The minimum mixing length scale that will be used "//&
                  "by ePBL.  The default (0) does not set a minimum.", &
@@ -2181,41 +2216,77 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
          units="nondim", default=.false.)
   endif
   if (CS%USE_LT) then
-    !### Add LT_ENHANCE_SCHEME.
-    call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM, &
-         "Integer for Langmuir number mode. \n"//&
-         " *Requires USE_LA_LI2016 to be set to True. \n"//&
-         "Options: 0 - No Langmuir \n"//&
-         "         1 - (removed)  \n"//&
-         "         2 - Multiplied w/ adjusted La. \n"//&
-         "         3 - Added w/ adjusted La.", &
-         units="nondim", default=0)
+    call get_param(param_file, mdl, "EPBL_LANGMUIR_SCHEME", tmpstr, &
+                 "EPBL_LANGMUIR_SCHEME selects the method for including Langmuir turbulence. "//&
+                 "Valid values are: \n"//&
+                 "\t NONE     - Do not do any extra mixing due to Langmuir turbulence \n"//&
+                 "\t RESCALE  - Use a multiplicative rescaling of mstar to account for Langmuir turbulence \n"//&
+                 "\t ADDITIVE - Add a Langmuir turblence contribution to mstar to other contributions", &
+                 default=NONE_STRING, do_not_log=.true.)
+    call get_param(param_file, mdl, "LT_ENHANCE", LT_enhance, default=-1)
+    if (LT_ENHANCE == 0) then
+      tmpstr = NONE_STRING
+      call MOM_error(WARNING, "Use EPBL_LANGMUIR_SCHEME = NONE instead of the archaic LT_ENHANCE = 0.")
+    elseif (LT_ENHANCE == 1) then
+      call MOM_error(FATAL, "You are using a legacy LT_ENHANCE mode in ePBL that has been phased out. "//&
+                            "If you need to use this setting please report this error.  Also use "//&
+                            "EPBL_LANGMUIR_SCHEME to specify the scheme for mstar.")
+    elseif (LT_ENHANCE == 2) then
+      tmpstr = RESCALED_STRING
+      call MOM_error(WARNING, "Use EPBL_LANGMUIR_SCHEME = RESCALE instead of the archaic LT_ENHANCE = 2.")
+    elseif (LT_ENHANCE == 3) then
+      tmpstr = ADDITIVE_STRING
+      call MOM_error(WARNING, "Use EPBL_LANGMUIR_SCHEME = ADDITIVE instead of the archaic LT_ENHANCE = 3.")
+    elseif (LT_ENHANCE > 3) then
+      call MOM_error(FATAL, "An unrecognized value of the obsolete parameter LT_ENHANCE was specified.")
+    endif
+    call log_param(param_file, mdl, "EPBL_LANGMUIR_SCHEME", tmpstr, &
+                 "EPBL_LANGMUIR_SCHEME selects the method for including Langmuir turbulence. "//&
+                 "Valid values are: \n"//&
+                 "\t NONE     - Do not do any extra mixing due to Langmuir turbulence \n"//&
+                 "\t RESCALE  - Use a multiplicative rescaling of mstar to account for Langmuir turbulence \n"//&
+                 "\t ADDITIVE - Add a Langmuir turblence contribution to mstar to other contributions", &
+                 default=NONE_STRING)
+    tmpstr = uppercase(tmpstr)
+    select case (tmpstr)
+      case (NONE_STRING)
+        CS%LT_enhance_form = No_Langmuir
+      case (RESCALED_STRING)
+        CS%LT_enhance_form = Langmuir_rescale
+      case (ADDITIVE_STRING)
+        CS%LT_enhance_form = Langmuir_add
+      case default
+        call MOM_mesg('CoriolisAdv_init: EPBL_LANGMUIR_SCHEME ="'//trim(tmpstr)//'"', 0)
+        call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
+              "EPBL_LANGMUIR_SCHEME = "//trim(tmpstr)//" found in input file.")
+    end select
+
     call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
-                 "Coefficient for Langmuir enhancement if LT_ENHANCE > 1", &
-                 units="nondim", default=0.447)
+                 "Coefficient for Langmuir enhancement of mstar", &
+                 units="nondim", default=0.447, do_not_log=(CS%LT_enhance_form==No_Langmuir))
     call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
-                 "Exponent for Langmuir enhancement if LT_ENHANCE > 1", &
-                 units="nondim", default=-1.33)
+                 "Exponent for Langmuir enhancementt of mstar", &
+                 units="nondim", default=-1.33,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
     call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK, &
                  "Coefficient for modification of Langmuir number due to "//&
-                 "MLD approaching Ekman depth if LT_ENHANCE=2.", &
-                 units="nondim", default=-0.87)
+                 "MLD approaching Ekman depth.", &
+                 units="nondim", default=-0.87,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
     call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab, &
                  "Coefficient for modification of Langmuir number due to "//&
-                 "MLD approaching stable Obukhov depth if LT_ENHANCE=2.", &
-                 units="nondim", default=0.0)
+                 "MLD approaching stable Obukhov depth.", &
+                 units="nondim", default=0.0,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
     call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un, &
                  "Coefficient for modification of Langmuir number due to "//&
-                 "MLD approaching unstable Obukhov depth if LT_ENHANCE=2.", &
-                 units="nondim", default=0.0)
+                 "MLD approaching unstable Obukhov depth.", &
+                 units="nondim", default=0.0,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
     call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab, &
                  "Coefficient for modification of Langmuir number due to "//&
-                 "ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.", &
-                 units="nondim", default=0.95)
+                 "ratio of Ekman to stable Obukhov depth.", &
+                 units="nondim", default=0.95,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
     call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un, &
                  "Coefficient for modification of Langmuir number due to "//&
-                 "ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.", &
-                 units="nondim", default=0.95)
+                 "ratio of Ekman to unstable Obukhov depth.", &
+                 units="nondim", default=0.95,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
   endif
 
 
