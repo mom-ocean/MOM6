@@ -76,15 +76,15 @@ type, public :: energetic_PBL_CS ; private
                              !! The default (0) does not set a minimum.
 
   !/ Velocity scale terms
-  integer :: wT_mode         !< An integer marking the chosen method for finding wT
-                             !! (the turbulent velocity scale) .
-                             !! wT_mode = 0 is the original (TKE_remaining)^1/3
-                             !! wT_mode = 1 is the version described by Reichl and Hallberg, 2018
+  integer :: wT_scheme       !< An enumerated value indicating the method for finding the turbulent
+                             !! velocity scale.  There are currently two options:
+                             !! wT_mwT_from_cRoot_TKE is the original (TKE_remaining)^1/3
+                             !! wT_from_RH18 is the version described by Reichl and Hallberg, 2018
   real    :: wstar_ustar_coef !< A ratio relating the efficiency with which convectively released
                              !! energy is converted to a turbulent velocity, relative to
                              !! mechanically forced turbulent kinetic energy [nondim].
                              !! Making this larger increases the diffusivity.
-  real    :: vstar_surf_fac  !< If (wT_mode == 1) this is the proportionality coefficient between
+  real    :: vstar_surf_fac  !< If (wT_scheme == wT_from_RH18) this is the proportionality coefficient between
                              !! ustar and the surface mechanical contribution to vstar [nondim]
   real    :: vstar_scale_fac !< An overall nondimensional scaling factor for vstar times a unit
                              !! conversion factor [Z s T-1 m-1 ~> nondim].  Making this larger increases
@@ -204,9 +204,15 @@ integer, parameter :: Langmuir_rescale = 2 !< The value of LT_ENHANCE_FORM to us
                                            !! rescaling of mstar to account for Langmuir turbulence.
 integer, parameter :: Langmuir_add = 3     !< The value of LT_ENHANCE_FORM to add a contribution to
                                            !! mstar from Langmuir turblence to other contributions.
+integer, parameter :: wT_from_cRoot_TKE = 0 !< Use a constant times the cube root of remaining TKE
+                                           !! to calculate the turbulent velocity.
+integer, parameter :: wT_from_RH18 = 1     !< Use a scheme based on a combination of w* and v* as
+                                           !! documented in Reichl & Hallberg (2018) to calculate
+                                           !! the turbulent velocity.
 character*(20), parameter :: CONSTANT_STRING = "CONSTANT"
 character*(20), parameter :: OM4_STRING = "OM4"
 character*(20), parameter :: RH18_STRING = "REICHL_H18"
+character*(20), parameter :: ROOT_TKE_STRING = "CUBE_ROOT_TKE"
 character*(20), parameter :: NONE_STRING = "NONE"
 character*(20), parameter :: RESCALED_STRING = "RESCALE"
 character*(20), parameter :: ADDITIVE_STRING = "ADDITIVE"
@@ -1101,9 +1107,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           h_tt = htot + h_tt_min
           TKE_here = mech_TKE + CS%wstar_ustar_coef*conv_PErel
           if (TKE_here > 0.0) then
-            if (CS%wT_mode==0) then
+            if (CS%wT_scheme==wT_from_cRoot_TKE) then
               vstar = CS%vstar_scale_fac * vstar_unit_scale * (I_dtrho*TKE_here)**C1_3
-            elseif (CS%wT_mode==1) then
+            elseif (CS%wT_scheme==wT_from_RH18) then
               Surface_Scale = max(0.05, 1.0 - htot/MLD_guess)
               vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
                         vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*I_dtrho)**C1_3)
@@ -1152,9 +1158,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
               ! Does MKE_src need to be included in the calculation of vstar here?
               TKE_here = mech_TKE + CS%wstar_ustar_coef*(conv_PErel-PE_chg_max)
               if (TKE_here > 0.0) then
-                if (CS%wT_mode==0) then
+                if (CS%wT_scheme==wT_from_cRoot_TKE) then
                   vstar = CS%vstar_scale_fac * vstar_unit_scale * (I_dtrho*TKE_here)**C1_3
-                elseif (CS%wT_mode==1) then
+                elseif (CS%wT_scheme==wT_from_RH18) then
                   Surface_Scale = max(0.05, 1. - htot/MLD_guess)
                   vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
                                   vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*I_dtrho)**C1_3)
@@ -1961,7 +1967,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   real :: omega_frac_dflt
   real :: Z3_T3_to_m3_s3 ! A conversion factor for work diagnostics [m3 T3 Z-3 s-3 ~> nondim]
   integer :: isd, ied, jsd, jed
-  integer :: mstar_mode, LT_enhance
+  integer :: mstar_mode, LT_enhance, wT_mode
   logical :: use_temperature, use_omega
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2063,7 +2069,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
     case (RH18_STRING)
       CS%mstar_Scheme = MStar_from_RH18
     case default
-      call MOM_mesg('CoriolisAdv_init: EPBL_MSTAR_SCHEME ="'//trim(tmpstr)//'"', 0)
+      call MOM_mesg('energetic_PBL_init: EPBL_MSTAR_SCHEME ="'//trim(tmpstr)//'"', 0)
       call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
             "EPBL_MSTAR_SCHEME = "//trim(tmpstr)//" found in input file.")
   end select
@@ -2177,31 +2183,55 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "This is only used if USE_MLD_ITERATION is True.", &
                  units="nondim", default=2.0)
 
-
 !/ Turbulent velocity scale in mixing coefficient
-  !### Replace this with EPBL_VEL_SCALE_SCHEME with names.
-  call get_param(param_file, mdl, "EPBL_VEL_SCALE_MODE", CS%wT_mode, &
-                 "An integer switch for how to compute the turbulent velocity. \n"//&
-                 "    0 for old wT = (TKE Remaining)^(1/3)\n"//&
-                 "    1 for new wT = v* + w* -see Reichl & Hallberg 2018.", &
-                 units="nondim", default=0)
+  call get_param(param_file, mdl, "EPBL_VEL_SCALE_SCHEME", tmpstr, &
+                 "Selects the method for translating TKE into turbulent velocities. "//&
+                 "Valid values are: \n"//&
+                 "\t CUBE_ROOT_TKE  - A constant times the cube root of remaining TKE. \n"//&
+                 "\t REICHL_H18 - Use the scheme based on a combination of w* and v* as \n"//&
+                 "\t              documented in Reichl & Hallberg, 2018.", &
+                 default=ROOT_TKE_STRING, do_not_log=.true.)
+  call get_param(param_file, mdl, "EPBL_VEL_SCALE_MODE", wT_mode, default=-1)
+  if (wT_mode == 0) then
+    tmpstr = ROOT_TKE_STRING
+    call MOM_error(WARNING, "Use EPBL_VEL_SCALE_SCHEME = CUBE_ROOT_TKE instead of the archaic EPBL_VEL_SCALE_MODE = 0.")
+  elseif (wT_mode == 1) then
+    tmpstr = RH18_STRING
+    call MOM_error(WARNING, "Use EPBL_VEL_SCALE_SCHEME = REICHL_H18 instead of the archaic EPBL_VEL_SCALE_MODE = 1.")
+  elseif (wT_mode >= 2) then
+    call MOM_error(FATAL, "An unrecognized value of the obsolete parameter EPBL_VEL_SCALE_MODE was specified.")
+  endif
+  call log_param(param_file, mdl, "EPBL_VEL_SCALE_SCHEME", tmpstr, &
+                 "Selects the method for translating TKE into turbulent velocities. "//&
+                 "Valid values are: \n"//&
+                 "\t CUBE_ROOT_TKE  - A constant times the cube root of remaining TKE. \n"//&
+                 "\t REICHL_H18 - Use the scheme based on a combination of w* and v* as \n"//&
+                 "\t              documented in Reichl & Hallberg, 2018.", &
+                 default=ROOT_TKE_STRING)
+  tmpstr = uppercase(tmpstr)
+  select case (tmpstr)
+    case (ROOT_TKE_STRING)
+      CS%wT_scheme = wT_from_cRoot_TKE
+    case (RH18_STRING)
+      CS%wT_scheme = wT_from_RH18
+    case default
+      call MOM_mesg('energetic_PBL_init: EPBL_VEL_SCALE_SCHEME ="'//trim(tmpstr)//'"', 0)
+      call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
+            "EPBL_VEL_SCALE_SCHEME = "//trim(tmpstr)//" found in input file.")
+  end select
+
   call get_param(param_file, mdl, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef, &
                  "A ratio relating the efficiency with which convectively "//&
                  "released energy is converted to a turbulent velocity, "//&
                  "relative to mechanically forced TKE. Making this larger "//&
                  "increases the BL diffusivity", units="nondim", default=1.0)
-  call get_param(param_file, mdl, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
+  call get_param(param_file, mdl, "EPBL_VEL_SCALE_FACTOR", CS%vstar_scale_fac, &
                  "An overall nondimensional scaling factor for wT. "//&
-                 "Making this larger decreases the PBL diffusivity.", &
-                 units="nondim", default=1.0) ! , scale=US%T_to_s*US%m_to_Z)
-!  call get_param(param_file, mdl, "EPBL_VEL_SCALE_FACTOR", CS%vstar_scale_fac, &
-!                 "An overall nondimensional scaling factor for wT. "//&
-!                 "Making this larger decreases the PBL diffusivity.", &
-!                 units="nondim", default=1.0, scale=US%m_to_Z)
+                 "Making this larger increases the PBL diffusivity.", &
+                 units="nondim", default=1.0)
   call get_param(param_file, mdl, "VSTAR_SURF_FAC", CS%vstar_surf_fac,&
                  "The proportionality times ustar to set vstar at the surface.", &
                  units="nondim", default=1.2)
-
 
   !/ Options related to Langmuir turbulence
   call get_param(param_file, mdl, "USE_LA_LI2016", use_LA_Windsea, &
@@ -2212,8 +2242,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
     CS%USE_LT = .true.
   else
     call get_param(param_file, mdl, "EPBL_LT", CS%USE_LT, &
-         "A logical to use a LT parameterization.", &
-         units="nondim", default=.false.)
+                 "A logical to use a LT parameterization.", &
+                 units="nondim", default=.false.)
   endif
   if (CS%USE_LT) then
     call get_param(param_file, mdl, "EPBL_LANGMUIR_SCHEME", tmpstr, &
@@ -2256,7 +2286,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       case (ADDITIVE_STRING)
         CS%LT_enhance_form = Langmuir_add
       case default
-        call MOM_mesg('CoriolisAdv_init: EPBL_LANGMUIR_SCHEME ="'//trim(tmpstr)//'"', 0)
+        call MOM_mesg('energetic_PBL_init: EPBL_LANGMUIR_SCHEME ="'//trim(tmpstr)//'"', 0)
         call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
               "EPBL_LANGMUIR_SCHEME = "//trim(tmpstr)//" found in input file.")
     end select
