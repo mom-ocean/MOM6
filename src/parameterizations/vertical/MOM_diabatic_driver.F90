@@ -1645,7 +1645,6 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call cpu_clock_begin(id_clock_entrain)
     ! Calculate appropriately limited diapycnal mass fluxes to account
     ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
-    ! XXX: Need to remove those US%s_to_T array multiply ops
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_lay=Kd_lay, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
@@ -2016,6 +2015,9 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
+  if (CS%id_dudt_dia > 0 .or. CS%id_dvdt_dia > 0) &
+    ! Remapped d[uv]dt_dia require east/north halo updates of h
+    call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
   call diag_update_remap_grids(CS%diag)
 
   ! diagnostics
@@ -2413,7 +2415,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
   if (present(minimum_forcing_depth)) minimum_forcing_depth = CS%minimum_forcing_depth
 
-end subroutine
+end subroutine extract_diabatic_member
 
 !> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
