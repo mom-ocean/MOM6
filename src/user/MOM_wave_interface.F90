@@ -683,7 +683,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   do ii = G%isc,G%iec
     do jj = G%jsc, G%jec
       Top = h(ii,jj,1)*GV%H_to_Z
-      call get_Langmuir_Number( La, G, GV, US, Top, US%Z_to_m*ustar(ii,jj), ii, jj, &
+      call get_Langmuir_Number( La, G, GV, US, Top, US%T_to_s*ustar(ii,jj), ii, jj, &
              H(ii,jj,:),Override_MA=.false.,WAVES=CS)
       CS%La_turb(ii,jj) = La
     enddo
@@ -881,7 +881,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   integer, intent(in) :: i      !< Meridional index of h-point
   integer, intent(in) :: j      !< Zonal index of h-point
-  real, intent(in)    :: ustar  !< Friction velocity [Z s-1 ~> m s-1].
+  real, intent(in)    :: ustar  !< Friction velocity [Z T-1 ~> m s-1].
   real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer [Z ~> m].
   logical, optional,       intent(in) :: Override_MA !< Override to use misalignment in LA
                                 !! calculation. This can be used if diagnostic
@@ -901,7 +901,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
 !Local Variables
   real :: Top, bottom, midpoint
   real :: Dpt_LASL, ShearDirection, WaveDirection
-  real :: LA_STKx, LA_STKy, LA_STK
+  real :: LA_STKx, LA_STKy, LA_STK ! Stokes velocities in [m s-1]
   logical :: ContinueLoop, USE_MA
   real, dimension(SZK_(G)) :: US_H, VS_H
   real, dimension(NumBands) :: StkBand_X, StkBand_Y
@@ -971,12 +971,13 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     ! there is also no good reason to cap it here other then
     ! to prevent large enhancements in unconstrained parts of
     ! the curve fit parameterizations.
-    LA = max(WAVES%La_min, sqrt(US%Z_to_m*ustar / (LA_STK+1.e-10)))
+    ! Note the dimensional constant background Stokes velocity of 10^-10 m s-1.
+    LA = max(WAVES%La_min, sqrt(US%Z_to_m*US%s_to_T*ustar / (LA_STK+1.e-10)))
   endif
 
   if (Use_MA) then
     WaveDirection = atan2(LA_STKy, LA_STKx)
-    LA = LA / sqrt(max(1.e-8,cos( WaveDirection - ShearDirection)))
+    LA = LA / sqrt(max(1.e-8, cos( WaveDirection - ShearDirection)))
   endif
 
   return
@@ -999,7 +1000,7 @@ end subroutine get_Langmuir_Number
 !! - BGR remove u10 input
 !! - BGR note: fixed parameter values should be changed to "get_params"
 subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
-  real, intent(in)  :: ustar !< water-side surface friction velocity [Z s-1 ~> m s-1].
+  real, intent(in)  :: ustar !< water-side surface friction velocity [Z T-1 ~> m s-1].
   real, intent(in)  :: hbl   !< boundary layer depth [Z ~> m].
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
@@ -1023,7 +1024,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
 
   if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
-    call ust_2_u10_coare3p5(US%Z_to_m*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
+    call ust_2_u10_coare3p5(US%Z_to_m*US%s_to_T*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
     ! surface Stokes drift
     UStokes = us_to_u10*u10
     !
@@ -1068,7 +1069,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
          sqrt( 2.0 * PI *kstar * z0) * &
          erfc( sqrt( 2.0 * kstar * z0 ) )
     UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
-    LA = sqrt(US%Z_to_m*ustar / UStokes_sl)
+    LA = sqrt(US%Z_to_m*US%s_to_T*ustar / UStokes_sl)
   else
     UStokes_sl = 0.0
     LA=1.e8

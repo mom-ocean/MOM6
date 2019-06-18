@@ -1073,7 +1073,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 
       if (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) then
         MLD_GUESS = max( 1.*US%m_to_Z, abs(US%m_to_Z*CS%OBLdepthprev(i,j) ) )
-        call get_Langmuir_Number( LA, G, GV, US, MLD_guess, surfFricVel, i, j, &
+        call get_Langmuir_Number( LA, G, GV, US, MLD_guess, US%s_to_T*uStar(i,j), i, j, &
              H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
         CS%La_SL(i,j)=LA
       endif

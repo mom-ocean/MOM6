@@ -465,7 +465,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
         CS%Mixing_Length(i,j,k) = mixlen(k)
       enddo ; endif
       if (CS%id_Velocity_Scale>0) then ; do k=1,nz
-        CS%Velocity_Scale(i,j,k) = US%s_to_T * mixvel(k)
+        CS%Velocity_Scale(i,j,k) = mixvel(k)
       enddo ; endif
       if (allocated(CS%mstar_mix)) CS%mstar_mix(i,j) = eCD%mstar
       if (allocated(CS%mstar_lt)) CS%mstar_lt(i,j) = eCD%mstar_LT
@@ -583,9 +583,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
 
   ! Local variables
    real, dimension(SZK_(GV)+1) :: &
-    pres, &         ! Interface pressures [Pa].
     pres_Z, &       ! Interface pressures with a rescaling factor to convert interface height
-                    ! movements into changes in column potential energy [J m-2 Z-1 ~> J m-3].
+                    ! movements into changes in column potential energy [kg m-3 Z2 T-2 ~> kg m-1 s-2].
     hb_hs           ! The distance from the bottom over the thickness of the
                     ! water column [nondim].
   real :: mech_TKE  !   The mechanically generated turbulent kinetic energy
@@ -645,8 +644,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     ! in the denominator of b1 in a downward-oriented tridiagonal solver.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: dMass     ! The mass per unit area within a layer [kg m-2].
-  real :: dPres     ! The hydrostatic pressure change across a layer [Pa].
+  real :: dMass     ! The mass per unit area within a layer [Z kg m-3 ~> kg m-2].
+  real :: dPres     ! The hydrostatic pressure change across a layer [kg m-3 Z2 T-2 ~> kg m-1 s-2 = Pa].
   real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
@@ -800,18 +799,16 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
 
   do K=1,nz+1 ; Kd(K) = 0.0 ; enddo
 
-  pres(1) = 0.0
   pres_Z(1) = 0.0
   do k=1,nz
-    dMass = GV%H_to_kg_m2 * h(k)
-    dPres = (US%m_to_Z**3*US%T_to_s**2) * (GV%g_Earth*US%m_to_Z) * dMass  ! Equivalent to GV%H_to_Pa * h(k)
-    dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT(k)
-    dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS(k)
-    dT_to_dColHt(k) = dMass * US%m_to_Z * dSV_dT(k)
-    dS_to_dColHt(k) = dMass * US%m_to_Z * dSV_dS(k)
+    dMass = US%m_to_Z * GV%H_to_kg_m2 * h(k)
+    dPres = (US%m_to_Z**2*US%T_to_s**2) * GV%g_Earth * dMass  ! Equivalent to GV%H_to_Pa * h(k) with rescaling
+    dT_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dT(k)
+    dS_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dS(k)
+    dT_to_dColHt(k) = dMass * dSV_dT(k)
+    dS_to_dColHt(k) = dMass * dSV_dS(k)
 
-    pres(K+1) = pres(K) + dPres
-    pres_Z(K+1) = US%Z_to_m * pres(K+1)
+    pres_Z(K+1) = pres_Z(K) + dPres
   enddo
 
   ! Determine the total thickness (h_sum) and the fractional distance from the bottom (hb_hs).
@@ -854,7 +851,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
 
       !/ Here we get MStar, which is the ratio of convective TKE driven mixing to UStar**3
       if (CS%Use_LT) then
-        call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess), US%s_to_T*u_star_mean, i, j, &
+        call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, &
                                  H=h, U_H=u, V_H=v, Waves=Waves)
         call find_mstar(CS, US, B_flux, u_star, u_star_Mean, MLD_Guess, absf, &
                         MStar_total, Langmuir_Number=La, Convect_Langmuir_Number=LAmod,&
@@ -2253,7 +2250,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'm', conversion=US%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'm s-1', conversion=US%Z_to_m)
+      Time, 'Velocity Scale that is used.', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'Total mstar that is used.', 'nondim')
   CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
