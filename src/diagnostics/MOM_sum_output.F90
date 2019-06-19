@@ -818,7 +818,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     endif
 
     if (CS%use_temperature) then
-      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES18.12, &
+      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, &
                                &", CFL ", F8.5, ", SL ",&
                                &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
                                &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
@@ -826,7 +826,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
             -H_0APE(1), mass_tot, salin, temp, mass_anom/mass_tot, salin_anom, &
             temp_anom
     else
-      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES18.12, &
+      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, &
                                 &", CFL ", F8.5, ", SL ",&
                                   &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
             trim(n_str), trim(day_str), CS%ntrunc, En_mass, max_CFL(1), &
