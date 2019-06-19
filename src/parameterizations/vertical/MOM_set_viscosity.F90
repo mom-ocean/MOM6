@@ -81,6 +81,9 @@ type, public :: set_visc_CS ; private
   real    :: omega_frac     !<   When setting the decay scale for turbulence, use
                             !! this fraction of the absolute rotation rate blended
                             !! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
+                            !! answers from the end of 2018.  Otherwise, use updated and more robust
+                            !! forms of the same expressions.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   type(ocean_OBC_type), pointer :: OBC => NULL() !< Open boundaries control structure
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -770,18 +773,19 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
            !  dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = max(vol-Vol_0, 0.0)
 
-           !### The following code is more robust when GV%Angstrom_H=0, but it
-           !### changes answers.
-           !   Vol_tol = max(0.5*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
-           !   Vol_quit = max(0.9*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
+             ! The following code is more robust when GV%Angstrom_H=0, but it changes answers.
+             if (.not.CS%answers_2018) then
+               Vol_tol = max(0.5*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
+               Vol_quit = max(0.9*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
+             endif
 
-           !   if (dVol <= 0.0) then
-           !     L(K) = L0
-           !     Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
-           !   elseif (a*a*dVol**3 < Vol_tol*dV_dL2**2 * &
-           !                     (dV_dL2*Vol_tol - 2.0*a*L0*dVol)) then
-              if (a*a*dVol**3 < GV%Angstrom_H*dV_dL2**2 * &
-                                (0.25*dV_dL2*GV%Angstrom_H - a*L0*dVol)) then
+              if ((.not.CS%answers_2018) .and. (dVol <= 0.0)) then
+                L(K) = L0
+                Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
+              elseif ( ((.not.CS%answers_2018) .and. &
+                  (a*a*dVol**3 < Vol_tol*dV_dL2**2 *(dV_dL2*Vol_tol - 2.0*a*L0*dVol))) .or. &
+                  (CS%answers_2018 .and. (a*a*dVol**3 < GV%Angstrom_H*dV_dL2**2 * &
+                                          (0.25*dV_dL2*GV%Angstrom_H - a*L0*dVol) )) ) then
                 ! One iteration of Newton's method should give an estimate
                 ! that is accurate to within Vol_tol.
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
@@ -1811,6 +1815,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
   differential_diffusion = .false.
+  call get_param(param_file, mdl, "SET_VISC_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=.true.)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
                  "law of the form c_drag*|u|*u. The velocity magnitude "//&
