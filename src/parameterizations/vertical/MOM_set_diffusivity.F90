@@ -113,6 +113,9 @@ type, public :: set_diffusivity_CS ; private
   real :: ML_rad_coeff        !< coefficient, which scales MSTAR*USTAR^3 to
                               !! obtain energy available for mixing below
                               !! mixed layer base [nondim]
+  logical :: ML_rad_bug       !< If true use code with a bug that reduces the energy available
+                              !! in the transition layer by a factor of the inverse of the energy
+                              !! deposition lenthscale (in m).
   logical :: ML_rad_TKE_decay !< If true, apply same exponential decay
                               !! to ML_rad as applied to the other surface
                               !! sources of TKE in the mixed layer code.
@@ -142,6 +145,10 @@ type, public :: set_diffusivity_CS ; private
   real    :: Max_Rrho_salt_fingers      !< max density ratio for salt fingering
   real    :: Max_salt_diff_salt_fingers !< max salt diffusivity for salt fingers [Z2 T-1 ~> m2 s-1]
   real    :: Kv_molecular               !< molecular visc for double diff convect [Z2 T-1 ~> m2 s-1]
+
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
+                            !! answers from the end of 2018.  Otherwise, use updated and more robust
+                            !! forms of the same expressions.
 
   character(len=200) :: inputdir !< The directory in which input files are found
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL() !< Control structure for a child module
@@ -667,8 +674,8 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
                       ! above or below [Z ~> m].
   real :: dRho_lay    ! density change across a layer [kg m-3]
   real :: Omega2      ! rotation rate squared [T-2 ~> s-2]
-  real :: G_Rho0      ! gravitation accel divided by Bouss ref density [m4 T-2 kg-1 -> m4 s-2 kg-1]
-  real :: G_IRho0     ! ### Alternate calculation of G_Rho0 for reproducibility
+  real :: G_Rho0      ! gravitation accel divided by Bouss ref density [Z m3 T-2 kg-1 -> m4 s-2 kg-1]
+  real :: G_IRho0     ! Alternate calculation of G_Rho0 for reproducibility [Z m3 T-2 kg-1 -> m4 s-2 kg-1]
   real :: I_Rho0      ! inverse of Boussinesq reference density [m3 kg-1]
   real :: I_dt        ! 1/dt [T-1]
   real :: H_neglect   ! negligibly small thickness [H ~> m or kg m-2]
@@ -681,12 +688,13 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   I_dt      = 1.0 / dt
   Omega2    = CS%omega**2
   H_neglect = GV%H_subroundoff
-  ! ### G_Rho0 and G_IRho0 are mathematically identical but give different
-  !     numerical values.  We compute both values for now, but they should be
-  !     consolidated at some point.
   G_Rho0    = (GV%g_Earth * US%m_to_Z**2 * US%T_to_s**2) / GV%Rho0
-  I_Rho0    = 1.0 / GV%Rho0
-  G_IRho0 = (GV%g_Earth * US%m_to_Z**2 * US%T_to_s**2) * I_Rho0
+  if (CS%answers_2018) then
+    I_Rho0    = 1.0 / GV%Rho0
+    G_IRho0 = (GV%g_Earth * US%m_to_Z**2 * US%T_to_s**2) * I_Rho0
+  else
+    G_IRho0 = G_Rho0
+  endif
 
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
@@ -1584,14 +1592,23 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
       dzL = GV%H_to_Z*h(i,j,k) ;  z1 = dzL*I_decay(i)
-      if (z1 > 1e-5) then
-        !### I think that this might be dimensionally inconsistent, but untested. -RWH
-        Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * & ! Units of Z2 T-1 ?
-                 US%m_to_Z * ((1.0 - exp(-z1)) / dzL)  ! Units of m-1 ?
+      if (CS%ML_Rad_bug) then
+        !### These expresssions are dimensionally inconsistent. -RWH
+        ! This is supposed to be the integrated energy deposited in the layer,
+        ! not the average over the layer as in these expressions.
+        if (z1 > 1e-5) then
+          Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * & ! Units of Z2 T-1
+                   US%m_to_Z * ((1.0 - exp(-z1)) / dzL)  ! Units of m-1
+        else
+          Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &  ! Units of Z2 T-1
+                   US%m_to_Z * (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1))) ! Units of m-1
+        endif
       else
-        !### I think that this might be dimensionally inconsistent, but untested. -RWH
-        Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &  ! Units of Z2 T-1 ?
-                 US%m_to_Z * (I_decay(i) * (1.0 - z1 * (0.5 - C1_6*z1))) ! Units of m-1 ?
+        if (z1 > 1e-5) then
+          Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * (1.0 - exp(-z1))
+        else
+          Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * (z1 * (1.0 - z1 * (0.5 - C1_6*z1)))
+        endif
       endif
       Kd_mlr = min(Kd_mlr, CS%ML_rad_kd_max)
       Kd_lay(i,j,k) = Kd_lay(i,j,k) + Kd_mlr
@@ -1916,6 +1933,11 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5, scale=US%T_to_s)
 
+  call get_param(param_file, mdl, "SET_DIFF_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=.true.)
+
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&
                  "work to penetrate below the base of the mixed layer "//&
@@ -1931,6 +1953,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "depth for turbulence below the base of the mixed layer. "//&
                  "This is only used if ML_RADIATION is true.", units="nondim", &
                  default=0.2)
+    call get_param(param_file, mdl, "ML_RAD_BUG", CS%ML_rad_bug, &
+                 "If true use code with a bug that reduces the energy available "//&
+                 "in the transition layer by a factor of the inverse of the energy "//&
+                 "deposition lenthscale (in m).", default=.true.)
     call get_param(param_file, mdl, "ML_RAD_KD_MAX", CS%ML_rad_kd_max, &
                  "The maximum diapycnal diffusivity due to turbulence "//&
                  "radiated from the base of the mixed layer. "//&

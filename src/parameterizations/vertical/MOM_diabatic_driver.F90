@@ -1561,14 +1561,10 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   if (CS%use_CVMix_conv) then
     call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml)
 
-    !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !### The vertical extent here is more limited that Kv_slow or Kd_int; it might be k=1,nz+1.
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,K) = Kd_int(i,j,K) + US%T_to_s * CS%CVMix_conv_csp%kd_conv(i,j,k)
-      visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
+    do K=1,nz+1 ; do j=js,je ; do i=is,ie
+      Kd_int(i,j,K) = Kd_int(i,j,K) + US%T_to_s * CS%CVMix_conv_csp%kd_conv(i,j,K)
+      visc%Kv_slow(i,j,K) = visc%Kv_slow(i,j,K) + CS%CVMix_conv_csp%kv_conv(i,j,K)
     enddo ; enddo ; enddo
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
   endif
 
   if (CS%useKPP) then
