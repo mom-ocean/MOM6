@@ -535,7 +535,7 @@ subroutine carry_overflow(int_sum, prec_error)
   ! This subroutine handles carrying of the overflow.
   integer :: i, num_carry
 
-  do i=ni,2,-1 ; if (abs(int_sum(i)) > prec) then
+  do i=ni,2,-1 ; if (abs(int_sum(i)) >= prec) then
     num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
@@ -559,7 +559,7 @@ subroutine regularize_ints(int_sum)
   logical :: positive
   integer :: i, num_carry
 
-  do i=ni,2,-1 ; if (abs(int_sum(i)) > prec) then
+  do i=ni,2,-1 ; if (abs(int_sum(i)) >= prec) then
     num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry

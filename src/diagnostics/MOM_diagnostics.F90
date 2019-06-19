@@ -1128,8 +1128,17 @@ subroutine calculate_derivs(dt, G, CS)
   if (dt > 0.0) then ; Idt = 1.0/dt
   else ; return ; endif
 
+  ! Because the field is unknown, its grid index bounds are also unknown.
+  ! Additionally, two of the fields (dudt, dvdt) require calculation of spatial
+  ! derivatives when computing d(KE)/dt.  This raises issues in non-symmetric
+  ! mode, where the symmetric boundaries (west, south) may not be updated.
+
+  ! For this reason, we explicitly loop from isc-1:iec and jsc-1:jec, in order
+  ! to force boundary value updates, even though it may not be strictly valid
+  ! for all fields.  Note this assumes a halo, and that it has been updated.
+
   do m=1,CS%num_time_deriv
-    do k=1,CS%nlay(m) ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    do k=1,CS%nlay(m) ; do j=G%jsc-1,G%jec ; do i=G%isc-1,G%iec
       CS%deriv(m)%p(i,j,k) = (CS%var_ptr(m)%p(i,j,k) - CS%prev_val(m)%p(i,j,k)) * Idt
       CS%prev_val(m)%p(i,j,k) = CS%var_ptr(m)%p(i,j,k)
     enddo ; enddo ; enddo
