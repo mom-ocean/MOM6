@@ -7,7 +7,7 @@ use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_remap_grids
-use MOM_domains,       only : pass_var
+use MOM_domains,       only : pass_var, To_West, To_South, Omit_Corners
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
@@ -750,6 +750,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
+  if (CS%id_uhml > 0 .or. CS%id_vhml > 0) &
+    ! Remapped uhml and vhml require east/north halo updates of h
+    call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
   call diag_update_remap_grids(CS%diag)
 
   ! Offer diagnostic fields for averaging.
