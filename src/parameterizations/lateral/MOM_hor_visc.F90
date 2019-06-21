@@ -386,20 +386,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   use_MEKE_Ku = associated(MEKE%Ku)
   use_MEKE_Au = associated(MEKE%Au)
 
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
-!$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
-!$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
-!$OMP                                  use_MEKE_Au, MEKE, hq,                         &
-!$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
-!$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &
-!$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
-!$OMP                                  sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
-!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
-!$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
-!$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
-!$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
-
   do j=js,je ; do i=is,ie
     boundary_mask(i,j) = (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
   enddo ; enddo
@@ -480,6 +466,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
   endif ! use_GME
 
+  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
+  !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
+  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
+  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
+  !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
+  !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
+  !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &
+  !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
+  !$OMP                                  sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
+  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
+  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
+  !$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
+  !$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal
