@@ -63,8 +63,10 @@ type, public :: thickness_diffuse_CS ; private
                                  !! with GME closure.
   logical :: MEKE_GEOMETRIC      !< If true, uses the GM coefficient formulation from the GEOMETRIC
                                  !! framework (Marshall et al., 2012)
-  real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of
+  real    :: MEKE_GEOMETRIC_alpha!< The nondimensional coefficient governing the efficiency of
                                  !! the GEOMETRIC thickness difussion [nondim]
+  real    :: MEKE_GEOMETRIC_epsilon !< Minimum Eady growth rate for the GEOMETRIC thickness
+                                 !! diffusivity [s-1].
   logical :: Use_KH_in_MEKE      !< If true, uses the thickness diffusivity calculated here to diffuse MEKE.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
@@ -144,7 +146,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [m2 s-1]
-  real :: epsilon
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -176,7 +177,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     cg1 => null()
   endif
 
-  epsilon = 1.e-6
 
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
   do j=js,je ; do I=is-1,ie
@@ -216,7 +216,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (CS%MEKE_GEOMETRIC) then
       do j=js,je ; do I=is-1,ie
         Khth_Loc_u(I,j) = Khth_Loc_u(I,j) +  G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
-                          (VarMix%SN_u(I,j) + epsilon)
+                          (VarMix%SN_u(I,j) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
       do j=js,je ; do I=is-1,ie
@@ -294,7 +294,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (CS%MEKE_GEOMETRIC) then
       do j=js-1,je ; do I=is,ie
         Khth_Loc(I,j) = Khth_Loc(I,j) +  G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
-                     (VarMix%SN_v(i,J) + epsilon)
+                     (VarMix%SN_v(i,J) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
       do J=js-1,je ; do i=is,ie
@@ -362,7 +362,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (CS%MEKE_GEOMETRIC) then
       do j=js,je ; do I=is,ie
         MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
-                         (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)+VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1)) + epsilon)
+                       (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)+VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1)) + &
+                       CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     endif
   endif ; endif
@@ -1923,9 +1924,17 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
                  "If true, uses the GM coefficient formulation \n"//&
                  "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
-  call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
+  if (CS%MEKE_GEOMETRIC) then
+
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC_EPSILON", CS%MEKE_GEOMETRIC_epsilon, &
+                 "Minimum Eady growth rate used in the calculation of \n"//&
+                 "GEOMETRIC thickness diffusivity.", units="s-1", default=1.0e-7)
+
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
                  "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
                  "thickness diffusion.", units="nondim", default=0.05)
+  endif
+
   call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &
                  "If true, uses the thickness diffusivity calculated here to diffuse \n"//&
                  "MEKE.", default=.false.)
