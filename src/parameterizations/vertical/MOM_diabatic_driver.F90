@@ -304,14 +304,14 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                  ! [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivatives of specific volume with temperature
     dSV_dS, &    ! and salinity in [m3 kg-1 degC-1] and [m3 kg-1 ppt-1].
-    cTKE,   &    ! convective TKE requirements for each layer [J/m^2].
+    cTKE,   &    ! convective TKE requirements for each layer [kg m-3 Z3 T-2 ~> J m-2].
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [m s-1]
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux [Z2 s-3 ~> m2 s-3], used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -330,7 +330,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 s-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 s-1 ~> m2 s-1]
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1]
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     eta, &      ! Interface heights before diapycnal mixing [m].
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
@@ -737,7 +737,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     endif
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
-    call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
+    call energetic_PBL(h, u_h, v_h, tv, fluxes, US%s_to_T*dt, Kd_ePBL, G, GV, US, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
@@ -754,11 +754,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     do K=2,nz ; do j=js,je ; do i=is,ie
       !### These expressesions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
-        Kd_add_here = Kd_ePBL(i,j,K)
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
+        Kd_add_here = US%s_to_T*Kd_ePBL(i,j,K)
+        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + US%s_to_T*Kd_ePBL(i,j,K)
       else
-        Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
+        Kd_add_here = max(US%s_to_T*Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
+        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), US%s_to_T*Kd_ePBL(i,j,K))
       endif
 
       Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
@@ -771,7 +771,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       call hchksum(eb_t, "after ePBL eb_t",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(ea_s, "after ePBL ea_s",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(eb_s, "after ePBL eb_s",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z_to_m**2)
+      call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%s_to_T*US%Z_to_m**2)
     endif
 
   else
@@ -1158,7 +1158,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
                  ! [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
     dSV_dS, &    ! The partial derivative of specific volume with salinity [m3 kg-1 ppt-1].
-    cTKE,   &    ! convective TKE requirements for each layer [J m-2].
+    cTKE,   &    ! convective TKE requirements for each layer [kg m-3 Z3 T-2 ~> J m-2].
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [m s-1]
 
@@ -1167,7 +1167,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
-    SkinBuoyFlux! 2d surface buoyancy flux [m2 s-3], used by ePBL
+    SkinBuoyFlux! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -1186,7 +1186,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     Kd_int,   & ! diapycnal diffusivity of interfaces [Z2 T-1 ~> m2 s-1]
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 s-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 s-1 ~> m2 s-1]
-    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1]
+    Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
     eta, &      ! Interface heights before diapycnal mixing [m].
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
@@ -1627,7 +1627,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 !$OMP                          private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea(i,j,k) = (GV%Z_to_H**2) * dt * hval * (US%s_to_T * Kd_int(i,j,K))
+      ea(i,j,k) = (GV%Z_to_H**2) * US%s_to_T*dt * hval * Kd_int(i,j,K)
       eb(i,j,k-1) = ea(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
@@ -1641,7 +1641,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call cpu_clock_begin(id_clock_entrain)
     ! Calculate appropriately limited diapycnal mass fluxes to account
     ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
-    call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS%entrain_diffusive_CSp, &
+    call Entrainment_diffusive(h, tv, fluxes, US%s_to_T*dt, G, GV, US, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_lay=Kd_lay, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
     if (showCallTree) call callTree_waypoint("done with Entrainment_diffusive (diabatic)")
@@ -1690,7 +1690,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       endif
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
-      call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
+      call energetic_PBL(h, u_h, v_h, tv, fluxes, US%s_to_T*dt, Kd_ePBL, G, GV, US, &
            CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
@@ -1704,11 +1704,11 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       do K=2,nz ; do j=js,je ; do i=is,ie
 
         if (CS%ePBL_is_additive) then
-          Kd_add_here = Kd_ePBL(i,j,K)
-          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
+          Kd_add_here = US%s_to_T*Kd_ePBL(i,j,K)
+          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + US%s_to_T*Kd_ePBL(i,j,K)
         else
-          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
+          Kd_add_here = max(US%s_to_T*Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
+          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), US%s_to_T*Kd_ePBL(i,j,K))
         endif
         Ent_int = Kd_add_here * (GV%Z_to_H**2 * dt) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
@@ -1725,7 +1725,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       if (CS%debug) then
         call hchksum(ea, "after ePBL ea",G%HI,haloshift=0, scale=GV%H_to_m)
         call hchksum(eb, "after ePBL eb",G%HI,haloshift=0, scale=GV%H_to_m)
-        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z_to_m**2)
+        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL", G%HI, haloshift=0, scale=US%Z_to_m**2*US%s_to_T)
       endif
 
     else
@@ -2995,7 +2995,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Total diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   if (CS%use_energetic_PBL) then
       CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
-          'ePBL diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z_to_m**2)
+          'ePBL diapycnal diffusivity at interfaces', 'm2 s-1', conversion=US%Z_to_m**2*US%s_to_T)
   endif
 
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &

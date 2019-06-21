@@ -37,7 +37,7 @@ type, public :: energetic_PBL_CS ; private
   !/ Constants
   real    :: VonKar = 0.41   !<   The von Karman coefficient.  This should be runtime, but because
                              !!  it is runtime in KPP and set to 0.4 it might change answers.
-  real    :: omega           !<   The Earth's rotation rate [s-1].
+  real    :: omega           !<   The Earth's rotation rate [T-1].
   real    :: omega_frac      !<   When setting the decay scale for turbulence, use this fraction of
                              !!  the absolute rotation rate blended with the local value of f, as
                              !!  sqrt((1-of)*f^2 + of*4*omega^2) [nondim].
@@ -61,7 +61,7 @@ type, public :: energetic_PBL_CS ; private
   real    :: MKE_to_TKE_effic !< The efficiency with which mean kinetic energy released by
                              !!  mechanically forced entrainment of the mixed layer is converted to
                              !!  TKE [nondim].
-  real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems [Z s-1 ~> m s-1].
+  real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems [Z T-1 ~> m s-1].
                              !! If the value is small enough, this should not affect the solution.
   real    :: Ekman_scale_coef !< A nondimensional scaling factor controlling the inhibition of the
                              !! diffusive length scale by rotation.  Making this larger decreases
@@ -183,7 +183,7 @@ type, public :: energetic_PBL_CS ; private
     LA_MOD             !< Modified Langmuir number [nondim]
 
   real, allocatable, dimension(:,:,:) :: &
-    Velocity_Scale, & !< The velocity scale used in getting Kd [Z s-1 ~> m s-1]
+    Velocity_Scale, & !< The velocity scale used in getting Kd [Z T-1 ~> m s-1]
     Mixing_Length     !< The length scale used in getting Kd [Z ~> m]
   !>@{ Diagnostic IDs
   integer :: id_ML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
@@ -239,7 +239,7 @@ contains
 !!  have already been applied.  All calculations are done implicitly, and there
 !!  is no stability limit on the time step.
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS, &
-                         dSV_dT, dSV_dS, TKE_forced, Buoy_Flux, dt_diag, last_call, &
+                         dSV_dT, dSV_dS, TKE_forced, buoy_flux, dt_diag, last_call, &
                          dT_expected, dS_expected, Waves )
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
@@ -261,23 +261,24 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                                                    !! volume with salinity [m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: TKE_forced !< The forcing requirements to homogenize the
-                                                   !! forcing that has been applied to each layer [J m-2].
+                                                   !! forcing that has been applied to each layer
+                                                   !! [kg m-3 Z3 T-2 ~> J m-2].
   type(thermo_var_ptrs),   intent(inout) :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
   type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to any
                                                    !! possible forcing fields. Unused fields have
                                                    !! NULL ptrs.
-  real,                    intent(in)    :: dt     !< Time increment [s].
+  real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces
                                                    !! [Z2 s-1 ~> m2 s-1].
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to mixedlayer_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)    :: Buoy_Flux !< The surface buoyancy flux [Z2 s-3 ~> m2 s-3].
+                           intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
   real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
-                                                   !! than dt if there are two calls to mixedlayer [s].
+                                                   !! than dt if there are two calls to mixedlayer [T ~> s].
   logical,       optional, intent(in)    :: last_call !< If true, this is the last call to
                                                    !! mixedlayer in the current time step, so
                                                    !! diagnostics will be written. The default
@@ -350,7 +351,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: MLD_io    ! The mixed layer depth found by ePBL_column [Z ~> m].
 
 ! The following are only used for diagnostics.
-  real :: dt__diag  ! A copy of dt_diag (if present) or dt [s].
+  real :: dt__diag  ! A copy of dt_diag (if present) or dt [T ~> s].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
 
@@ -406,7 +407,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = u_3d(i,j,k) ; v_2d(i,k) = v_3d(i,j,k)
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
-      TKE_forced_2d(i,k) = (US%m_to_Z**3 * US%T_to_s**2) * TKE_forced(i,j,k)
+      TKE_forced_2d(i,k) = TKE_forced(i,j,k)
       dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = dSV_dS(i,j,k)
     enddo ; enddo
 
@@ -429,7 +430,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       ! Make local copies of surface forcing and process them.
       u_star = US%T_to_s*fluxes%ustar(i,j)
       u_star_Mean = US%T_to_s*fluxes%ustar_gustless(i,j)
-      B_flux = US%T_to_s**3*buoy_flux(i,j)
+      B_flux = buoy_flux(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           u_star = (1.0 - fluxes%frac_shelf_h(i,j)) * u_star + &
@@ -450,7 +451,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       if (CS%MLD_iteration_guess .and. (CS%ML_Depth(i,j) > 0.0))  MLD_io = CS%ML_Depth(i,j)
 
       call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
-                       u_star, u_star_mean, dt*US%s_to_T, MLD_io, Kd, mixvel, mixlen, GV, &
+                       u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
                        US, CS, eCD, dt_diag=dt_diag, Waves=Waves, G=G, i=i, j=j)
 
 
@@ -490,9 +491,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       if (allocated(CS%La_mod)) CS%La_mod(i,j) = eCD%LAmod
     else ! End of the ocean-point part of the i-loop
       ! For masked points, Kd_int must still be set (to 0) because it has intent out.
-      do K=1,nz+1
-        Kd_2d(i,K) = 0.
-      enddo
+      do K=1,nz+1 ; Kd_2d(i,K) = 0. ; enddo
       CS%ML_depth(i,j) = 0.0
 
       if (present(dT_expected)) then
@@ -503,9 +502,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       endif
     endif ; enddo ! Close of i-loop - Note unusual loop order!
 
-    do K=1,nz+1 ; do i=is,ie
-      Kd_int(i,j,K) = US%s_to_T * Kd_2d(i,K)
-    enddo ; enddo
+    do K=1,nz+1 ; do i=is,ie ; Kd_int(i,j,K) = Kd_2d(i,K) ; enddo ; enddo
 
   enddo ! j-loop
 
@@ -567,17 +564,17 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZK_(GV)+1), &
                            intent(out)   :: Kd     !< The diagnosed diffusivities at interfaces
-                                                   !! [Z2 s-1 ~> m2 s-1].
+                                                   !! [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
                            intent(out)   :: mixvel !< The mixing velocity scale used in Kd
-                                                   !! [Z s-1 ~> m s-1].
+                                                   !! [Z T-1 ~> m s-1].
   real, dimension(SZK_(GV)+1), &
                            intent(out)   :: mixlen !< The mixing length scale used in Kd [Z ~> m].
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to mixedlayer_init.
   type(ePBL_column_diags), intent(inout) :: eCD    !< A container for passing around diagnostics.
   real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
-                                                   !! than dt if there are two calls to mixedlayer [s].
+                                                   !! than dt if there are two calls to mixedlayer [T ~> s].
   type(wave_parameters_CS), &
                  optional, pointer       :: Waves  !< Wave CS for Langmuir turbulence
   type(ocean_grid_type), &
@@ -672,7 +669,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     ! the MKE conversion equation [H-1 ~> m-1 or m2 kg-1].
 
   real :: dt_h      ! The timestep divided by the averages of the thicknesses around
-                    ! a layer, times a thickness conversion factor [H s m-2 ~> s m-1 or kg s m-4].
+                    ! a layer, times a thickness conversion factor [H T m-2 ~> s m-1 or kg s m-4].
   real :: h_bot     ! The distance from the bottom [H ~> m or kg m-2].
   real :: h_rsum    ! The running sum of h from the top [Z ~> m].
   real :: I_hs      ! The inverse of h_sum [H-1 ~> m-1 or m2 kg-1].
@@ -788,7 +785,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   h_neglect = GV%H_subroundoff
 
   C1_3 = 1.0 / 3.0
-  dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag * US%s_to_T
+  dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   I_dtdiag = 1.0 / dt__diag
   max_itt = 20
 
