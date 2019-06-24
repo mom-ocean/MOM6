@@ -600,7 +600,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                                                                     !!       [Z2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP
                                                                     !! (out) Vertical viscosity including KPP
-                                                                    !!       [Z2 s-1 ~> m2 s-1]
+                                                                    !!       [Z2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport [m s-1]
 
@@ -683,9 +683,9 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt [m2 s-1]
          Kviscosity(:)     = 0. ! Viscosity [m2 s-1]
       else
-         Kdiffusivity(:,1) = US%Z_to_m**2*US%T_to_s * Kt(i,j,:)
-         Kdiffusivity(:,2) = US%Z_to_m**2*US%T_to_s * Ks(i,j,:)
-         Kviscosity(:) = US%Z_to_m**2 * Kv(i,j,:)
+         Kdiffusivity(:,1) = US%Z2_T_to_m2_s * Kt(i,j,:)
+         Kdiffusivity(:,2) = US%Z2_T_to_m2_s * Ks(i,j,:)
+         Kviscosity(:) = US%Z2_T_to_m2_s * Kv(i,j,:)
       endif
 
       call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity [m2 s-1]
@@ -830,15 +830,15 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
           do k=1, G%ke+1
             Kt(i,j,k) = Kt(i,j,k) + US%m2_s_to_Z2_T * Kdiffusivity(k,1)
             Ks(i,j,k) = Ks(i,j,k) + US%m2_s_to_Z2_T * Kdiffusivity(k,2)
-            Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2 * Kv(i,j,k)
+            Kv(i,j,k) = Kv(i,j,k) + US%m2_s_to_Z2_T * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2*US%s_to_T * Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
             if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = US%m2_s_to_Z2_T * Kdiffusivity(k,1)
             if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = US%m2_s_to_Z2_T * Kdiffusivity(k,2)
-            if (Kviscosity(k) /= 0.) Kv(i,j,k) = US%m_to_Z**2 * Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2 * Kv(i,j,k)
+            if (Kviscosity(k) /= 0.) Kv(i,j,k) = US%m2_s_to_Z2_T * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2*US%s_to_T * Kv(i,j,k)
           enddo
         endif
       endif

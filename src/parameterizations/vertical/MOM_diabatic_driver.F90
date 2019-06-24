@@ -755,10 +755,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
       !### These expressesions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
         Kd_add_here = Kd_ePBL(i,j,K)
-        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + US%s_to_T*Kd_ePBL(i,j,K)
+        visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
       else
         Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), US%s_to_T*Kd_ePBL(i,j,K))
+        visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
       endif
 
       Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_add_here
@@ -1705,10 +1705,10 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
         if (CS%ePBL_is_additive) then
           Kd_add_here = Kd_ePBL(i,j,K)
-          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + US%s_to_T*Kd_ePBL(i,j,K)
+          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
         else
           Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
-          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), US%s_to_T*Kd_ePBL(i,j,K))
+          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
         endif
         Ent_int = Kd_add_here * (GV%Z_to_H**2 * US%s_to_T*dt) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)

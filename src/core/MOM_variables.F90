@@ -247,13 +247,13 @@ type, public :: vertvisc_type
                 !! in tracer columns [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
-                !! in tracer columns [Z2 s-1 ~> m2 s-1].
+                !! in tracer columns [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kv_shear_Bu => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers in
-                !! corner columns [Z2 s-1 ~> m2 s-1].
+                !! corner columns [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc) [Z2 s-1 ~> m2 s-1].
+                !! background, convection etc) [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces [m2 s-2].
                 !! This may be at the tracer or corner points

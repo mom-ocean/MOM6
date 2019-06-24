@@ -1074,7 +1074,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     kv_tbl, &   ! The viscosity in a top boundary layer under ice [Z2 s-1 ~> m2 s-1].
     tbl_thick
   real, dimension(SZIB_(G),SZK_(GV)) :: &
-    Kv_add      ! A viscosity to add [Z2 s-1 ~> m2 s-1].
+    Kv_add      ! A viscosity to add [Z2 T-1 ~> m2 s-1].
   real :: h_shear ! The distance over which shears occur [H ~> m or kg m-2].
   real :: r       ! A thickness to compare with Hbbl [H ~> m or kg m-2].
   real :: visc_ml ! The mixed layer viscosity [Z2 s-1 ~> m2 s-1].
@@ -1157,7 +1157,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        a_cpl(i,K) = a_cpl(i,K) + US%s_to_T*Kv_add(i,K)
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
@@ -1173,7 +1173,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        a_cpl(i,K) = a_cpl(i,K) + US%s_to_T*Kv_add(i,K)
       endif ; enddo ; enddo
     endif
   endif
@@ -1181,11 +1181,11 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(visc%Kv_shear_Bu)) then
     if (work_on_u) then
       do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
-        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*(US%s_to_T*visc%Kv_shear_Bu(I,J-1,k) + US%s_to_T*visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
+        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*(US%s_to_T*visc%Kv_shear_Bu(I-1,J,k) + US%s_to_T*visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     endif
   endif
@@ -1195,19 +1195,19 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+        Kv_add(I,K) = Kv_add(I,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(I,K) = Kv_add(I,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(I,K) = Kv_add(I,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        a_cpl(I,K) = a_cpl(I,K) + US%s_to_T*Kv_add(I,K)
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
@@ -1224,7 +1224,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        a_cpl(i,K) = a_cpl(i,K) + US%s_to_T*Kv_add(i,K)
       endif ; enddo ; enddo
     endif
   endif
@@ -1735,7 +1735,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
-     'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z_to_m**2)
+     'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
      'Total vertical viscosity at u-points', 'm2 s-1', conversion=US%Z_to_m**2)
