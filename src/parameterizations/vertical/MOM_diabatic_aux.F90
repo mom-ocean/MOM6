@@ -216,7 +216,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
                                                  !! available thermodynamic fields.
   type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                  !! boundary layer properies, and related fields.
-  real,                    intent(in)    :: dt   !<  Time increment [s].
+  real,                    intent(in)    :: dt   !<  Time increment [T ~> s].
 
   ! local variables
   real, dimension(SZI_(G)) :: &
@@ -235,7 +235,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   real :: b_denom_T    ! The first term in the denominators for the expressions
   real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
   real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
-  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities [Z2 s-1 ~> m2 s-1].
+  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities [Z2 T-1 ~> m2 s-1].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

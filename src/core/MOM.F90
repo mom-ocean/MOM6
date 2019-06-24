@@ -2634,7 +2634,11 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, &
                               "Height unit conversion factor", "Z meter-1")
   call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, &
-                              "Thickness unit conversion factor", "Z meter-1")
+                              "Thickness unit conversion factor", "H meter-1")
+  call register_restart_field(US%m_to_Z_restart, "m_to_L", .false., restart_CSp, &
+                              "Length unit conversion factor", "L meter-1")
+  call register_restart_field(US%s_to_T_restart, "s_to_T", .false., restart_CSp, &
+                              "Time unit conversion factor", "T second-1")
 
 end subroutine set_restart_fields
 

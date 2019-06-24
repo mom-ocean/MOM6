@@ -109,7 +109,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [Pa] (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
-                                                   !! (not layer!) [Z2 s-1 ~> m2 s-1].  Initially this is the
+                                                   !! (not layer!) [Z2 T-1 ~> m2 s-1].  Initially this is the
                                                    !! value from the previous timestep, which may
                                                    !! accelerate the iteration toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
@@ -299,7 +299,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       if (new_kappa) then
         do K=1,nzc+1 ; kappa(K) = US%m_to_Z**2*1.0 ; enddo
       else
-        do K=1,nzc+1 ; kappa(K) = kappa_2d(i,K) ; enddo
+        do K=1,nzc+1 ; kappa(K) = US%s_to_T*kappa_2d(i,K) ; enddo
       endif
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
@@ -310,18 +310,18 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     ! Extrapolate from the vertically reduced grid back to the original layers.
       if (nz == nzc) then
         do K=1,nz+1
-          kappa_2d(i,K) = kappa_avg(K)
+          kappa_2d(i,K) = US%T_to_s*kappa_avg(K)
           !### Should this be tke_avg?
           tke_2d(i,K) = tke(K)
         enddo
       else
         do K=1,nz+1
           if (kf(K) == 0.0) then
-            kappa_2d(i,K) = kappa_avg(kc(K))
+            kappa_2d(i,K) = US%T_to_s*kappa_avg(kc(K))
             tke_2d(i,K) = tke_avg(kc(K))
           else
-            kappa_2d(i,K) = (1.0-kf(K)) * kappa_avg(kc(K)) + &
-                             kf(K) * kappa_avg(kc(K)+1)
+            kappa_2d(i,K) = (1.0-kf(K)) * US%T_to_s*kappa_avg(kc(K)) + &
+                             kf(K) * US%T_to_s*kappa_avg(kc(K)+1)
             tke_2d(i,K) = (1.0-kf(K)) * tke_avg(kc(K)) + &
                            kf(K) * tke_avg(kc(K)+1)
           endif
@@ -353,7 +353,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     do K=1,nz+1 ; do i=is,ie
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
-      kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
+      kv_io(i,j,K) = ( G%mask2dT(i,j) * US%s_to_T*kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K)
       dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
@@ -363,7 +363,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   enddo ! end of j-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI, scale=US%Z_to_m**2)
+    call hchksum(kappa_io, "kappa", G%HI, scale=US%Z2_T_to_m2_s)
     call hchksum(tke_io, "tke", G%HI)
   endif
 
@@ -400,7 +400,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                                                    !! (or NULL).
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: kappa_io !< The diapycnal diffusivity at each interface
-                                                   !! (not layer!) [Z2 s-1 ~> m2 s-1].
+                                                   !! (not layer!) [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
                                                    !! each interface (not layer!) [m2 s-2].
@@ -423,7 +423,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     h_2d, &                         ! A 2-D version of h, but converted to m.
     u_2d, v_2d, T_2d, S_2d, rho_2d  ! 2-D versions of u_in, v_in, T, S, and rho.
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
-    kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 s-1 ~> m2 s-1].
+    kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     tke_2d      ! 2-D version tke_io [m2 s-2].
   real, dimension(SZK_(GV)) :: &
@@ -540,7 +540,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       rho_2d(I,k) = GV%Rlay(k)
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do I=IsB,IeB
-      kappa_2d(I,K,J2) = kv_io(I,J,K) * I_Prandtl
+      kappa_2d(I,K,J2) = US%T_to_s*kv_io(I,J,K) * I_Prandtl
     enddo ; enddo ; endif
 
 !---------------------------------------
@@ -624,7 +624,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       if (new_kappa) then
         do K=1,nzc+1 ; kappa(K) = US%m_to_Z**2*1.0 ; enddo
       else
-        do K=1,nzc+1 ; kappa(K) = kappa_2d(I,K,J2) ; enddo
+        do K=1,nzc+1 ; kappa(K) = US%s_to_T*kappa_2d(I,K,J2) ; enddo
       endif
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
@@ -635,18 +635,18 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     ! Extrapolate from the vertically reduced grid back to the original layers.
       if (nz == nzc) then
         do K=1,nz+1
-          kappa_2d(I,K,J2) = kappa_avg(K)
+          kappa_2d(I,K,J2) = US%T_to_s*kappa_avg(K)
           !### Should this be tke_avg?
           tke_2d(I,K) = tke(K)
         enddo
       else
         do K=1,nz+1
           if (kf(K) == 0.0) then
-            kappa_2d(I,K,J2) = kappa_avg(kc(K))
+            kappa_2d(I,K,J2) = US%T_to_s*kappa_avg(kc(K))
             tke_2d(I,K) = tke_avg(kc(K))
           else
-            kappa_2d(I,K,J2) = (1.0-kf(K)) * kappa_avg(kc(K)) + &
-                               kf(K) * kappa_avg(kc(K)+1)
+            kappa_2d(I,K,J2) = (1.0-kf(K)) * US%T_to_s*kappa_avg(kc(K)) + &
+                               kf(K) * US%T_to_s*kappa_avg(kc(K)+1)
             tke_2d(I,K) = (1.0-kf(K)) * tke_avg(kc(K)) + &
                            kf(K) * tke_avg(kc(K)+1)
           endif
@@ -677,7 +677,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
     do K=1,nz+1 ; do I=IsB,IeB
       tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
-      kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
+      kv_io(I,J,K) = ( G%mask2dBu(I,J) * US%s_to_T*kappa_2d(I,K,J2) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(I,J,K) = I_Ld2_2d(I,K)
       dz_Int_3d(I,J,K) = dz_Int_2d(I,K)
@@ -693,7 +693,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   enddo ! end of J-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI, scale=US%Z_to_m**2)
+    call hchksum(kappa_io, "kappa", G%HI, scale=US%Z2_T_to_m2_s)
     call Bchksum(tke_io, "tke", G%HI)
   endif
 
@@ -2123,7 +2123,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
-      'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=US%Z_to_m**2)
+      'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_TKE = register_diag_field('ocean_model','TKE_shear',diag%axesTi,Time, &
       'Shear-driven Turbulent Kinetic Energy', 'm2 s-2')
 #ifdef ADD_DIAGNOSTICS

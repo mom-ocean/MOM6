@@ -1786,7 +1786,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   real    :: Kv_background
   real    :: omega_frac_dflt
   real    :: Z_rescale  ! A rescaling factor for heights from the representation in
-                        ! a reastart fole to the internal representation in this run.
+                        ! a restart file to the internal representation in this run.
+  real    :: I_T_rescale  ! A rescaling factor for time from the internal representation in this run
+                        ! to the representation in a restart file.
   integer :: i, j, k, is, ie, js, je, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: use_kappa_shear, adiabatic, use_omega
@@ -2037,14 +2039,21 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
   call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
 
-  if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
+  if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) &
     Z_rescale = US%m_to_Z / US%m_to_Z_restart
+
+  if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= US%s_to_T)) &
+    I_T_rescale = US%s_to_T_restart / US%s_to_T
+
+  if (Z_rescale**2*I_T_rescale /= 1.0) then
     if (associated(visc%Kd_shear)) then ; if (query_initialized(visc%Kd_shear, "Kd_shear", restart_CS)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        visc%Kd_shear(i,j,k) = Z_rescale**2 * visc%Kd_shear(i,j,k)
+        visc%Kd_shear(i,j,k) = Z_rescale**2*I_T_rescale * visc%Kd_shear(i,j,k)
       enddo ; enddo ; enddo
     endif ; endif
+  endif
 
+  if (Z_rescale /= 1.0) then
     if (associated(visc%Kv_shear)) then ; if (query_initialized(visc%Kv_shear, "Kv_shear", restart_CS)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         visc%Kv_shear(i,j,k) = Z_rescale**2 * visc%Kv_shear(i,j,k)
