@@ -693,8 +693,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! Increment vertical diffusion and viscosity due to convection
     !$OMP parallel do default(shared)
     do k=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_heat(i,j,k) = Kd_heat(i,j,k) + US%T_to_s*CS%CVMix_conv_csp%kd_conv(i,j,k)
-      Kd_salt(i,j,k) = Kd_salt(i,j,k) + US%T_to_s*CS%CVMix_conv_csp%kd_conv(i,j,k)
+      Kd_heat(i,j,k) = Kd_heat(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
+      Kd_salt(i,j,k) = Kd_salt(i,j,k) + CS%CVMix_conv_csp%kd_conv(i,j,k)
       if (CS%useKPP) then
         visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + CS%CVMix_conv_csp%kv_conv(i,j,k)
       else
@@ -1562,7 +1562,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml)
 
     do K=1,nz+1 ; do j=js,je ; do i=is,ie
-      Kd_int(i,j,K) = Kd_int(i,j,K) + US%T_to_s * CS%CVMix_conv_csp%kd_conv(i,j,K)
+      Kd_int(i,j,K) = Kd_int(i,j,K) + CS%CVMix_conv_csp%kd_conv(i,j,K)
       visc%Kv_slow(i,j,K) = visc%Kv_slow(i,j,K) + CS%CVMix_conv_csp%kv_conv(i,j,K)
     enddo ; enddo ; enddo
   endif
@@ -1571,10 +1571,10 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
-      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G%HI,haloshift=0)
-      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G%HI,haloshift=0)
+      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat", G%HI, haloshift=0)
+      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar", G%HI, haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S

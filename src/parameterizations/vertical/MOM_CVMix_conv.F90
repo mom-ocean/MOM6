@@ -42,7 +42,7 @@ type, public :: CVMix_conv_cs
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:,:) :: N2      !< Squared Brunt-Vaisala frequency [s-2]
-  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection [m2 s-1]
+  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection [Z2 T-1 ~> m2 s-1]
   real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection [m2 s-1]
 
 end type CVMix_conv_cs
@@ -134,7 +134,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
-      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
+      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z2_T_to_m2_s)
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
       'Additional viscosity added by MOM_CVMix_conv module', 'm2/s', conversion=US%Z_to_m**2)
 
@@ -232,7 +232,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
 
       do K=1,G%ke+1
         CS%kv_conv(i,j,K) = US%m_to_Z**2 * kv_col(K)
-        CS%kd_conv(i,j,K) = US%m_to_Z**2 * kd_col(K)
+        CS%Kd_conv(i,j,K) = US%m2_s_to_Z2_T * kd_col(K)
       enddo
       ! Do not apply mixing due to convection within the boundary layer
       do k=1,kOBL
@@ -245,8 +245,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
 
   if (CS%debug) then
     call hchksum(CS%N2, "MOM_CVMix_conv: N2",G%HI,haloshift=0)
-    call hchksum(CS%kd_conv, "MOM_CVMix_conv: kd_conv",G%HI,haloshift=0)
-    call hchksum(CS%kv_conv, "MOM_CVMix_conv: kv_conv",G%HI,haloshift=0)
+    call hchksum(CS%kd_conv, "MOM_CVMix_conv: kd_conv",G%HI,haloshift=0,scale=US%Z2_T_to_m2_s)
+    call hchksum(CS%kv_conv, "MOM_CVMix_conv: kv_conv",G%HI,haloshift=0,scale=US%Z_to_m**2)
   endif
 
   ! send diagnostics to post_data
