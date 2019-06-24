@@ -1803,16 +1803,6 @@ subroutine ModelAdvance(gcomp, rc)
     file=__FILE__)) &
     return  ! bail out
 
-  call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
-
-  Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-  ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
-  ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
-
   ! HERE THE MODEL ADVANCES: currTime -> currTime + timeStep
 
   call ESMF_ClockPrint(clock, options="currTime", &
@@ -1835,8 +1825,7 @@ subroutine ModelAdvance(gcomp, rc)
     return  ! bail out
 
   call ESMF_TimePrint(currTime + timeStep, &
-    preString="--------------------------------> to: ", &
-    unit=msgString, rc=rc)
+    preString="--------------------------------> to: ", unit=msgString, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
     file=__FILE__)) &
@@ -1869,83 +1858,89 @@ subroutine ModelAdvance(gcomp, rc)
         do_advance = .true.
       endif
 
-      ! If the second cpl tstep of a startup run, step back a cpl tstep and advance for two cpl tsteps
-      if (currTime == startTime + timeStep) then
-        call ESMF_LogWrite("MOM6 - Stepping back one coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
-        Time = esmf2fms_time(currTime-timeStep) ! i.e., startTime
+      if (do_advance) then
+         ! If the second cpl tstep of a startup run, step back a cpl tstep and advance for two cpl tsteps
+         if (currTime == startTime + timeStep) then
+            call ESMF_LogWrite("MOM6 - Stepping back one coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
+            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                 line=__LINE__, &
+                 file=__FILE__)) &
+                 return  ! bail out
+            Time = esmf2fms_time(currTime-timeStep) ! i.e., startTime
 
-        call ESMF_LogWrite("MOM6 - doubling the coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
-        Time_step_coupled = 2 * esmf2fms_time(timeStep)
-      endif
+            call ESMF_LogWrite("MOM6 - doubling the coupling timestep", ESMF_LOGMSG_INFO, rc=rc)
+            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+                 line=__LINE__, &
+                 file=__FILE__)) &
+                 return  ! bail out
+            Time_step_coupled = 2 * esmf2fms_time(timeStep)
+         endif
+      end if
+
     endif
   endif
 
-
-  !---------------
-  ! Write diagnostics for import
-  !---------------
-
-  if(write_diagnostics) then
-    call NUOPC_Write(importState, fileNamePrefix='field_ocn_import_', &
-      timeslice=import_slice, relaxedFlag=.true., rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    import_slice = import_slice + 1
-  endif
-
-  !---------------
-  ! Get ocean grid
-  !---------------
-
-  call get_ocean_grid(ocean_state, ocean_grid)
-
-  !---------------
-  ! Import data
-  !---------------
-
-  call shr_file_setLogUnit (logunit)
-
-  if (cesm_coupled) then
-     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, runtype=runtype, rc=rc)
-  else
-     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
-  endif
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
-
-  !---------------
-  ! Update MOM6
-  !---------------
-
-  if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
   if (do_advance) then
-    call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
+
+     call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+
+     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
+     ocean_public       => ocean_internalstate%ptr%ocean_public_type_ptr
+     ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+
+     !---------------
+     ! Write diagnostics for import
+     !---------------
+
+     if (write_diagnostics) then
+        call NUOPC_Write(importState, fileNamePrefix='field_ocn_import_', &
+             timeslice=import_slice, relaxedFlag=.true., rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+             line=__LINE__, &
+             file=__FILE__)) &
+             return  ! bail out
+        import_slice = import_slice + 1
+     endif
+
+     !---------------
+     ! Get ocean grid
+     !---------------
+
+     call get_ocean_grid(ocean_state, ocean_grid)
+
+     !---------------
+     ! Import data
+     !---------------
+
+     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+
+     !---------------
+     ! Update MOM6
+     !---------------
+
+     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
+     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
+     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
+
+     !---------------
+     ! Export Data
+     !---------------
+
+     call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+
   endif
-  if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
-
-  !---------------
-  ! Export Data
-  !---------------
-
-  call mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-       line=__LINE__, &
-       file=__FILE__)) &
-       return  ! bail out
-
-  call shr_file_setLogUnit (logunit)
 
   !---------------
   ! If restart alarm is ringing - write restart file
