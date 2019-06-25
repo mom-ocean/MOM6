@@ -4,7 +4,8 @@ module MOM_diag_mediator
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,        only : chksum_general
+use MOM_checksums,        only : chksum0, zchksum
+use MOM_checksums,        only : hchksum, uchksum, vchksum, Bchksum
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
@@ -12,6 +13,7 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING, is_root_pe, assert
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
+use MOM_io,               only : get_filename_appendix
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
@@ -237,7 +239,7 @@ end type diagcs_dsamp
 type, public :: diag_ctrl
   integer :: available_diag_doc_unit = -1 !< The unit number of a diagnostic documentation file.
                                           !! This file is open if available_diag_doc_unit is > 0.
-  integer :: chksum_diag_doc_unit = -1 !< The unit number of a diagnostic documentation file.
+  integer :: chksum_iounit = -1           !< The unit number of a diagnostic documentation file.
                                           !! This file is open if available_diag_doc_unit is > 0.
   logical :: diag_as_chksum !< If true, log chksums in a text file instead of posting diagnostics
 
@@ -326,6 +328,9 @@ type, public :: diag_ctrl
   ! need the target grid for vertical remapping needs to have been updated.
   real, dimension(:,:,:), allocatable :: h_old
 #endif
+
+  !> Number of checksum-only diagnostics
+  integer :: num_chksum_diags
 
 end type diag_ctrl
 
@@ -1210,7 +1215,9 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
               'post_data_0d: Unregistered diagnostic id')
   diag => diag_cs%diags(diag_field_id)
   do while (associated(diag))
-    if (is_stat) then
+    if (diag_cs%diag_as_chksum) then
+      call chksum0(field, diag%debug_str, logunit=diag_cs%chksum_iounit)
+    else if (is_stat) then
       used = send_data(diag%fms_diag_id, field)
     elseif (diag_cs%ave_enabled) then
       used = send_data(diag%fms_diag_id, field, diag_cs%time_end)
@@ -1260,7 +1267,9 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
       locfield => field
     endif
 
-    if (is_stat) then
+    if (diag_cs%diag_as_chksum) then
+      call zchksum(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
+    else if (is_stat) then
       used = send_data(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, weight=diag_cs%time_int)
@@ -1397,9 +1406,20 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag_cs%diag_as_chksum) then
-    chksum = chksum_general(locfield)
-    if (is_root_pe()) then
-      call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
+    if (diag%axes%is_h_point) then
+      call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                   logunit=diag_cs%chksum_iounit)
+    else if (diag%axes%is_u_point) then
+      call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                   logunit=diag_cs%chksum_iounit)
+    else if (diag%axes%is_v_point) then
+      call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                   logunit=diag_cs%chksum_iounit)
+    else if (diag%axes%is_q_point) then
+      call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                   logunit=diag_cs%chksum_iounit)
+    else
+      call MOM_error(FATAL, "post_data_2d_low: unknown axis type.")
     endif
   else
     if (is_stat) then
@@ -1672,9 +1692,20 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%fms_diag_id>0) then
     if (diag_cs%diag_as_chksum) then
-      chksum = chksum_general(locfield)
-      if (is_root_pe()) then
-        call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
+      if (diag%axes%is_h_point) then
+        call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                     logunit=diag_cs%chksum_iounit)
+      else if (diag%axes%is_u_point) then
+        call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                     logunit=diag_cs%chksum_iounit)
+      else if (diag%axes%is_v_point) then
+        call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                     logunit=diag_cs%chksum_iounit)
+      else if (diag%axes%is_q_point) then
+        call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+                     logunit=diag_cs%chksum_iounit)
+      else
+        call MOM_error(FATAL, "post_data_3d_low: unknown axis type.")
       endif
     else
       if (is_stat) then
@@ -1759,8 +1790,13 @@ subroutine post_xy_average(diag_cs, diag, field)
                                          averaged_field, averaged_mask)
   endif
 
-  used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
-                   weight=diag_cs%time_int, mask=averaged_mask)
+  if (diag_cs%diag_as_chksum) then
+    call zchksum(averaged_field, trim(diag%debug_str)//'_xyave', &
+                 logunit=diag_CS%chksum_iounit)
+  else
+    used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
+                     weight=diag_cs%time_int, mask=averaged_mask)
+  endif
 end subroutine post_xy_average
 
 !> This subroutine enables the accumulation of time averages over the specified time interval.
@@ -1951,6 +1987,9 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
   !Register downsampled diagnostics
   do dl=2,MAX_DSAMP_LEV
+     ! Do not attempt to checksum the downsampled diagnostics
+     if (diag_cs%diag_as_chksum) cycle
+
      new_module_name = trim(module_name)//'_d2'
 
      if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
@@ -2154,7 +2193,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   endif
 
   ! For the CMOR variation of the above diagnostic
-  if (present(cmor_field_name)) then
+  if (present(cmor_field_name) .and. .not. diag_cs%diag_as_chksum) then
     ! Fallback values for strings set to "NULL"
     posted_cmor_units = "not provided"         !
     posted_cmor_standard_name = "not provided" ! Values might be able to be replaced with a CS%missing field?
@@ -2251,7 +2290,10 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
   volume_id = axes%id_volume
 
   ! Get the FMS diagnostic id
-  if (present(interp_method) .or. axes%is_h_point) then
+  if (axes%diag_cs%diag_as_chksum) then
+    fms_id = axes%diag_cs%num_chksum_diags + 1
+    axes%diag_cs%num_chksum_diags = fms_id
+  else if (present(interp_method) .or. axes%is_h_point) then
     ! If interp_method is provided we must use it
     if (area_id>0) then
       if (volume_id>0) then
@@ -2563,9 +2605,16 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   diag => null()
   cmor_diag => null()
 
-  fms_id = register_diag_field_fms(module_name, field_name, init_time, &
-      long_name=long_name, units=units, missing_value=MOM_missing_value, &
-      range=range, standard_name=standard_name, do_not_log=do_not_log, err_msg=err_msg)
+  if (diag_cs%diag_as_chksum) then
+    fms_id = diag_cs%num_chksum_diags + 1
+    diag_cs%num_chksum_diags = fms_id
+  else
+    fms_id = register_diag_field_fms(module_name, field_name, init_time, &
+        long_name=long_name, units=units, missing_value=MOM_missing_value, &
+        range=range, standard_name=standard_name, do_not_log=do_not_log, &
+        err_msg=err_msg)
+  endif
+
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
     dm_id = get_new_diag_id(diag_cs)
     call alloc_diag_with_id(dm_id, diag_cs, diag)
@@ -2669,11 +2718,17 @@ function register_static_field(module_name, field_name, axes, &
   diag => null()
   cmor_diag => null()
 
-  fms_id = register_static_field_fms(module_name, field_name, axes%handles, &
-         long_name=long_name, units=units, missing_value=MOM_missing_value, &
-         range=range, mask_variant=mask_variant, standard_name=standard_name, &
-         do_not_log=do_not_log, &
-         interp_method=interp_method, tile_count=tile_count, area=area)
+  if (diag_cs%diag_as_chksum) then
+    fms_id = diag_cs%num_chksum_diags + 1
+    diag_cs%num_chksum_diags = fms_id
+  else
+    fms_id = register_static_field_fms(module_name, field_name, axes%handles, &
+           long_name=long_name, units=units, missing_value=MOM_missing_value, &
+           range=range, mask_variant=mask_variant, standard_name=standard_name, &
+           do_not_log=do_not_log, &
+           interp_method=interp_method, tile_count=tile_count, area=area)
+  endif
+
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
     dm_id = get_new_diag_id(diag_cs)
     call alloc_diag_with_id(dm_id, diag_cs, diag)
@@ -2692,9 +2747,10 @@ function register_static_field(module_name, field_name, axes, &
     if (present(area_cell_method)) then
       call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
     endif
+    if (diag_cs%diag_as_chksum) diag%axes => axes
   endif
 
-  if (present(cmor_field_name)) then
+  if (present(cmor_field_name) .and. .not. diag_cs%diag_as_chksum) then
     ! Fallback values for strings set to "not provided"
     posted_cmor_units = "not provided"
     posted_cmor_standard_name = "not provided"
@@ -2905,6 +2961,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40) :: mdl = "MOM_diag_mediator" ! This module's name.
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
 
   id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
   id_clock_diag_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
@@ -2954,6 +3011,9 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  'Instead of writing diagnostics to the diag manager, write '//&
                  'a text file containing the checksum (bitcount) of the array.',  &
                  default=.false.)
+
+  if (diag_cs%diag_as_chksum) &
+    diag_cs%num_chksum_diags = 0
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
@@ -3023,15 +3083,25 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
     endif
   endif
 
-  if (is_root_pe() .and. (diag_CS%chksum_diag_doc_unit < 0) .and. diag_CS%diag_as_chksum) then
-    write(this_pe,'(i6.6)') PE_here()
-    doc_file_dflt = "chksum_diag."//this_pe
+  if (is_root_pe() .and. (diag_CS%chksum_iounit < 0) .and. diag_CS%diag_as_chksum) then
+    !write(this_pe,'(i6.6)') PE_here()
+    !doc_file_dflt = "chksum_diag."//this_pe
+    doc_file_dflt = "chksum_diag"
     call get_param(param_file, mdl, "CHKSUM_DIAG_FILE", doc_file, &
                  "A file into which to write all checksums of the "//&
                  "diagnostics listed in the diag_table.", &
-                 default=doc_file_dflt, do_not_log=(diag_CS%chksum_diag_doc_unit/=-1))
+                 default=doc_file_dflt, do_not_log=(diag_CS%chksum_iounit/=-1))
+
+    call get_filename_appendix(filename_appendix)
+    if (len_trim(filename_appendix) > 0) then
+      doc_file = trim(doc_file) //'.'//trim(filename_appendix)
+    endif
+#ifdef STATSLABEL
+    doc_file = trim(doc_file)//"."//trim(adjustl(STATSLABEL))
+#endif
+
     if (len_trim(doc_file) > 0) then
-      new_file = .true. ; if (diag_CS%chksum_diag_doc_unit /= -1) new_file = .false.
+      new_file = .true. ; if (diag_CS%chksum_iounit /= -1) new_file = .false.
     ! Find an unused unit number.
       do new_unit=512,42,-1
         inquire( new_unit, opened=opened)
@@ -3045,16 +3115,16 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
         doc_path = trim(slasher(doc_file_dir))//trim(doc_file)
       endif ; endif
 
-      diag_CS%chksum_diag_doc_unit = new_unit
+      diag_CS%chksum_iounit = new_unit
 
       if (new_file) then
-        open(diag_CS%chksum_diag_doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
+        open(diag_CS%chksum_iounit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
              action='WRITE', status='REPLACE', iostat=ios)
       else ! This file is being reopened, and should be appended.
-        open(diag_CS%chksum_diag_doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
+        open(diag_CS%chksum_iounit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
              action='WRITE', status='OLD', position='APPEND', iostat=ios)
       endif
-      inquire(diag_CS%chksum_diag_doc_unit, opened=opened)
+      inquire(diag_CS%chksum_iounit, opened=opened)
       if ((.not.opened) .or. (ios /= 0)) then
         call MOM_error(FATAL, "Failed to open checksum diags file "//trim(doc_path)//".")
       endif
@@ -3205,8 +3275,8 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   if (diag_CS%available_diag_doc_unit > -1) then
     close(diag_CS%available_diag_doc_unit) ; diag_CS%available_diag_doc_unit = -3
   endif
-  if (diag_CS%chksum_diag_doc_unit > -1) then
-    close(diag_CS%chksum_diag_doc_unit) ; diag_CS%chksum_diag_doc_unit = -3
+  if (diag_CS%chksum_iounit > -1) then
+    close(diag_CS%chksum_iounit) ; diag_CS%chksum_iounit = -3
   endif
 
   deallocate(diag_cs%diags)
