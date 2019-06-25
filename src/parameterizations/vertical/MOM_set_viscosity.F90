@@ -72,7 +72,7 @@ type, public :: set_visc_CS ; private
                             !! determine the mixed layer thickness for viscosity.
   real    :: bulk_Ri_ML     !< The bulk mixed layer used to determine the
                             !! thickness of the viscous mixed layer.  Nondim.
-  real    :: omega          !<   The Earth's rotation rate [T-1].
+  real    :: omega          !<   The Earth's rotation rate [T-1 ~> s-1].
   real    :: ustar_min      !< A minimum value of ustar to avoid numerical
                             !! problems [Z T-1 ~> m s-1].  If the value is small enough,
                             !! this should not affect the solution.
@@ -844,13 +844,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           if (m==1) then
             if (Rayleigh > 0.0) then
               v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
-              visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
+              visc%Ray_u(I,j,k) = Rayleigh*US%T_to_s*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
               u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
-              visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
+              visc%Ray_v(i,J,k) = Rayleigh*US%T_to_s*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
           endif
@@ -2019,9 +2019,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m)
+       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=US%Z_to_m)
+       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   endif
 
   if (use_CVMix_ddiff .or. differential_diffusion) then
