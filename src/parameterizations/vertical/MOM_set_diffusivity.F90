@@ -1181,7 +1181,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   ! Any turbulence that makes it into the mixed layers is assumed
   ! to be relatively small and is discarded.
   do i=is,ie
-    ustar_h = US%T_to_s * visc%ustar_BBL(i,j)
+    ustar_h = visc%ustar_BBL(i,j)
     if (associated(fluxes%ustar_tidal)) &
       ustar_h = ustar_h + (US%m_to_Z * US%T_to_s * fluxes%ustar_tidal(i,j))
     absf = 0.25 * ((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
@@ -1398,7 +1398,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                    (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1)))) ! Non-zero on equator!
 
     ! u* at the bottom [m s-1].
-    ustar = US%T_to_s * visc%ustar_BBL(i,j)
+    ustar = visc%ustar_BBL(i,j)
     ustar2 = ustar**2
     ! In add_drag_diffusivity(), fluxes%ustar_tidal is added in. This might be double counting
     ! since ustar_BBL should already include all contributions to u*? -AJA
@@ -1653,13 +1653,13 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
   real, dimension(SZIB_(G)) :: &
     uhtot, &      ! running integral of u in the BBL [Z m s-1 ~> m2 s-1]
-    ustar, &      ! bottom boundary layer turbulence speed [Z s-1 ~> m s-1].
+    ustar, &      ! bottom boundary layer turbulence speed [Z T-1 ~> m s-1].
     u2_bbl        ! square of the mean zonal velocity in the BBL [m2 s-2]
 
   real :: vhtot(SZI_(G)) ! running integral of v in the BBL [Z m s-1 ~> m2 s-1]
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vstar, & ! ustar at at v-points [Z s-1 ~> m s-1].
+    vstar, & ! ustar at at v-points [Z T-1 ~> m s-1].
     v2_bbl   ! square of average meridional velocity in BBL [m2 s-2]
 
   real :: cdrag_sqrt  ! square root of the drag coefficient [nondim]
@@ -1694,7 +1694,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
     ! vertical decay scale.
     do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
       do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
-      vstar(i,J) = US%s_to_T*visc%Kv_bbl_v(i,J) / (cdrag_sqrt*visc%bbl_thick_v(i,J))
+      vstar(i,J) = visc%Kv_bbl_v(i,J) / (cdrag_sqrt*visc%bbl_thick_v(i,J))
     else
       do_i(i) = .false. ; vstar(i,J) = 0.0 ; htot(i) = 0.0
     endif ; enddo
@@ -1724,7 +1724,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   do j=js,je
     do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
-      ustar(I) = US%s_to_T*visc%Kv_bbl_u(I,j) / (cdrag_sqrt*visc%bbl_thick_u(I,j))
+      ustar(I) = visc%Kv_bbl_u(I,j) / (cdrag_sqrt*visc%bbl_thick_u(I,j))
     else
       do_i(I) = .false. ; ustar(I) = 0.0 ; htot(I) = 0.0
     endif ; enddo
@@ -1755,7 +1755,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
                   G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
                  (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
                   G%areaCv(i,J)*(vstar(i,J)*vstar(i,J))) ) )
-      visc%TKE_BBL(i,j) = US%T_to_s**3 * US%m_to_Z**2 * &
+      visc%TKE_BBL(i,j) = US%T_to_s**2 * US%m_to_Z**2 * &
                  (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
                     G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
                    (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
