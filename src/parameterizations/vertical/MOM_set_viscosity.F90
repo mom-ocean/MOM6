@@ -55,7 +55,7 @@ type, public :: set_visc_CS ; private
                             !! in calculating the near-surface velocity [H ~> m or kg m-2].
   real    :: Htbl_shelf_min !< The minimum surface boundary layer thickness [H ~> m or kg m-2].
   real    :: KV_BBL_min     !< The minimum viscosity in the bottom boundary layer [Z2 s-1 ~> m2 s-1].
-  real    :: KV_TBL_min     !< The minimum viscosity in the top boundary layer [Z2 s-1 ~> m2 s-1].
+  real    :: KV_TBL_min     !< The minimum viscosity in the top boundary layer [Z2 T-1 ~> m2 s-1].
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
                             !! drag law c_drag*|u|*u. The velocity magnitude
                             !! may be an assumed value or it may be based on the
@@ -72,9 +72,9 @@ type, public :: set_visc_CS ; private
                             !! determine the mixed layer thickness for viscosity.
   real    :: bulk_Ri_ML     !< The bulk mixed layer used to determine the
                             !! thickness of the viscous mixed layer.  Nondim.
-  real    :: omega          !<   The Earth's rotation rate [s-1].
+  real    :: omega          !<   The Earth's rotation rate [T-1].
   real    :: ustar_min      !< A minimum value of ustar to avoid numerical
-                            !! problems [Z s-1 ~> m s-1].  If the value is small enough,
+                            !! problems [Z T-1 ~> m s-1].  If the value is small enough,
                             !! this should not affect the solution.
   real    :: TKE_decay      !< The ratio of the natural Ekman depth to the TKE
                             !! decay scale, nondimensional.
@@ -129,7 +129,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   ! Local variables
   real, dimension(SZIB_(G)) :: &
-    ustar, &    !   The bottom friction velocity [Z s-1 ~> m s-1].
+    ustar, &    !   The bottom friction velocity [Z T-1 ~> m s-1].
     T_EOS, &    !   The temperature used to calculate the partial derivatives
                 ! of density with T and S [degC].
     S_EOS, &    !   The salinity used to calculate the partial derivatives
@@ -521,9 +521,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         enddo ! end of k loop
 
         if (.not.CS%linear_drag .and. (hwtot > 0.0)) then
-          ustar(i) = cdrag_sqrt_Z*hutot/hwtot
+          ustar(i) = cdrag_sqrt_Z*US%T_to_s*hutot/hwtot
         else
-          ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel
+          ustar(i) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel
         endif
 
         if (use_BBL_EOS) then ; if (hwtot > 0.0) then
@@ -533,7 +533,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         endif ; endif
       endif ; enddo
     else
-      do i=is,ie ; ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel ; enddo
+      do i=is,ie ; ustar(i) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel ; enddo
     endif ! Not linear_drag
 
     if (use_BBL_EOS) then
@@ -551,7 +551,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     do i=is,ie ; if (do_i(i)) then
 !  The 400.0 in this expression is the square of a constant proposed
 !  by Killworth and Edwards, 1999, in equation (2.20).
-      ustarsq = Rho0x400_G * ustar(i)**2
+      ustarsq = Rho0x400_G * US%s_to_T**2 * ustar(i)**2
       htot = 0.0
 
 !   This block of code calculates the thickness of a stratification
@@ -635,7 +635,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
-        ustH = ustar(i)*GV%Z_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
+        ustH = US%s_to_T*ustar(i)*GV%Z_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
         if (htot*ustH <= (CS%BBL_thick_min+h_neglect) * (0.5*ustH + root)) then
           bbl_thick = CS%BBL_thick_min
         else
@@ -643,7 +643,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         endif
       else
         bbl_thick = htot / (0.5 + sqrt(0.25 + htot*htot*C2f*C2f/ &
-          ((ustar(i)*ustar(i)) * (GV%Z_to_H**2) )))
+          ((US%s_to_T**2*ustar(i)*ustar(i)) * (GV%Z_to_H**2) )))
 
         if (bbl_thick < CS%BBL_thick_min) bbl_thick = CS%BBL_thick_min
       endif
@@ -859,11 +859,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
         bbl_thick_Z = bbl_thick * GV%H_to_Z
         if (m==1) then
-          visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, &
+          visc%Kv_bbl_u(I,j) = max(CS%Kv_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
           visc%bbl_thick_u(I,j) = bbl_thick_Z
         else
-          visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, &
+          visc%Kv_bbl_v(i,J) = max(CS%Kv_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac)
           visc%bbl_thick_v(i,J) = bbl_thick_Z
         endif
@@ -873,10 +873,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 ! the correct stress when the shear occurs over bbl_thick.
         bbl_thick_Z = bbl_thick * GV%H_to_Z
         if (m==1) then
-          visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
+          visc%Kv_bbl_u(I,j) = max(CS%Kv_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
           visc%bbl_thick_u(I,j) = bbl_thick_Z
         else
-          visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
+          visc%Kv_bbl_v(i,J) = max(CS%Kv_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick_Z)
           visc%bbl_thick_v(i,J) = bbl_thick_Z
         endif
       endif
@@ -901,7 +901,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
         call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=US%Z_to_m)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=US%Z_to_m**2)
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
         call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
                       visc%bbl_thick_v, G%HI, haloshift=0, scale=US%Z_to_m)
@@ -1040,7 +1040,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                 ! (roughly the base of the mixed layer) with temperature [kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with salinity [kg m-3 ppt-1].
-    ustar, &    !   The surface friction velocity under ice shelves [Z s-1 ~> m s-1].
+    ustar, &    !   The surface friction velocity under ice shelves [Z T-1 ~> m s-1].
     press, &    ! The pressure at which dR_dT and dR_dS are evaluated [Pa].
     T_EOS, &    ! The potential temperature at which dR_dT and dR_dS are evaluated [degC]
     S_EOS       ! The salinity at which dR_dT and dR_dS are evaluated [ppt].
@@ -1206,12 +1206,12 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
-          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
+          if (CS%omega_frac >= 1.0) then ; absf = 2.0*US%s_to_T*CS%omega ; else
             absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
             if (CS%omega_frac > 0.0) &
-              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+              absf = sqrt(CS%omega_frac*4.0*US%s_to_T**2*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
           endif
-          U_star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j)))
+          U_star = max(US%s_to_T*CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_star) * CS%TKE_decay) * GV%H_to_Z
         endif
       enddo
@@ -1336,9 +1336,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
         enddo ; endif
 
         if ((.not.CS%linear_drag) .and. (hwtot > 0.0)) then
-          ustar(I) = cdrag_sqrt_Z*hutot/hwtot
+          ustar(I) = cdrag_sqrt_Z*US%T_to_s*hutot/hwtot
         else
-          ustar(I) = cdrag_sqrt_Z*CS%drag_bg_vel
+          ustar(I) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel
         endif
 
         if (use_EOS) then ; if (hwtot > 0.0) then
@@ -1356,7 +1356,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
       do I=Isq,Ieq ; if (do_i(I)) then
   !  The 400.0 in this expression is the square of a constant proposed
   !  by Killworth and Edwards, 1999, in equation (2.20).
-        ustarsq = Rho0x400_G * ustar(i)**2
+        ustarsq = Rho0x400_G * US%s_to_T**2 * ustar(i)**2
         htot(i) = 0.0
         if (use_EOS) then
           Thtot(i) = 0.0 ; Shtot(i) = 0.0
@@ -1410,14 +1410,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
        !visc%tbl_thick_shelf_u(I,j) = GV%H_to_Z * max(CS%Htbl_shelf_min, &
        !    htot(I) / (0.5 + sqrt(0.25 + &
-       !                 (htot(i)*US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
+       !                 (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
        !                 (ustar(i)*GV%Z_to_H)**2 )) )
-        ustar1 = ustar(i)*GV%Z_to_H
-        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
+        ustar1 = US%s_to_T*ustar(i)*GV%Z_to_H
+        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*US%s_to_T*CS%omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_u(I,j) = tbl_thick_Z
-        visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
+        visc%Kv_tbl_shelf_u(I,j) = max(CS%Kv_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
       endif ; enddo ! I-loop
     endif ! do_any_shelf
 
@@ -1441,13 +1441,13 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
-         if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
+         if (CS%omega_frac >= 1.0) then ; absf = 2.0*US%s_to_T*CS%omega ; else
            absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
            if (CS%omega_frac > 0.0) &
-             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+             absf = sqrt(CS%omega_frac*4.0*US%s_to_T**2*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
 
-         U_star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1)))
+         U_star = max(US%s_to_T*CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_star) * CS%TKE_decay) * GV%H_to_Z
 
         endif
@@ -1573,9 +1573,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
         enddo ; endif
 
         if (.not.CS%linear_drag) then ; if (hwtot > 0.0) then
-          ustar(i) = cdrag_sqrt_Z*hutot/hwtot
+          ustar(i) = cdrag_sqrt_Z*US%T_to_s*hutot/hwtot
         else
-          ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel
+          ustar(i) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel
         endif ; endif
 
         if (use_EOS) then ; if (hwtot > 0.0) then
@@ -1593,7 +1593,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
       do i=is,ie ; if (do_i(i)) then
   !  The 400.0 in this expression is the square of a constant proposed
   !  by Killworth and Edwards, 1999, in equation (2.20).
-        ustarsq = Rho0x400_G * ustar(i)**2
+        ustarsq = Rho0x400_G * US%s_to_T**2 * ustar(i)**2
         htot(i) = 0.0
         if (use_EOS) then
           Thtot(i) = 0.0 ; Shtot(i) = 0.0
@@ -1647,14 +1647,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
        !visc%tbl_thick_shelf_v(i,J) = GV%H_to_Z * max(CS%Htbl_shelf_min, &
        !    htot(i) / (0.5 + sqrt(0.25 + &
-       !        (htot(i)*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
+       !        (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
        !        (ustar(i)*GV%Z_to_H)**2 )) )
-        ustar1 = ustar(i)*GV%Z_to_H
-        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
+        ustar1 = US%s_to_T*ustar(i)*GV%Z_to_H
+        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*US%s_to_T*CS%omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_v(i,J) = tbl_thick_Z
-        visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
+        visc%Kv_tbl_shelf_v(i,J) = max(CS%Kv_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
 
       endif ; enddo ! i-loop
     endif ! do_any_shelf
@@ -1896,13 +1896,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    units="nondim", default=omega_frac_dflt)
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5)
+                 default=7.2921e-5, scale=US%T_to_s)
     ! This give a minimum decay scale that is typically much less than Angstrom.
     CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_to_Z*GV%H_subroundoff)
   else
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5)
+                 default=7.2921e-5, scale=US%T_to_s)
   endif
 
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
@@ -1971,10 +1971,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
-                 units="m2 s-1", default=Kv_background, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=Kv_background, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KV_TBL_MIN", CS%KV_TBL_min, &
                  "The minimum viscosities in the top boundary layer.", &
-                 units="m2 s-1", default=Kv_background, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=Kv_background, scale=US%m2_s_to_Z2_T)
 
   if (CS%Channel_drag) then
     call get_param(param_file, mdl, "SMAG_LAP_CONST", smag_const1, default=-1.0)
@@ -2009,11 +2009,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
        diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=US%Z_to_m**2)
+       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
        diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=US%Z_to_m**2)
+       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0

@@ -203,8 +203,8 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points [Z ~> m].
     bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points [Z ~> m].
-    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points [Z2 s-1 ~> m2 s-1].
-    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points [Z2 s-1 ~> m2 s-1].
+    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points [Z2 T-1 ~> m2 s-1].
+    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points [Z2 T-1 ~> m2 s-1].
     ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points [Z s-1 ~> m s-1].
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
@@ -218,9 +218,9 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
                 !< Thickness of the viscous top boundary layer under ice shelves at v-points [Z ~> m].
   real, pointer, dimension(:,:) :: kv_tbl_shelf_u => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at u-points [Z2 s-1 ~> m2 s-1].
+                !< Viscosity in the viscous top boundary layer under ice shelves at u-points [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at v-points [Z2 s-1 ~> m2 s-1].
+                !< Viscosity in the viscous top boundary layer under ice shelves at v-points [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
                 !< The number of layers in the viscous surface mixed layer at u-points [nondim].
                 !! This is not an integer because there may be fractional layers, and it is stored in

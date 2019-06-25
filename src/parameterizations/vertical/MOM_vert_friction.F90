@@ -676,7 +676,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
     if (CS%bottomdraglaw) then ; do I=Isq,Ieq
-      kv_bbl(I) = visc%kv_bbl_u(I,j)
+      kv_bbl(I) = US%s_to_T*visc%Kv_bbl_u(I,j)
       bbl_thick(I) = visc%bbl_thick_u(I,j) * GV%Z_to_H
       if (do_i(I)) I_Hbbl(I) = 1.0 / (bbl_thick(I) + h_neglect)
     enddo ; endif
@@ -843,7 +843,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
     if (CS%bottomdraglaw) then ; do i=is,ie
-      kv_bbl(i) = visc%kv_bbl_v(i,J)
+      kv_bbl(i) = US%s_to_T*visc%Kv_bbl_v(i,J)
       bbl_thick(i) = visc%bbl_thick_v(i,J) * GV%Z_to_H
       if (do_i(i)) I_Hbbl(i) = 1.0 / bbl_thick(i)
     enddo ; endif
@@ -1256,10 +1256,10 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     ! Set the coefficients to include the no-slip surface stress.
     do i=is,ie ; if (do_i(i)) then
       if (work_on_u) then
-        kv_tbl(i) = visc%kv_tbl_shelf_u(I,j)
+        kv_tbl(i) = US%s_to_T*visc%Kv_tbl_shelf_u(I,j)
         tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * GV%Z_to_H
       else
-        kv_tbl(i) = visc%kv_tbl_shelf_v(i,J)
+        kv_tbl(i) = US%s_to_T*visc%Kv_tbl_shelf_v(i,J)
         tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * GV%Z_to_H
       endif
       z_t(i) = 0.0
