@@ -295,7 +295,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! If nothing else is specified, this will be the value used.
   Kd_lay(:,:,:) = CS%Kd
   Kd_int(:,:,:) = CS%Kd
-  if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = US%s_to_T * CS%Kv
+  if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
 
   ! Set up arrays for diagnostics.
 

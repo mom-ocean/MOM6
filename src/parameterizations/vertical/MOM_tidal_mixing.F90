@@ -59,8 +59,8 @@ type, public :: tidal_mixing_diags ; private
                                            !! dissipation due to propagating low modes [Z3 T-3 ~> m3 s-3]
   real, pointer, dimension(:,:) :: &
     TKE_itidal_used           => NULL(),& !< internal tide TKE input at ocean bottom [kg Z3 m-3 T-3 ~> W m-2]
-    N2_bot                    => NULL(),& !< bottom squared buoyancy frequency [s-2]
-    N2_meanz                  => NULL(),& !< vertically averaged buoyancy frequency [s-2]
+    N2_bot                    => NULL(),& !< bottom squared buoyancy frequency [T-2 ~> s-2]
+    N2_meanz                  => NULL(),& !< vertically averaged buoyancy frequency [T-2 ~> s-2]
     Polzin_decay_scale_scaled => NULL(),& !< vertical scale of decay for tidal dissipation
     Polzin_decay_scale        => NULL(),& !< vertical decay scale for tidal diss with Polzin [m]
     Simmons_coeff_2d          => NULL()   !< The Simmons et al mixing coefficient
@@ -112,7 +112,7 @@ type, public :: tidal_mixing_cs
 
   real :: Nbotref_Polzin      !< Reference value for the buoyancy frequency at the
                               !! ocean bottom used in Polzin formulation of the
-                              !! vertical scale of decay of tidal dissipation [s-1]
+                              !! vertical scale of decay of tidal dissipation [T-1 ~> s-1]
   real :: Polzin_decay_scale_factor !< Scaling factor for the decay length scale
                               !! of the tidal dissipation profile in Polzin [nondim]
   real :: Polzin_decay_scale_max_factor !< The decay length scale of tidal dissipation
@@ -148,7 +148,7 @@ type, public :: tidal_mixing_cs
                                                          !! [kg Z3 m-3 T-3 ~> W m-2]
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL() !< The internal Turbulent Kinetic Energy input divided
                                                          !! by the bottom stratfication [kg Z3 m-3 T-2 ~> J m-2].
-  real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency [s-1].
+  real, pointer, dimension(:,:) :: Nb          => NULL() !< The near bottom buoyancy frequency [T-1 ~> s-1].
   real, pointer, dimension(:,:) :: mask_itidal => NULL() !< A mask of where internal tide energy is input
   real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance [m2].
   real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [m s-1]
@@ -359,7 +359,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "reference value of the buoyancy frequency at the ocean "//&
                  "bottom in the Polzin formulation for the vertical "//&
                  "scale of decay for the tidal energy dissipation.", &
-                 units="s-1", default=9.61e-4)
+                 units="s-1", default=9.61e-4, scale=US%T_to_s)
     call get_param(param_file, mdl, "POLZIN_DECAY_SCALE_FACTOR", &
                  CS%Polzin_decay_scale_factor, &
                  "When the Polzin decay profile is used, this is a "//&
@@ -576,7 +576,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
       CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
           'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2', conversion=(US%Z_to_m**3*US%s_to_T**3))
       CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
-           'Bottom Buoyancy Frequency', 's-1')
+           'Bottom Buoyancy Frequency', 's-1', conversion=US%s_to_T)
 
       CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
            'Internal Tide Driven Diffusivity (from propagating low modes)', &
@@ -600,10 +600,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
            'scaled by N2_bot/N2_meanz', 'm', conversion=US%Z_to_m)
 
       CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
-           'Bottom Buoyancy frequency squared', 's-2')
+           'Bottom Buoyancy frequency squared', 's-2', conversion=US%s_to_T**2)
 
-      CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
-           'Buoyancy frequency squared averaged over the water column', 's-2')
+      CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz', diag%axesT1, Time, &
+           'Buoyancy frequency squared averaged over the water column', 's-2', conversion=US%s_to_T**2)
 
       CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
            'Work done by Internal Tide Diapycnal Mixing', 'W m-2', conversion=(US%Z_to_m**3*US%s_to_T**3))
@@ -662,7 +662,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US, C
                                                             !! [Z2 T-1 ~> m2 s-1].
                                                             !! Set this to a negative value to have no limit.
   real, dimension(:,:,:),           pointer       :: Kv     !< The "slow" vertical viscosity at each interface
-                                                            !! (not layer!) [Z2 s-1 ~> m2 s-1].
+                                                            !! (not layer!) [Z2 T-1 ~> m2 s-1].
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
@@ -690,10 +690,10 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: Kd_lay!< The diapycnal diffusivities in the layers [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
-                                                  !! (not layer!) [Z2 s-1 ~> m2 s-1].
+                                                  !! (not layer!) [Z2 T-1 ~> m2 s-1].
   ! Local variables
-  real, dimension(SZK_(G)+1) :: Kd_tidal    ! tidal diffusivity [m2/s]
-  real, dimension(SZK_(G)+1) :: Kv_tidal    ! tidal viscosity [m2/s]
+  real, dimension(SZK_(G)+1) :: Kd_tidal    ! tidal diffusivity [m2 s-1]
+  real, dimension(SZK_(G)+1) :: Kv_tidal    ! tidal viscosity [m2 s-1]
   real, dimension(SZK_(G)+1) :: vert_dep    ! vertical deposition
   real, dimension(SZK_(G)+1) :: iFaceHeight ! Height of interfaces [m]
   real, dimension(SZK_(G)+1) :: SchmittnerSocn
@@ -772,7 +772,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
       ! Update viscosity with the proper unit conversion.
       if (associated(Kv)) then
         do k=1,G%ke+1
-          Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kv_tidal(k)  ! Rescale from m2 s-1 to Z2 s-1.
+          Kv(i,j,k) = Kv(i,j,k) + US%m2_s_to_Z2_T * Kv_tidal(k)  ! Rescale from m2 s-1 to Z2 T-1.
         enddo
       endif
 
@@ -874,7 +874,7 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kv)
       ! Update viscosity
       if (associated(Kv)) then
         do k=1,G%ke+1
-          Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 s-1.
+          Kv(i,j,k) = Kv(i,j,k) + US%m2_s_to_Z2_T * Kv_tidal(k)   ! Rescale from m2 s-1 to Z2 T-1.
         enddo
       endif
 
@@ -959,7 +959,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
                         ! z*=int(N2/N2_bot) * N2_bot/N2_meanz = int(N2/N2_meanz)
                         ! z0_Polzin_scaled = z0_Polzin * N2_bot/N2_meanz
-    N2_meanz,         & ! vertically averaged squared buoyancy frequency [s-2] for WKB scaling
+    N2_meanz,         & ! vertically averaged squared buoyancy frequency [T-2] for WKB scaling
     TKE_itidal_rem,   & ! remaining internal tide TKE (from barotropic source) [Z3 T-3 ~> m3 s-3]
     TKE_Niku_rem,     & ! remaining lee-wave TKE [Z3 T-3 ~> m3 s-3]
     TKE_lowmode_rem,  & ! remaining internal tide TKE (from propagating low mode source) [Z3 T-3 ~> m3 s-3] (BDM)
@@ -1013,8 +1013,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     Izeta_lee = 1.0 / max(CS%Int_tide_decay_scale*CS%Decay_scale_factor_lee, &
                           GV%H_subroundoff*GV%H_to_Z)
     do i=is,ie
-      CS%Nb(i,j) = sqrt(US%s_to_T**2 * N2_bot(i))
-      if (associated(dd%N2_bot)) dd%N2_bot(i,j) = US%s_to_T**2 * N2_bot(i)
+      CS%Nb(i,j) = sqrt(N2_bot(i))
+      if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
       if ( CS%Int_tide_dissipation ) then
         if (Izeta*htot(i) > 1.0e-14) then ! L'Hospital's version of Adcroft's reciprocal rule.
           Inv_int(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
@@ -1037,9 +1037,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   ! Polzin:
   if ( use_Polzin ) then
     ! WKB scaling of the vertical coordinate
-    do i=is,ie ; N2_meanz(i)=0.0 ; enddo
+    do i=is,ie ; N2_meanz(i) = 0.0 ; enddo
     do k=1,nz ; do i=is,ie
-      N2_meanz(i) = N2_meanz(i) + (US%s_to_T**2 * N2_lay(i,k)) * GV%H_to_Z * h(i,j,k)
+      N2_meanz(i) = N2_meanz(i) + N2_lay(i,k) * GV%H_to_Z * h(i,j,k)
     enddo ; enddo
     do i=is,ie
       N2_meanz(i) = N2_meanz(i) / (htot(i) + GV%H_subroundoff*GV%H_to_Z)
@@ -1050,21 +1050,21 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     do i=is,ie ; htot_WKB(i) = htot(i) ; enddo
 !    do i=is,ie ; htot_WKB(i) = 0.0 ; enddo
 !    do k=1,nz ; do i=is,ie
-!      htot_WKB(i) = htot_WKB(i) + GV%H_to_Z*h(i,j,k) * (US%s_to_T**2 * N2_lay(i,k)) / N2_meanz(i)
+!      htot_WKB(i) = htot_WKB(i) + GV%H_to_Z*h(i,j,k) * N2_lay(i,k) / N2_meanz(i)
 !    enddo ; enddo
     ! htot_WKB(i) = htot(i) ! Nearly equivalent and simpler
 
     do i=is,ie
-      CS%Nb(i,j) = sqrt(US%s_to_T**2 * N2_bot(i))
+      CS%Nb(i,j) = sqrt(N2_bot(i))
       !### In the code below 1.0e-14 is a dimensional constant in [s-3]
       if ((CS%tideamp(i,j) > 0.0) .and. &
-          (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14) ) then
+          (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14*US%T_to_s**3) ) then
         z0_polzin(i) = CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
                        CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
-                     ( CS%kappa_itides**2 * CS%h2(i,j) * US%T_to_s * CS%Nb(i,j)**3 )
+                     ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
         if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
           z0_polzin(i) = CS%Polzin_min_decay_scale
-        if (N2_meanz(i) > 1.0e-14  ) then  !### Here 1.0e-14 has dimensions of s-2.
+        if (N2_meanz(i) > 1.0e-14*US%T_to_s**2  ) then  !### Here 1.0e-14 has dimensions of s-2.
           z0_polzin_scaled(i) = z0_polzin(i)*CS%Nb(i,j)**2 / N2_meanz(i)
         else
           z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
@@ -1106,8 +1106,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
 
       z_from_bot(i) = GV%H_to_Z*h(i,j,nz)
       ! Use the new formulation for WKB scaling.  N2 is referenced to its vertical mean.
-      if (N2_meanz(i) > 1.0e-14 ) then  !### Avoid using this dimensional constant.
-        z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz) * (US%s_to_T**2 * N2_lay(i,nz)) / N2_meanz(i)
+      if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then  !### Avoid using this dimensional constant.
+        z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz) * N2_lay(i,nz) / N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
     enddo
   endif  ! Polzin
@@ -1116,7 +1116,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   ! Both Polzin and Simmons:
   do i=is,ie
     ! Dissipation of locally trapped internal tide (non-propagating high modes)
-    TKE_itidal_bot(i) = min(CS%TKE_itidal(i,j)*US%T_to_s*CS%Nb(i,j), CS%TKE_itide_max)
+    TKE_itidal_bot(i) = min(CS%TKE_itidal(i,j)*CS%Nb(i,j), CS%TKE_itide_max)
     if (associated(dd%TKE_itidal_used)) &
       dd%TKE_itidal_used(i,j) = TKE_itidal_bot(i)
     TKE_itidal_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_itides) * TKE_itidal_bot(i)
@@ -1233,9 +1233,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
       z_from_bot(i) = z_from_bot(i) + GV%H_to_Z*h(i,j,k)
-      if (N2_meanz(i) > 1.0e-14 ) then
+      if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then
         z_from_bot_WKB(i) = z_from_bot_WKB(i) &
-            + GV%H_to_Z * h(i,j,k) * (US%s_to_T**2 * N2_lay(i,k)) / N2_meanz(i)
+            + GV%H_to_Z * h(i,j,k) * N2_lay(i,k) / N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
 
       ! Fraction of bottom flux predicted to reach top of this layer

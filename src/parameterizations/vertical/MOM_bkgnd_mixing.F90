@@ -125,7 +125,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   type(bkgnd_mixing_cs),    pointer      :: CS         !< This module's control structure.
 
   ! Local variables
-  real :: Kv                    ! The interior vertical viscosity [m2 s-1] - read to set prandtl
+  real :: Kv                    ! The interior vertical viscosity [Z2 T-1 ~> m2 s-1] - read to set prandtl
                                 ! number unless it is provided as a parameter
   real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
 
@@ -151,7 +151,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "KV", Kv, &
                  "The background kinematic viscosity in the interior. "//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", fail_if_missing=.true.)
+                 units="m2 s-1", scale=US%m2_s_to_Z2_T, fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
@@ -245,7 +245,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%Bryan_Lewis_diffusivity .or. CS%horiz_varying_background) then
 
     prandtl_bkgnd_comp = CS%prandtl_bkgnd
-    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/(US%s_to_T*CS%Kd)
+    if (CS%Kd /= 0.0) prandtl_bkgnd_comp = Kv/CS%Kd
 
     if ( abs(CS%prandtl_bkgnd - prandtl_bkgnd_comp)>1.e-14) then
       call MOM_error(FATAL,"set_diffusivity_init: The provided KD, KV,"//&
@@ -308,7 +308,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
       'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
   CS%id_kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
-      'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z_to_m**2)
+      'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s', conversion=US%Z2_T_to_m2_s)
 
 end subroutine bkgnd_mixing_init
 
@@ -379,7 +379,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd_lay !< Diapycnal diffusivity of each layer
                                                                  !! [Z2 T-1 ~> m2 s-1].
   real, dimension(:,:,:),                   pointer       :: Kv  !< The "slow" vertical viscosity at each interface
-                                                                 !! (not layer!) [Z2 s-1 ~> m2 s-1]
+                                                                 !! (not layer!) [Z2 T-1 ~> m2 s-1]
   integer,                                  intent(in)    :: j   !< Meridional grid index
   type(bkgnd_mixing_cs),                    pointer       :: CS  !< The control structure returned by
                                                                  !! a previous call to bkgnd_mixing_init.
@@ -430,7 +430,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
       ! Update Kd and Kv.
       do K=1,nz+1
-        CS%Kv_bkgnd(i,j,K) = US%m_to_Z**2*Kv_col(K)
+        CS%Kv_bkgnd(i,j,K) = US%m2_s_to_Z2_T*Kv_col(K)
         CS%Kd_bkgnd(i,j,K) = US%m2_s_to_Z2_T*Kd_col(K)
       enddo
       do k=1,nz
@@ -492,7 +492,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
       endif
 
       ! Compute kv_bkgnd
-      CS%kv_bkgnd(i,j,:) = US%s_to_T*CS%Kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
+      CS%kv_bkgnd(i,j,:) = CS%Kd_bkgnd(i,j,:) * CS%prandtl_bkgnd
 
       ! Update Kd (uniform profile; no interpolation needed)
       Kd_lay(i,j,:) = CS%Kd_bkgnd(i,j,1)
@@ -502,8 +502,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
   elseif (CS%Henyey_IGW_background_new) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
     do k=1,nz ; do i=is,ie
-      abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-      N_2Omega = max(abs_sin,sqrt(US%s_to_T**2 * N2_lay(i,k))*I_2Omega)
+      abs_sin = max(epsilon, abs(sin(G%geoLatT(i,j)*deg_to_rad)))
+      N_2Omega = max(abs_sin, sqrt(US%s_to_T**2 * N2_lay(i,k))*I_2Omega)
       N02_N2 = (CS%N0_2Omega/N_2Omega)**2
       Kd_lay(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
@@ -522,7 +522,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
         CS%Kd_bkgnd(i,j,k) = 0.5*(Kd_lay(i,j,K-1) + Kd_lay(i,j,K))
-        CS%Kv_bkgnd(i,j,k) = US%s_to_T*CS%Kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
+        CS%Kv_bkgnd(i,j,k) = CS%Kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
       enddo
     enddo
   endif

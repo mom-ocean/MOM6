@@ -182,7 +182,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! the present layer [H ~> m or kg m-2].
   real :: bbl_thick        ! The thickness of the bottom boundary layer [H ~> m or kg m-2].
   real :: bbl_thick_Z      ! The thickness of the bottom boundary layer [Z ~> m].
-  real :: C2f              ! C2f = 2*f at velocity points.
+  real :: C2f              ! C2f = 2*f at velocity points [T-1 ~> s-1].
 
   real :: U_bg_sq          ! The square of an assumed background
                            ! velocity, for calculating the mean
@@ -198,7 +198,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! of the bottom [H ~> m or kg m-2].
   real :: v_at_u, u_at_v   ! v at a u point or vice versa [m s-1].
   real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors
-                           ! [kg s2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
+                           ! [kg T2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                            ! The 400 is a constant proposed by Killworth and Edwards, 1999.
   real, dimension(SZI_(G),SZJ_(G),max(GV%nk_rho_varies,1)) :: &
     Rml                    ! The mixed layer coordinate density [kg m-3].
@@ -243,8 +243,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! evaluated at L=L0 [H ~> m or kg m-2].
   real :: h_neglect        ! A thickness that is so small it is usually lost
                            ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: ustH             ! ustar converted to units of H s-1 [H s-1 ~> m s-1 or kg m-2 s-1].
-  real :: root             ! A temporary variable [H s-1 ~> m s-1 or kg m-2 s-1].
+  real :: ustH             ! ustar converted to units of H T-1 [H T-1 ~> m s-1 or kg m-2 s-1].
+  real :: root             ! A temporary variable [H T-1 ~> m s-1 or kg m-2 s-1].
 
   real :: Cell_width       ! The transverse width of the velocity cell [m].
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
@@ -269,7 +269,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
-  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%Z_to_m**2 * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%s_to_T**2*US%Z_to_m**2 * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -551,7 +551,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     do i=is,ie ; if (do_i(i)) then
 !  The 400.0 in this expression is the square of a constant proposed
 !  by Killworth and Edwards, 1999, in equation (2.20).
-      ustarsq = Rho0x400_G * US%s_to_T**2 * ustar(i)**2
+      ustarsq = Rho0x400_G * ustar(i)**2
       htot = 0.0
 
 !   This block of code calculates the thickness of a stratification
@@ -629,13 +629,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 ! The  bottom boundary layer thickness is found by solving the same
 ! equation as in Killworth and Edwards:    (h/h_f)^2 + h/h_N = 1.
 
-      if (m==1) then ; C2f = US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J))
-      else ; C2f = US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) ; endif
+      if (m==1) then ; C2f = G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J)
+      else ; C2f = G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J) ; endif
 
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
-        ustH = US%s_to_T*ustar(i)*GV%Z_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
+        ustH = ustar(i)*GV%Z_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
         if (htot*ustH <= (CS%BBL_thick_min+h_neglect) * (0.5*ustH + root)) then
           bbl_thick = CS%BBL_thick_min
         else
@@ -643,7 +643,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         endif
       else
         bbl_thick = htot / (0.5 + sqrt(0.25 + htot*htot*C2f*C2f/ &
-          ((US%s_to_T**2*ustar(i)*ustar(i)) * (GV%Z_to_H**2) )))
+                                       ((ustar(i)*ustar(i)) * (GV%Z_to_H**2)) ) )
 
         if (bbl_thick < CS%BBL_thick_min) bbl_thick = CS%BBL_thick_min
       endif
@@ -1105,15 +1105,15 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                     ! the quadratic surface drag [m2 s-2].
   real :: h_tiny    ! A very small thickness [H ~> m or kg m-2]. Layers that are less than
                     ! h_tiny can not be the deepest in the viscous mixed layer.
-  real :: absf      ! The absolute value of f averaged to velocity points, s-1.
-  real :: U_star    ! The friction velocity at velocity points [Z s-1 ~> m s-1].
+  real :: absf      ! The absolute value of f averaged to velocity points [T-1 ~> s-1].
+  real :: U_star    ! The friction velocity at velocity points [Z T-1 ~> m s-1].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: Rho0x400_G ! 400*Rho0/G_Earth, times unit conversion factors
-                     ! [kg s2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
+                     ! [kg T2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                      ! The 400 is a constant proposed by Killworth and Edwards, 1999.
-  real :: ustar1    ! ustar [H s-1 ~> m s-1 or kg m-2 s-1]
-  real :: h2f2      ! (h*2*f)^2 [H2 s-2 ~> m2 s-2 or kg2 m-4 s-2]
+  real :: ustar1    ! ustar [H T-1 ~> m s-1 or kg m-2 s-1]
+  real :: h2f2      ! (h*2*f)^2 [H2 T-2 ~> m2 s-2 or kg2 m-4 s-2]
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml, n
   type(ocean_OBC_type), pointer :: OBC => NULL()
@@ -1131,7 +1131,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     Jsq = js-1 ; Isq = is-1
   endif ; endif
 
-  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%Z_to_m**2 * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth) * US%s_to_T**2*US%Z_to_m**2 * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
@@ -1206,12 +1206,12 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
-          if (CS%omega_frac >= 1.0) then ; absf = 2.0*US%s_to_T*CS%omega ; else
-            absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
+          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
+            absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
             if (CS%omega_frac > 0.0) &
-              absf = sqrt(CS%omega_frac*4.0*US%s_to_T**2*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
           endif
-          U_star = max(US%s_to_T*CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j)))
+          U_star = max(CS%ustar_min, 0.5 * US%T_to_s*(forces%ustar(i,j) + forces%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_star) * CS%TKE_decay) * GV%H_to_Z
         endif
       enddo
@@ -1356,7 +1356,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
       do I=Isq,Ieq ; if (do_i(I)) then
   !  The 400.0 in this expression is the square of a constant proposed
   !  by Killworth and Edwards, 1999, in equation (2.20).
-        ustarsq = Rho0x400_G * US%s_to_T**2 * ustar(i)**2
+        ustarsq = Rho0x400_G * ustar(i)**2
         htot(i) = 0.0
         if (use_EOS) then
           Thtot(i) = 0.0 ; Shtot(i) = 0.0
@@ -1412,8 +1412,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
        !    htot(I) / (0.5 + sqrt(0.25 + &
        !                 (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
        !                 (ustar(i)*GV%Z_to_H)**2 )) )
-        ustar1 = US%s_to_T*ustar(i)*GV%Z_to_H
-        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*US%s_to_T*CS%omega)**2
+        ustar1 = ustar(i)*GV%Z_to_H
+        h2f2 = (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_u(I,j) = tbl_thick_Z
@@ -1441,13 +1441,13 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
-         if (CS%omega_frac >= 1.0) then ; absf = 2.0*US%s_to_T*CS%omega ; else
-           absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+         if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
+           absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
            if (CS%omega_frac > 0.0) &
-             absf = sqrt(CS%omega_frac*4.0*US%s_to_T**2*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
 
-         U_star = max(US%s_to_T*CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1)))
+         U_star = max(CS%ustar_min, 0.5 * US%T_to_s*(forces%ustar(i,j) + forces%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_star) * CS%TKE_decay) * GV%H_to_Z
 
         endif
@@ -1593,7 +1593,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
       do i=is,ie ; if (do_i(i)) then
   !  The 400.0 in this expression is the square of a constant proposed
   !  by Killworth and Edwards, 1999, in equation (2.20).
-        ustarsq = Rho0x400_G * US%s_to_T**2 * ustar(i)**2
+        ustarsq = Rho0x400_G * ustar(i)**2
         htot(i) = 0.0
         if (use_EOS) then
           Thtot(i) = 0.0 ; Shtot(i) = 0.0
@@ -1649,8 +1649,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
        !    htot(i) / (0.5 + sqrt(0.25 + &
        !        (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
        !        (ustar(i)*GV%Z_to_H)**2 )) )
-        ustar1 = US%s_to_T*ustar(i)*GV%Z_to_H
-        h2f2 = (htot(i)*US%s_to_T*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*US%s_to_T*CS%omega)**2
+        ustar1 = ustar(i)*GV%Z_to_H
+        h2f2 = (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%omega)**2
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_v(i,J) = tbl_thick_Z
