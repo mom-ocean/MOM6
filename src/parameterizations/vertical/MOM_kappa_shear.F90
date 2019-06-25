@@ -147,9 +147,9 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
     S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
-    kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 s-1 ~> m2 s-1].
+    kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 T-1 ~> m2 s-1].
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
-    kappa_avg, & ! The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
+    kappa_avg, & ! The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
     tke_avg     ! The time-weighted average of TKE [m2 s-2].
   real :: f2   ! The squared Coriolis parameter of each column [s-2].
   real :: surface_pres  ! The top surface pressure [Pa].
@@ -172,34 +172,18 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   ! Diagnostics that should be deleted?
 #ifdef ADD_DIAGNOSTICS
   real, dimension(SZK_(GV)+1) :: &  ! Additional diagnostics.
-    I_Ld2_1d
+    I_Ld2_1d, dz_Int_1d
   real, dimension(SZI_(G),SZK_(GV)+1) :: & ! 2-D versions of diagnostics.
     I_Ld2_2d, dz_Int_2d
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: & ! 3-D versions of diagnostics.
     I_Ld2_3d, dz_Int_3d
-#endif
-#ifdef DEBUG
-  integer :: max_debug_itt ; parameter(max_debug_itt=20)
-  real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
-  real, dimension(SZK_(GV)+1) :: &
-    Ri_k, tke_prev, dtke, dkap, dtke_norm, &
-    ksrc_av    ! The average through the iterations of k_src [s-1].
-  real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
-    tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
-  real, dimension(SZK_(GV)+1,1:max_debug_itt) :: &
-    dkappa_it1, wt_it1, K_Q_it1, d_dkappa_it1, dkappa_norm
-  real, dimension(SZK_(GV),0:max_debug_itt) :: &
-    u_it1, v_it1, rho_it1, T_it1, S_it1
-  real, dimension(0:max_debug_itt) :: &
-    dk_wt_it1, dkpos_wt_it1, dkneg_wt_it1, k_mag
-  real, dimension(max_debug_itt) ::  dt_it1
 #endif
   is = G%isc ; ie = G%iec; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
-  k0dt = dt*CS%kappa_0
+  k0dt = dt*US%s_to_T*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
 
   !$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
@@ -293,50 +277,50 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                   (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
 
-    ! ----------------------------------------------------
+    ! ----------------------------------------------------    I_Ld2_1d, dz_Int_1d
+
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
       if (new_kappa) then
-        do K=1,nzc+1 ; kappa(K) = US%m_to_Z**2*1.0 ; enddo
+        do K=1,nzc+1 ; kappa(K) = US%m2_s_to_Z2_T*1.0 ; enddo
       else
-        do K=1,nzc+1 ; kappa(K) = US%s_to_T*kappa_2d(i,K) ; enddo
+        do K=1,nzc+1 ; kappa(K) = kappa_2d(i,K) ; enddo
       endif
 
+#ifdef ADD_DIAGNOSTICS
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+                              dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
+                              tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
+#else
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US)
+#endif
 
     ! call cpu_clock_begin(id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
       if (nz == nzc) then
         do K=1,nz+1
-          kappa_2d(i,K) = US%T_to_s*kappa_avg(K)
+          kappa_2d(i,K) = kappa_avg(K)
           !### Should this be tke_avg?
           tke_2d(i,K) = tke(K)
         enddo
       else
         do K=1,nz+1
           if (kf(K) == 0.0) then
-            kappa_2d(i,K) = US%T_to_s*kappa_avg(kc(K))
+            kappa_2d(i,K) = kappa_avg(kc(K))
             tke_2d(i,K) = tke_avg(kc(K))
           else
-            kappa_2d(i,K) = (1.0-kf(K)) * US%T_to_s*kappa_avg(kc(K)) + &
-                             kf(K) * US%T_to_s*kappa_avg(kc(K)+1)
+            kappa_2d(i,K) = (1.0-kf(K)) * kappa_avg(kc(K)) + &
+                             kf(K) * kappa_avg(kc(K)+1)
             tke_2d(i,K) = (1.0-kf(K)) * tke_avg(kc(K)) + &
                            kf(K) * tke_avg(kc(K)+1)
           endif
         enddo
       endif
 #ifdef ADD_DIAGNOSTICS
-      I_Ld2_2d(i,1) = 0.0 ; dz_Int_2d(i,1) = dz_Int(1)
-      do K=2,nzc
-        I_Ld2_2d(i,K) = I_L2_bdry(K) + &
-            (N2(K) / CS%lambda**2 + f2) * Z2_to_L2 / (max(TKE(K),1e-30))
-        dz_Int_2d(i,K) = dz_Int(K)
-      enddo
-      I_Ld2_2d(i,nzc+1) = 0.0 ; dz_Int_2d(i,nzc+1) = dz_Int(nzc+1)
-      do K=nzc+2,nz+1
-        I_Ld2_2d(i,K) = 0.0 ; dz_Int_2d(i,K) = 0.0
+      do K=1,nz+1
+        I_Ld2_2d(i,K) = I_Ld2_1d(K) ; dz_Int_2d(i,K) = dz_Int_1d(K)
       enddo
 #endif
     ! call cpu_clock_end(id_clock_setup)
@@ -344,8 +328,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       do K=1,nz+1
         kappa_2d(i,K) = 0.0 ; tke_2d(i,K) = 0.0
 #ifdef ADD_DIAGNOSTICS
-        I_Ld2_2d(i,K) = 0.0
-        dz_Int_2d(i,K) = dz_Int(K)
+        I_Ld2_2d(i,K) = 0.0  ; dz_Int_2d(i,K) = 0.0
 #endif
       enddo
     endif ; enddo ! i-loop
@@ -355,8 +338,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
       kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
-      I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K)
-      dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
+      I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K) ; dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
 #endif
     enddo ; enddo
 
@@ -438,9 +420,9 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
     S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
-    kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 s-1 ~> m2 s-1].
+    kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 T-1 ~> m2 s-1].
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
-    kappa_avg, & ! The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
+    kappa_avg, & ! The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
     tke_avg     ! The time-weighted average of TKE [m2 s-2].
   real :: f2   ! The squared Coriolis parameter of each column [s-2].
   real :: surface_pres  ! The top surface pressure [Pa].
@@ -466,34 +448,18 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   ! Diagnostics that should be deleted?
 #ifdef ADD_DIAGNOSTICS
   real, dimension(SZK_(GV)+1) :: &  ! Additional diagnostics.
-    I_Ld2_1d
+    I_Ld2_1d, dz_Int_1d
   real, dimension(SZI_(G),SZK_(GV)+1) :: & ! 2-D versions of diagnostics.
     I_Ld2_2d, dz_Int_2d
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: & ! 3-D versions of diagnostics.
     I_Ld2_3d, dz_Int_3d
-#endif
-#ifdef DEBUG
-  integer :: max_debug_itt ; parameter(max_debug_itt=20)
-  real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
-  real, dimension(SZK_(GV)+1) :: &
-    Ri_k, tke_prev, dtke, dkappa, dtke_norm, &
-    ksrc_av    ! The average through the iterations of k_src [s-1].
-  real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
-    tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
-  real, dimension(SZK_(GV)+1,1:max_debug_itt) :: &
-    dkappa_it1, wt_it1, K_Q_it1, d_dkappa_it1, dkappa_norm
-  real, dimension(SZK_(GV),0:max_debug_itt) :: &
-    u_it1, v_it1, rho_it1, T_it1, S_it1
-  real, dimension(0:max_debug_itt) :: &
-    dk_wt_it1, dkpos_wt_it1, dkneg_wt_it1, k_mag
-  real, dimension(max_debug_itt) ::  dt_it1
 #endif
   isB = G%isc-1 ; ieB = G%iecB ; jsB = G%jsc-1 ; jeB = G%jecB ; nz = GV%ke
 
   use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
-  k0dt = dt*CS%kappa_0
+  k0dt =  dt*US%s_to_T*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
   I_Prandtl = 0.0 ; if (CS%Prandtl_turb > 0.0) I_Prandtl = 1.0 / CS%Prandtl_turb
 
@@ -622,46 +588,44 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
       if (new_kappa) then
-        do K=1,nzc+1 ; kappa(K) = US%m_to_Z**2*1.0 ; enddo
+        do K=1,nzc+1 ; kappa(K) = US%m2_s_to_Z2_T*1.0 ; enddo
       else
-        do K=1,nzc+1 ; kappa(K) = US%s_to_T*kappa_2d(I,K,J2) ; enddo
+        do K=1,nzc+1 ; kappa(K) = kappa_2d(I,K,J2) ; enddo
       endif
 
+#ifdef ADD_DIAGNOSTICS
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+                              dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
+                              tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
+#else
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US)
-
+#endif
     ! call cpu_clock_begin(Id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
       if (nz == nzc) then
         do K=1,nz+1
-          kappa_2d(I,K,J2) = US%T_to_s*kappa_avg(K)
+          kappa_2d(I,K,J2) = kappa_avg(K)
           !### Should this be tke_avg?
           tke_2d(I,K) = tke(K)
         enddo
       else
         do K=1,nz+1
           if (kf(K) == 0.0) then
-            kappa_2d(I,K,J2) = US%T_to_s*kappa_avg(kc(K))
+            kappa_2d(I,K,J2) = kappa_avg(kc(K))
             tke_2d(I,K) = tke_avg(kc(K))
           else
-            kappa_2d(I,K,J2) = (1.0-kf(K)) * US%T_to_s*kappa_avg(kc(K)) + &
-                               kf(K) * US%T_to_s*kappa_avg(kc(K)+1)
+            kappa_2d(I,K,J2) = (1.0-kf(K)) * kappa_avg(kc(K)) + &
+                               kf(K) * kappa_avg(kc(K)+1)
             tke_2d(I,K) = (1.0-kf(K)) * tke_avg(kc(K)) + &
                            kf(K) * tke_avg(kc(K)+1)
           endif
         enddo
       endif
 #ifdef ADD_DIAGNOSTICS
-      I_Ld2_2d(I,1) = 0.0 ; dz_Int_2d(I,1) = dz_Int(1)
-      do K=2,nzc
-        I_Ld2_2d(I,K) = I_L2_bdry(K) + &
-            (N2(K) / CS%lambda**2 + f2) * Z2_to_L2 / (max(TKE(K),1e-30))
-        dz_Int_2d(I,K) = dz_Int(K)
-      enddo
-      I_Ld2_2d(I,nzc+1) = 0.0 ; dz_Int_2d(I,nzc+1) = dz_Int(nzc+1)
-      do K=nzc+2,nz+1
-        I_Ld2_2d(I,K) = 0.0 ; dz_Int_2d(I,K) = 0.0
+      do K=1,nz+1
+        I_Ld2_2d(i,K) = I_Ld2_1d(K) ; dz_Int_2d(i,K) = dz_Int_1d(K)
       enddo
 #endif
     ! call cpu_clock_end(Id_clock_setup)
@@ -669,8 +633,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       do K=1,nz+1
         kappa_2d(I,K,J2) = 0.0 ; tke_2d(I,K) = 0.0
 #ifdef ADD_DIAGNOSTICS
-        I_Ld2_2d(I,K) = 0.0
-        dz_Int_2d(I,K) = dz_Int(K)
+        I_Ld2_2d(I,K) = 0.0 ; dz_Int_2d(I,K) = 0.0
 #endif
       enddo
     endif ; enddo ! i-loop
@@ -679,8 +642,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
       kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
-      I_Ld2_3d(I,J,K) = I_Ld2_2d(I,K)
-      dz_Int_3d(I,J,K) = dz_Int_2d(I,K)
+      I_Ld2_3d(I,J,K) = I_Ld2_2d(I,K) ; dz_Int_3d(I,J,K) = dz_Int_2d(I,K)
 #endif
     enddo ; enddo
     if (J>=G%jsc) then ; do K=1,nz+1 ; do i=G%isc,G%iec
@@ -710,11 +672,11 @@ end subroutine Calc_kappa_shear_vertex
 !> This subroutine calculates shear-driven diffusivity and TKE in a single column
 subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
-                              tke_avg, tv, CS, GV, US)
+                              tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZK_(GV)+1), &
-                     intent(inout) :: kappa !< The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
+                     intent(inout) :: kappa !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
                      intent(inout) :: tke  !< The Turbulent Kinetic Energy per unit mass at
                                            !! an interface [m2 s-2].
@@ -732,7 +694,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real, dimension(SZK_(GV)), &
                      intent(in)    :: S0xdz !< The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1), &
-                     intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 s-1 ~> m2 s-1].
+                     intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
                      intent(out)   :: tke_avg  !< The time-weighted average of TKE [m2 s-2].
   real,                    intent(in)    :: dt !< Time increment [s].
@@ -741,6 +703,11 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                                                !! have NULL ptrs.
   type(Kappa_shear_CS),    pointer       :: CS !< The control structure returned by a previous
                                                !! call to kappa_shear_init.
+  real,  dimension(SZK_(GV)+1), &
+           optional, intent(out)   :: I_Ld2_1d !< The inverse of the squared mixing length [Z-2 ~> m-2].
+  real,  dimension(SZK_(GV)+1), &
+           optional, intent(out)   :: dz_Int_1d !< The extent of a finite-volume space surrounding an interface,
+                                               !! as used in calculating kappa and TKE [Z ~> m].
 
   real, dimension(nzc) :: &
     u, &        ! The zonal velocity after a timestep of mixing [m s-1].
@@ -762,12 +729,12 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
                 ! velocity, and density equations [Z s-1 ~> m s-1] or [Z ~> m]
     c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
-    k_src, &    ! The shear-dependent source term in the kappa equation [s-1].
-    kappa_src, & ! The shear-dependent source term in the kappa equation [s-1].
-    kappa_out, & ! The kappa that results from the kappa equation [Z2 s-1 ~> m2 s-1].
-    kappa_mid, & ! The average of the initial and predictor estimates of kappa [Z2 s-1 ~> m2 s-1].
+    k_src, &    ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].
+    kappa_src, & ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].
+    kappa_out, & ! The kappa that results from the kappa equation [Z2 T-1 ~> m2 s-1].
+    kappa_mid, & ! The average of the initial and predictor estimates of kappa [Z2 T-1 ~> m2 s-1].
     tke_pred, & ! The value of TKE from a predictor step [m2 s-2].
-    kappa_pred, & ! The value of kappa from a predictor step [Z2 s-1 ~> m2 s-1].
+    kappa_pred, & ! The value of kappa from a predictor step [Z2 T-1 ~> m2 s-1].
     pressure, & ! The pressure at an interface [Pa].
     T_int, &    ! The temperature interpolated to an interface [degC].
     Sal_int, &  ! The salinity interpolated to an interface [ppt].
@@ -775,15 +742,15 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     dbuoy_dS, & ! and salinity, [Z s-2 degC-1 ~> m s-2 degC-1] and [Z s-2 ppt-1 ~> m s-2 ppt-1].
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
                    ! distance to the top and bottom boundaries [Z-2 ~> m-2].
-    K_Q, &         ! Diffusivity divided by TKE [Z2 m-2 s ~> s].
-    K_Q_tmp, &     ! A temporary copy of diffusivity divided by TKE [Z2 m-2 s ~> s].
+    K_Q, &         ! Diffusivity divided by TKE [Z2 m-2 s2 T-1 ~> s].
+    K_Q_tmp, &     ! A temporary copy of diffusivity divided by TKE [Z2 m-2 s2 T-1 ~> s].
     local_src_avg, & ! The time-integral of the local source [nondim].
-    tol_min, & ! Minimum tolerated ksrc for the corrector step [s-1].
-    tol_max, & ! Maximum tolerated ksrc for the corrector step [s-1].
-    tol_chg, & ! The tolerated change integrated in time [nondim].
+    tol_min, & ! Minimum tolerated ksrc for the corrector step [T-1 ~> s-1].
+    tol_max, & ! Maximum tolerated ksrc for the corrector step [T-1 ~> s-1].
+    tol_chg, & ! The tolerated change integrated in time [s T-nondim].
     dist_from_top, &  ! The distance from the top surface [Z ~> m].
     local_src     ! The sum of all sources of kappa, including kappa_src and
-                  ! sources from the elliptic term [s-1].
+                  ! sources from the elliptic term [T-1 ~> s-1].
 
   real :: dist_from_bot ! The distance from the bottom surface [Z ~> m].
   real :: b1            ! The inverse of the pivot in the tridiagonal equations.
@@ -802,7 +769,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: dt_wt         !   The fractional weight of the current iteration [nondim].
   real :: dt_test       !   A time-step that is being tested for whether it
                         ! gives acceptably small changes in k_src [s].
-  real :: Idtt          !   Idtt = 1 / dt_test [s-1].
+  real :: Idtt          !   Idtt = 1 / dt_test [T-1 ~> s-1].
   real :: dt_inc        !   An increment to dt_test that is being tested [s].
 
   real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
@@ -818,10 +785,27 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                            ! to estimate the maximum permitted time step.  I.e.,
                            ! the resolution is 1/2^dt_refinements.
   integer :: k, itt, itt_dt
+#ifdef DEBUG
+  integer :: max_debug_itt ; parameter(max_debug_itt=20)
+  real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
+  real, dimension(SZK_(GV)+1) :: &
+    Ri_k, tke_prev, dtke, dkappa, dtke_norm, &
+    N2_debug, & ! A version of N2 for debugging [s-2]
+    ksrc_av     ! The average through the iterations of k_src [T-1 ~> s-1].
+  real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
+    tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
+  real, dimension(SZK_(GV)+1,1:max_debug_itt) :: &
+    dkappa_it1, wt_it1, K_Q_it1, d_dkappa_it1, dkappa_norm
+  real, dimension(SZK_(GV),0:max_debug_itt) :: &
+    u_it1, v_it1, rho_it1, T_it1, S_it1
+  real, dimension(0:max_debug_itt) :: &
+    dk_wt_it1, dkpos_wt_it1, dkneg_wt_it1, k_mag
+  real, dimension(max_debug_itt) ::  dt_it1
+#endif
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%Rho0*(GV%g_Earth*US%m_to_Z) ; g_R0 = (GV%g_Earth*US%m_to_Z**2)/GV%Rho0
-  k0dt = dt*CS%kappa_0
+  k0dt = dt*US%s_to_T*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
   tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
@@ -895,10 +879,6 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   enddo
   dz_Int(nzc) = dz_Int(nzc) + dz(nzc) ; dz_Int(nzc+1) = 0.0
 
-#ifdef ADD_DIAGNOSTICS
-  do K=1,nzc+1 ; I_Ld2_1d(K) = 0.0 ; enddo
-#endif
-
   dist_from_bot = 0.0
   do K=nzc,2,-1
     dist_from_bot = dist_from_bot + dz(k)
@@ -925,11 +905,11 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   endif
 
 #ifdef DEBUG
-  N2(1) = 0.0 ; N2(nzc+1) = 0.0
+  N2_debug(1) = 0.0 ; N2_debug(nzc+1) = 0.0
   do K=2,nzc
-    N2(K) = max((dbuoy_dT(K) * (T0xdz(k-1)*Idz(k-1) - T0xdz(k)*Idz(k)) + &
-                 dbuoy_dS(K) * (S0xdz(k-1)*Idz(k-1) - S0xdz(k)*Idz(k))) * &
-                 I_dz_int(K), 0.0)
+    N2_debug(K) = max((dbuoy_dT(K) * (T0xdz(k-1)*Idz(k-1) - T0xdz(k)*Idz(k)) + &
+                       dbuoy_dS(K) * (S0xdz(k-1)*Idz(k-1) - S0xdz(k)*Idz(k))) * &
+                       I_dz_int(K), 0.0)
   enddo
   do k=1,nzc
     u_it1(k,0) = u0xdz(k)*Idz(k) ; v_it1(k,0) = v0xdz(k)*Idz(k)
@@ -938,9 +918,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   do K=1,nzc+1
     kprev_it1(K,0) = kappa(K) ; kappa_it1(K,0) = kappa(K)
     tke_it1(K,0) = tke(K)
-    N2_it1(K,0) = N2(K) ; Sh2_it1(K,0) = S2(K) ; ksrc_it1(K,0) = k_src(K)
+    N2_it1(K,0) = N2_debug(K) ; Sh2_it1(K,0) = S2(K) ; ksrc_it1(K,0) = K_src(K)
   enddo
-  do k=nzc+1,nz
+  do k=nzc+1,GV%ke
     u_it1(k,0) = 0.0 ; v_it1(k,0) = 0.0
     T_it1(k,0) = 0.0 ; S_it1(k,0) = 0.0
     kprev_it1(K+1,0) = 0.0 ; kappa_it1(K+1,0) = 0.0 ; tke_it1(K+1,0) = 0.0
@@ -948,12 +928,12 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   enddo
   do itt=1,max_debug_itt
     dt_it1(itt) = 0.0
-    do k=1,nz
+    do k=1,GV%ke
       u_it1(k,itt) = 0.0 ; v_it1(k,itt) = 0.0
       T_it1(k,itt) = 0.0 ; S_it1(k,itt) = 0.0
       rho_it1(k,itt) = 0.0
     enddo
-    do K=1,nz+1
+    do K=1,GV%ke+1
       kprev_it1(K,itt) = 0.0 ; kappa_it1(K,itt) = 0.0 ; tke_it1(K,itt) = 0.0
       N2_it1(K,itt) = 0.0 ; Sh2_it1(K,itt) = 0.0
       ksrc_it1(K,itt) = 0.0
@@ -961,7 +941,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       K_Q_it1(K,itt) = 0.0 ; d_dkappa_it1(K,itt) = 0.0
     enddo
   enddo
-  do K=1,nz+1 ; ksrc_av(K) = 0.0 ; enddo
+  do K=1,GV%ke+1 ; ksrc_av(K) = 0.0 ; enddo
 #endif
 
   ! This call just calculates N2 and S2.
@@ -1040,13 +1020,13 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                                        GV, US, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, &
                                        vel_underflow=CS%vel_underflow)
         valid_dt = .true.
-        Idtt = 1.0 / dt_test
+        Idtt = 1.0 / (US%s_to_T*dt_test)
         do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
           if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
-            k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+            K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                        ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
-             if ((k_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
-                 (k_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
+            if ((K_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
+                (K_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
               valid_dt = .false. ; exit
             endif
           else
@@ -1066,14 +1046,14 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                    nzc, dz, I_dz_int, dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
                    GV, US, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, vel_underflow=CS%vel_underflow)
           valid_dt = .true.
-          Idtt = 1.0 / (dt_test+dt_inc)
+          Idtt = 1.0 / (US%s_to_T*(dt_test+dt_inc))
           do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
             if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
-              k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+              K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                          ((Ri_crit*S2(K) - N2(K)) / &
                           (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
-               if ((k_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
-                   (k_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
+              if ((K_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
+                  (K_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
                 valid_dt = .false. ; exit
               endif
             else
@@ -1090,9 +1070,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         dt_inc = 0.0
       endif
 
-       dt_now = min(dt_test*(1.0+CS%kappa_tol_err)+dt_inc,dt_rem)
+      dt_now = min(dt_test*(1.0+CS%kappa_tol_err)+dt_inc,dt_rem)
       do K=2,nzc
-        local_src_avg(K) = local_src_avg(K) + dt_now * local_src(K)
+        local_src_avg(K) = local_src_avg(K) + dt_now*US%s_to_T * local_src(K)
       enddo
     endif  ! Are all the values of kappa_out 0?
   ! call cpu_clock_end(id_clock_project)
@@ -1173,7 +1153,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       k_mag(itt) = 0.0
       wt_itt = 1.0/real(itt) ; wt_tot = 0.0
       do K=1,nzc+1
-        ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*k_src(K)
+        ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*K_src(K)
         wt_tot = wt_tot + dz_Int(K) * ksrc_av(K)
       enddo
       ! Use the 1/0=0 convention.
@@ -1184,7 +1164,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         k_mag(itt) = k_mag(itt) + wt(K)*kappa_mid(K)
         dkappa_it1(K,itt) = kappa_pred(K) - kappa_out(K)
         dk_wt_it1(itt) = dk_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
-        if (dk > 0.0) then
+        if (dkappa_it1(K,itt) > 0.0) then
           dkpos_wt_it1(itt) = dkpos_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
         else
           dkneg_wt_it1(itt) = dkneg_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
@@ -1196,7 +1176,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       Ri_k(K) = 1e3 ; if (N2(K) < 1e3 * S2(K)) Ri_k(K) = N2(K) / S2(K)
       dtke(K) = tke_pred(K) - tke(K)
       dtke_norm(K) = dtke(K) / (0.5*(tke(K) + tke_pred(K)))
-      dkap(K) = kappa_pred(K) - kappa_out(K)
+      dkappa(K) = kappa_pred(K) - kappa_out(K)
     enddo
     if (itt <= max_debug_itt) then
       do k=1,nzc
@@ -1204,8 +1184,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         T_it1(k,itt) = T(k) ; S_it1(k,itt) = Sal(k)
       enddo
       do K=1,nzc+1
-        kprev_it1(K,itt)=kappa_out(K)
-        kappa_it1(K,itt)=kappa_mid(K) ; tke_it1(K,itt) = 0.5*(tke(K)+tke_pred(K))
+        kprev_it1(K,itt) = kappa_out(K)
+        kappa_it1(K,itt) = kappa_mid(K) ; tke_it1(K,itt) = 0.5*(tke(K)+tke_pred(K))
         N2_it1(K,itt)=N2(K) ; Sh2_it1(K,itt)=S2(K)
         ksrc_it1(K,itt) = kappa_src(K)
         K_Q_it1(K,itt) = kappa_out(K) / (TKE(K))
@@ -1213,7 +1193,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
           if (abs(dkappa_it1(K,itt-1)) > 1e-20) &
             d_dkappa_it1(K,itt) = dkappa_it1(K,itt) / dkappa_it1(K,itt-1)
         endif
-        dkappa_norm(K,itt) = dkap(K) / max(0.5*(kappa_pred(K) + kappa_out(K)), US%m_to_Z**2*1e-100)
+        dkappa_norm(K,itt) = dkappa(K) / max(0.5*(kappa_pred(K) + kappa_out(K)), US%m2_s_to_Z2_T*1e-100)
       enddo
     endif
 #endif
@@ -1221,6 +1201,19 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     if (dt_rem <= 0.0) exit
 
   enddo ! end itt loop
+
+#ifdef ADD_DIAGNOSTICS
+  if (present(I_Ld2_1d)) then
+    do K=1,GV%ke+1 ; I_Ld2_1d(K) = 0.0 ; enddo
+    do K=2,nzc ; if (TKE(K) > 0.0) &
+      I_Ld2_1d(K) = I_L2_bdry(K) + (N2(K) / CS%lambda**2 + f2) * US%Z_to_m**2 / TKE(K)
+    enddo
+  endif
+  if (present(dz_Int_1d)) then
+    do K=1,nzc+1 ; dz_Int_1d(K) = dz_Int(K) ; enddo
+    do K=nzc+2,GV%ke ; dz_Int_1d(K) = 0.0 ; enddo
+  endif
+#endif
 
 end subroutine kappa_shear_column
 
@@ -1233,7 +1226,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   integer,               intent(in)    :: nz  !< The number of layers (after eliminating massless
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
-                                              !! [Z2 s-1 ~> m2 s-1].
+                                              !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [m s-1].
   real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [m s-1].
   real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
@@ -1279,7 +1272,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   if (ks > ke) return
 
   if (dt > 0.0) then
-    a_b = dt*(kappa(ks+1)*I_dz_int(ks+1))
+    a_b = dt*US%s_to_T*(kappa(ks+1)*I_dz_int(ks+1))
     b1 = 1.0 / (dz(ks) + a_b)
     c1(ks+1) = a_b * b1 ; d1 = dz(ks) * b1 ! = 1 - c1
 
@@ -1287,7 +1280,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
     T(ks) = (b1 * dz(ks))*T0(ks) ; Sal(ks) = (b1 * dz(ks))*S0(ks)
     do K=ks+1,ke-1
       a_a = a_b
-      a_b = dt*(kappa(K+1)*I_dz_int(K+1))
+      a_b = dt*US%s_to_T*(kappa(K+1)*I_dz_int(K+1))
       bd1 = dz(k) + d1*a_a
       b1 = 1.0 / (bd1 + a_b)
       c1(K+1) = a_b * b1 ; d1 = bd1 * b1 ! d1 = 1 - c1
@@ -1310,7 +1303,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
     ! tracers and velocities if the mixing is separated from the bottom, but if
     ! the mixing goes all the way to the bottom, use no-slip BCs for velocities.
     if (ke == nz) then
-      a_b = dt*(kappa(nz+1)*I_dz_int(nz+1))
+      a_b = dt*US%s_to_T*(kappa(nz+1)*I_dz_int(nz+1))
       b1nz_0 = 1.0 / ((dz(nz) + d1*a_a) + a_b)
     else
       b1nz_0 = b1
@@ -1371,7 +1364,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces [s-2].
   real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces [s-2].
   real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity
-                                              !! [Z2 s-1 ~> m2 s-1].
+                                              !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
@@ -1383,16 +1376,16 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), intent(inout) :: K_Q !< The shear-driven diapycnal diffusivity divided by
                                               !! the turbulent kinetic energy per unit mass at
-                                              !! interfaces [s].
+                                              !! interfaces [Z2 m-2 s2 T-1 ~> s].
   real, dimension(nz+1), intent(out)   :: tke !< The turbulent kinetic energy per unit mass at
                                               !! interfaces [m2 s-2].
   real, dimension(nz+1), intent(out)   :: kappa  !< The diapycnal diffusivity at interfaces
-                                              !! [Z2 s-1 ~> m2 s-1].
+                                              !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), optional, &
-                         intent(out)   :: kappa_src !< The source term for kappa [s-1].
+                         intent(out)   :: kappa_src !< The source term for kappa [T-1].
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
-                                              !! [s-1].
+                                              !! [T-1 ~> s-1].
 !   This subroutine calculates new, consistent estimates of TKE and kappa.
 
   ! Local variables
@@ -1400,14 +1393,13 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
     aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE equations [m s-1].
     dQdz        ! Half the partial derivative of TKE with depth [m s-2].
   real, dimension(nz+1) :: &
-    dK, &         ! The change in kappa [Z2 s-1 ~> m2 s-1].
+    dK, &         ! The change in kappa [Z2 T-1 ~> m2 s-1].
     dQ, &         ! The change in TKE [m2 s-2].
     cQ, cK, &     ! cQ and cK are the upward influences in the tridiagonal and
                   ! hexadiagonal solvers for the TKE and kappa equations [nondim].
-    I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale
-                  ! for kappa [Z-2 ~> m-2].
+    I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale for kappa [Z-2 ~> m-2].
     TKE_decay, &  ! The local TKE decay rate [s-1].
-    k_src, &      ! The source term in the kappa equation [s-1].
+    k_src, &      ! The source term in the kappa equation [T-1 ~> s-1].
     dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k) [m2 s Z-2 ~> s].
     dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k) [Z2 m-2 s-1 ~> s-1].
     e1            ! The fractional change in a layer TKE due to a change in the
@@ -1430,16 +1422,15 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: Ilambda2      ! 1.0 / CS%lambda**2 [nondim]
   real :: TKE_min       !   The minimum value of shear-driven TKE that can be
                         ! solved for [m2 s-2].
-  real :: kappa0        ! The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
-  real :: max_err       ! The maximum value of norm_err in a column [nondim].
-  real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0 [Z2 s-1 ~> m2 s-1].
+  real :: kappa0        ! The background diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
+  real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0 [Z2 T-1 ~> m2 s-1].
 
   real :: eden1, eden2, I_eden, ome  ! Variables used in calculating e1.
-  real :: diffusive_src ! The diffusive source in the kappa equation [m s-1].
+  real :: diffusive_src ! The diffusive source in the kappa equation [m T-1 ~> m s-1].
   real :: chg_by_k0     ! The value of k_src that leads to an increase of
-                        ! kappa_0 if only the diffusive term is a sink [s-1].
+                        ! kappa_0 if only the diffusive term is a sink [T-1 ~> s-1].
 
-  real :: kappa_mean    ! A mean value of kappa [Z2 s-1 ~> m2 s-1].
+  real :: kappa_mean    ! A mean value of kappa [Z2 T-1 ~> m2 s-1].
   real :: Newton_test   ! The value of relative error that will cause the next
                         ! iteration to use Newton's method.
   ! Temporary variables used in the Newton's method iterations.
@@ -1474,14 +1465,12 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   integer :: max_debug_itt ; parameter(max_debug_itt=20)
   real :: K_err_lin, Q_err_lin
   real, dimension(nz+1) :: &
-    kappa_prev, & ! The value of kappa at the start of the current iteration [Z2 s-1 ~> m2 s-1].
+    I_Ld2_debug, & ! A separate version of I_Ld2 for debugging [Z-2 ~> m-2].
+    kappa_prev, & ! The value of kappa at the start of the current iteration [Z2 T-1 ~> m2 s-1].
     TKE_prev   ! The value of TKE at the start of the current iteration [m2 s-2].
   real, dimension(nz+1,1:max_debug_itt) :: &
     tke_it1, kappa_it1, kprev_it1, &  ! Various values from each iteration.
     dkappa_it1, K_Q_it1, d_dkappa_it1, dkappa_norm_it1
-  real :: norm_err      ! The absolute change in kappa between iterations,
-                        ! normalized by the value of kappa [nondim].
-  real :: max_TKE_err, min_TKE_err, TKE_err(nz)  ! Various normalized TKE changes.
   integer :: it2
 #endif
 
@@ -1503,7 +1492,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 !       Ri = N2(K) / S2(K)
 !       k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
 !                  ((Ri_crit - Ri) / (Ri_crit + CS%FRi_curvature*Ri))
-      k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+      K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                  ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
       ke_src = K
       if (ks_src > k) ks_src = K
@@ -1538,7 +1527,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   ! Calculate the term (e1) that allows changes in TKE to be calculated quickly
   ! below the deepest nonzero value of kappa.  If kappa = 0, below interface
   ! k-1, the final changes in TKE are related by dQ(K+1) = e1(K+1)*dQ(K).
-  eden2 = kappa0 * Idz(nz)
+  eden2 = US%s_to_T*kappa0 * Idz(nz)
   if (tke_noflux_bottom_BC) then
     eden1 = dz_Int(nz+1)*TKE_decay(nz+1)
     I_eden = 1.0 / (eden2 + eden1)
@@ -1548,7 +1537,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   endif
   do k=nz,2,-1
     eden1 = dz_Int(K)*TKE_decay(K) + ome * eden2
-    eden2 = kappa0 * Idz(k-1)
+    eden2 = US%s_to_T*kappa0 * Idz(k-1)
     I_eden = 1.0 / (eden2 + eden1)
     e1(K) = eden2 * I_eden ; ome = eden1 * I_eden ! = 1-e1
   enddo
@@ -1575,11 +1564,11 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       ke_tke = max(ke_kappa,ke_kappa_prev)+1
       ! aQ is the coupling between adjacent interfaces [Z s-1 ~> m s-1].
       do k=1,min(ke_tke,nz)
-        aQ(k) = (0.5*(kappa(K)+kappa(K+1)) + kappa0) * Idz(k)
+        aQ(k) = US%s_to_T*(0.5*(kappa(K)+kappa(K+1)) + kappa0) * Idz(k)
       enddo
       dQ(1) = -TKE(1)
       if (tke_noflux_top_BC) then
-        tke_src = Z2_to_L2*kappa0*S2(1) + q0 * TKE_decay(1) ! Uses that kappa(1) = 0
+        tke_src = Z2_to_L2*US%s_to_T*kappa0*S2(1) + q0 * TKE_decay(1) ! Uses that kappa(1) = 0
         bd1 = dz_Int(1) * TKE_decay(1)
         bQ = 1.0 / (bd1 +  aQ(1))
         tke(1) = bQ * (dz_Int(1)*tke_src)
@@ -1589,8 +1578,8 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       endif
       do K=2,ke_tke-1
         dQ(K) = -TKE(K)
-        tke_src = Z2_to_L2*(kappa(K) + kappa0)*S2(K) + q0*TKE_decay(K)
-        bd1 = dz_Int(K)*(TKE_decay(K) + N2(K)*Z2_to_L2*K_Q(K)) + cQcomp*aQ(k-1)
+        tke_src = Z2_to_L2*US%s_to_T*(kappa(K) + kappa0)*S2(K) + q0*TKE_decay(K)
+        bd1 = dz_Int(K)*(TKE_decay(K) + N2(K)*Z2_to_L2*US%s_to_T*K_Q(K)) + cQcomp*aQ(k-1)
         bQ = 1.0 / (bd1 + aQ(k))
         tke(K) = bQ * (dz_Int(K)*tke_src + aQ(k-1)*tke(K-1))
         cQ(K+1) = aQ(k) * bQ ; cQcomp = bd1 * bQ ! = 1 - cQ
@@ -1600,7 +1589,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         dQ(nz+1) = 0.0
       else
         k = ke_tke
-        tke_src = Z2_to_L2*kappa0*S2(K) + q0*TKE_decay(K) ! Uses that kappa(ke_tke) = 0
+        tke_src = Z2_to_L2*US%s_to_T*kappa0*S2(K) + q0*TKE_decay(K) ! Uses that kappa(ke_tke) = 0
         if (K == nz+1) then
           dQ(K) = -TKE(K)
           bQ = 1.0 / (dz_Int(K)*TKE_decay(K) + cQcomp*aQ(k-1))
@@ -1652,7 +1641,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         bd1 = dz_Int(K)*I_Ld2(K) + cKcomp*Idz(k-1)
         bK = 1.0 / (bd1 + Idz(k))
 
-        kappa(K) = bK * (Idz(k-1)*kappa(K-1) + dz_Int(K) * k_src(K))
+        kappa(K) = bK * (Idz(k-1)*kappa(K-1) + dz_Int(K) * K_src(K))
         cK(K+1) = Idz(k) * bK ; cKcomp = bd1 * bK ! = 1 - cK(K+1)
 
         ! Neglect values that are smaller than kappa_trunc.
@@ -1689,10 +1678,10 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       ks_kappa_prev = ks_kappa ; ke_kappa_prev = ke_kappa ; ke_kappa = nz
       ks_kappa = 2
       dK(1) = 0.0 ; cK(2) = 0.0 ; cKcomp = 1.0 ; dKdQ(1) = 0.0
-      aQ(1) = (0.5*(kappa(1)+kappa(2))+kappa0) * Idz(1)
+      aQ(1) = US%s_to_T*(0.5*(kappa(1)+kappa(2))+kappa0) * Idz(1)
       dQdz(1) = 0.5*(TKE(1) - TKE(2))*Idz(1)
       if (tke_noflux_top_BC) then
-        tke_src = dz_Int(1) * (Z2_to_L2*kappa0*S2(1) - (TKE(1) - q0)*TKE_decay(1)) - &
+        tke_src = dz_Int(1) * (Z2_to_L2*US%s_to_T*kappa0*S2(1) - (TKE(1) - q0)*TKE_decay(1)) - &
                   aQ(1) * (TKE(1) - TKE(2))
 
         bQ = 1.0 / (aQ(1) + dz_Int(1)*TKE_decay(1))
@@ -1707,7 +1696,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         I_Q = 1.0 / TKE(K)
         I_Ld2(K) = (N2(K)*Ilambda2 + f2) * (Z2_to_L2*I_Q) + I_L2_bdry(K)
 
-        kap_src = dz_Int(K) * (k_src(K) - I_Ld2(K)*kappa(K)) + &
+        kap_src = dz_Int(K) * (K_src(K) - I_Ld2(K)*kappa(K)) + &
                             Idz(k-1)*(kappa(K-1)-kappa(K)) - Idz(k)*(kappa(K)-kappa(K+1))
 
         ! Ensure that the pivot is always positive, and that 0 <= cK <= 1.
@@ -1719,8 +1708,8 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         cK(K+1) = bK * Idz(k)
         cKcomp = bK * (Idz(k-1)*cKcomp + decay_term_k) ! = 1-cK(K+1)
         dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
-                      US%Z_to_m*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
-        dK(K) = bK * (kap_src + Idz(k-1)*dK(K-1) + Idz(k-1)*dKdQ(K-1)*dQ(K-1))
+                      US%Z_to_m*(N2(K)*Ilambda2 + f2) * I_Q**2 * US%s_to_T*kappa(K) )
+        dK(K) = bK * (kap_src + Idz(k-1)*dK(K-1) + Idz(k-1)*US%T_to_s*dKdQ(K-1)*dQ(K-1))
 
         ! Truncate away negligibly small values of kappa.
         if (dK(K) <= cKcomp*(kappa_trunc - kappa(K))) then
@@ -1731,9 +1720,9 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         endif
 
         ! Solve for dQ(K)...
-        aQ(k) = (0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
+        aQ(k) = US%s_to_T*(0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
         dQdz(k) = 0.5*(TKE(K) - TKE(K+1))*Idz(k)
-        tke_src = dz_Int(K) * (Z2_to_L2*((kappa(k) + kappa0)*S2(k) - kappa(k)*N2(k)) - &
+        tke_src = dz_Int(K) * (Z2_to_L2*US%s_to_T*((kappa(K) + kappa0)*S2(K) - kappa(k)*N2(K)) - &
                                   (TKE(k) - q0)*TKE_decay(k)) - &
                   (aQ(k) * (TKE(K) - TKE(K+1)) - aQ(k-1) * (TKE(K-1) - TKE(K)))
         v1 = aQ(k-1) + dQdz(k-1)*dKdQ(K-1)
@@ -1751,8 +1740,8 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         dQmdK(K+1) = (v2 * cK(K+1) - dQdz(k)) * bQ
 
         ! Ensure that TKE+dQ will not drop below 0.5*TKE.
-        dQ(K) = max(bQ * ((v1 * dQ(K-1) + dQdz(k-1)*dK(k-1)) + &
-                          (v2 * dK(K) + tke_src)), cQcomp*(-0.5*TKE(K)))
+        dQ(K) = max(bQ * ((v1 * dQ(K-1) + dQdz(k-1)*US%s_to_T*dK(k-1)) + &
+                          (v2 * US%s_to_T*dK(K) + tke_src)), cQcomp*(-0.5*TKE(K)))
 
         ! Check whether the next layer will be affected by any nonzero kappas.
         if ((itt > 1) .and. (K > ke_src) .and. (dK(K) == 0.0) .and. &
@@ -1765,7 +1754,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         dK(nz+1) = 0.0 ; dKdQ(nz+1) = 0.0
         if (tke_noflux_bottom_BC) then
           K = nz+1
-          tke_src = dz_Int(K) * (Z2_to_L2*kappa0*S2(K) - (TKE(K) - q0)*TKE_decay(K)) + &
+          tke_src = dz_Int(K) * (Z2_to_L2*US%s_to_T*kappa0*S2(K) - (TKE(K) - q0)*TKE_decay(K)) + &
                     aQ(k-1) * (TKE(K-1) - TKE(K))
 
           v1 = aQ(k-1) + dQdz(k-1)*dKdQ(K-1)
@@ -1775,7 +1764,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
           else
             bQ = 1.0 / (aQ(k) + (cQcomp*aQ(k-1) + decay_term_Q))
           ! Ensure that TKE+dQ will not drop below 0.5*TKE.
-            dQ(K) = max(bQ * ((v1 * dQ(K-1) + dQdz(k-1)*dK(K-1)) + tke_src), &
+            dQ(K) = max(bQ * ((v1 * dQ(K-1) + dQdz(k-1)*US%s_to_T*dK(K-1)) + tke_src), &
                         -0.5*TKE(K))
             TKE(K) = max(TKE(K) + dQ(K), TKE_min)
           endif
@@ -1790,8 +1779,8 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 #ifdef DEBUG
           if (K < nz+1) then
           ! Ignore this source?
-            aQ(k) = (0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
-            tke_src = (dz_Int(K) * (Z2_to_L2*kappa0*S2(K) - (TKE(K)-q0)*TKE_decay(K)) - &
+            aQ(k) = US%s_to_T*(0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
+            tke_src = (dz_Int(K) * (Z2_to_L2*US%s_to_T*kappa0*S2(K) - (TKE(K)-q0)*TKE_decay(K)) - &
                        (aQ(k) * (TKE(K) - TKE(K+1)) - aQ(k-1) * (TKE(K-1) - TKE(K))) ) / &
                       (aQ(k) + (aQ(k-1) + dz_Int(K)*TKE_decay(K)))
           endif
@@ -1810,10 +1799,10 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       if (.not. abort_Newton) then
         do K=ke_kappa,2,-1
           ! Ensure that TKE+dQ will not drop below 0.5*TKE.
-          dQ(K) = max(dQ(K) + (cQ(K+1)*dQ(K+1) + dQmdK(K+1) * dK(K+1)), &
+          dQ(K) = max(dQ(K) + (cQ(K+1)*dQ(K+1) + dQmdK(K+1) * US%s_to_T*dK(K+1)), &
                       -0.5*TKE(K))
           TKE(K) = max(TKE(K) + dQ(K), TKE_min)
-          dK(K) = dK(K) + (cK(K+1)*dK(K+1) + dKdQ(K) * dQ(K))
+          dK(K) = dK(K) + (cK(K+1)*dK(K+1) + US%T_to_s*dKdQ(K) * dQ(K))
           ! Truncate away negligibly small values of kappa.
           if (dK(K) <= kappa_trunc - kappa(K)) then
             dK(K) = -kappa(K)
@@ -1828,7 +1817,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
             if (K<=ks_kappa) ks_kappa = 2
           endif
         enddo
-        dQ(1) = max(dQ(1) + cQ(2)*dQ(2) + dQmdK(2) * dK(2), TKE_min - TKE(1))
+        dQ(1) = max(dQ(1) + cQ(2)*dQ(2) + dQmdK(2) * US%s_to_T*dK(2), TKE_min - TKE(1))
         TKE(1) = max(TKE(1) + dQ(1), TKE_min)
         dK(1) = 0.0
       endif
@@ -1843,52 +1832,29 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         ! been increased to ensure a positive pivot, or 2) negative TKEs have been
         ! truncated, or 3) small or negative kappas have been rounded toward 0.
         I_Q = 1.0 / TKE(K)
-        I_Ld2(K) = (N2(K)*Ilambda2 + f2) * (Z2_to_L2*I_Q) + I_L2_bdry(K)
+        I_Ld2_debug(K) = (N2(K)*Ilambda2 + f2) * (Z2_to_L2*I_Q) + I_L2_bdry(K)
 
-        kap_src = dz_Int(K) * (k_src(K) - I_Ld2(K)*kappa_prev(K)) + &
+        kap_src = dz_Int(K) * (K_src(K) - I_Ld2(K)*kappa_prev(K)) + &
                             (Idz(k-1)*(kappa_prev(k-1)-kappa_prev(k)) - &
                              Idz(k)*(kappa_prev(k)-kappa_prev(k+1)))
         K_err_lin = -Idz(k-1)*(dK(K-1)-dK(K)) + Idz(k)*(dK(K)-dK(K+1)) + &
-                     dz_Int(K)*I_Ld2(K)*dK(K) - kap_src - &
+                     dz_Int(K)*I_Ld2_debug(K)*dK(K) - kap_src - &
                      US%Z_to_m*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
 
-        tke_src = dz_Int(K) * (Z2_to_L2*(kappa_prev(K) + kappa0)*S2(K) - &
-                     Z2_to_L2*kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
-                  (aQ(k) * (TKE_prev(K) - TKE_prev(K+1)) - &
-                   aQ(k-1) * (TKE_prev(K-1) - TKE_prev(K)))
-        Q_err_lin = (aQ(k-1) * (dQ(K-1)-dQ(K)) - aQ(k) * (dQ(k)-dQ(k+1))) - &
-          0.5*(TKE_prev(K)-TKE_prev(K+1))*Idz(k)  * (dK(K) + dK(K+1)) - &
-          0.5*(TKE_prev(K)-TKE_prev(K-1))*Idz(k-1)* (dK(K-1) + dK(K)) + &
-          dz_Int(K) * (Z2_to_L2*dK(K) * (S2(K) - N2(K)) - dQ(K)*TKE_decay(K)) + tke_src
+        tke_src = dz_Int(K) * (Z2_to_L2*US%s_to_T*(kappa_prev(K) + kappa0)*S2(K) - &
+                     Z2_to_L2*US%s_to_T*kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
+                  (aQ(k) * (TKE_prev(K) - TKE_prev(K+1)) -  aQ(k-1) * (TKE_prev(K-1) - TKE_prev(K)))
+        Q_err_lin = tke_src + (aQ(k-1) * (dQ(K-1)-dQ(K)) - aQ(k) * (dQ(k)-dQ(k+1))) - &
+                    US%s_to_T*0.5*(TKE_prev(K)-TKE_prev(K+1))*Idz(k)  * (dK(K) + dK(K+1)) - &
+                    US%s_to_T*0.5*(TKE_prev(K)-TKE_prev(K-1))*Idz(k-1)* (dK(K-1) + dK(K)) + &
+                    dz_Int(K) * (Z2_to_L2*US%s_to_T*dK(K) * (S2(K) - N2(K)) - dQ(K)*TKE_decay(K))
       enddo
 #endif
     endif  ! End of the Newton's method solver.
 
     ! Test kappa for convergence...
-#ifdef DEBUG
-    max_err = 0.0 ; max_TKE_err = 0.0 ; min_TKE_err = 0.0
-    do K=min(ks_kappa,ks_kappa_prev),max(ke_kappa,ke_kappa_prev)
-      norm_err = abs(kappa(K) - kappa_prev(K)) / &
-                    (kappa0 + 0.5*(kappa(K) + kappa_prev(K)))
-      if (max_err < norm_err) max_err = norm_err
-
-      TKE_err(K) = dQ(K) / (tke(K) - 0.5*dQ(K))
-      if (TKE_err(K) > max_TKE_err) max_TKE_err = TKE_err(K)
-      if (TKE_err(K) < min_TKE_err) min_TKE_err = TKE_err(K)
-    enddo
-    if (do_Newton) then
-      if (max(max_err,max_TKE_err,-min_TKE_err) >= 2.0*Newton_err) then
-        do_Newton = .false. ; abort_Newton = .true.
-      endif
-    else
-      if (max(max_err,max_TKE_err,-min_TKE_err) < Newton_err) do_Newton = .true.
-    endif
-    within_tolerance = (max_err < tol_err)
-#else
- !   max_err = 0.0
     if ((tol_err < Newton_err) .and. (.not.abort_Newton)) then
-      !   A lower tolerance is used to switch to Newton's method than to
-      ! switch back.
+      !  A lower tolerance is used to switch to Newton's method than to switch back.
       Newton_test = Newton_err ; if (do_Newton) Newton_test = 2.0*Newton_err
       was_Newton = do_Newton
       within_tolerance = .true. ; do_Newton = .true.
@@ -1914,7 +1880,6 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         endif
       enddo
     endif
-#endif
 
     if (abort_Newton) then
       do_Newton = .false. ; abort_Newton = .false.
@@ -1927,14 +1892,14 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 #ifdef DEBUG
     if (itt <= max_debug_itt) then
       do K=1,nz+1
-        kprev_it1(K,itt)=kappa_prev(K)
-        kappa_it1(K,itt)=kappa(K) ; tke_it1(K,itt) = tke(K)
+        kprev_it1(K,itt) = kappa_prev(K)
+        kappa_it1(K,itt) = kappa(K) ; tke_it1(K,itt) = tke(K)
         dkappa_it1(K,itt) = kappa(K) - kappa_prev(K)
         dkappa_norm_it1(K,itt) = (kappa(K) - kappa_prev(K)) / &
             (kappa0 + 0.5*(kappa(K) + kappa_prev(K)))
         K_Q_it1(K,itt) = kappa(K) / max(TKE(K),TKE_min)
         d_dkappa_it1(K,itt) = 0.0
-        if (itt > 1) then ; if (abs(dkappa_it1(K,itt-1)) > 1e-20) &
+        if (itt > 1) then ; if (abs(kappa_it1(K,itt-1)) > 1e-20*US%T_to_s) &
             d_dkappa_it1(K,itt) = dkappa_it1(K,itt) / dkappa_it1(K,itt-1)
         endif
       enddo
@@ -1964,16 +1929,16 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       diffusive_src = Idz(k-1)*(kappa(K-1)-kappa(K)) + Idz(k)*(kappa(K+1)-kappa(K))
       chg_by_k0 = kappa0 * ((Idz(k-1)+Idz(k)) / dz_Int(K) + I_Ld2(K))
       if (diffusive_src <= 0.0) then
-        local_src(K) = k_src(K) + chg_by_k0
+        local_src(K) = K_src(K) + chg_by_k0
       else
-        local_src(K) = (k_src(K) + chg_by_k0) + diffusive_src / dz_Int(K)
+        local_src(K) = (K_src(K) + chg_by_k0) + diffusive_src / dz_Int(K)
       endif
     enddo
   endif
   if (present(kappa_src)) then
     kappa_src(1) = 0.0 ; kappa_src(nz+1) = 0.0
     do K=2,nz
-      kappa_src(K) = k_src(K)
+      kappa_src(K) = K_src(K)
     enddo
   endif
 
@@ -2043,7 +2008,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "The background diffusivity that is used to smooth the "//&
                  "density and shear profiles before solving for the "//&
                  "diffusivities. Defaults to value of KD.", &
-                 units="m2 s-1", default=KD_normal, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=KD_normal, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the "//&
                  "Richardson number in the kappa source term in the "//&
