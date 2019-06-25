@@ -56,6 +56,7 @@ type, public :: bkgnd_mixing_cs  ! TODO: private
                                     !! horiz_varying_background=.true. [Z2 T-1 ~> m2 s-1]
   real    :: Kd_min                 !< minimum diapycnal diffusivity [Z2 T-1 ~> m2 s-1]
   real    :: Kd                     !< interior diapycnal diffusivity [Z2 T-1 ~> m2 s-1]
+  real    :: omega                  !< The Earth's rotation rate [T-1 ~> s-1].
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
                                     !! Henyey scaling from the mixing
@@ -274,11 +275,15 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
          "diffusivity (KD) is specified along with "//trim(CS%bkgnd_scheme_str))
   endif
 
-  if (CS%Henyey_IGW_background) &
+  if (CS%Henyey_IGW_background) then
     call get_param(param_file, mdl, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
                   "The ratio of the typical Buoyancy frequency to twice "//&
                   "the Earth's rotation period, used with the Henyey "//&
                   "scaling from the mixing.", units="nondim", default=20.0)
+    call get_param(param_file, mdl, "OMEGA", CS%omega, &
+                 "The rotation rate of the earth.", units="s-1", &
+                 default=7.2921e-5, scale=US%T_to_s)
+  endif
 
   call get_param(param_file, mdl, "KD_TANH_LAT_FN", &
                   CS%Kd_tanh_lat_fn, &
@@ -391,13 +396,13 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
   real, dimension(SZI_(G)) :: depth        !< distance from surface of an interface [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [Z ~> m]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [Z-1 ~> m-1]
-  real :: I_2Omega   !< 1/(2 Omega) [s]
-  real :: N_2Omega
-  real :: N02_N2
-  real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
+  real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
+  real :: N_2Omega   !  The ratio of the stratification to the Earth's rotation rate [nondim]
+  real :: N02_N2     !  The ratio a reference stratification to the actual stratification [nondim]
+  real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
   real :: abs_sin    !< absolute value of sine of latitude [nondim]
-  real :: epsilon
+  real :: epsilon    ! The minimum value of the sine of latitude [nondim]
   real :: bckgrnd_vdc_psin !< PSI diffusivity in northern hemisphere [Z2 T-1 ~> m2 s-1]
   real :: bckgrnd_vdc_psis !< PSI diffusivity in southern hemisphere [Z2 T-1 ~> m2 s-1]
   integer :: i, k, is, ie, js, je, nz
@@ -501,9 +506,10 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kv, j, G, GV, US, CS)
 
   elseif (CS%Henyey_IGW_background_new) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
+    I_2Omega = 0.5 / CS%omega
     do k=1,nz ; do i=is,ie
       abs_sin = max(epsilon, abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-      N_2Omega = max(abs_sin, sqrt(US%s_to_T**2 * N2_lay(i,k))*I_2Omega)
+      N_2Omega = max(abs_sin, sqrt(N2_lay(i,k))*I_2Omega)
       N02_N2 = (CS%N0_2Omega/N_2Omega)**2
       Kd_lay(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
