@@ -378,6 +378,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: dt_mix  ! amount of time over which to apply mixing [s]
   real :: Idt     ! inverse time step [s-1]
+  real :: dt_in_T ! The time step converted to T units [T ~> s]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
@@ -422,6 +423,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (dt < 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
         "diabatic was called with a negative timestep.")
   Idt = 1.0 / dt
+  dt_in_T = dt * US%s_to_T
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
          "Module must be initialized before it is used.")
@@ -433,7 +435,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
   if (CS%debug_energy_req) &
-    call diapyc_energy_req_test(h, dt, tv, G, GV, US, CS%diapyc_en_rec_CSp)
+    call diapyc_energy_req_test(h, dt_in_T, tv, G, GV, US, CS%diapyc_en_rec_CSp)
 
 
   call cpu_clock_begin(id_clock_set_diffusivity)
@@ -669,7 +671,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
      CS%use_CVMix_ddiff) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv, visc, dt*US%s_to_T, G, GV)
+    call differential_diffuse_T_S(h, tv, visc, dt_in_T, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -737,7 +739,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     endif
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
-    call energetic_PBL(h, u_h, v_h, tv, fluxes, US%s_to_T*dt, Kd_ePBL, G, GV, US, &
+    call energetic_PBL(h, u_h, v_h, tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
@@ -839,9 +841,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     !$OMP parallel do default(shared) private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval = 1.0 / (h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea_t(i,j,k) = (GV%Z_to_H**2) * US%s_to_T*dt * hval * Kd_heat(i,j,k)
+      ea_t(i,j,k) = (GV%Z_to_H**2) * dt_in_T * hval * Kd_heat(i,j,k)
       eb_t(i,j,k-1) = ea_t(i,j,k)
-      ea_s(i,j,k) = (GV%Z_to_H**2) * US%s_to_T*dt * hval * Kd_salt(i,j,k)
+      ea_s(i,j,k) = (GV%Z_to_H**2) * dt_in_T * hval * Kd_salt(i,j,k)
       eb_s(i,j,k-1) = ea_s(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
@@ -925,7 +927,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   call cpu_clock_begin(id_clock_tracers)
 
   if (CS%mix_boundary_tracers) then
-    Tr_ea_BBL = GV%Z_to_H * sqrt(dt*US%s_to_T*CS%Kd_BBL_tr)
+    Tr_ea_BBL = GV%Z_to_H * sqrt(dt_in_T*CS%Kd_BBL_tr)
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
@@ -944,7 +946,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
           ! should be much less than the values that have been set in Kd_lay,
           ! perhaps a molecular diffusivity.
-          add_ent = ((dt*US%s_to_T * CS%Kd_min_tr) * GV%Z_to_H**2) * &
+          add_ent = ((dt_in_T * CS%Kd_min_tr) * GV%Z_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
                      (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
                     0.5*(ea_s(i,j,k) + eb_s(i,j,k-1))
@@ -962,7 +964,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
         endif
 
         if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt*US%s_to_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+          add_ent = ((dt_in_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.5 * (h(i,j,k-1) + h(i,j,k)) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -988,7 +990,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (visc%Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt*US%s_to_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+        add_ent = ((dt_in_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
            (0.5 * (h(i,j,k-1) + h(i,j,k))  + &
             h_neglect)
       else
@@ -1234,6 +1236,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2].
   real :: dt_mix  ! amount of time over which to apply mixing [s]
   real :: Idt     ! inverse time step [s-1]
+  real :: dt_in_T ! The time step converted to T units [T ~> s]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
@@ -1275,6 +1278,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   if (dt < 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
         "legacy_diabatic was called with a negative timestep.")
   Idt = 1.0 / dt
+  dt_in_T = dt * US%s_to_T
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
          "Module must be initialized before it is used.")
@@ -1286,7 +1290,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
   if (CS%debug_energy_req) &
-    call diapyc_energy_req_test(h, dt, tv, G, GV, US, CS%diapyc_en_rec_CSp)
+    call diapyc_energy_req_test(h, dt_in_T, tv, G, GV, US, CS%diapyc_en_rec_CSp)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp)
@@ -1597,7 +1601,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
     call cpu_clock_begin(id_clock_differential_diff)
 
-    call differential_diffuse_T_S(h, tv, visc, dt*US%s_to_T, G, GV)
+    call differential_diffuse_T_S(h, tv, visc, dt_in_T, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
@@ -1627,7 +1631,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
 !$OMP                          private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea(i,j,k) = (GV%Z_to_H**2) * US%s_to_T*dt * hval * Kd_int(i,j,K)
+      ea(i,j,k) = (GV%Z_to_H**2) * dt_in_T * hval * Kd_int(i,j,K)
       eb(i,j,k-1) = ea(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
@@ -1641,7 +1645,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     call cpu_clock_begin(id_clock_entrain)
     ! Calculate appropriately limited diapycnal mass fluxes to account
     ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
-    call Entrainment_diffusive(h, tv, fluxes, US%s_to_T*dt, G, GV, US, CS%entrain_diffusive_CSp, &
+    call Entrainment_diffusive(h, tv, fluxes, dt_in_T, G, GV, US, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_lay=Kd_lay, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
     if (showCallTree) call callTree_waypoint("done with Entrainment_diffusive (diabatic)")
@@ -1690,7 +1694,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
       endif
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
-      call energetic_PBL(h, u_h, v_h, tv, fluxes, US%s_to_T*dt, Kd_ePBL, G, GV, US, &
+      call energetic_PBL(h, u_h, v_h, tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
            CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
@@ -1710,7 +1714,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
           Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
           visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
         endif
-        Ent_int = Kd_add_here * (GV%Z_to_H**2 * US%s_to_T*dt) / &
+        Ent_int = Kd_add_here * (GV%Z_to_H**2 * dt_in_T) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
@@ -2047,7 +2051,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
-    Tr_ea_BBL = sqrt(dt*US%s_to_T*CS%Kd_BBL_tr)  !### I think this needs GV%Z_to_H
+    Tr_ea_BBL = sqrt(dt_in_T*CS%Kd_BBL_tr)  !### I think this needs GV%Z_to_H
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
@@ -2066,7 +2070,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
           ! should be much less than the values that have been set in Kd_lay,
           ! perhaps a molecular diffusivity.
-          add_ent = ((dt*US%s_to_T * CS%Kd_min_tr) * GV%Z_to_H**2) * &
+          add_ent = ((dt_in_T * CS%Kd_min_tr) * GV%Z_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
                      (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
                     0.5*(ea(i,j,k) + eb(i,j,k-1))
@@ -2083,7 +2087,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
           ebtr(i,j,k-1) = eb(i,j,k-1) ; eatr(i,j,k) = ea(i,j,k)
         endif
         if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt*US%s_to_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+          add_ent = ((dt_in_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -2114,7 +2118,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
     !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (visc%Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt*US%s_to_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
+        add_ent = ((dt_in_T * visc%Kd_extra_S(i,j,k)) * GV%Z_to_H**2) / &
            (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
             h_neglect)
       else

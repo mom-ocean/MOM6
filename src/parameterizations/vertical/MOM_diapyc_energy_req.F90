@@ -55,17 +55,17 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   type(thermo_var_ptrs),          intent(inout) :: tv   !< A structure containing pointers to any
                                                         !! available thermodynamic fields.
                                                         !! Absent fields have NULL ptrs.
-  real,                           intent(in)    :: dt   !< The amount of time covered by this call [s].
+  real,                           intent(in)    :: dt   !< The amount of time covered by this call [T ~> s].
   type(diapyc_energy_req_CS),     pointer       :: CS   !< This module's control structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke+1), &
-                        optional, intent(in)    :: Kd_int !< Interface diffusivities [Z2 s-1 ~> m2 s-1].
+                        optional, intent(in)    :: Kd_int !< Interface diffusivities [Z2 T-1 ~> m2 s-1].
 
   ! Local variables
   real, dimension(GV%ke) :: &
     T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities [degC] and g/kg.
     h_col       ! h_col is a column of thicknesses h at tracer points [H ~> m or kg m-2].
   real, dimension(GV%ke+1) :: &
-    Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 s-1 ~> m2 s-1].
+    Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
   real :: ustar, absf, htot
   real :: energy_Kd ! The energy used by diapycnal mixing [W m-2].
@@ -94,8 +94,8 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
         h_bot(K) = h_bot(K+1) + h_col(k)
       enddo
 
-      ustar = 0.01*US%m_to_Z ! Change this to being an input parameter?
-      absf = 0.25*US%s_to_T*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+      ustar = 0.01*US%m_to_Z*US%T_to_s ! Change this to being an input parameter?
+      absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                              (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
       do K=2,nz
@@ -127,8 +127,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures [degC].
   real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities [ppt].
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities
-                                                  !! [Z2 s-1 ~> m2 s-1].
-  real,                     intent(in)    :: dt   !< The amount of time covered by this call [s].
+                                                  !! [Z2 T-1 ~> m2 s-1].
+  real,                     intent(in)    :: dt   !< The amount of time covered by this call [T ~> s].
   real,                     intent(out)   :: energy_Kd !< The column-integrated rate of energy
                                                   !! consumption by diapycnal diffusion [W m-2].
   type(thermo_var_ptrs),    intent(inout) :: tv   !< A structure containing pointers to any
