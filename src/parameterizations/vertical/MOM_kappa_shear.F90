@@ -151,7 +151,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
     kappa_avg, & ! The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
     tke_avg     ! The time-weighted average of TKE [m2 s-2].
-  real :: f2   ! The squared Coriolis parameter of each column [s-2].
+  real :: f2   ! The squared Coriolis parameter of each column [T-2 ~> s-2].
   real :: surface_pres  ! The top surface pressure [Pa].
 
   real :: dz_in_lay     !   The running sum of the thickness in a layer [Z ~> m].
@@ -273,8 +273,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-      f2 = 0.25 * US%s_to_T**2 * ((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25 * ((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                   (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
 
     ! ----------------------------------------------------    I_Ld2_1d, dz_Int_1d
@@ -424,7 +424,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
     kappa_avg, & ! The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
     tke_avg     ! The time-weighted average of TKE [m2 s-2].
-  real :: f2   ! The squared Coriolis parameter of each column [s-2].
+  real :: f2   ! The squared Coriolis parameter of each column [T-2 ~> s-2].
   real :: surface_pres  ! The top surface pressure [Pa].
 
   real :: dz_in_lay     !   The running sum of the thickness in a layer [Z ~> m].
@@ -578,7 +578,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-      f2 = US%s_to_T**2 * G%CoriolisBu(I,J)**2
+      f2 = G%CoriolisBu(I,J)**2
       surface_pres = 0.0 ; if (associated(p_surf)) then
         surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
                                (p_surf(i+1,j) + p_surf(i,j+1)))
@@ -681,7 +681,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                      intent(inout) :: tke  !< The Turbulent Kinetic Energy per unit mass at
                                            !! an interface [m2 s-2].
   integer,           intent(in)    :: nzc  !< The number of active layers in the column.
-  real,              intent(in)    :: f2   !< The square of the Coriolis parameter [s-2].
+  real,              intent(in)    :: f2   !< The square of the Coriolis parameter [T-2 ~> s-2].
   real,              intent(in)    :: surface_pres  !< The surface pressure [Pa].
   real, dimension(SZK_(GV)), &
                      intent(in)    :: dz   !< The layer thickness [Z ~> m].
@@ -718,14 +718,14 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     u_test, v_test, T_test, S_test
 
   real, dimension(nzc+1) :: &
-    N2, &       ! The squared buoyancy frequency at an interface [s-2].
+    N2, &       ! The squared buoyancy frequency at an interface [T-2 ~> s-2].
     dz_Int, &   ! The extent of a finite-volume space surrounding an interface,
                 ! as used in calculating kappa and TKE [Z ~> m].
     I_dz_int, & ! The inverse of the distance between velocity & density points
                 ! above and below an interface [Z-1 ~> m-1].  This is used to
                 ! calculate N2, shear, and fluxes, and it might differ from
                 ! 1/dz_Int, as they have different uses.
-    S2, &       ! The squared shear at an interface [s-2].
+    S2, &       ! The squared shear at an interface [T-2 ~> s-2].
     a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
                 ! velocity, and density equations [Z s-1 ~> m s-1] or [Z ~> m]
     c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
@@ -739,7 +739,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     T_int, &    ! The temperature interpolated to an interface [degC].
     Sal_int, &  ! The salinity interpolated to an interface [ppt].
     dbuoy_dT, & ! The partial derivatives of buoyancy with changes in temperature
-    dbuoy_dS, & ! and salinity, [Z s-2 degC-1 ~> m s-2 degC-1] and [Z s-2 ppt-1 ~> m s-2 ppt-1].
+    dbuoy_dS, & ! and salinity, [Z T-2 degC-1 ~> m s-2 degC-1] and [Z T-2 ppt-1 ~> m s-2 ppt-1].
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
                    ! distance to the top and bottom boundaries [Z-2 ~> m-2].
     K_Q, &         ! Diffusivity divided by TKE [Z2 m-2 s2 T-1 ~> s].
@@ -756,8 +756,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: b1            ! The inverse of the pivot in the tridiagonal equations.
   real :: bd1           ! A term in the denominator of b1.
   real :: d1            ! 1 - c1 in the tridiagonal equations.
-  real :: gR0           ! Rho_0 times g [kg m-2 s-2].
-  real :: g_R0          ! g_R0 is g/Rho [Z m3 kg-1 s-2 ~> m4 kg-1 s-2].
+  real :: gR0           ! Rho_0 times g [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
+  real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z m3 kg-1 T-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
   real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
@@ -790,7 +790,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
   real, dimension(SZK_(GV)+1) :: &
     Ri_k, tke_prev, dtke, dkappa, dtke_norm, &
-    N2_debug, & ! A version of N2 for debugging [s-2]
+    N2_debug, & ! A version of N2 for debugging [T-2 ~> s-2]
     ksrc_av     ! The average through the iterations of k_src [T-1 ~> s-1].
   real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
     tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
@@ -804,7 +804,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 #endif
 
   Ri_crit = CS%Rino_crit
-  gR0 = GV%Rho0*(GV%g_Earth*US%m_to_Z) ; g_R0 = (GV%g_Earth*US%m_to_Z**2)/GV%Rho0
+  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = (GV%g_Earth*US%m_to_Z**2*US%T_to_s**2)/GV%Rho0
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
@@ -890,18 +890,18 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   if (use_temperature) then
     pressure(1) = surface_pres
     do K=2,nzc
-      pressure(K) = pressure(K-1) + gR0*US%Z_to_m*dz(k-1)
+      pressure(K) = pressure(K-1) + gR0*dz(k-1)
       T_int(K) = 0.5*(T(k-1) + T(k))
       Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
     enddo
     call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, &
                                   dbuoy_dS, 2, nzc-1, tv%eqn_of_state)
     do K=2,nzc
-      dbuoy_dT(K) = -G_R0*dbuoy_dT(K)
-      dbuoy_dS(K) = -G_R0*dbuoy_dS(K)
+      dbuoy_dT(K) = -g_R0*dbuoy_dT(K)
+      dbuoy_dS(K) = -g_R0*dbuoy_dS(K)
     enddo
   else
-    do K=1,nzc+1 ; dbuoy_dT(K) = -G_R0 ; dbuoy_dS(K) = 0.0 ; enddo
+    do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   endif
 
 #ifdef DEBUG
@@ -1023,7 +1023,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         Idtt = 1.0 / dt_test
         do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
           if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
-            K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+            K_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                        ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
             if ((K_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
                 (K_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
@@ -1049,9 +1049,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
           Idtt = 1.0 / (dt_test+dt_inc)
           do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
             if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
-              K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
-                         ((Ri_crit*S2(K) - N2(K)) / &
-                          (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
+              K_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+                         ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
               if ((K_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
                   (K_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
                 valid_dt = .false. ; exit
@@ -1206,7 +1205,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   if (present(I_Ld2_1d)) then
     do K=1,GV%ke+1 ; I_Ld2_1d(K) = 0.0 ; enddo
     do K=2,nzc ; if (TKE(K) > 0.0) &
-      I_Ld2_1d(K) = I_L2_bdry(K) + (N2(K) / CS%lambda**2 + f2) * US%Z_to_m**2 / TKE(K)
+      I_Ld2_1d(K) = I_L2_bdry(K) + (N2(K) / CS%lambda**2 + f2) * (US%s_to_T**2*US%Z_to_m**2) / TKE(K)
     enddo
   endif
   if (present(dz_Int_1d)) then
@@ -1235,9 +1234,9 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
-                                              !! temperature [Z s-2 degC-1 ~> m s-2 degC-1].
+                                              !! temperature [Z T-2 degC-1 ~> m s-2 degC-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
-                                              !! salinity [Z s-2 ppt-1 ~> m s-2 ppt-1].
+                                              !! salinity [Z T-2 ppt-1 ~> m s-2 ppt-1].
   real,                  intent(in)    :: dt  !< The time step [T ~> s].
   real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
   real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
@@ -1246,9 +1245,9 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(nz+1), optional, &
-                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces [s-2].
+                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces [T-2 ~> s-2].
   real, dimension(nz+1), optional, &
-                         intent(inout) :: S2  !< The squared shear at interfaces [s-2].
+                         intent(inout) :: S2  !< The squared shear at interfaces [T-2 ~> s-2].
   integer, optional,     intent(in)    :: ks_int !< The topmost k-index with a non-zero diffusivity.
   integer, optional,     intent(in)    :: ke_int !< The bottommost k-index with a non-zero
                                               !! diffusivity.
@@ -1259,7 +1258,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   ! Local variables
   real, dimension(nz+1) :: c1
   real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
-                         ! units squared [Z2 m-2 ~> 1].
+                         ! units squared [Z2 s2 T-2 m-2 ~> 1].
   real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [m s-1].
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
@@ -1330,7 +1329,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   endif
 
   if (present(S2)) then
-    L2_to_Z2 = US%m_to_Z**2
+    L2_to_Z2 = US%m_to_Z**2 * US%T_to_s**2
     S2(1) = 0.0 ; S2(nz+1) = 0.0
     if (ks > 1) &
       S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (L2_to_Z2*I_dz_int(ks)**2)
@@ -1361,8 +1360,8 @@ end subroutine calculate_projected_state
 subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                           nz, CS, GV, US, K_Q, tke, kappa, kappa_src, local_src)
   integer,               intent(in)    :: nz  !< The number of layers to work on.
-  real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces [s-2].
-  real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces [s-2].
+  real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces [T-2 ~> s-2].
+  real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces [T-2 ~> s-2].
   real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity
                                               !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
@@ -1370,7 +1369,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
                                               !! boundaries [m-2].
   real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers [Z-1 ~> m-1].
-  real,                  intent(in)    :: f2  !< The squared Coriolis parameter [s-2].
+  real,                  intent(in)    :: f2  !< The squared Coriolis parameter [T-2 ~> s-2].
   type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
@@ -1443,7 +1442,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: v1            ! A temporary variable proportional to [T-1 ~> s-1]
   real :: v2
   real :: Z2_to_L2       ! A conversion factor from vertical depth units to horizontal length
-                         ! units squared [m2 Z-2].
+                         ! units squared [m2 s-2 T2 Z-2].
   real :: tol_err        ! The tolerance for max_err that determines when to
                          ! stop iterating.
   real :: Newton_err     ! The tolerance for max_err that determines when to
@@ -1481,7 +1480,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   q0 = CS%TKE_bg ; kappa0 = CS%kappa_0 ; TKE_min = max(CS%TKE_bg,1.0E-20)
   Ri_crit = CS%Rino_crit
   Ilambda2 = 1.0 / CS%lambda**2
-  Z2_to_L2 = US%Z_to_m**2
+  Z2_to_L2 = US%s_to_T**2 * US%Z_to_m**2
   kappa_trunc = 0.01*kappa0  ! ### CHANGE THIS HARD-WIRING LATER?
   do_Newton = .false. ; abort_Newton = .false.
   tol_err = CS%kappa_tol_err
@@ -1495,7 +1494,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 !       Ri = N2(K) / S2(K)
 !       k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
 !                  ((Ri_crit - Ri) / (Ri_crit + CS%FRi_curvature*Ri))
-      K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+      K_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                  ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
       ke_src = K
       if (ks_src > k) ks_src = K
@@ -1517,7 +1516,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   do K=1,nz+1
     kappa(K) = kappa_in(K)
 !     TKE_decay(K) = c_n*sqrt(N2(K)) + c_s*sqrt(S2(K)) ! The expression in JHL.
-    TKE_decay(K) = US%T_to_s*sqrt(c_n2*N2(K) + c_s2*S2(K))
+    TKE_decay(K) = sqrt(c_n2*N2(K) + c_s2*S2(K))
     if ((kappa(K) > 0.0) .and. (K_Q(K) > 0.0)) then
       TKE(K) = kappa(K) / K_Q(K)
     else
@@ -1711,7 +1710,9 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         cKcomp = bK * (Idz(k-1)*cKcomp + decay_term_k) ! = 1-cK(K+1)
         !### The following expression appears to be dimensionally inconsistent in length. -RWH
         dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
-                      US%Z_to_m*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+                      US%m_to_Z*Z2_to_L2*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+        !  I think that the second term needs to be multiplied by dz_Int(K):
+        !             Z2_to_L2*dz_Int(K)*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
         dK(K) = bK * (kap_src + Idz(k-1)*dK(K-1) + Idz(k-1)*dKdQ(K-1)*dQ(K-1))
 
         ! Truncate away negligibly small values of kappa.
@@ -1839,9 +1840,10 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                             (Idz(k-1)*(kappa_prev(k-1)-kappa_prev(k)) - &
                              Idz(k)*(kappa_prev(k)-kappa_prev(k+1)))
         !### The last line of the following appears to be dimensionally inconsistent with the first two.
+        !  I think that the term on the last line needs to be multiplied by dz_Int(K).
         K_err_lin = -Idz(k-1)*(dK(K-1)-dK(K)) + Idz(k)*(dK(K)-dK(K+1)) + &
                      dz_Int(K)*I_Ld2_debug(K)*dK(K) - kap_src - &
-                     US%Z_to_m*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
+                     US%m_to_Z*Z2_to_L2*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
 
         tke_src = dz_Int(K) * (Z2_to_L2*(kappa_prev(K) + kappa0)*S2(K) - &
                      Z2_to_L2*kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
@@ -1901,7 +1903,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
             (kappa0 + 0.5*(kappa(K) + kappa_prev(K)))
         K_Q_it1(K,itt) = kappa(K) / max(TKE(K),TKE_min)
         d_dkappa_it1(K,itt) = 0.0
-        if (itt > 1) then ; if (abs(kappa_it1(K,itt-1)) > 1e-20*US%T_to_s) &
+        if (itt > 1) then ; if (abs(dkappa_it1(K,itt-1)) > 1e-20*US%m2_s_to_Z2_T) &
             d_dkappa_it1(K,itt) = dkappa_it1(K,itt) / dkappa_it1(K,itt-1)
         endif
       enddo
