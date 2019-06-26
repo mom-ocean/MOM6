@@ -2154,9 +2154,10 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
              range=range, mask_variant=mask_variant, standard_name=standard_name, &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
              interp_method=interp_method, tile_count=tile_count)
-  call attach_cell_methods(fms_id, axes, cm_string, &
-                           cell_methods, x_cell_method, y_cell_method, v_cell_method, &
-                           v_extensive=v_extensive)
+  if (.not. diag_cs%diag_as_chksum) &
+    call attach_cell_methods(fms_id, axes, cm_string, cell_methods, &
+                             x_cell_method, y_cell_method, v_cell_method, &
+                             v_extensive=v_extensive)
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
@@ -2172,8 +2173,9 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
              range=range, mask_variant=mask_variant, standard_name=standard_name, &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
              interp_method=interp_method, tile_count=tile_count)
-    call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
-                             cell_methods, v_cell_method, v_extensive=v_extensive)
+    if (.not. diag_cs%diag_as_chksum) &
+      call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
+                               cell_methods, v_cell_method, v_extensive=v_extensive)
     if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
       msg = ''
       if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'_xyave"'
@@ -2736,18 +2738,25 @@ function register_static_field(module_name, field_name, axes, &
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
     if (present(conversion)) diag%conversion_factor = conversion
-    if (present(x_cell_method)) then
-      call get_diag_axis_name(axes%handles(1), axis_name)
-      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+
+    if (diag_cs%diag_as_chksum) then
+      diag%axes => axes
+    else
+      if (present(x_cell_method)) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', &
+            trim(axis_name)//':'//trim(x_cell_method))
+      endif
+      if (present(y_cell_method)) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', &
+            trim(axis_name)//':'//trim(y_cell_method))
+      endif
+      if (present(area_cell_method)) then
+        call diag_field_add_attribute(fms_id, 'cell_methods', &
+            'area:'//trim(area_cell_method))
+      endif
     endif
-    if (present(y_cell_method)) then
-      call get_diag_axis_name(axes%handles(2), axis_name)
-      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
-    endif
-    if (present(area_cell_method)) then
-      call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
-    endif
-    if (diag_cs%diag_as_chksum) diag%axes => axes
   endif
 
   if (present(cmor_field_name) .and. .not. diag_cs%diag_as_chksum) then
