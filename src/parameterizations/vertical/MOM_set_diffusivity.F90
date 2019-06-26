@@ -353,22 +353,21 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            (GV%Z_to_H**2)*kappa_fill*dt_fill, halo=1)
 
       call calc_kappa_shear_vertex(u, v, h, T_adj, S_adj, tv, fluxes%p_surf, visc%Kd_shear, &
-                                   visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, US, CS%kappaShear_CSp)
+                                   visc%TKE_turb, visc%Kv_shear_Bu, US%s_to_T*dt, G, GV, US, CS%kappaShear_CSp)
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
         call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear", G%HI, scale=US%Z2_T_to_m2_s)
         call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu", G%HI, scale=US%Z2_T_to_m2_s)
-        call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb", G%HI)
+        call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
       endif
     else
-      ! Changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????)
-      ! Sets visc%Kv_shear
+      ! Changes: visc%Kd_shear ;  Sets: visc%Kv_shear and visc%TKE_turb
       call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
-                                 visc%Kv_shear, dt, G, GV, US, CS%kappaShear_CSp)
+                                 visc%Kv_shear, US%s_to_T*dt, G, GV, US, CS%kappaShear_CSp)
       if (CS%debug) then
         call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI, scale=US%Z2_T_to_m2_s)
         call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, scale=US%Z2_T_to_m2_s)
-        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb", G%HI)
+        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
       endif
     endif
     call cpu_clock_end(id_clock_kappaShear)

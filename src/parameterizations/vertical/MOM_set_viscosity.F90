@@ -1726,17 +1726,12 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   endif
   if (use_kappa_shear .and. KS_at_vertex) then
     call safe_alloc_ptr(visc%TKE_turb, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
-    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
-                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", &
-                  hor_grid="Bu", z_grid='i')
     call safe_alloc_ptr(visc%Kv_shear_Bu, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
     call register_restart_field(visc%Kv_shear_Bu, "Kv_shear_Bu", .false., restart_CS, &
                   "Shear-driven turbulent viscosity at vertex interfaces", "m2 s-1", &
                   hor_grid="Bu", z_grid='i')
   elseif (use_kappa_shear) then
     call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
-    call register_restart_field(visc%TKE_turb, "TKE_turb", .false., restart_CS, &
-                  "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", z_grid='i')
   endif
 
   ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
@@ -1993,8 +1988,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   endif
 
   if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
-    ! These are necessary for reproduciblity across restarts in non-symmetric mode.
-    call pass_var(visc%TKE_turb, G%Domain, position=CORNER, complete=.false.)
+    ! This is necessary for reproduciblity across restarts in non-symmetric mode.
     call pass_var(visc%Kv_shear_Bu, G%Domain, position=CORNER, complete=.true.)
   endif
 
@@ -2041,6 +2035,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
   call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
 
+  ! Account for possible changes in dimensional scaling for variables that have been
+  ! read from a restart file.
   Z_rescale = 1.0
   if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) &
     Z_rescale = US%m_to_Z / US%m_to_Z_restart
@@ -2063,8 +2059,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     endif ; endif
 
     if (associated(visc%Kv_shear_Bu)) then ; if (query_initialized(visc%Kv_shear_Bu, "Kv_shear_Bu", restart_CS)) then
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        visc%Kv_shear_Bu(i,j,k) = Z2_T_rescale * visc%Kv_shear_Bu(i,j,k)
+      do k=1,nz+1 ; do J=js-1,je ; do I=is-1,ie
+        visc%Kv_shear_Bu(I,J,k) = Z2_T_rescale * visc%Kv_shear_Bu(I,J,k)
       enddo ; enddo ; enddo
     endif ; endif
 

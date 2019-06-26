@@ -562,8 +562,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   endif ! end CS%use_int_tides
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
-  ! Also changes: visc%Kd_shear, visc%Kv_slow and visc%TKE_turb (not clear that TKE_turb is used as input ????
+  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
+  ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, US, &
                        CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -754,7 +754,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
     do K=2,nz ; do j=js,je ; do i=is,ie
-      !### These expressesions assume a Prandtl number of 1.
+      !### These expressions assume a Prandtl number of 1.
       if (CS%ePBL_is_additive) then
         Kd_add_here = Kd_ePBL(i,j,K)
         visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
@@ -1462,9 +1462,8 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
-  ! Also changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????
-  ! And sets visc%Kv_shear
+  ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
+  ! Also changes: visc%Kd_shear and visc%Kv_shear
   if ((CS%halo_TS_diff > 0) .and. (CS%ML_mix_first > 0.0)) then
     if (associated(tv%T)) call pass_var(tv%T, G%Domain, halo=CS%halo_TS_diff, complete=.false.)
     if (associated(tv%T)) call pass_var(tv%S, G%Domain, halo=CS%halo_TS_diff, complete=.false.)

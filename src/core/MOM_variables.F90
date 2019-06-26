@@ -255,7 +255,7 @@ type, public :: vertvisc_type
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
                 !! background, convection etc) [Z2 T-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
-                !< The turbulent kinetic energy per unit mass at the interfaces [m2 s-2].
+                !< The turbulent kinetic energy per unit mass at the interfaces [Z2 T-2 ~> m2 s-2].
                 !! This may be at the tracer or corner points
   logical :: add_Kv_slow !< If True, add Kv_slow when calculating the 'coupling coefficient' (a_cpl)
                          !! at the interfaces in find_coupling_coef.

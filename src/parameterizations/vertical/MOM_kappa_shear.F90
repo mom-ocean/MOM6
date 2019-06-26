@@ -113,17 +113,14 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                                    !! value from the previous timestep, which may
                                                    !! accelerate the iteration toward convergence.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                           intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
-                                                   !! each interface (not layer!) [m2 s-2].
-                                                   !! Initially this is the value from the previous
-                                                   !! timestep, which may accelerate the iteration
-                                                   !! toward convergence.
+                           intent(out) :: tke_io   !< The turbulent kinetic energy per unit mass at
+                                                   !! each interface (not layer!) [Z2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface
                                                    !! (not layer!) [Z2 T-1 ~> m2 s-1]. This discards any
                                                    !! previous value (i.e. it is intent out) and
                                                    !! simply sets Kv = Prandtl * Kd_shear
-  real,                    intent(in)    :: dt     !< Time increment [s].
+  real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
   logical,       optional, intent(in)    :: initialize_all !< If present and false, the previous
@@ -137,11 +134,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     kappa_2d, & ! 2-D version of kappa_io [Z2 T-1 ~> m2 s-1].
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
   real, dimension(SZK_(GV)) :: &
-    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
-    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
-    T, &        ! The potential temperature after a timestep of mixing [degC].
-    Sal, &      ! The salinity after a timestep of mixing [ppt].
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [Z m s-1 ~> m2 s-1].
     v0xdz, &    ! The initial meridional velocity times dz [Z m s-1 ~> m2 s-1].
@@ -184,7 +177,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
-  k0dt = dt*US%s_to_T*CS%kappa_0
+  k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
 
   !$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
@@ -289,11 +282,11 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       endif
 
 #ifdef ADD_DIAGNOSTICS
-      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
 #else
-      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US)
 #endif
@@ -336,7 +329,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
     do K=1,nz+1 ; do i=is,ie
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
-      tke_io(i,j,K) = G%mask2dT(i,j) * (US%Z_to_m**2*US%s_to_T**2)*tke_2d(i,K)
+      tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
       kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K) ; dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
@@ -347,7 +340,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   if (CS%debug) then
     call hchksum(kappa_io, "kappa", G%HI, scale=US%Z2_T_to_m2_s)
-    call hchksum(tke_io, "tke", G%HI)
+    call hchksum(tke_io, "tke", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
   endif
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)
@@ -385,17 +378,14 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                            intent(out)   :: kappa_io !< The diapycnal diffusivity at each interface
                                                    !! (not layer!) [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
-                           intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
-                                                   !! each interface (not layer!) [m2 s-2].
-                                                   !! Initially this is the value from the previous
-                                                   !! timestep, which may accelerate the iteration
-                                                   !! toward convergence.
+                           intent(out)   :: tke_io !< The turbulent kinetic energy per unit mass at
+                                                   !! each interface (not layer!) [Z2 T-2 ~> m2 s-2].
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface [Z2 T-1 ~> m2 s-1].
                                                    !! The previous value is used to initialize kappa
                                                    !! in the vertex columes as Kappa = Kv/Prandtl
                                                    !! to accelerate the iteration toward covergence.
-  real,                    intent(in)    :: dt     !< Time increment [s].
+  real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
   logical,       optional, intent(in)    :: initialize_all !< If present and false, the previous
@@ -410,11 +400,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
   real, dimension(SZK_(GV)) :: &
-    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
-    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
-    T, &        ! The potential temperature after a timestep of mixing [degC].
-    Sal, &      ! The salinity after a timestep of mixing [ppt].
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [m Z s-1 ~> m2 s-1].
     v0xdz, &    ! The initial meridional velocity times dz [m Z s-1 ~> m2 s-1].
@@ -460,7 +446,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
-  k0dt =  dt*US%s_to_T*CS%kappa_0
+  k0dt =  dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
   I_Prandtl = 0.0 ; if (CS%Prandtl_turb > 0.0) I_Prandtl = 1.0 / CS%Prandtl_turb
 
@@ -580,10 +566,9 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
       f2 = G%CoriolisBu(I,J)**2
-      surface_pres = 0.0 ; if (associated(p_surf)) then
+      surface_pres = 0.0 ; if (associated(p_surf)) &
         surface_pres = 0.25 * ((p_surf(i,j) + p_surf(i+1,j+1)) + &
                                (p_surf(i+1,j) + p_surf(i,j+1)))
-      endif
 
     ! ----------------------------------------------------
     ! Set the initial guess for kappa, here defined at interfaces.
@@ -595,11 +580,11 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       endif
 
 #ifdef ADD_DIAGNOSTICS
-      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
 #else
-      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US)
 #endif
@@ -617,10 +602,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
             kappa_2d(I,K,J2) = kappa_avg(kc(K))
             tke_2d(I,K) = tke_avg(kc(K))
           else
-            kappa_2d(I,K,J2) = (1.0-kf(K)) * kappa_avg(kc(K)) + &
-                               kf(K) * kappa_avg(kc(K)+1)
-            tke_2d(I,K) = (1.0-kf(K)) * tke_avg(kc(K)) + &
-                           kf(K) * tke_avg(kc(K)+1)
+            kappa_2d(I,K,J2) = (1.0-kf(K)) * kappa_avg(kc(K)) + kf(K) * kappa_avg(kc(K)+1)
+            tke_2d(I,K) = (1.0-kf(K)) * tke_avg(kc(K)) + kf(K) * tke_avg(kc(K)+1)
           endif
         enddo
       endif
@@ -679,7 +662,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real, dimension(SZK_(GV)+1), &
                      intent(inout) :: kappa !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
-                     intent(inout) :: tke  !< The Turbulent Kinetic Energy per unit mass at
+                     intent(out)   :: tke  !< The Turbulent Kinetic Energy per unit mass at
                                            !! an interface [Z2 T-2 ~> m2 s-2].
   integer,           intent(in)    :: nzc  !< The number of active layers in the column.
   real,              intent(in)    :: f2   !< The square of the Coriolis parameter [T-2 ~> s-2].
@@ -918,7 +901,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   enddo
   do K=1,nzc+1
     kprev_it1(K,0) = kappa(K) ; kappa_it1(K,0) = kappa(K)
-    tke_it1(K,0) = tke(K)
+    tke_it1(K,0) = 0.0
     N2_it1(K,0) = N2_debug(K) ; Sh2_it1(K,0) = S2(K) ; ksrc_it1(K,0) = K_src(K)
   enddo
   do k=nzc+1,GV%ke
@@ -973,7 +956,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 #ifdef DEBUG
     do K=1,nzc+1
       Ri_k(K) = 1e3 ; if (S2(K) > 1e-3*N2(K)) Ri_k(K) = N2(K) / S2(K)
-      tke_prev(K) = tke(K)
+      if (itt > 1) then ; tke_prev(K) = tke(K) ; else ; tke_prev(K) = 0.0 ; endif
     enddo
 #endif
 
@@ -2093,7 +2076,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear',diag%axesTi,Time, &
       'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_TKE = register_diag_field('ocean_model','TKE_shear',diag%axesTi,Time, &
-      'Shear-driven Turbulent Kinetic Energy', 'm2 s-2')
+      'Shear-driven Turbulent Kinetic Energy', 'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
 #ifdef ADD_DIAGNOSTICS
   CS%id_ILd2 = register_diag_field('ocean_model','ILd2_shear',diag%axesTi,Time, &
       'Inverse kappa decay scale at interfaces', 'm-2', conversion=US%m_to_Z**2)
