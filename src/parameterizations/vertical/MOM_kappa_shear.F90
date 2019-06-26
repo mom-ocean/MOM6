@@ -55,7 +55,7 @@ type, public :: Kappa_shear_CS ; private
   real    :: lambda2_N_S     !<   The square of the ratio of the coefficients of
                              !! the buoyancy and shear scales in the diffusivity
                              !! equation, 0 to eliminate the shear scale. Nondim.
-  real    :: TKE_bg          !<   The background level of TKE [m2 s-2].
+  real    :: TKE_bg          !<   The background level of TKE [Z2 T-2 ~> m2 s-2].
   real    :: kappa_0         !<   The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
   real    :: kappa_tol_err   !<   The fractional error in kappa that is tolerated.
   real    :: Prandtl_turb    !< Prandtl number used to convert Kd_shear into viscosity.
@@ -134,7 +134,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     h_2d, &                         ! A 2-D version of h, but converted to m.
     u_2d, v_2d, T_2d, S_2d, rho_2d  ! 2-D versions of u_in, v_in, T, S, and rho.
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
-    kappa_2d, tke_2d                ! 2-D versions of various kappa_io and tke_io.
+    kappa_2d, & ! 2-D version of kappa_io [Z2 T-1 ~> m2 s-1].
+    tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
   real, dimension(SZK_(GV)) :: &
     u, &        ! The zonal velocity after a timestep of mixing [m s-1].
     v, &        ! The meridional velocity after a timestep of mixing [m s-1].
@@ -148,9 +149,9 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 T-1 ~> m2 s-1].
-    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
+    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [Z2 T-2 ~> m2 s-2].
     kappa_avg, & ! The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
-    tke_avg     ! The time-weighted average of TKE [m2 s-2].
+    tke_avg     ! The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
   real :: f2   ! The squared Coriolis parameter of each column [T-2 ~> s-2].
   real :: surface_pres  ! The top surface pressure [Pa].
 
@@ -335,7 +336,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
     do K=1,nz+1 ; do i=is,ie
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
-      tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
+      tke_io(i,j,K) = G%mask2dT(i,j) * (US%Z_to_m**2*US%s_to_T**2)*tke_2d(i,K)
       kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
 #ifdef ADD_DIAGNOSTICS
       I_Ld2_3d(i,j,K) = I_Ld2_2d(i,K) ; dz_Int_3d(i,j,K) = dz_Int_2d(i,K)
@@ -407,7 +408,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
     kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
-    tke_2d      ! 2-D version tke_io [m2 s-2].
+    tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
   real, dimension(SZK_(GV)) :: &
     u, &        ! The zonal velocity after a timestep of mixing [m s-1].
     v, &        ! The meridional velocity after a timestep of mixing [m s-1].
@@ -421,9 +422,9 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 T-1 ~> m2 s-1].
-    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [m2 s-2].
+    tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [Z2 T-2 ~> m2 s-2].
     kappa_avg, & ! The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
-    tke_avg     ! The time-weighted average of TKE [m2 s-2].
+    tke_avg     ! The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
   real :: f2   ! The squared Coriolis parameter of each column [T-2 ~> s-2].
   real :: surface_pres  ! The top surface pressure [Pa].
 
@@ -679,7 +680,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                      intent(inout) :: kappa !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
                      intent(inout) :: tke  !< The Turbulent Kinetic Energy per unit mass at
-                                           !! an interface [m2 s-2].
+                                           !! an interface [Z2 T-2 ~> m2 s-2].
   integer,           intent(in)    :: nzc  !< The number of active layers in the column.
   real,              intent(in)    :: f2   !< The square of the Coriolis parameter [T-2 ~> s-2].
   real,              intent(in)    :: surface_pres  !< The surface pressure [Pa].
@@ -696,7 +697,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real, dimension(SZK_(GV)+1), &
                      intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
-                     intent(out)   :: tke_avg  !< The time-weighted average of TKE [m2 s-2].
+                     intent(out)   :: tke_avg  !< The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
   real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(thermo_var_ptrs),   intent(in)    :: tv !< A structure containing pointers to any
                                                !! available thermodynamic fields. Absent fields
@@ -733,7 +734,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     kappa_src, & ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].
     kappa_out, & ! The kappa that results from the kappa equation [Z2 T-1 ~> m2 s-1].
     kappa_mid, & ! The average of the initial and predictor estimates of kappa [Z2 T-1 ~> m2 s-1].
-    tke_pred, & ! The value of TKE from a predictor step [m2 s-2].
+    tke_pred, & ! The value of TKE from a predictor step [Z2 T-2 ~> m2 s-2].
     kappa_pred, & ! The value of kappa from a predictor step [Z2 T-1 ~> m2 s-1].
     pressure, & ! The pressure at an interface [Pa].
     T_int, &    ! The temperature interpolated to an interface [degC].
@@ -1205,7 +1206,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   if (present(I_Ld2_1d)) then
     do K=1,GV%ke+1 ; I_Ld2_1d(K) = 0.0 ; enddo
     do K=2,nzc ; if (TKE(K) > 0.0) &
-      I_Ld2_1d(K) = I_L2_bdry(K) + (N2(K) / CS%lambda**2 + f2) * (US%s_to_T**2*US%Z_to_m**2) / TKE(K)
+      I_Ld2_1d(K) = I_L2_bdry(K) + (N2(K) / CS%lambda**2 + f2) / TKE(K)
     enddo
   endif
   if (present(dz_Int_1d)) then
@@ -1367,7 +1368,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
-                                              !! boundaries [m-2].
+                                              !! boundaries [Z-2 !> m-2].
   real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers [Z-1 ~> m-1].
   real,                  intent(in)    :: f2  !< The squared Coriolis parameter [T-2 ~> s-2].
   type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
@@ -1377,7 +1378,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                                               !! the turbulent kinetic energy per unit mass at
                                               !! interfaces [Z2 m-2 s2 T-1 ~> s].
   real, dimension(nz+1), intent(out)   :: tke !< The turbulent kinetic energy per unit mass at
-                                              !! interfaces [m2 s-2].
+                                              !! interfaces [Z2 T-2 ~> m2 s-2].
   real, dimension(nz+1), intent(out)   :: kappa  !< The diapycnal diffusivity at interfaces
                                               !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), optional, &
@@ -1390,22 +1391,22 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   ! Local variables
   real, dimension(nz) :: &
     aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE equations [Z T-1 ~> m s-1].
-    dQdz        ! Half the partial derivative of TKE with depth [m s-2].
+    dQdz        ! Half the partial derivative of TKE with depth [Z T-2 ~> m s-2].
   real, dimension(nz+1) :: &
     dK, &         ! The change in kappa [Z2 T-1 ~> m2 s-1].
-    dQ, &         ! The change in TKE [m2 s-2].
+    dQ, &         ! The change in TKE [Z2 T-2 ~> m2 s-2].
     cQ, cK, &     ! cQ and cK are the upward influences in the tridiagonal and
                   ! hexadiagonal solvers for the TKE and kappa equations [nondim].
     I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale for kappa [Z-2 ~> m-2].
     TKE_decay, &  ! The local TKE decay rate [T-1 ~> s-1].
     k_src, &      ! The source term in the kappa equation [T-1 ~> s-1].
-    dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k) [m2 T Z-2 ~> s].
-    dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k) [Z2 m-2 T-1 ~> s-1].
+    dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k) [T ~> s].
+    dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k) [T-1 ~> s-1].
     e1            ! The fractional change in a layer TKE due to a change in the
                   ! TKE of the layer above when all the kappas below are 0.
                   ! e1 is nondimensional, and 0 < e1 < 1.
   real :: tke_src       ! The net source of TKE due to mixing against the shear
-                        ! and stratification [m2 s-2 T-1 ~> m2 s-3].  (For convenience,
+                        ! and stratification [Z2 T-3 ~> m2 s-3].  (For convenience,
                         ! a term involving the non-dissipation of q0 is also
                         ! included here.)
   real :: bQ            ! The inverse of the pivot in the tridiagonal equations [T Z-1 ~> s m-1].
@@ -1419,15 +1420,15 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                         ! stratification (i.e. proportional to N*tke) [nondim].
   real :: Ri_crit       !   The critical shear Richardson number for shear-
                         ! driven mixing. The theoretical value is 0.25.
-  real :: q0            !   The background level of TKE [m2 s-2].
+  real :: q0            !   The background level of TKE [Z2 T-2 ~> m2 s-2].
   real :: Ilambda2      ! 1.0 / CS%lambda**2 [nondim]
   real :: TKE_min       !   The minimum value of shear-driven TKE that can be
-                        ! solved for [m2 s-2].
+                        ! solved for [Z2 T-2 ~> m2 s-2].
   real :: kappa0        ! The background diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0 [Z2 T-1 ~> m2 s-1].
 
   real :: eden1, eden2, I_eden, ome  ! Variables used in calculating e1.
-  real :: diffusive_src ! The diffusive source in the kappa equation [m T-1 ~> m s-1].
+  real :: diffusive_src ! The diffusive source in the kappa equation [Z T-1 ~> m s-1].
   real :: chg_by_k0     ! The value of k_src that leads to an increase of
                         ! kappa_0 if only the diffusive term is a sink [T-1 ~> s-1].
 
@@ -1441,8 +1442,6 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: kap_src
   real :: v1            ! A temporary variable proportional to [T-1 ~> s-1]
   real :: v2
-  real :: Z2_to_L2       ! A conversion factor from vertical depth units to horizontal length
-                         ! units squared [m2 s-2 T2 Z-2].
   real :: tol_err        ! The tolerance for max_err that determines when to
                          ! stop iterating.
   real :: Newton_err     ! The tolerance for max_err that determines when to
@@ -1469,7 +1468,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1) :: &
     I_Ld2_debug, & ! A separate version of I_Ld2 for debugging [Z-2 ~> m-2].
     kappa_prev, & ! The value of kappa at the start of the current iteration [Z2 T-1 ~> m2 s-1].
-    TKE_prev   ! The value of TKE at the start of the current iteration [m2 s-2].
+    TKE_prev   ! The value of TKE at the start of the current iteration [Z2 T-2 ~> m2 s-2].
   real, dimension(nz+1,1:max_debug_itt) :: &
     tke_it1, kappa_it1, kprev_it1, &  ! Various values from each iteration.
     dkappa_it1, K_Q_it1, d_dkappa_it1, dkappa_norm_it1
@@ -1477,10 +1476,10 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 #endif
 
   c_N2 = CS%C_N**2 ; c_S2 = CS%C_S**2
-  q0 = CS%TKE_bg ; kappa0 = CS%kappa_0 ; TKE_min = max(CS%TKE_bg,1.0E-20)
+  q0 = CS%TKE_bg ; kappa0 = CS%kappa_0
+  TKE_min = max(CS%TKE_bg, 1.0E-20*US%m_to_Z**2*US%T_to_s**2)
   Ri_crit = CS%Rino_crit
   Ilambda2 = 1.0 / CS%lambda**2
-  Z2_to_L2 = US%s_to_T**2 * US%Z_to_m**2
   kappa_trunc = 0.01*kappa0  ! ### CHANGE THIS HARD-WIRING LATER?
   do_Newton = .false. ; abort_Newton = .false.
   tol_err = CS%kappa_tol_err
@@ -1570,7 +1569,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       enddo
       dQ(1) = -TKE(1)
       if (tke_noflux_top_BC) then
-        tke_src = Z2_to_L2*kappa0*S2(1) + q0 * TKE_decay(1) ! Uses that kappa(1) = 0
+        tke_src = kappa0*S2(1) + q0 * TKE_decay(1) ! Uses that kappa(1) = 0
         bQd1 = dz_Int(1) * TKE_decay(1)
         bQ = 1.0 / (bQd1 +  aQ(1))
         tke(1) = bQ * (dz_Int(1)*tke_src)
@@ -1580,8 +1579,8 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       endif
       do K=2,ke_tke-1
         dQ(K) = -TKE(K)
-        tke_src = Z2_to_L2*(kappa(K) + kappa0)*S2(K) + q0*TKE_decay(K)
-        bQd1 = dz_Int(K)*(TKE_decay(K) + N2(K)*Z2_to_L2*K_Q(K)) + cQcomp*aQ(k-1)
+        tke_src = (kappa(K) + kappa0)*S2(K) + q0*TKE_decay(K)
+        bQd1 = dz_Int(K)*(TKE_decay(K) + N2(K)*K_Q(K)) + cQcomp*aQ(k-1)
         bQ = 1.0 / (bQd1 + aQ(k))
         tke(K) = bQ * (dz_Int(K)*tke_src + aQ(k-1)*tke(K-1))
         cQ(K+1) = aQ(k) * bQ ; cQcomp = bQd1 * bQ ! = 1 - cQ
@@ -1591,7 +1590,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         dQ(nz+1) = 0.0
       else
         k = ke_tke
-        tke_src = Z2_to_L2*kappa0*S2(K) + q0*TKE_decay(K) ! Uses that kappa(ke_tke) = 0
+        tke_src = kappa0*S2(K) + q0*TKE_decay(K) ! Uses that kappa(ke_tke) = 0
         if (K == nz+1) then
           dQ(K) = -TKE(K)
           bQ = 1.0 / (dz_Int(K)*TKE_decay(K) + cQcomp*aQ(k-1))
@@ -1633,12 +1632,12 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       dK(1) = 0.0 ! kappa takes boundary values of 0.
       cK(2) = 0.0 ; cKcomp = 1.0
       if (itt == 1) then ; dO K=2,nz
-        I_Ld2(K) = (N2(K)*Ilambda2 + f2) * Z2_to_L2 / tke(K) + I_L2_bdry(K)
+        I_Ld2(K) = (N2(K)*Ilambda2 + f2) / tke(K) + I_L2_bdry(K)
       enddo ; endif
       do K=2,nz
         dK(K) = -kappa(K)
         if (itt>1) &
-          I_Ld2(K) = (N2(K)*Ilambda2 + f2) * Z2_to_L2 / tke(K) + I_L2_bdry(K)
+          I_Ld2(K) = (N2(K)*Ilambda2 + f2) / tke(K) + I_L2_bdry(K)
         bKd1 = dz_Int(K)*I_Ld2(K) + cKcomp*Idz(k-1)
         bK = 1.0 / (bKd1 + Idz(k))
 
@@ -1682,7 +1681,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       aQ(1) = (0.5*(kappa(1)+kappa(2))+kappa0) * Idz(1)
       dQdz(1) = 0.5*(TKE(1) - TKE(2))*Idz(1)
       if (tke_noflux_top_BC) then
-        tke_src = dz_Int(1) * (Z2_to_L2*kappa0*S2(1) - (TKE(1) - q0)*TKE_decay(1)) - &
+        tke_src = dz_Int(1) * (kappa0*S2(1) - (TKE(1) - q0)*TKE_decay(1)) - &
                   aQ(1) * (TKE(1) - TKE(2))
 
         bQ = 1.0 / (aQ(1) + dz_Int(1)*TKE_decay(1))
@@ -1695,7 +1694,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       endif
       do K=2,nz
         I_Q = 1.0 / TKE(K)
-        I_Ld2(K) = (N2(K)*Ilambda2 + f2) * (Z2_to_L2*I_Q) + I_L2_bdry(K)
+        I_Ld2(K) = (N2(K)*Ilambda2 + f2) * I_Q + I_L2_bdry(K)
 
         kap_src = dz_Int(K) * (K_src(K) - I_Ld2(K)*kappa(K)) + &
                             Idz(k-1)*(kappa(K-1)-kappa(K)) - Idz(k)*(kappa(K)-kappa(K+1))
@@ -1710,9 +1709,9 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         cKcomp = bK * (Idz(k-1)*cKcomp + decay_term_k) ! = 1-cK(K+1)
         !### The following expression appears to be dimensionally inconsistent in length. -RWH
         dKdQ(K) = bK * (Idz(k-1)*dKdQ(K-1)*cQ(K) + &
-                      US%m_to_Z*Z2_to_L2*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+                      US%m_to_Z*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
         !  I think that the second term needs to be multiplied by dz_Int(K):
-        !             Z2_to_L2*dz_Int(K)*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
+        !             dz_Int(K)*(N2(K)*Ilambda2 + f2) * I_Q**2 * kappa(K) )
         dK(K) = bK * (kap_src + Idz(k-1)*dK(K-1) + Idz(k-1)*dKdQ(K-1)*dQ(K-1))
 
         ! Truncate away negligibly small values of kappa.
@@ -1726,12 +1725,12 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         ! Solve for dQ(K)...
         aQ(k) = (0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
         dQdz(k) = 0.5*(TKE(K) - TKE(K+1))*Idz(k)
-        tke_src = dz_Int(K) * (Z2_to_L2*((kappa(K) + kappa0)*S2(K) - kappa(k)*N2(K)) - &
+        tke_src = dz_Int(K) * (((kappa(K) + kappa0)*S2(K) - kappa(k)*N2(K)) - &
                                   (TKE(k) - q0)*TKE_decay(k)) - &
                   (aQ(k) * (TKE(K) - TKE(K+1)) - aQ(k-1) * (TKE(K-1) - TKE(K)))
         v1 = aQ(k-1) + dQdz(k-1)*dKdQ(K-1)
         v2 = (v1*dQmdK(K) + dQdz(k-1)*cK(K)) + &
-             ((dQdz(k-1) - dQdz(k)) + Z2_to_L2*dz_Int(K)*(S2(K) - N2(K)))
+             ((dQdz(k-1) - dQdz(k)) + dz_Int(K)*(S2(K) - N2(K)))
 
         ! Ensure that the pivot is always positive, and that 0 <= cQ <= 1.
         ! Otherwise do not use Newton's method.
@@ -1758,7 +1757,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         dK(nz+1) = 0.0 ; dKdQ(nz+1) = 0.0
         if (tke_noflux_bottom_BC) then
           K = nz+1
-          tke_src = dz_Int(K) * (Z2_to_L2*kappa0*S2(K) - (TKE(K) - q0)*TKE_decay(K)) + &
+          tke_src = dz_Int(K) * (kappa0*S2(K) - (TKE(K) - q0)*TKE_decay(K)) + &
                     aQ(k-1) * (TKE(K-1) - TKE(K))
 
           v1 = aQ(k-1) + dQdz(k-1)*dKdQ(K-1)
@@ -1783,7 +1782,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
           if (K < nz+1) then
           ! Ignore this source?
             aQ(k) = (0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
-            tke_src_norm = (dz_Int(K) * (Z2_to_L2*kappa0*S2(K) - (TKE(K)-q0)*TKE_decay(K)) - &
+            tke_src_norm = (dz_Int(K) * (kappa0*S2(K) - (TKE(K)-q0)*TKE_decay(K)) - &
                            (aQ(k) * (TKE(K) - TKE(K+1)) - aQ(k-1) * (TKE(K-1) - TKE(K))) ) / &
                            (aQ(k) + (aQ(k-1) + dz_Int(K)*TKE_decay(K)))
           endif
@@ -1834,7 +1833,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         ! been increased to ensure a positive pivot, or 2) negative TKEs have been
         ! truncated, or 3) small or negative kappas have been rounded toward 0.
         I_Q = 1.0 / TKE(K)
-        I_Ld2_debug(K) = (N2(K)*Ilambda2 + f2) * (Z2_to_L2*I_Q) + I_L2_bdry(K)
+        I_Ld2_debug(K) = (N2(K)*Ilambda2 + f2) * I_Q + I_L2_bdry(K)
 
         kap_src = dz_Int(K) * (K_src(K) - I_Ld2(K)*kappa_prev(K)) + &
                             (Idz(k-1)*(kappa_prev(k-1)-kappa_prev(k)) - &
@@ -1843,15 +1842,15 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
         !  I think that the term on the last line needs to be multiplied by dz_Int(K).
         K_err_lin = -Idz(k-1)*(dK(K-1)-dK(K)) + Idz(k)*(dK(K)-dK(K+1)) + &
                      dz_Int(K)*I_Ld2_debug(K)*dK(K) - kap_src - &
-                     US%m_to_Z*Z2_to_L2*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
+                     US%m_to_Z*(N2(K)*Ilambda2 + f2)*I_Q**2*kappa_prev(K) * dQ(K)
 
-        tke_src = dz_Int(K) * (Z2_to_L2*(kappa_prev(K) + kappa0)*S2(K) - &
-                     Z2_to_L2*kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
+        tke_src = dz_Int(K) * ((kappa_prev(K) + kappa0)*S2(K) - &
+                     kappa_prev(K)*N2(K) - (TKE_prev(K) - q0)*TKE_decay(K)) - &
                   (aQ(k) * (TKE_prev(K) - TKE_prev(K+1)) -  aQ(k-1) * (TKE_prev(K-1) - TKE_prev(K)))
         Q_err_lin = tke_src + (aQ(k-1) * (dQ(K-1)-dQ(K)) - aQ(k) * (dQ(k)-dQ(k+1))) - &
                     0.5*(TKE_prev(K)-TKE_prev(K+1))*Idz(k)  * (dK(K) + dK(K+1)) - &
                     0.5*(TKE_prev(K)-TKE_prev(K-1))*Idz(k-1)* (dK(K-1) + dK(K)) + &
-                    dz_Int(K) * (Z2_to_L2*dK(K) * (S2(K) - N2(K)) - dQ(K)*TKE_decay(K))
+                    dz_Int(K) * (dK(K) * (S2(K) - N2(K)) - dQ(K)*TKE_decay(K))
       enddo
 #endif
     endif  ! End of the Newton's method solver.
@@ -2048,7 +2047,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "TKE_BACKGROUND", CS%TKE_bg, &
                  "A background level of TKE used in the first iteration "//&
                  "of the kappa equation.  TKE_BACKGROUND could be 0.", &
-                 units="m2 s-2", default=0.0)
+                 units="m2 s-2", default=0.0, scale=US%m_to_Z**2*US%T_to_s**2)
   call get_param(param_file, mdl, "KAPPA_SHEAR_ELIM_MASSLESS", CS%eliminate_massless, &
                  "If true, massless layers are merged with neighboring "//&
                  "massive layers in this calculation.  The default is "//&
