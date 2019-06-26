@@ -670,7 +670,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
             kU_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
                       fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
-        absf_x_H = 0.25 * US%m_to_Z * US%s_to_T * h(i,0) * &  !### I think this should be H_to_Z -RWH
+        absf_x_H = 0.25 * GV%H_to_Z * US%s_to_T * h(i,0) * &
             ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
              (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         ! If the mixed layer vertical viscosity specification is changed in
