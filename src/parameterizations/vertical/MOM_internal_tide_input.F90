@@ -37,6 +37,8 @@ type, public :: int_tide_input_CS ; private
                         !! regulate the timing of diagnostic output.
   real :: TKE_itide_max !< Maximum Internal tide conversion
                         !! available to mix above the BBL [W m-2]
+  real :: kappa_fill    !< Vertical diffusivity used to interpolate sensible values
+                        !! of T & S into thin layers [Z2 s-1 ~> m2 s-1].
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
             !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
@@ -85,8 +87,6 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
-  real :: kappa_fill  ! diffusivity used to fill massless layers
-  real :: dt_fill     ! timestep used to fill massless layers
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -94,22 +94,19 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant [m2 s-1].
-  dt_fill    = 7200.              !### Dimensionalconstant [s].
-
   use_EOS = associated(tv%eqn_of_state)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill, dt*US%s_to_T, T_f, S_f, G, GV)
   endif
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,itide,N2_bot,CS)
+  !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
-    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j),CS%TKE_itide_max)
+    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
   enddo ; enddo
 
   if (CS%debug) then
@@ -295,6 +292,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", min_zbot_itides, &
                "Turn off internal tidal dissipation when the total "//&
                "ocean depth is less than this value.", units="m", default=0.0, scale=US%m_to_Z)
+  call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_fill, &
+                 "A diapycnal diffusivity that is used to interpolate "//&
+                 "more sensible values of T & S into thin layers.", &
+                 default=1.0e-6, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "UTIDE", utide, &
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
