@@ -2050,7 +2050,7 @@ subroutine legacy_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_en
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
-    Tr_ea_BBL = sqrt(dt_in_T*CS%Kd_BBL_tr)  !### I think this needs GV%Z_to_H
+    Tr_ea_BBL = GV%Z_to_H * sqrt(dt_in_T*CS%Kd_BBL_tr)
     !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
