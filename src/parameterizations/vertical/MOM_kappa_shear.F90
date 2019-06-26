@@ -288,11 +288,11 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       endif
 
 #ifdef ADD_DIAGNOSTICS
-      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
 #else
-      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US)
 #endif
@@ -594,11 +594,11 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       endif
 
 #ifdef ADD_DIAGNOSTICS
-      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US, I_Ld2_1d, dz_Int_1d)
 #else
-      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+      call kappa_shear_column(kappa, tke, US%s_to_T*dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
                               tke_avg, tv, CS, GV, US)
 #endif
@@ -697,7 +697,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                      intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
                      intent(out)   :: tke_avg  !< The time-weighted average of TKE [m2 s-2].
-  real,                    intent(in)    :: dt !< Time increment [s].
+  real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(thermo_var_ptrs),   intent(in)    :: tv !< A structure containing pointers to any
                                                !! available thermodynamic fields. Absent fields
                                                !! have NULL ptrs.
@@ -764,13 +764,13 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                         ! within an iteration.  0 < tol_dksrc_low < 1.
   real :: Ri_crit       !   The critical shear Richardson number for shear-
                         ! driven mixing. The theoretical value is 0.25.
-  real :: dt_rem        !   The remaining time to advance the solution [s].
-  real :: dt_now        !   The time step used in the current iteration [s].
+  real :: dt_rem        !   The remaining time to advance the solution [T ~> s].
+  real :: dt_now        !   The time step used in the current iteration [T ~> s].
   real :: dt_wt         !   The fractional weight of the current iteration [nondim].
   real :: dt_test       !   A time-step that is being tested for whether it
-                        ! gives acceptably small changes in k_src [s].
+                        ! gives acceptably small changes in k_src [T ~> s].
   real :: Idtt          !   Idtt = 1 / dt_test [T-1 ~> s-1].
-  real :: dt_inc        !   An increment to dt_test that is being tested [s].
+  real :: dt_inc        !   An increment to dt_test that is being tested [T ~> s].
 
   real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
   logical :: valid_dt   ! If true, all levels so far exhibit acceptably small
@@ -805,7 +805,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%Rho0*(GV%g_Earth*US%m_to_Z) ; g_R0 = (GV%g_Earth*US%m_to_Z**2)/GV%Rho0
-  k0dt = dt*US%s_to_T*CS%kappa_0
+  k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
   tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
@@ -1020,7 +1020,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                                        GV, US, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, &
                                        vel_underflow=CS%vel_underflow)
         valid_dt = .true.
-        Idtt = 1.0 / (US%s_to_T*dt_test)
+        Idtt = 1.0 / dt_test
         do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
           if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
             K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
@@ -1046,7 +1046,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                    nzc, dz, I_dz_int, dbuoy_dT, dbuoy_dS, u_test, v_test, T_test, S_test, &
                    GV, US, N2, S2, ks_int=ks_kappa, ke_int=ke_kappa, vel_underflow=CS%vel_underflow)
           valid_dt = .true.
-          Idtt = 1.0 / (US%s_to_T*(dt_test+dt_inc))
+          Idtt = 1.0 / (dt_test+dt_inc)
           do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
             if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
               K_src(K) = US%T_to_s*(2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
@@ -1070,9 +1070,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
         dt_inc = 0.0
       endif
 
-      dt_now = min(dt_test*(1.0+CS%kappa_tol_err)+dt_inc,dt_rem)
+      dt_now = min(dt_test*(1.0+CS%kappa_tol_err)+dt_inc, dt_rem)
       do K=2,nzc
-        local_src_avg(K) = local_src_avg(K) + dt_now*US%s_to_T * local_src(K)
+        local_src_avg(K) = local_src_avg(K) + dt_now * local_src(K)
       enddo
     endif  ! Are all the values of kappa_out 0?
   ! call cpu_clock_end(id_clock_project)
@@ -1238,7 +1238,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! temperature [Z s-2 degC-1 ~> m s-2 degC-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
                                               !! salinity [Z s-2 ppt-1 ~> m s-2 ppt-1].
-  real,                  intent(in)    :: dt  !< The time step [s].
+  real,                  intent(in)    :: dt  !< The time step [T ~> s].
   real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
   real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
   real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
@@ -1272,7 +1272,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   if (ks > ke) return
 
   if (dt > 0.0) then
-    a_b = dt*US%s_to_T*(kappa(ks+1)*I_dz_int(ks+1))
+    a_b = dt*(kappa(ks+1)*I_dz_int(ks+1))
     b1 = 1.0 / (dz(ks) + a_b)
     c1(ks+1) = a_b * b1 ; d1 = dz(ks) * b1 ! = 1 - c1
 
@@ -1280,7 +1280,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
     T(ks) = (b1 * dz(ks))*T0(ks) ; Sal(ks) = (b1 * dz(ks))*S0(ks)
     do K=ks+1,ke-1
       a_a = a_b
-      a_b = dt*US%s_to_T*(kappa(K+1)*I_dz_int(K+1))
+      a_b = dt*(kappa(K+1)*I_dz_int(K+1))
       bd1 = dz(k) + d1*a_a
       b1 = 1.0 / (bd1 + a_b)
       c1(K+1) = a_b * b1 ; d1 = bd1 * b1 ! d1 = 1 - c1
@@ -1303,7 +1303,7 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
     ! tracers and velocities if the mixing is separated from the bottom, but if
     ! the mixing goes all the way to the bottom, use no-slip BCs for velocities.
     if (ke == nz) then
-      a_b = dt*US%s_to_T*(kappa(nz+1)*I_dz_int(nz+1))
+      a_b = dt*(kappa(nz+1)*I_dz_int(nz+1))
       b1nz_0 = 1.0 / ((dz(nz) + d1*a_a) + a_b)
     else
       b1nz_0 = b1
