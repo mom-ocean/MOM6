@@ -1439,7 +1439,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   character(len=48) :: thickness_units, flux_units
-  logical :: use_temperature
+  logical :: use_temperature, adiabatic
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
 
@@ -1457,6 +1457,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   CS%diag => diag
   use_temperature = associated(tv%T)
+  call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
+                 do_not_log=.true.)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
@@ -1642,10 +1644,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Kinetic Energy Source from Horizontal Viscosity', 'm3 s-3')
   if (CS%id_KE_horvisc>0) call safe_alloc_ptr(CS%KE_horvisc,isd,ied,jsd,jed,nz)
 
-  CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', diag%axesTL, Time, &
-      'Kinetic Energy Source from Diapycnal Diffusion', 'm3 s-3')
-  if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
-
+  if (.not. adiabatic) then
+    CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', diag%axesTL, Time, &
+        'Kinetic Energy Source from Diapycnal Diffusion', 'm3 s-3')
+    if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
+  endif
 
   ! gravity wave CFLs
   CS%id_cg1 = register_diag_field('ocean_model', 'cg1', diag%axesT1, Time, &
