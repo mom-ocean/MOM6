@@ -191,7 +191,7 @@ contains
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic, &
-                                thickness_diffuse, G, GV, US, CS, OBC)
+                                G, GV, US, CS, OBC)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -213,8 +213,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                                                        !! specify the spatially variable viscosities
   type(barotropic_CS),           pointer     :: Barotropic  !< Pointer to a structure containing
                                                        !! barotropic velocities
-  type(thickness_diffuse_CS),    pointer     :: thickness_diffuse  !< Pointer to a structure containing
-                                                       !! interface height diffusivities
   type(hor_visc_CS),             pointer     :: CS     !< Control structure returned by a previous
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
                                                        !! call to hor_visc_init.
