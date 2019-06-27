@@ -191,7 +191,7 @@ contains
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
-                                CS, OBC, Barotropic)
+                                CS, OBC, BT)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -215,7 +215,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
                                                        !! call to hor_visc_init.
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
-  type(barotropic_CS),  optional, pointer    :: Barotropic !< Pointer to a structure containing
+  type(barotropic_CS),  optional, pointer    :: BT     !< Pointer to a structure containing
                                                        !! barotropic velocities.
 
   ! Local variables
@@ -403,7 +403,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 !    call pass_var(boundary_mask, G%Domain, complete=.true.)
 
     ! Get barotropic velocities and their gradients
-    call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
+    call barotropic_get_tav(BT, ubtav, vbtav, G)
     call pass_vector(ubtav, vbtav, G%Domain)
 
     do j=js,je ; do i=is,ie
