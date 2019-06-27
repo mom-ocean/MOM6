@@ -190,8 +190,8 @@ contains
 !!   u[is-2:ie+2,js-2:je+2]
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
-subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic, &
-                                G, GV, US, CS, OBC)
+subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
+                                CS, OBC, Barotropic)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -199,7 +199,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(in)  :: v      !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                 intent(inout)  :: h      !< Layer thicknesses, in H
+                                 intent(inout)  :: h   !< Layer thicknesses, in H
                                                        !! (usually m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
@@ -211,12 +211,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
                                                        !! specify the spatially variable viscosities
-  type(barotropic_CS),           pointer     :: Barotropic  !< Pointer to a structure containing
-                                                       !! barotropic velocities
   type(hor_visc_CS),             pointer     :: CS     !< Control structure returned by a previous
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
                                                        !! call to hor_visc_init.
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
+  type(barotropic_CS),  optional, pointer    :: Barotropic !< Pointer to a structure containing
+                                                       !! barotropic velocities.
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -1407,6 +1407,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   logical :: get_all       ! If true, read and log all parameters, regardless of
                            ! whether they are used, to enable spell-checking of
                            ! valid parameters.
+  logical :: split         ! If true, use the split time stepping scheme.
+                           ! If false and USE_GME = True, issue a FATAL error.
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1638,6 +1640,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
+
+  if (CS%use_GME) then
+    call get_param(param_file, mdl, "SPLIT", split, &
+                 "Use the split time stepping if true.", default=.true., &
+                  do_not_log=.true.)
+    if (.not. split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
+                                           "cannot be used with SPLIT=False.")
+  endif
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mdl, "DT", dt, &
