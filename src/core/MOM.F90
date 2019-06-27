@@ -54,7 +54,6 @@ use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, updat
 use MOM_coord_initialization,  only : MOM_initialize_coord
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
-use MOM_diabatic_driver,       only : legacy_diabatic
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
@@ -203,8 +202,6 @@ type, public :: MOM_control_struct ; private
                     !! related to the Mesoscale Eddy Kinetic Energy
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
-  logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the diabatic
-                    !! subroutine. This is temporary and is needed to avoid change in answers.
   logical :: diabatic_first !< If true, apply diabatic and thermodynamic processes before time
                     !! stepping the dynamics.
   logical :: use_ALE_algorithm  !< If true, use the ALE algorithm rather than layered
@@ -1184,14 +1181,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     endif
 
     call cpu_clock_begin(id_clock_diabatic)
-    if (CS%use_legacy_diabatic_driver) then
-      ! the following subroutine is legacy and will be deleted in the near future.
-      call legacy_diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                           dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
-    else
-      call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                    dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
-    endif
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                  dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
@@ -1670,10 +1661,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "true. This assumes that KD = KDML = 0.0 and that "//&
                  "there is no buoyancy forcing, but makes the model "//&
                  "faster by eliminating subroutine calls.", default=.false.)
-  call get_param(param_file, "MOM", "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic_driver, &
-                 "If true, use a legacy version of the diabatic subroutine. "//&
-                 "This is temporary and is needed to avoid change in answers.", &
-                 default=.true.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as "//&
                  "the gravity wave adjustment to h. This is a fragile feature and "//&
