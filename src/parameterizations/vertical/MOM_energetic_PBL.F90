@@ -1446,7 +1446,11 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       MLD_guess = 0.5*(min_MLD + max_MLD)
     endif
   enddo ! Iteration loop for converged boundary layer thickness.
-  eCD%LA = LA ; eCD%LAmod =  LAmod ; eCD%mstar = mstar_total ; eCD%mstar_LT = mstar_LT
+  if (CS%Use_LT) then
+    eCD%LA = LA ; eCD%LAmod = LAmod ; eCD%mstar = mstar_total ; eCD%mstar_LT = mstar_LT
+  else
+    eCD%LA = 0.0 ; eCD%LAmod = 0.0 ; eCD%mstar = mstar_total ; eCD%mstar_LT = 0.0
+  endif
 
   MLD_io = MLD_output
 
@@ -1479,7 +1483,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                                 !! above, including implicit mixing effects with other
                                 !! yet higher layers [degC H ~> degC m or degC kg m-2].
   real, intent(in)  :: Th_b     !< An effective temperature times a thickness in the layer
-                                !! below, including implicit mixing effects with other
+                                !! below, including implicit mixfing effects with other
                                 !! yet lower layers [degC H ~> degC m or degC kg m-2].
   real, intent(in)  :: Sh_b     !< An effective salinity times a thickness in the layer
                                 !! below, including implicit mixing effects with other
@@ -2351,12 +2355,15 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Velocity Scale that is used.', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'Total mstar that is used.', 'nondim')
-  CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
-      Time, 'Langmuir number.', 'nondim')
-  CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
-      Time, 'Modified Langmuir number.', 'nondim')
-  CS%id_MSTAR_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
-      Time, 'Increase in mstar due to Langmuir Turbulence.', 'nondim')
+
+  if (CS%use_LT) then
+    CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
+        Time, 'Langmuir number.', 'nondim')
+    CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
+        Time, 'Modified Langmuir number.', 'nondim')
+    CS%id_MSTAR_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
+        Time, 'Increase in mstar due to Langmuir Turbulence.', 'nondim')
+  endif
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state "//&
