@@ -1150,7 +1150,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, US, CS%hor_visc_CSp, & 
+                              G, GV, US, CS%hor_visc_CSp, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp)
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
