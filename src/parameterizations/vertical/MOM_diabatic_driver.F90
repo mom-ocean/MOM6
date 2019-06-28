@@ -67,7 +67,6 @@ use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_p
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_wave_speed,          only : wave_speeds
-use time_manager_mod,        only : increment_time ! for testing itides (BDM)
 use MOM_wave_interface,      only : wave_parameters_CS
 
 
@@ -120,20 +119,8 @@ type, public:: diabatic_CS; private
                                      !! other diffusivities. Otherwise, the larger of kappa-
                                      !! shear and ePBL diffusivities are used.
   integer :: nMode = 1               !< Number of baroclinic modes to consider
-  logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
-                                     !! for internal tide testing (BDM)
-  real    :: int_tide_source_x       !< X Location of generation site
-                                     !! for internal tide for testing (BDM)
-  real    :: int_tide_source_y       !< Y Location of generation site
-                                     !! for internal tide for testing (BDM)
-  integer :: tlen_days               !< Time interval from start for adding wave source
-                                     !! for testing internal tides (BDM)
-  logical :: uniform_cg              !< If true, set cg = cg_test everywhere
-                                     !! for testing internal tides (BDM)
-  real    :: cg_test                 !< Uniform group velocity of internal tide
-                                     !! for testing internal tides (BDM)
-  type(time_type) :: time_max_source !< For use in testing internal tides (BDM)
-  type(time_type) :: time_end        !< For use in testing internal tides (BDM)
+  real    :: uniform_test_cg         !< Uniform group velocity of internal tide
+                                     !! for testing internal tides [m s-1] (BDM)
   logical :: useALEalgorithm         !< If true, use the ALE algorithm rather than layered
                                      !! isopycnal/stacked shallow water mode. This logical
                                      !! passed by argument to diabatic_driver_init.
@@ -294,12 +281,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     eta      ! Interface heights before diapycnal mixing [m].
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
-    cn       ! baroclinic gravity wave speeds
+    cn_IGW   ! baroclinic internal gravity wave speeds
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G))      :: TKE_itidal_input_test ! override of energy input for testing (BDM)
   real :: dt_in_T ! The time step converted to T units [T ~> s]
   integer :: i, j, k, m, is, ie, js, je, nz
-  logical :: avg_enabled  ! for testing internal tides (BDM)
   logical :: showCallTree ! If true, show the call tree
 
   if (G%ke == 1) return
@@ -371,45 +357,17 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%use_int_tides) then
     ! This block provides an interface for the unresolved low-mode internal tide module (BDM).
-
-    ! PROVIDE ENERGY DISTRIBUTION (calculate time-varying energy source)
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, GV, US, &
                             CS%int_tide_input_CSp)
-    ! CALCULATE MODAL VELOCITIES
-    cn(:,:,:) = 0.0
-    if (CS%uniform_cg) then
-      ! SET TO CONSTANT VALUE TO TEST PROPAGATE CODE
-      do m=1,CS%nMode ; cn(:,:,m) = CS%cg_test ; enddo
+    cn_IGW(:,:,:) = 0.0
+    if (CS%uniform_test_cg > 0.0) then
+      do m=1,CS%nMode ; cn_IGW(:,:,m) = CS%uniform_test_cg ; enddo
     else
-      call wave_speeds(h, tv, G, GV, US, CS%nMode, cn, full_halos=.true.)
-      ! uncomment the lines below for a hard-coded cn that changes linearly with latitude
-      !do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      !  cn(i,j,:) = ((7.-1.)/14000000.)*G%geoLatBu(i,j) + (1.-((7.-1.)/14000000.)*-7000000.)
-      !enddo ; enddo
+      call wave_speeds(h, tv, G, GV, US, CS%nMode, cn_IGW, full_halos=.true.)
     endif
 
-    if (CS%int_tide_source_test) then
-      ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING
-      !  This block of code should be moved into set_int_tide_input. -RWH
-      TKE_itidal_input_test(:,:) = 0.0
-      avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
-      if (CS%time_end <= CS%time_max_source) then
-        do j=G%jsc,G%jec ; do i=G%isc,G%iec
-          !INPUT ARBITRARY ENERGY POINT SOURCE
-          if ((G%idg_offset + i == CS%int_tide_source_x) .and. &
-              (G%jdg_offset + j == CS%int_tide_source_y)) then
-            TKE_itidal_input_test(i,j) = 1.0
-          endif
-        enddo ; enddo
-      endif
-      ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
-      call propagate_int_tide(h, tv, cn, TKE_itidal_input_test, CS%int_tide_input%tideamp, &
-                              CS%int_tide_input%Nb, dt, G, GV, US, CS%int_tide_CSp)
-    else
-      ! CALL ROUTINE USING CALCULATED KE INPUT
-      call propagate_int_tide(h, tv, cn, CS%int_tide_input%TKE_itidal_input, CS%int_tide_input%tideamp, &
-                              CS%int_tide_input%Nb, dt, G, GV, US, CS%int_tide_CSp)
-    endif
+    call propagate_int_tide(h, tv, cn_IGW, CS%int_tide_input%TKE_itidal_input, CS%int_tide_input%tideamp, &
+                            CS%int_tide_input%Nb, dt, G, GV, US, CS%int_tide_CSp)
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif ! end CS%use_int_tides
 
@@ -475,8 +433,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call diagnoseMLDbyDensityDifference(CS%id_MLD_user, h, tv, CS%MLDdensityDifference, G, GV, US, CS%diag)
   endif
   if (CS%use_int_tides) then
-    if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn(:,:,1),CS%diag)
-    do m=1,CS%nMode ; if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m),cn(:,:,m),CS%diag) ; enddo
+    if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn_IGW(:,:,1),CS%diag)
+    do m=1,CS%nMode ; if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m), cn_IGW(:,:,m), CS%diag) ; enddo
   endif
   call disable_averaging(CS%diag)
 
@@ -3323,33 +3281,12 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "equations for the internal tide energy density.", default=.false.)
   CS%nMode = 1
   if (CS%use_int_tides) then
-    ! SET NUMBER OF MODES TO CONSIDER
     call get_param(param_file, mdl, "INTERNAL_TIDE_MODES", CS%nMode, &
                  "The number of distinct internal tide modes "//&
                  "that will be calculated.", default=1, do_not_log=.true.)
-
-    ! The following parameters are used in testing the internal tide code.
-    ! GET LOCATION AND DURATION OF ENERGY POINT SOURCE FOR TESTING (BDM)
-    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
-                 "If true, apply an arbitrary generation site for internal tide testing", &
-                 default=.false.)
-    if (CS%int_tide_source_test)then
-      call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1.)
-      call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1.)
-      call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", CS%tlen_days, &
-                 "Time interval from start of experiment for adding wave source", &
-                 units="days", default=0)
-      CS%time_max_source = increment_time(Time,0,days=CS%tlen_days)
-    endif
-    ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)
-    call get_param(param_file, mdl, "UNIFORM_CG", CS%uniform_cg, &
-                 "If true, set cg = cg_test everywhere for test case", default=.false.)
-    if (CS%uniform_cg)then
-      call get_param(param_file, mdl, "CG_TEST", CS%cg_test, &
-                 "Uniform group velocity of internal tide for test case", default=1.)
-    endif
+    call get_param(param_file, mdl, "UNIFORM_TEST_CG", CS%uniform_test_cg, &
+                 "If positive, a uniform group velocity of internal tide for test case", &
+                 default=-1., units="m s-1")
   endif
 
   call get_param(param_file, mdl, "MASSLESS_MATCH_TARGETS", &

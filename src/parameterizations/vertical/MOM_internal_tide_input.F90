@@ -5,7 +5,7 @@ module MOM_int_tide_input
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_diag_mediator, only : diag_ctrl, query_averaging_enabled
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
@@ -14,6 +14,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, vardesc, MOM_read_data
 use MOM_thickness_diffuse, only : vert_fill_TS
+use MOM_time_manager, only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid, only : verticalGrid_type
@@ -43,6 +44,15 @@ type, public :: int_tide_input_CS ; private
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
             !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
   character(len=200) :: inputdir !< The directory for input files.
+
+  logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
+                                     !! for internal tide testing (BDM)
+  type(time_type) :: time_max_source !< A time for use in testing internal tides
+  real    :: int_tide_source_x       !< X Location of generation site
+                                     !! for internal tide for testing (BDM)
+  real    :: int_tide_source_y       !< Y Location of generation site
+                                     !! for internal tide for testing (BDM)
+
 
   !>@{ Diagnostic IDs
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
@@ -84,6 +94,10 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
                   ! the massless layers filled vertically by diffusion.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
+  logical :: avg_enabled  ! for testing internal tides (BDM)
+  type(time_type) :: time_end        !< For use in testing internal tides (BDM)
+
+
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
@@ -108,6 +122,20 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
     itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
     itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
   enddo ; enddo
+
+  if (CS%int_tide_source_test) then
+    itide%TKE_itidal_input(:,:) = 0.0
+    avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+    if (time_end <= CS%time_max_source) then
+      do j=js,je ; do i=is,ie
+        ! Input  an arbitrary energy point source.
+        if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
+            ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
+          itide%TKE_itidal_input(i,j) = 1.0
+        endif
+      enddo ; enddo
+    endif
+  endif
 
   if (CS%debug) then
     call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0)
@@ -261,6 +289,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height.
   real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling
   real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion [Z ~> m].
+  integer :: tlen_days               !< Time interval from start for adding wave source
+                                     !! for testing internal tides (BDM)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
   if (associated(CS)) then
@@ -339,6 +369,21 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
   call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
+
+  ! The following parameters are used in testing the internal tide code.
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
+               "If true, apply an arbitrary generation site for internal tide testing", &
+               default=.false.)
+  if (CS%int_tide_source_test)then
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+               "X Location of generation site for internal tide", default=1.)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+               "Y Location of generation site for internal tide", default=1.)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", tlen_days, &
+               "Time interval from start of experiment for adding wave source", &
+               units="days", default=0)
+    CS%time_max_source = Time + set_time(0, days=tlen_days)
+  endif
 
   do j=js,je ; do i=is,ie
     mask_itidal = 1.0
