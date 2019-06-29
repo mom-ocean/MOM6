@@ -159,6 +159,10 @@ type, public :: tidal_mixing_cs
                                                          !! TODO: make this E(x,y) only
   real, allocatable, dimension(:,:,:) :: tidal_qe_3d_in  !< q*E(x,y,z) with the Schmittner parameterization [W m-3?]
 
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
+                            !! answers from the end of 2018.  Otherwise, use updated and more robust
+                            !! forms of the same expressions.
+
   ! Diagnostics
   type(diag_ctrl),          pointer :: diag => NULL() !< structure to regulate diagnostic output timing
   type(tidal_mixing_diags), pointer :: dd => NULL() !< A pointer to a structure of diagnostic arrays
@@ -258,6 +262,11 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   ! return if tidal mixing is inactive
   tidal_mixing_init = CS%int_tide_dissipation
   if (.not. tidal_mixing_init) return
+
+  call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=.true.)
 
   if (CS%int_tide_dissipation) then
 
@@ -453,11 +462,12 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
       ! Restrict rms topo to 10 percent of column depth.
       !### Note the hard-coded nondimensional constant, and that this could be simplified.
-      hamp = min(0.1*G%bathyT(i,j),sqrt(CS%h2(i,j)))
+      hamp = min(0.1*G%bathyT(i,j), sqrt(CS%h2(i,j)))
       CS%h2(i,j) = hamp*hamp
 
       utide = CS%tideamp(i,j)
-      ! Compute the fixed part of internal tidal forcing; units are [kg Z3 m-3 T-2 ~> J m-2 = kg s-2] here.
+      ! Compute the fixed part of internal tidal forcing.
+      ! The units here are [kg Z3 m-3 T-2 ~> J m-2 = kg s-2] here.
       CS%TKE_itidal(i,j) = 0.5 * CS%kappa_h2_factor * GV%Rho0 * &
            CS%kappa_itides * CS%h2(i,j) * utide*utide
     enddo ; enddo
@@ -978,6 +988,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
   real :: frac_used     ! fraction of TKE that can be used in a layer [nondim]
   real :: Izeta         ! inverse of TKE decay scale [Z-1 ~> m-1].
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves [Z-1 ~> m-1].
+  real :: z0Ps_num      ! The numerator of the unlimited z0_Polzin_scaled [Z T-3 ~> m s-3].
+  real :: z0Ps_denom    ! The denominator of the unlimited z0_Polzin_scaled [T-3 ~> s-3].
   real :: z0_psl        ! temporary variable [Z ~> m].
   real :: TKE_lowmode_tot ! TKE from all low modes [kg Z3 m-3 T-3 ~> W m-2] (BDM)
 
@@ -1056,24 +1068,42 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
 
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
-      !### In the code below 1.0e-14 is a dimensional constant in [s-3]
-      if ((CS%tideamp(i,j) > 0.0) .and. &
-          (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14*US%T_to_s**3) ) then
-        z0_polzin(i) = CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
-                       CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
-                     ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
-        if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
-          z0_polzin(i) = CS%Polzin_min_decay_scale
-        if (N2_meanz(i) > 1.0e-14*US%T_to_s**2  ) then  !### Here 1.0e-14 has dimensions of s-2.
-          z0_polzin_scaled(i) = z0_polzin(i)*CS%Nb(i,j)**2 / N2_meanz(i)
+      if (CS%answers_2018) then
+        if ((CS%tideamp(i,j) > 0.0) .and. &
+            (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14*US%T_to_s**3) ) then
+          z0_polzin(i) = CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
+                         CS%Nbotref_Polzin**2 * CS%tideamp(i,j) / &
+                       ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 )
+          if (z0_polzin(i) < CS%Polzin_min_decay_scale) &
+            z0_polzin(i) = CS%Polzin_min_decay_scale
+          if (N2_meanz(i) > 1.0e-14*US%T_to_s**2  ) then
+            z0_polzin_scaled(i) = z0_polzin(i)*CS%Nb(i,j)**2 / N2_meanz(i)
+          else
+            z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
+          endif
+          if (z0_polzin_scaled(i) > (CS%Polzin_decay_scale_max_factor * htot(i)) ) &
+            z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
         else
+          z0_polzin(i) = CS%Polzin_decay_scale_max_factor * htot(i)
           z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
         endif
-        if (z0_polzin_scaled(i) > (CS%Polzin_decay_scale_max_factor * htot(i)) ) &
-          z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
       else
-        z0_polzin(i) = CS%Polzin_decay_scale_max_factor * htot(i)
-        z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
+        z0Ps_num = (CS%Polzin_decay_scale_factor * CS%Nu_Polzin * CS%Nbotref_Polzin**2) * CS%tideamp(i,j)
+        z0Ps_denom = ( CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j) * N2_meanz(i) )
+        if ((CS%tideamp(i,j) > 0.0) .and. &
+            (z0Ps_num < z0Ps_denom * CS%Polzin_decay_scale_max_factor * htot(i))) then
+          z0_polzin_scaled(i) = z0Ps_num / z0Ps_denom
+
+          if (abs(N2_meanz(i) * z0_polzin_scaled(i)) < &
+              CS%Nb(i,j)**2 * (CS%Polzin_decay_scale_max_factor * htot(i))) then
+            z0_polzin(i) = z0_polzin_scaled(i) * (N2_meanz(i) / CS%Nb(i,j)**2)
+          else
+            z0_polzin(i) = CS%Polzin_decay_scale_max_factor * htot(i)
+          endif
+        else
+          z0_polzin(i) = CS%Polzin_decay_scale_max_factor * htot(i)
+          z0_polzin_scaled(i) = CS%Polzin_decay_scale_max_factor * htot(i)
+        endif
       endif
 
       if (associated(dd%Polzin_decay_scale)) &
@@ -1082,33 +1112,48 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
         dd%Polzin_decay_scale_scaled(i,j) = z0_polzin_scaled(i)
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = CS%Nb(i,j)*CS%Nb(i,j)
 
-      if ( CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
-        ! For the Polzin formulation, this if loop prevents the vertical
-        ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14*US%m_to_Z) then  !### Avoid using this dimensional constant.
-          Inv_int(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
+      if (CS%answers_2018) then
+        ! These expressions use dimensional constants to avoid NaN values.
+        if ( CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
+          if (htot_WKB(i) > 1.0e-14*US%m_to_Z) &
+            Inv_int(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
         endif
-      endif
-      if ( CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09) ) then
-        ! For the Polzin formulation, this if loop prevents the vertical
-        ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14*US%m_to_Z) then !### Avoid using this dimensional constant.
-          Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1.0
+        if ( CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09) ) then
+          if (htot_WKB(i) > 1.0e-14*US%m_to_Z) &
+            Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1.0
         endif
-      endif
-      if ( CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
-        ! For the Polzin formulation, this if loop prevents the vertical
-        ! flux of energy dissipation from having NaN values
-        if (htot_WKB(i) > 1.0e-14*US%m_to_Z) then !### Avoid using this dimensional constant.
-          Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
+        if ( CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
+          if (htot_WKB(i) > 1.0e-14*US%m_to_Z) &
+            Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
+        endif
+      else
+        ! These expressions give values of Inv_int < 10^14 using a variant of Adcroft's reciprocal rule.
+        Inv_int(i) = 0.0 ; Inv_int_lee(i) = 0.0 ; Inv_int_low(i) = 0.0
+        if ( CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
+          if (z0_polzin_scaled(i) < 1.0e14 * htot_WKB(i)) &
+            Inv_int(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
+        endif
+        if ( CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09) ) then
+          if (z0_polzin_scaled(i) < 1.0e14 * htot_WKB(i)) &
+            Inv_int_lee(i) = ( z0_polzin_scaled(i)*CS%Decay_scale_factor_lee / htot_WKB(i) ) + 1.0
+        endif
+        if ( CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
+          if (z0_polzin_scaled(i) < 1.0e14 * htot_WKB(i)) &
+            Inv_int_low(i) = ( z0_polzin_scaled(i) / htot_WKB(i) ) + 1.0
         endif
       endif
 
       z_from_bot(i) = GV%H_to_Z*h(i,j,nz)
       ! Use the new formulation for WKB scaling.  N2 is referenced to its vertical mean.
-      if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then  !### Avoid using this dimensional constant.
-        z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz) * N2_lay(i,nz) / N2_meanz(i)
-      else ; z_from_bot_WKB(i) = 0 ; endif
+      if (CS%answers_2018) then
+        if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then
+          z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz) * N2_lay(i,nz) / N2_meanz(i)
+        else ; z_from_bot_WKB(i) = 0 ; endif
+      else
+        if (GV%H_to_Z*h(i,j,nz) * N2_lay(i,nz) < N2_meanz(i) * (1.0e14 * htot_WKB(i))) then
+          z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz) * N2_lay(i,nz) / N2_meanz(i)
+        else ; z_from_bot_WKB(i) = 0 ; endif
+      endif
     enddo
   endif  ! Polzin
 
