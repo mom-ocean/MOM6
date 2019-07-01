@@ -113,6 +113,8 @@ type, public :: surface_forcing_CS ; private
   logical :: restore_temp       !< If true, the coupled MOM driver adds a term to restore sea
                                 !! surface temperature to a specified value.
   real    :: Flux_const                     !< Piston velocity for surface restoring [m s-1]
+  real    :: Flux_const_salt                     !< Piston velocity for surface salt restoring [m s-1]
+  real    :: Flux_const_temp                     !< Piston velocity for surface temp restoring [m s-1]
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero    !< Adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< Adjust srestore w/o moving zero contour
@@ -347,7 +349,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       do j=js,je ; do i=is,ie
         delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
+        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const_salt)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -367,7 +369,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
-                      (CS%Rho0*CS%Flux_const) * &
+                      (CS%Rho0*CS%Flux_const_salt) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
       enddo ; enddo
@@ -393,7 +395,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                      (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+                      (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const_temp   ! W m-2
     enddo ; enddo
   endif
 
@@ -1261,10 +1263,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
+                 "The constant that relates the restoring surface salt fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
+    call get_param(param_file, mdl, "FLUXCONST_SALT", CS%Flux_const_salt, &
+                 "The constant that relates the restoring surface fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
+                 "velocity).  Note the non-MKS units.", units="m day-1", &
+                 fail_if_missing=.false., default=CS%Flux_const)
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
                  "A file in which to find the surface salinity to use for restoring.", &
                  default="salt_restore.nc")
@@ -1273,7 +1280,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "SALT_RESTORE_FILE for restoring salinity.", &
                  default="salt")
 ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
+    CS%Flux_const_salt = CS%Flux_const_salt / 86400.0
 
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
                  "If true, the restoring of salinity is applied as a salt "//&
@@ -1309,10 +1316,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%restore_temp) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
+                 "The constant that relates the restoring surface temperature fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
+    call get_param(param_file, mdl, "FLUXCONST_TEMP", CS%Flux_const_temp, &
+                 "The constant that relates the restoring surface temperature fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
+                 "velocity).  Note the non-MKS units.", units="m day-1", &
+                 fail_if_missing=.false., default=CS%Flux_const)
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
                  "A file in which to find the surface temperature to use for restoring.", &
                  default="temp_restore.nc")
@@ -1321,7 +1333,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "SST_RESTORE_FILE for restoring sst.", &
                  default="temp")
   ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
+    CS%Flux_const_temp = CS%Flux_const_temp / 86400.0
 
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
