@@ -62,12 +62,21 @@ type, public :: bulkmixedlayer_CS ; private
                              !! density contours.  It should be a typical value of
                              !! (dR/dS) / (dR/dT) in oceanic profiles.
                              !! 6 degC ppt-1 might be reasonable.
+  real    :: Hbuffer_min     !< The minimum buffer layer thickness when the mixed layer
+                             !! is very large [H ~> m or kg m-2].
+  real    :: Hbuffer_rel_min !< The minimum buffer layer thickness relative to the combined
+                             !! mixed and buffer layer thicknesses when they are thin [nondim]
+  real    :: BL_detrain_time !< A timescale that characterizes buffer layer detrainment
+                             !! events [T ~> s].
   real    :: BL_extrap_lim   !< A limit on the density range over which
                              !! extrapolation can occur when detraining from the
                              !! buffer layers, relative to the density range
                              !! within the mixed and buffer layers, when the
                              !! detrainment is going into the lightest interior
-                             !! layer, nondimensional.
+                             !! layer  [nondim].
+  real :: BL_split_rho_tol   !< The fractional tolerance for matching layer target densities
+                             !! when splitting layers to deal with massive interior layers
+                             !! that are lighter than one of the mixed or buffer layers [nondim].
   logical :: ML_resort       !<   If true, resort the layers by density, rather than
                              !! doing convective adjustment.
   integer :: ML_presort_nz_conv_adj !< If ML_resort is true, do convective
@@ -632,11 +641,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     if (id_clock_detrain>0) call cpu_clock_begin(id_clock_detrain)
     if (CS%nkbl == 1) then
       call mixedlayer_detrain_1(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
-                                GV%Rlay, dt, dt__diag, d_ea, d_eb, j, G, GV, CS, &
+                                GV%Rlay, dt, dt__diag, d_ea, d_eb, j, G, GV, US, CS, &
                                 dRcv_dT, dRcv_dS, max_BL_det)
     elseif (CS%nkbl == 2) then
       call mixedlayer_detrain_2(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
-                                GV%Rlay, dt, dt__diag, d_ea, j, G, GV, CS, &
+                                GV%Rlay, dt, dt__diag, d_ea, j, G, GV, US, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
     else ! CS%nkbl not = 1 or 2
       ! This code only works with 1 or 2 buffer layers.
@@ -851,7 +860,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
   real :: Ih    !   The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
   real :: g_H2_2Rho0  !   Half the gravitational acceleration times the square of
                       ! the conversion from H to Z divided by the mean density,
-                      ! in m7 s-2 Z-1 H-2 kg-1. !### CHECK UNITS
+                      ! in [m5 Z s-2 H-2 kg-1 ~> m4 s-2 kg-1 or m10 s-2 kg-3].
   integer :: is, ie, nz, i, k, k1, nzc, nkmb
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
@@ -1939,7 +1948,6 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
   real    :: h_move, h_tgt_old, I_hnew
   real    :: dT_dS_wt2, dT_dR, dS_dR, I_denom
   real    :: Rcv_int
-  real    :: target_match_tol
   real    :: T_up, S_up, R0_up, I_hup, h_to_up
   real    :: T_dn, S_dn, R0_dn, I_hdn, h_to_dn
   real    :: wt_dn
@@ -1956,7 +1964,6 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
   nkmb = CS%nkml+CS%nkbl
-  target_match_tol = 0.1 ! ### MAKE THIS A PARAMETER.
 
   dT_dS_wt2 = CS%dT_dS_wt**2
 
@@ -2018,10 +2025,10 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
         k = ks2(ks)
         leave_in_layer = .false.
         if ((k > nkmb) .and. (Rcv(i,k) <= RcvTgt(k))) then
-          if (RcvTgt(k)-Rcv(i,k) < target_match_tol*(RcvTgt(k) - RcvTgt(k-1))) &
+          if (RcvTgt(k)-Rcv(i,k) < CS%BL_split_rho_tol*(RcvTgt(k) - RcvTgt(k-1))) &
             leave_in_layer = .true.
         elseif (k > nkmb) then
-          if (Rcv(i,k)-RcvTgt(k) < target_match_tol*(RcvTgt(k+1) - RcvTgt(k))) &
+          if (Rcv(i,k)-RcvTgt(k) < CS%BL_split_rho_tol*(RcvTgt(k+1) - RcvTgt(k))) &
             leave_in_layer = .true.
         endif
 
@@ -2199,7 +2206,7 @@ end subroutine resort_ML
 !> This subroutine moves any water left in the former mixed layers into the
 !! two buffer layers and may also move buffer layer water into the interior
 !! isopycnal layers.
-subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, CS, &
+subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, US, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -2220,6 +2227,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                                             !! [H ~> m or kg m-2]. Positive d_ea
                                                             !! goes with layer thickness increases.
   integer,                            intent(in)    :: j    !< The meridional row to work on.
+  type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
   type(bulkmixedlayer_CS),            pointer       :: CS   !< The control structure returned by a
                                                             !! previous call to mixedlayer_init.
   real, dimension(SZI_(G)),           intent(in)    :: dR0_dT  !< The partial derivative of
@@ -2257,11 +2265,6 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: S_to_bl                 ! The depth integrated amount of S that is detrained to the
                                   ! buffer layer [ppt H ~> ppt m or ppt kg m-2]
   real :: h_min_bl                ! The minimum buffer layer thickness [H ~> m or kg m-2].
-  real :: h_min_bl_thick          ! The minimum buffer layer thickness when the
-                                  ! mixed layer is very large [H ~> m or kg m-2].
-  real :: h_min_bl_frac_ml = 0.05 ! The minimum buffer layer thickness relative
-                                  ! to the total mixed layer thickness for thin
-                                  ! mixed layers [nondim], maybe 0.1/CS%nkbl.
 
   real :: h1, h2                  ! Scalar variables holding the values of
                                   ! h(i,CS%nkml+1) and h(i,CS%nkml+2) [H ~> m or kg m-2].
@@ -2325,10 +2328,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                   ! days?
   real :: num_events              ! The number of detrainment events over which
                                   ! to prefer merging the buffer layers.
-  real :: detrainment_timescale   ! The typical timescale for a detrainment
-                                  ! event [s].
-  real :: dPE_time_ratio          ! Larger of 1 and the detrainment_timescale
-                                  ! over dt, nondimensional.
+  real :: dPE_time_ratio          ! Larger of 1 and the detrainment timescale over dt [nondim].
   real :: dT_dS_gauge, dS_dT_gauge ! The relative scales of temperature and
                                   ! salinity changes in defining spiciness, in
                                   ! [degC ppt-1] and [ppt degC-1].
@@ -2370,15 +2370,13 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   Angstrom = GV%Angstrom_H
 
   ! This is hard coding of arbitrary and dimensional numbers.
-  h_min_bl_thick = 5.0 * GV%m_to_H  !### DIMENSIONAL CONSTANT
-  dT_dS_gauge = CS%dT_dS_wt ; dS_dT_gauge = 1.0 /dT_dS_gauge
+  dT_dS_gauge = CS%dT_dS_wt ; dS_dT_gauge = 1.0 / dT_dS_gauge
   num_events = 10.0
-  detrainment_timescale = 4.0*3600.0  !### DIMENSIONAL CONSTANT
 
   if (CS%nkbl /= 2) call MOM_error(FATAL, "MOM_mixed_layer"// &
                         "CS%nkbl must be 2 in mixedlayer_detrain_2.")
 
-  if (dt < detrainment_timescale) then ; dPE_time_ratio = detrainment_timescale/dt
+  if (US%s_to_T*dt < CS%BL_detrain_time) then ; dPE_time_ratio = CS%BL_detrain_time / (US%s_to_T*dt)
   else ; dPE_time_ratio = 1.0 ; endif
 
   do i=is,ie
@@ -2425,7 +2423,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
     ! Determine whether more must be detrained from the mixed layer to keep a
     ! minimal amount of mass in the buffer layers.  In this case the 5% of the
     ! mixed layer thickness is hard-coded, but probably shouldn't be!
-    h_min_bl = MIN(h_min_bl_thick,h_min_bl_frac_ml*h(i,0))
+    h_min_bl = MIN(CS%Hbuffer_min, CS%Hbuffer_rel_min*h(i,0))
 
     stable_Rcv = .true.
     if (((R0(i,kb2)-R0(i,kb1)) * (Rcv(i,kb2)-Rcv(i,kb1)) <= 0.0)) &
@@ -3100,7 +3098,7 @@ end subroutine mixedlayer_detrain_2
 !! single buffer layers and may also move buffer layer water into the interior
 !! isopycnal layers.
 subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_eb, &
-                                j, G, GV, CS, dRcv_dT, dRcv_dS, max_BL_det)
+                                j, G, GV, US, CS, dRcv_dT, dRcv_dS, max_BL_det)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness [H ~> m or kg m-2].
@@ -3125,6 +3123,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
                                                             !! Positive values go with mass gain by
                                                             !! a layer.
   integer,                            intent(in)    :: j    !< The meridional row to work on.
+  type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
   type(bulkmixedlayer_CS),            pointer       :: CS   !< The control structure returned by a
                                                             !! previous call to mixedlayer_init.
   real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT !< The partial derivative of
@@ -3149,7 +3148,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
   real :: dT_dR, dS_dR, dRml, dR0_dRcv, dT_dS_wt2
   real :: I_denom             ! A work variable [ppt2 m6 kg-2].
   real :: Sdown, Tdown
-  real :: dt_Time, Timescale = 86400.0*30.0! *365.0/12.0
+  real :: dt_Time             ! The timestep divided by the detrainment timescale [nondim].
   real :: g_H2_2Rho0dt        ! Half the gravitational acceleration times the square of the
                               ! conversion from H to m divided by the mean density times the time
                               ! step [m7 s-3 Z-1 H-2 kg-1 ~> m4 s-3 kg-1 or m10 s-3 kg-3].
@@ -3166,7 +3165,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
   if (CS%nkbl /= 1) call MOM_error(FATAL,"MOM_mixed_layer: "// &
                         "CS%nkbl must be 1 in mixedlayer_detrain_1.")
   Idt = 1.0/dt
-  dt_Time = dt/Timescale
+
+  dt_Time = US%s_to_T*dt / CS%BL_detrain_time
   g_H2_2Rho0dt = (GV%g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0 * dt_diag)
   g_H2_2dt = (GV%g_Earth * GV%H_to_Z**2) / (2.0 * dt_diag)
 
@@ -3257,7 +3257,6 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
 
   dT_dS_wt2 = CS%dT_dS_wt**2
 
-!    dt_Time = dt/Timescale
   do k=nz-1,nkmb+1,-1 ; do i=is,ie
     if (splittable_BL(i)) then
       if (RcvTgt(k)<=Rcv(i,nkmb)) then
@@ -3408,6 +3407,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_mixed_layer"  ! This module's name.
+  real :: BL_detrain_time_dflt ! The default value for BUFFER_LAY_DETRAIN_TIME [s]
   real :: omega_frac_dflt, ustar_min_dflt, Hmix_min_m
   integer :: isd, ied, jsd, jed
   logical :: use_temperature, use_omega
@@ -3494,11 +3494,27 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "buffer layers, when the detrainment is going into the "//&
                  "lightest interior layer, nondimensional, or a negative "//&
                  "value not to apply this limit.", units="nondim", default = -1.0)
+  call get_param(param_file, mdl, "BUFFER_LAYER_HMIN_THICK", CS%Hbuffer_min, &
+                 "The minimum buffer layer thickness when the mixed layer is very thick.", &
+                 units="m", default=5.0, scale=GV%m_to_H)
+  call get_param(param_file, mdl, "BUFFER_LAYER_HMIN_REL", CS%Hbuffer_rel_min, &
+                 "The minimum buffer layer thickness relative to the combined mixed "//&
+                 "land buffer ayer thicknesses when they are thin.", &
+                 units="nondim", default=0.1/CS%nkbl)
+  BL_detrain_time_dflt = 4.0*3600.0 ; if (CS%nkbl==1) BL_detrain_time_dflt = 86400.0*30.0
+  call get_param(param_file, mdl, "BUFFER_LAY_DETRAIN_TIME", CS%BL_detrain_time, &
+                 "A timescale that characterizes buffer layer detrainment events.", &
+                 units="s", default=BL_detrain_time_dflt, scale=US%s_to_T)
+  call get_param(param_file, mdl, "BUFFER_SPLIT_RHO_TOL", CS%BL_split_rho_tol, &
+                 "The fractional tolerance for matching layer target densities when splitting "//&
+                 "layers to deal with massive interior layers that are lighter than one of the "//&
+                 "mixed or buffer layers.", units="nondim", default=0.1)
+
   call get_param(param_file, mdl, "DEPTH_LIMIT_FLUXES", CS%H_limit_fluxes, &
                  "The surface fluxes are scaled away when the total ocean "//&
                  "depth is less than DEPTH_LIMIT_FLUXES.", &
                  units="m", default=0.1*Hmix_min_m, scale=GV%m_to_H)
-  call get_param(param_file, mdl, "OMEGA",CS%omega, &
+  call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
   call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
