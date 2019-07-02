@@ -104,7 +104,7 @@ type, public :: wave_parameters_CS ; private
                           !! Horizontal -> V points
                           !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear [Z2/s ~> m2 s-1]
+       KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -1205,12 +1205,12 @@ end subroutine DHH85_mid
 
 !> Explicit solver for Stokes mixing.
 !! Still in development do not use.
-subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
+subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
        intent(in)    :: GV    !< Ocean vertical grid
-  real, intent(in)   :: Dt    !< Time step of MOM6 [s] for explicit solver
+  real, intent(in)   :: dt    !< Time step of MOM6 [T ~> s] for explicit solver
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1220,7 +1220,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables
-  real :: dTauUp, dTauDn
+  real :: dTauUp, dTauDn ! Vertical momentum fluxes [Z T-1 m s-1]
   real :: h_Lay  ! The layer thickness at a velocity point [Z ~> m].
   integer :: i,j,k
 
