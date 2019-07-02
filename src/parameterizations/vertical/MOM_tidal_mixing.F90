@@ -222,7 +222,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
-  real :: utide, hamp, prandtl_tidal
+  real :: utide, hamp, prandtl_tidal, max_frac_rough
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -456,14 +456,23 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
     call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
+    call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
+                 "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
+                 "or a negative value for no limitations on roughness.", &
+                 units="nondim", default=0.1)
+
     do j=js,je ; do i=is,ie
       if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
-      ! Restrict rms topo to 10 percent of column depth.
-      !### Note the hard-coded nondimensional constant, and that this could be simplified.
-      hamp = min(0.1*G%bathyT(i,j), sqrt(CS%h2(i,j)))
-      CS%h2(i,j) = hamp*hamp
+      ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
+      if (CS%answers_2018 .and. (max_frac_rough >= 0.0)) then
+        hamp = min(max_frac_rough*G%bathyT(i,j), sqrt(CS%h2(i,j)))
+        CS%h2(i,j) = hamp*hamp
+      else
+        if (max_frac_rough >= 0.0) &
+          CS%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, CS%h2(i,j))
+      endif
 
       utide = CS%tideamp(i,j)
       ! Compute the fixed part of internal tidal forcing.
