@@ -1074,7 +1074,8 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                 ! by Hmix, [H ~> m or kg m-2] or [nondim].
     kv_TBL, &   ! The viscosity in a top boundary layer under ice [Z2 T-1 ~> m2 s-1].
     tbl_thick
-  real, dimension(SZIB_(G),SZK_(GV)) :: &
+  real, dimension(SZIB_(G),SZK_(GV)+1) :: &
+    Kv_tot, &   ! The total viscosity at an interface [Z2 T-1 ~> m2 s-1].
     Kv_add      ! A viscosity to add [Z2 T-1 ~> m2 s-1].
   real :: h_shear ! The distance over which shears occur [H ~> m or kg m-2].
   real :: r       ! A thickness to compare with Hbbl [H ~> m or kg m-2].
@@ -1088,13 +1089,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                       ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: z2      ! A copy of z_i [nondim]
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
-  real :: a_top   ! Twice a viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
+  real :: a_top   ! A viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
   logical :: do_shelf, do_OBCs
   integer :: i, k, is, ie, max_nk
   integer :: nz
   real    :: botfn
 
   a_cpl(:,:) = 0.0
+  Kv_tot(:,:) = 0.0
 
   if (work_on_u) then ; is = G%IscB ; ie = G%IecB
   else ; is = G%isc ; ie = G%iec ; endif
@@ -1113,15 +1115,15 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
 !    The following loop calculates the vertical average velocity and
 !  surface mixed layer contributions to the vertical viscosity.
-  do i=is,ie ; a_cpl(i,1) = 0.0 ; enddo
+  do i=is,ie ; Kv_tot(i,1) = 0.0 ; enddo
   if ((GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
-    if (do_i(i)) a_cpl(i,K) = 2.0*CS%Kv
+    if (do_i(i)) Kv_tot(i,K) = CS%Kv
   enddo ; enddo ; else
     I_Hmix = 1.0 / (CS%Hmix + h_neglect)
     do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
     do K=2,nz ; do i=is,ie ; if (do_i(i)) then
       z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
-      a_cpl(i,K) = 2.0*CS%Kv + 2.0*CS%Kvml / ((z_t(i)*z_t(i)) *  &
+      Kv_tot(i,K) = CS%Kv + CS%Kvml / ((z_t(i)*z_t(i)) *  &
                (1.0 + 0.09*z_t(i)*z_t(i)*z_t(i)*z_t(i)*z_t(i)*z_t(i)))
     endif ; enddo ; enddo
   endif
@@ -1130,51 +1132,48 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     if (CS%bottomdraglaw) then
       r = hvel(i,nz)*0.5
       if (r < bbl_thick(i)) then
-        a_cpl(i,nz+1) = 1.0*kv_bbl(i) / (I_amax*kv_bbl(i) + r*GV%H_to_Z)
+        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + r*GV%H_to_Z)
       else
-        a_cpl(i,nz+1) = 1.0*kv_bbl(i) / (I_amax*kv_bbl(i) + bbl_thick(i)*GV%H_to_Z)
+        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + bbl_thick(i)*GV%H_to_Z)
       endif
     else
-      a_cpl(i,nz+1) = 2.0*CS%Kvbbl / (hvel(i,nz)*GV%H_to_Z + 2.0*I_amax*CS%Kvbbl)
+      a_cpl(i,nz+1) = CS%Kvbbl / (0.5*hvel(i,nz)*GV%H_to_Z + I_amax*CS%Kvbbl)
     endif
   endif ; enddo
 
   if (associated(visc%Kv_shear)) then
-     ! BGR/ Add factor of 2. * the averaged Kv_shear.
-     !      this is needed to reproduce the analytical solution to
-     !      a simple diffusion problem, likely due to h_shear being
-     !      equal to 2 x \delta z
+    ! The factor of 2 that used to be required in the viscosities is no longer needed.
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
+        Kv_add(i,K) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        Kv_tot(i,K) = Kv_tot(i,K) + Kv_add(i,K)
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
+        Kv_add(i,K) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        Kv_tot(i,K) = Kv_tot(i,K) + Kv_add(i,K)
       endif ; enddo ; enddo
     endif
   endif
@@ -1182,11 +1181,11 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(visc%Kv_shear_Bu)) then
     if (work_on_u) then
       do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
-        a_cpl(I,K) = a_cpl(I,K) + (2.*0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+        Kv_tot(I,K) = Kv_tot(I,K) + (0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + (2.*0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
+        Kv_tot(i,K) = Kv_tot(i,K) + (0.5)*(visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
       endif ; enddo ; enddo
     endif
   endif
@@ -1195,37 +1194,43 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(visc%Kv_slow) .and. (visc%add_Kv_slow)) then
     ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
     if (work_on_u) then
+      !### Incrementing Kv_add here will cause visc%Kv_shear to be double counted. - RWH
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(I,K) = Kv_add(I,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+        Kv_add(I,K) = Kv_add(I,K) + 0.5 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
+        ! Should be : Kv_add(I,K) = 0.5 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
       endif ; enddo ; enddo
+      !### I am pretty sure that this code is double counting viscosity at OBC points! - RWH
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(I,K) = Kv_add(I,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(I,K) = Kv_add(I,K) +  visc%Kv_slow(i,j,k) ; enddo
+            ! Should be : do K=2,nz ; Kv_add(I,K) = visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(I,K) = Kv_add(I,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(I,K) = Kv_add(I,K) +  visc%Kv_slow(i+1,j,k) ; enddo
+            ! Should be : do K=2,nz ; Kv_add(I,K) = visc%Kv_slow(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(I,K) = a_cpl(I,K) + Kv_add(I,K)
+        Kv_tot(I,K) = Kv_tot(I,K) + Kv_add(I,K)
       endif ; enddo ; enddo
     else
+      !### Incrementing Kv_add here will cause visc%Kv_shear to be double counted. - RWH
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
+        Kv_add(i,K) = Kv_add(i,K) + 0.5*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
       endif ; enddo ; enddo
-      !### I am pretty sure that this is double counting here! - RWH
+      !### I am pretty sure that this code is double counting viscosity at OBC points! - RWH
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + visc%Kv_slow(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + visc%Kv_slow(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
+        Kv_tot(i,K) = Kv_tot(i,K) + Kv_add(i,K)
       endif ; enddo ; enddo
     endif
   endif
@@ -1237,20 +1242,20 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
 
     if (CS%bottomdraglaw) then
-      a_cpl(i,K) = a_cpl(i,K) + 2.0*(kv_bbl(i) - CS%Kv)*botfn
-      r = (hvel(i,k)+hvel(i,k-1))
-      if (r > 2.0*bbl_thick(i)) then
-        h_shear = ((1.0 - botfn) * r + botfn*2.0*bbl_thick(i))
+      Kv_tot(i,K) = Kv_tot(i,K) + (kv_bbl(i) - CS%Kv)*botfn
+      r = 0.5*(hvel(i,k) + hvel(i,k-1))
+      if (r > bbl_thick(i)) then
+        h_shear = ((1.0 - botfn) * r + botfn*bbl_thick(i))
       else
         h_shear = r
       endif
     else
-      a_cpl(i,K) = a_cpl(i,K) + 2.0*(CS%Kvbbl-CS%Kv)*botfn
-      h_shear = hvel(i,k) + hvel(i,k-1) + h_neglect
+      Kv_tot(i,K) = Kv_tot(i,K) + (CS%Kvbbl-CS%Kv)*botfn
+      h_shear = 0.5*(hvel(i,k) + hvel(i,k-1) + h_neglect)
     endif
 
-    !  Up to this point a_cpl has had units of Z2 T-1, but now is converted to Z T-1.
-    a_cpl(i,K) = a_cpl(i,K) / (h_shear*GV%H_to_Z + I_amax*a_cpl(i,K))
+    ! Calculate the coupling coefficients from the viscosities.
+    a_cpl(i,K) = Kv_tot(i,K) / (h_shear*GV%H_to_Z + I_amax*Kv_tot(i,K))
   endif ; enddo ; enddo ! i & k loops
 
   if (do_shelf) then
@@ -1267,7 +1272,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
       ! If a_cpl(i,1) were not already 0, it would be added here.
       if (0.5*hvel(i,1) > tbl_thick(i)) then
-        a_cpl(i,1) = kv_TBL(i) / (tbl_thick(i) *GV%H_to_Z + I_amax*kv_TBL(i))
+        a_cpl(i,1) = kv_TBL(i) / (tbl_thick(i)*GV%H_to_Z + I_amax*kv_TBL(i))
       else
         a_cpl(i,1) = kv_TBL(i) / (0.5*hvel(i,1)*GV%H_to_Z + I_amax*kv_TBL(i))
       endif
@@ -1277,14 +1282,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       z_t(i) = z_t(i) + hvel(i,k-1) / tbl_thick(i)
       topfn = 1.0 / (1.0 + 0.09 * z_t(i)**6)
 
-      r = (hvel(i,k)+hvel(i,k-1))
-      if (r > 2.0*tbl_thick(i)) then
-        h_shear = ((1.0 - topfn) * r + topfn*2.0*tbl_thick(i))
+      r = 0.5*(hvel(i,k)+hvel(i,k-1))
+      if (r > tbl_thick(i)) then
+        h_shear = ((1.0 - topfn) * r + topfn*tbl_thick(i))
       else
         h_shear = r
       endif
 
-      a_top = 2.0 * topfn * kv_TBL(i)
+      a_top = topfn * kv_TBL(i)
       a_cpl(i,K) = a_cpl(i,K) + a_top / (h_shear*GV%H_to_Z + I_amax*a_top)
     endif ; enddo ; enddo
   elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0)) then
@@ -1335,7 +1340,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
       ! and be further limited by rotation to give the natural Ekman length.
       visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + h_ml(i)*u_star(i))
-      a_ml = 4.0*visc_ml / ((hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 2.0*I_amax*visc_ml)
+      a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
       ! Choose the largest estimate of a.
       if (a_ml > a_cpl(i,K)) a_cpl(i,K) = a_ml
     endif ; endif ; enddo ; enddo
