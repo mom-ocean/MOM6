@@ -66,6 +66,7 @@ type, public :: MEKE_CS ; private
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
+  logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
 
@@ -383,7 +384,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
     endif !
 
-    if (CS%MEKE_KH >= 0.0 .or. CS%KhMEKE_FAC > 0.0 .or. CS%MEKE_advection_factor >0.0) then
+    if (CS%kh_flux_enabled) then
       ! Lateral diffusion of MEKE
       Kh_here = max(0.,CS%MEKE_Kh)
       !$OMP parallel do default(shared) firstprivate(Kh_here) private(Inv_Kh_max)
@@ -1037,6 +1038,13 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
     allocate(CS%del2MEKE(isd:ied,jsd:jed)) ; CS%del2MEKE(:,:) = 0.0
   endif
 
+  ! Identify if any lateral diffusive processes are active
+  CS%kh_flux_enabled = .false.
+  if (CS%MEKE_KH >= 0.0 &
+      .or. CS%KhMEKE_FAC > 0.0 &
+      .or. CS%MEKE_advection_factor >0.0) &
+    CS%kh_flux_enabled = .true.
+
 ! In the case of a restart, these fields need a halo update
   if (associated(MEKE%MEKE)) then
     call create_group_pass(CS%pass_MEKE, MEKE%MEKE, G%Domain)
@@ -1079,10 +1087,6 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
      'MEKE energy source', 'm2 s-3')
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
      'MEKE decay rate', 's-1')
-  CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', diag%axesCu1, Time, &
-     'Zonal diffusivity of MEKE', 'm2 s-1')
-  CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
-     'Meridional diffusivity of MEKE', 'm2 s-1')
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
      'MEKE energy available from thickness mixing', 'W m-2')
   if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
@@ -1099,6 +1103,13 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
      'Ratio of bottom-projected eddy velocity to column-mean eddy velocity', 'nondim')
   CS%id_gamma_t = register_diag_field('ocean_model', 'MEKE_gamma_t', diag%axesT1, Time, &
      'Ratio of barotropic eddy velocity to column-mean eddy velocity', 'nondim')
+
+  if (CS%kh_flux_enabled) then
+    CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', diag%axesCu1, Time, &
+     'Zonal diffusivity of MEKE', 'm2 s-1')
+    CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
+     'Meridional diffusivity of MEKE', 'm2 s-1')
+  endif
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
