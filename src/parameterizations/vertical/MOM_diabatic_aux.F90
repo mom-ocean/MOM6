@@ -828,15 +828,20 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
                      ! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     netMassInOut_rate! netmassinout but for dt=1 [H s-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d
-  real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
+  real, dimension(SZI_(G), SZK_(G)) :: &
+    h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
+    T2d, &           ! A 2-d copy of the layer temperatures [degC]
+    pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
+                     ! a layer [kg m-3 Z3 T-2 ~> J m-2]
+    dSV_dT_2d        ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
   real, dimension(SZI_(G),SZK_(G)+1)                    :: netPen
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd, Pen_SW_bnd_rate
                                                            !^ _rate is w/ dt=1
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
-  real                                                  :: hGrounding(maxGroundings)
+  real, dimension(maxGroundings) :: hGrounding
   real    :: Temp_in, Salin_in
 !  real    :: I_G_Earth
+  real    :: dt_in_T ! The time step converted to T units [T ~> s]
   real    :: g_Hconv2
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
                       ! [Z m3 s-2 kg-1 ~> m4 s-2 kg-1]
@@ -852,6 +857,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   if (.not.associated(fluxes%sw)) return
 
 #define _OLD_ALG_
+  dt_in_T = dt * US%s_to_T
   nsw = optics%nbands
   Idt = 1.0/dt
 
@@ -1189,19 +1195,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
         CS%penSWflux_diag(i,j,k) = 0.0
       enddo ; enddo
       k=nz+1 ; do i=is,ie
-         CS%penSWflux_diag(i,j,k) = 0.0
+        CS%penSWflux_diag(i,j,k) = 0.0
       enddo
     endif
 
     if (calculate_energetics) then
-      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, j, dt_in_T, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
-        cTKE(i,j,k) = cTKE(i,j,k) + (US%m_to_Z**3 * US%T_to_s**2) * pen_TKE_2d(i,k)
+        cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
-      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, j, dt_in_T, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd)
     endif
 
@@ -1254,7 +1260,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
       netPen(:,:) = 0.0
       ! Sum over bands and attenuate as a function of depth
       ! netPen is the netSW as a function of depth
-      call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
+      call sumSWoverBands(G, GV, US, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt_in_T, &
            H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
