@@ -165,7 +165,6 @@ type, public:: diabatic_CS; private
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
   real :: dz_subML_N2                !< The distance over which to calculate a diagnostic of the
                                      !! average stratification at the base of the mixed layer [Z ~> m].
-  integer :: nsw                     !< SW_NBANDS
 
   !>@{ Diagnostic IDs
   integer :: id_cg1      = -1                 ! diag handle for mode-1 speed (BDM)
@@ -588,7 +587,9 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
-  if (associated(CS%optics)) call set_opacity(CS%optics, fluxes, G, GV, CS%opacity_CSp)
+  if (associated(CS%optics)) &
+    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, CS%opacity_CSp)
 
   if (CS%debug) call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
 
@@ -1371,7 +1372,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
-  if (associated(CS%optics)) call set_opacity(CS%optics, fluxes, G, GV, CS%opacity_CSp)
+  if (associated(CS%optics)) &
+    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, CS%opacity_CSp)
 
   if (CS%debug) call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
 
@@ -2060,7 +2063,9 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
-  if (associated(CS%optics)) call set_opacity(CS%optics, fluxes, G, GV, CS%opacity_CSp)
+  if (associated(CS%optics)) &
+    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, CS%opacity_CSp)
 
   if (CS%bulkmixedlayer) then
     if (CS%debug) call MOM_forcing_chksum("Before mixedlayer", fluxes, G, US, haloshift=0)
@@ -3720,8 +3725,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       call opacity_init(Time, G, param_file, diag, CS%tracer_flow_CSp, CS%opacity_CSp, CS%optics)
     endif
   endif
-  CS%nsw = 0
-  if (associated(CS%optics)) CS%nsw = CS%optics%nbands
 
   ! Initialize the diagnostic grid storage
   call diag_grid_storage_init(CS%diag_grids_prev, G, diag)

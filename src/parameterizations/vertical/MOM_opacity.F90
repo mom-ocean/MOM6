@@ -8,7 +8,7 @@ use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
-use MOM_forcing_type, only : forcing, optics_type
+use MOM_shortwave_abs, only : optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
@@ -68,12 +68,14 @@ character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP" !< String to speci
 contains
 
 !> This sets the opacity of sea water based based on one of several different schemes.
-subroutine set_opacity(optics, fluxes, G, GV, CS)
+subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, GV, CS)
   type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                    !! set based on the opacities.
-  type(forcing),           intent(in)    :: fluxes !< A structure containing pointers to any
-                                                   !! possible forcing fields. Unused fields
-                                                   !! have NULL ptrs.
+  real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [W m-2]
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by
@@ -96,10 +98,10 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
 
   if (CS%var_pen_sw) then
     if (CS%chl_from_file) then
-      call opacity_from_chl(optics, fluxes, G, CS)
+      call opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, CS)
     else
       call get_chl_from_model(chl, G, CS%tracer_flow_CSp)
-      call opacity_from_chl(optics, fluxes, G, CS, chl)
+      call opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, CS, chl)
     endif
   else ! Use sw e-folding scale set by MOM_input
     if (optics%nbands <= 1) then ; Inv_nbands = 1.0
@@ -115,7 +117,7 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
              0.1*GV%Angstrom_m,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
-      if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
+      if (.not.associated(sw_total) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie ; do n=1,optics%nbands
           optics%sw_pen_band(n,i,j) = 0.0
@@ -123,15 +125,15 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
       else
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
-          optics%sw_pen_band(1,i,j) = (CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
-          optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
+          optics%sw_pen_band(1,i,j) = (CS%SW_1st_EXP_RATIO) * sw_total(i,j)
+          optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * sw_total(i,j)
         enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
         optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
       enddo ; enddo ; enddo ; enddo
-      if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
+      if (.not.associated(sw_total) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie ; do n=1,optics%nbands
           optics%sw_pen_band(n,i,j) = 0.0
@@ -139,7 +141,7 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
       else
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie ; do n=1,optics%nbands
-          optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
+          optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * sw_total(i,j)
         enddo ; enddo ; enddo
       endif
     endif
@@ -189,17 +191,19 @@ end subroutine set_opacity
 
 !> This sets the "blue" band opacity based on chloophyll A concencentrations
 !! The red portion is lumped into the net heating at the surface.
-subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
-  type(optics_type),     intent(inout)  :: optics !< An optics structure that has values
-                                                  !! set based on the opacities.
-  type(forcing),         intent(in)     :: fluxes !< A structure containing pointers to any
-                                                  !! possible forcing fields. Unused fields
-                                                  !! have NULL ptrs.
-  type(ocean_grid_type), intent(in)     :: G      !< The ocean's grid structure.
-  type(opacity_CS),      pointer        :: CS     !< The control structure.
+subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, CS, chl_in)
+  type(optics_type),     intent(inout) :: optics !< An optics structure that has values
+                                                 !! set based on the opacities.
+  real, dimension(:,:),  pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
+  real, dimension(:,:),  pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [W m-2]
+  real, dimension(:,:),  pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [W m-2]
+  real, dimension(:,:),  pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [W m-2]
+  real, dimension(:,:),  pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [W m-2]
+  type(ocean_grid_type), intent(in)    :: G      !< The ocean's grid structure.
+  type(opacity_CS),      pointer       :: CS     !< The control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-               optional, intent(in)     :: chl_in !< A 3-d field of chlorophyll A,
-                                                  !! in mg m-3.
+               optional, intent(in)    :: chl_in !< A 3-d field of chlorophyll A,
+                                                 !! in mg m-3.
 
   real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in a layer [mg m-3].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
@@ -240,10 +244,10 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   if (nbands <= 2) then ; Inv_nbands_nir = 0.0
   else ; Inv_nbands_nir = 1.0 / real(nbands - 2.0) ; endif
 
-  multiband_vis_input = (associated(fluxes%sw_vis_dir) .and. &
-                         associated(fluxes%sw_vis_dif))
-  multiband_nir_input = (associated(fluxes%sw_nir_dir) .and. &
-                         associated(fluxes%sw_nir_dif))
+  multiband_vis_input = (associated(sw_vis_dir) .and. &
+                         associated(sw_vis_dif))
+  multiband_nir_input = (associated(sw_nir_dir) .and. &
+                         associated(sw_nir_dif))
 
   chl_data(:,:) = 0.0
   if (present(chl_in)) then
@@ -280,21 +284,19 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
 
   select case (CS%opacity_scheme)
     case (MANIZZA_05)
-!$OMP parallel do default(none) shared(is,ie,js,je,fluxes,optics,CS,G,multiband_nir_input, &
-!$OMP                                  nbands,Inv_nbands_nir,multiband_vis_input )         &
-!$OMP                          private(SW_vis_tot,SW_nir_tot)
+      !$OMP parallel do default(shared) private(SW_vis_tot,SW_nir_tot)
       do j=js,je ; do i=is,ie
         SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
         if (G%mask2dT(i,j) > 0.5) then
           if (multiband_vis_input) then
-            SW_vis_tot = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j)
+            SW_vis_tot = sw_vis_dir(i,j) + sw_vis_dif(i,j)
           else  ! Follow Manizza 05 in assuming that 42% of SW is visible.
-            SW_vis_tot = 0.42 * fluxes%sw(i,j)
+            SW_vis_tot = 0.42 * sw_total(i,j)
           endif
           if (multiband_nir_input) then
-            SW_nir_tot = fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
+            SW_nir_tot = sw_nir_dir(i,j) + sw_nir_dif(i,j)
           else
-            SW_nir_tot = fluxes%sw(i,j) - SW_vis_tot
+            SW_nir_tot = sw_total(i,j) - SW_vis_tot
           endif
         endif
 
@@ -309,17 +311,15 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         enddo
       enddo ; enddo
     case (MOREL_88)
-!$OMP parallel do default(none) shared(is,ie,js,je,G,multiband_vis_input,chl_data, &
-!$OMP                                  fluxes,nbands,optics,Inv_nbands) &
-!$OMP                          private(SW_pen_tot)
+      !$OMP parallel do default(shared) private(SW_pen_tot)
       do j=js,je ; do i=is,ie
         SW_pen_tot = 0.0
         if (G%mask2dT(i,j) > 0.5) then ; if (multiband_vis_input) then
             SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
-                (fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j))
+                (sw_vis_dir(i,j) + sw_vis_dif(i,j))
           else
             SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
-                0.5*fluxes%sw(i,j)
+                0.5*sw_total(i,j)
         endif ; endif
 
         do n=1,nbands

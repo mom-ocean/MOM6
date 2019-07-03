@@ -718,7 +718,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   endif
 
   if (associated(CS%optics)) &
-    call set_opacity(CS%optics, fluxes, CS%G, CS%GV, CS%opacity_CSp)
+    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, CS%G, CS%GV, CS%opacity_CSp)
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
