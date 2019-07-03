@@ -1389,7 +1389,6 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   type(vardesc) :: vd
   type(FmsNetcdfDomainFile_t) :: fileObjWrite
   type(axis_data_type) :: axis_data_CS
-  integer :: horgrid_position = 1
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0, total_axes
@@ -1419,7 +1418,6 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
 
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
   call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
@@ -1506,8 +1504,7 @@ subroutine MOM_write_IC_4d(directory, filename,variable_name, field_data, variab
   enddo
    
   call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes), & 
-                           domain_position=horgrid_position)
+                           dimensions=dim_names(1:num_axes))
  
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
@@ -1543,7 +1540,6 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
   type(vardesc) :: vd
   type(FmsNetcdfDomainFile_t) :: fileObjWrite
   type(axis_data_type) :: axis_data_CS
-  integer :: horgrid_position = 1
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0, total_axes
@@ -1572,9 +1568,6 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
 
   vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
-
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
-
   num_axes=0
   call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
                               dim_names, dim_lengths, num_axes, G=G, GV=GV)
@@ -1662,8 +1655,7 @@ subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variab
 
   ! register and write the IC variable and attributes to the IC file
   call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes), & 
-                           domain_position=horgrid_position) 
+                           dimensions=dim_names(1:num_axes)) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
@@ -1698,7 +1690,6 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
   type(vardesc) :: vd
   type(FmsNetcdfDomainFile_t) :: fileObjWrite
   type(axis_data_type) :: axis_data_CS
-  integer :: horgrid_position = 1
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes, total_axes
@@ -1727,8 +1718,6 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
 
   vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
-
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   num_axes=0
   call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
@@ -1816,8 +1805,7 @@ subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variab
 
   ! register and write the IC variable and attributes to the IC file
   call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes), &
-                           domain_position=horgrid_position) 
+                           dimensions=dim_names(1:num_axes)) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
@@ -1852,7 +1840,6 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   type(vardesc) :: vd
   type(FmsNetcdfDomainFile_t) :: fileObjWrite
   type(axis_data_type) :: axis_data_CS
-  integer :: horgrid_position = 1
   integer :: substring_index = 0
   integer :: name_length = 0
   integer :: num_axes = 0, total_axes
@@ -1881,8 +1868,6 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
 
   vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
                 z_grid=z_grid, t_grid=t_grid)
-
-  horgrid_position = get_horizontal_grid_position(vd%hor_grid)
 
   call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
                               dim_names, dim_lengths, num_axes, G=G, GV=GV)
@@ -1968,8 +1953,7 @@ subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variab
   ! register and write the IC variable and attributes to the IC file
    
   call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes), &
-                           domain_position=horgrid_position) 
+                           dimensions=dim_names(1:num_axes)) 
   call MOM_write_data(fileObjWrite, variable_name, field_data)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
   call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 

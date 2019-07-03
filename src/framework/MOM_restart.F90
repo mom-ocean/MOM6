@@ -1071,13 +1071,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p(is:ie), &
-                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/), &
-                                                  domain_position=axis_data_CS%axis(i)%horgrid_position)
+                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/))
               else
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p, &
-                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/), &
-                                                  domain_position=axis_data_CS%axis(i)%horgrid_position)
+                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/))
               endif
 
               call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
@@ -1117,35 +1115,35 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         ! register and write the restart variables to the file
         if (associated(CS%var_ptr3d(m)%p)) then
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
-               dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
+               dimensions=axis_names(1:num_axes))
 
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
         elseif (associated(CS%var_ptr2d(m)%p)) then
 
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
-               dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
+               dimensions=axis_names(1:num_axes))
 
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
         elseif (associated(CS%var_ptr4d(m)%p)) then
 
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
-               dimensions=axis_names(1:num_axes), domain_position=horgrid_position)
+               dimensions=axis_names(1:num_axes))
 
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
         elseif (associated(CS%var_ptr1d(m)%p)) then
            ! need to explicitly define axis_names array for 1-D variable
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
-               dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
+               dimensions=(/axis_names(1:num_axes)/))
 
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
         elseif (associated(CS%var_ptr0d(m)%p)) then
            ! need to explicitly define axis_names array for scalar variable
            call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
-               dimensions=(/axis_names(1:num_axes)/), domain_position=horgrid_position)
+               dimensions=(/axis_names(1:num_axes)/))
 
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
@@ -1304,7 +1302,6 @@ subroutine restore_state(filename, directory, day, G, CS)
 
     !Get the variable's "domain position."
     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="restore_state")
-    pos = get_horizontal_grid_position(hor_grid)
 
     !Register the restart fields and compute the checksums.
     if (associated(CS%var_ptr1d(m)%p)) then
@@ -1312,11 +1309,11 @@ subroutine restore_state(filename, directory, day, G, CS)
     elseif (associated(CS%var_ptr0d(m)%p)) then
       call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr0d(m)%p)
     elseif (associated(CS%var_ptr2d(m)%p)) then
-      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr2d(m)%p, domain_position=pos)
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr2d(m)%p)
     elseif (associated(CS%var_ptr3d(m)%p)) then
-      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr3d(m)%p, domain_position=pos)
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr3d(m)%p)
     elseif (associated(CS%var_ptr4d(m)%p)) then
-      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr4d(m)%p, domain_position=pos)
+      call fms2_register_restart_field(fileObjRead, trim(varname), CS%var_ptr4d(m)%p)
     else
       call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
     endif
