@@ -109,7 +109,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real, allocatable, dimension(:,:,:) :: &
     Kd_eff, &     ! The effective diffusivity that actually applies to each
                   ! layer after the effects of boundary conditions are
-                  ! considered [Z2 s-1 ~> m2 s-1].
+                  ! considered [Z2 T-1 ~> m2 s-1].
     diff_work     ! The work actually done by diffusion across each
                   ! interface [W m-2].  Sum vertically for the total work.
 
@@ -2126,7 +2126,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z_to_m**2*US%s_to_T)
+      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
       'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=US%Z_to_m*US%s_to_T)
 

@@ -56,7 +56,7 @@ type, public :: Kappa_shear_CS ; private
                              !! the buoyancy and shear scales in the diffusivity
                              !! equation, 0 to eliminate the shear scale. Nondim.
   real    :: TKE_bg          !<   The background level of TKE [Z2 T-2 ~> m2 s-2].
-  real    :: kappa_0         !<   The background diapycnal diffusivity [Z2 s-1 ~> m2 s-1].
+  real    :: kappa_0         !<   The background diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real    :: kappa_tol_err   !<   The fractional error in kappa that is tolerated.
   real    :: Prandtl_turb    !< Prandtl number used to convert Kd_shear into viscosity.
   integer :: nkml            !<   The number of layers in the mixed layer, as

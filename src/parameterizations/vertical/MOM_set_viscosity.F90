@@ -54,7 +54,7 @@ type, public :: set_visc_CS ; private
   real    :: Htbl_shelf     !< A nominal thickness of the surface boundary layer for use
                             !! in calculating the near-surface velocity [H ~> m or kg m-2].
   real    :: Htbl_shelf_min !< The minimum surface boundary layer thickness [H ~> m or kg m-2].
-  real    :: KV_BBL_min     !< The minimum viscosity in the bottom boundary layer [Z2 s-1 ~> m2 s-1].
+  real    :: KV_BBL_min     !< The minimum viscosity in the bottom boundary layer [Z2 T-1 ~> m2 s-1].
   real    :: KV_TBL_min     !< The minimum viscosity in the top boundary layer [Z2 T-1 ~> m2 s-1].
   logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
                             !! drag law c_drag*|u|*u. The velocity magnitude

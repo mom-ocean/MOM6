@@ -381,8 +381,8 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
   integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init
-  real,                    intent(in)    :: dt   !< The thermodyanmic time step [s].
-  integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic
+  real,                    intent(in)    :: dt   !< The thermodynamic time step [s].
+  integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic of
                                                  !! which layer receivees the brine.
 
   ! local variables

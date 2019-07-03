@@ -39,7 +39,7 @@ type, public :: int_tide_input_CS ; private
   real :: TKE_itide_max !< Maximum Internal tide conversion
                         !! available to mix above the BBL [W m-2]
   real :: kappa_fill    !< Vertical diffusivity used to interpolate sensible values
-                        !! of T & S into thin layers [Z2 s-1 ~> m2 s-1].
+                        !! of T & S into thin layers [Z2 T-1 ~> m2 s-1].
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
             !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
