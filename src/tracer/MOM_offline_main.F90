@@ -10,7 +10,7 @@ use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diabatic_aux,         only : diabatic_aux_CS
+use MOM_diabatic_aux,         only : diabatic_aux_CS, set_pen_shortwave
 use MOM_diabatic_driver,      only : diabatic_CS, extract_diabatic_member
 use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
@@ -26,7 +26,7 @@ use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
 use MOM_offline_aux,          only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
 use MOM_offline_aux,          only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
-use MOM_opacity,              only : set_opacity, opacity_CS
+use MOM_opacity,              only : opacity_CS
 use MOM_open_boundary,        only : ocean_OBC_type
 use MOM_shortwave_abs,        only : optics_type
 use MOM_time_manager,         only : time_type
@@ -70,6 +70,8 @@ type, public :: offline_transport_CS ; private
           !< Pointer to structure containing information about the vertical grid
   type(optics_type),             pointer :: optics          => NULL()
           !< Pointer to the optical properties type
+  type(diabatic_aux_CS),         pointer :: diabatic_aux_CSp => NULL()
+          !< Pointer to the diabatic_aux control structure
 
   !> Variables related to reading in fields from online run
   integer :: start_index  !< Timelevel to start
@@ -718,8 +720,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   endif
 
   if (associated(CS%optics)) &
-    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, CS%G, CS%GV, CS%opacity_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, CS%G, CS%GV, CS%diabatic_aux_CSp, CS%opacity_CSp)
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
@@ -1401,7 +1402,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   if (.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
 
   ! Copy members from other modules
-  call extract_diabatic_member(diabatic_CSp, opacity_CSp=CS%opacity_CSp, optics_CSp=CS%optics,&
+  call extract_diabatic_member(diabatic_CSp, opacity_CSp=CS%opacity_CSp, optics_CSp=CS%optics, &
+                               diabatic_aux_CSp=CS%diabatic_aux_CSp, &
                                evap_CFL_limit=CS%evap_CFL_limit, &
                                minimum_forcing_depth=CS%minimum_forcing_depth)
 

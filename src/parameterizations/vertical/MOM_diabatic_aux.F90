@@ -15,6 +15,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
+use MOM_opacity,       only : set_opacity, opacity_CS
 use MOM_shortwave_abs, only : absorbRemainingSW, optics_type, sumSWoverBands
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
@@ -26,7 +27,7 @@ implicit none ; private
 
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
-public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
+public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -636,6 +637,25 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
 
   call cpu_clock_end(id_clock_uv_at_h)
 end subroutine find_uv_at_h
+
+
+subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp)
+  type(optics_type),       pointer       :: optics !< An optics structure that has will contain
+                                                   !! information about shortwave fluxes and absorption.
+  type(forcing),           intent(inout) :: fluxes !< points to forcing fields
+                                                   !! unused fields have NULL ptrs
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
+  type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
+
+
+
+  if (associated(optics)) &
+    call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp)
+
+end subroutine set_pen_shortwave
 
 
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.

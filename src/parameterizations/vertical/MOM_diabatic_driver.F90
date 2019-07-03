@@ -14,6 +14,7 @@ use MOM_CVMix_ddiff,         only : CVMix_ddiff_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
+use MOM_diabatic_aux,        only : set_pen_shortwave
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averaging, disable_averaging
@@ -51,7 +52,7 @@ use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_CVMix_KPP,           only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
 use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD
 use MOM_CVMix_KPP,           only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
-use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opacity_CS
+use MOM_opacity,             only : opacity_init, opacity_end, opacity_CS
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_TKE
 use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
@@ -584,12 +585,11 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
 
-  ! Set_opacity estimates the optical properties of the water column.
+  ! Set_pen_shortwave estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
-    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, CS%opacity_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, G, GV, CS%diabatic_aux_CSp, CS%opacity_CSp)
 
   if (CS%debug) call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
 
@@ -1369,12 +1369,11 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
 
-  ! Set_opacity estimates the optical properties of the water column.
+  ! Set_pen_shortwave estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
-    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, CS%opacity_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, G, GV, CS%diabatic_aux_CSp, CS%opacity_CSp)
 
   if (CS%debug) call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
 
@@ -2060,12 +2059,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
 
-  ! Set_opacity estimates the optical properties of the water column.
+  ! Set_pen_shortwave estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
-    call set_opacity(CS%optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, CS%opacity_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, G, GV, CS%diabatic_aux_CSp, CS%opacity_CSp)
 
   if (CS%bulkmixedlayer) then
     if (CS%debug) call MOM_forcing_chksum("Before mixedlayer", fluxes, G, US, haloshift=0)
@@ -2866,7 +2864,7 @@ end subroutine layered_diabatic
 !> Returns pointers or values of members within the diabatic_CS type. For extensibility,
 !! each returned argument is an optional argument
 subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
-                                   evap_CFL_limit, minimum_forcing_depth)
+                                   evap_CFL_limit, minimum_forcing_depth, diabatic_aux_CSp)
   type(diabatic_CS),           intent(in   ) :: CS !< module control structure
   ! All output arguments are optional
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
@@ -2875,10 +2873,13 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
                                                             !! evaporated in one time-step [nondim].
   real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
                                                             !! and freshwater fluxes are applied [m].
+  type(diabatic_aux_CS), optional, pointer   :: diabatic_aux_CSp !< A pointer to be set to the diabatic_aux
+                                                            !! control structure
 
   ! Pointers to control structures
   if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
   if (present(optics_CSp))  optics_CSp  => CS%optics
+  if (present(diabatic_aux_CSp)) diabatic_aux_CSp  => CS%diabatic_aux_CSp
 
   ! Constants within diabatic_CS
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
