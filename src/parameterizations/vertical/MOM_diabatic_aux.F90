@@ -12,14 +12,18 @@ use MOM_EOS,           only : calculate_density, calculate_TFreeze
 use MOM_EOS,           only : calculate_specific_vol_derivs, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : slasher
 use MOM_opacity,       only : set_opacity, opacity_CS
 use MOM_shortwave_abs, only : absorbRemainingSW, optics_type, sumSWoverBands
+use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
+use time_interp_external_mod, only : init_external_field, time_interp_external
+use time_interp_external_mod, only : time_interp_external_init
 
 implicit none ; private
 
@@ -56,7 +60,13 @@ type, public :: diabatic_aux_CS ; private
   logical :: use_calving_heat_content !< If true, assumes that ice-ocean boundary
                              !! has provided a calving heat content. Otherwise, calving
                              !! is added with a temperature of the local SST.
+  logical :: var_pen_sw      !<   If true, use one of the CHL_A schemes to determine the
+                             !! e-folding depth of incoming shortwave radiation.
+  integer :: sbc_chl         !< An integer handle used in time interpolation of
+                             !! chlorophyll read from a file.
+  logical ::  chl_from_file  !< If true, chl_a is read from a file.
 
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
   ! Diagnostic handles
@@ -65,6 +75,7 @@ type, public :: diabatic_aux_CS ; private
   integer :: id_penSW_diag     = -1 !< Diagnostic ID of Penetrative shortwave heating (flux convergence)
   integer :: id_penSWflux_diag = -1 !< Diagnostic ID of Penetrative shortwave flux
   integer :: id_nonpenSW_diag  = -1 !< Diagnostic ID of Non-penetrative shortwave heating
+  integer :: id_Chl            = -1 !< Diagnostic ID of chlorophyll-A handles for opacity
 
   ! Optional diagnostic arrays
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
@@ -573,7 +584,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   real :: s, Idenom
   logical :: mix_vertically
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   call cpu_clock_begin(id_clock_uv_at_h)
   h_neglect = GV%H_subroundoff
 
@@ -639,7 +650,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
 end subroutine find_uv_at_h
 
 
-subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp)
+subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow_CSp)
   type(optics_type),       pointer       :: optics !< An optics structure that has will contain
                                                    !! information about shortwave fluxes and absorption.
   type(forcing),           intent(inout) :: fluxes !< points to forcing fields
@@ -648,12 +659,50 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp)
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
   type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure of the tracer modules.
 
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: chl_3d !< The chlorophyll-A concentractions of each layer [mg m-3]
+  character(len=128) :: mesg
+  integer :: i, j, k, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
+  if (.not.associated(optics)) return
 
-  if (associated(optics)) &
+  if (CS%var_pen_sw) then
+    if (CS%chl_from_file) then
+      ! Only the 2-d surface chlorophyll can be read in from a file.  The
+      ! same value is assumed for all layers.
+      call time_interp_external(CS%sbc_chl, CS%Time, chl_2d)
+      do j=js,je ; do i=is,ie
+        if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
+          write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
+                    & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
+                     chl_2d(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
+          call MOM_error(FATAL, "MOM_diabatic_aux set_pen_shortwave: "//trim(mesg))
+        endif
+      enddo ; enddo
+
+      if (CS%id_chl > 0) call post_data(CS%id_chl, chl_2d, CS%diag)
+
+      call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_2d=chl_2d)
+    else
+      if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
+        "The tracer flow control structure must be associated when the model sets "//&
+        "the chlorophyll internally in set_pen_shortwave.")
+      call get_chl_from_model(chl_3d, G, tracer_flow_CSp)
+
+      if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
+
+      call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_3d=chl_3d)
+    endif
+  else
     call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
                      fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp)
+  endif
 
 end subroutine set_pen_shortwave
 
@@ -1326,7 +1375,7 @@ end subroutine applyBoundaryFluxesInOut
 
 !> This subroutine initializes the parameters and control structure of the diabatic_aux module.
 subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgorithm, use_ePBL)
-  type(time_type),         intent(in)    :: Time !< The current model time
+  type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -1344,6 +1393,12 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 #include "version_variable.h"
   character(len=40)  :: mdl  = "MOM_diabatic_aux" ! This module's name.
   character(len=48)  :: thickness_units
+  character(len=200) :: inputdir   ! The directory where NetCDF input files
+  character(len=240) :: chl_filename ! A file from which chl_a concentrations are to be read.
+  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
+                                 ! when var_pen_sw is defined and reading from file.
+  character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
+  logical :: use_temperature     ! True if thermodynamics are enabled.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -1357,10 +1412,15 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
    endif
 
   CS%diag => diag
+  CS%Time => Time
 
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
                    "The following parameters are used for auxiliary diabatic processes.")
+
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
+                 "If true, temperature and salinity are used as state "//&
+                 "variables.", default=.true.)
 
   call get_param(param_file, mdl, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
                  "If true, try to use any frazil heat deficit to cool any "//&
@@ -1440,6 +1500,35 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     if (CS%id_nonpenSW_diag > 0) then
        allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
        CS%nonpenSW_diag(:,:) = 0.0
+    endif
+  endif
+
+  if (use_temperature) then
+    call get_param(param_file, mdl, "VAR_PEN_SW", CS%var_pen_sw, &
+                   "If true, use one of the CHL_A schemes specified by "//&
+                   "OPACITY_SCHEME to determine the e-folding depth of "//&
+                   "incoming short wave radiation.", default=.false.)
+    if (CS%var_pen_sw) then
+
+      call get_param(param_file, mdl, "CHL_FROM_FILE", CS%chl_from_file, &
+                   "If true, chl_a is read from a file.", default=.true.)
+      if (CS%chl_from_file) then
+        call time_interp_external_init()
+
+        call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+        call get_param(param_file, mdl, "CHL_FILE", chl_file, &
+                   "CHL_FILE is the file containing chl_a concentrations in "//&
+                   "the variable CHL_A. It is used when VAR_PEN_SW and "//&
+                   "CHL_FROM_FILE are true.", fail_if_missing=.true.)
+        chl_filename = trim(slasher(inputdir))//trim(chl_file)
+        call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", chl_filename)
+        call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
+                   "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
+        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), domain=G%Domain%mpp_domain)
+      endif
+
+      CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &
+          'Surface chlorophyll A concentration used to find opacity', 'mg m-3')
     endif
   endif
 

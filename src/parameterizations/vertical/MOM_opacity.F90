@@ -10,12 +10,9 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_shortwave_abs, only : optics_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : slasher
-use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use time_interp_external_mod, only : init_external_field, time_interp_external
-use time_interp_external_mod, only : time_interp_external_init
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -24,9 +21,8 @@ public set_opacity, opacity_init, opacity_end, opacity_manizza, opacity_morel
 
 !> The control structure with paramters for the MOM_opacity module
 type, public :: opacity_CS ; private
-  logical :: var_pen_sw      !<   If true, use one of the CHL_A schemes (specified below) to
-                             !! determine the e-folding depth of incoming short wave radiation.
-                             !! The default is false.
+  logical :: var_pen_sw      !<   If true, use one of the CHL_A schemes (specified by OPACITY_SCHEME) to
+                             !! determine the e-folding depth of incoming shortwave radiation.
   integer :: opacity_scheme  !<   An integer indicating which scheme should be used to translate
                              !! water properties into the opacity (i.e., the e-folding depth) and
                              !! (perhaps) the number of bands of penetrating shortwave radiation to use.
@@ -41,17 +37,11 @@ type, public :: opacity_CS ; private
                              !! radiation that is in the blue band [nondim].
   real :: opacity_land_value !< The value to use for opacity over land [m-1].
                              !! The default is 10 m-1 - a value for muddy water.
-  integer :: sbc_chl         !< An integer handle used in time interpolation of
-                             !! chlorophyll read from a file.
-  logical ::  chl_from_file  !< If true, chl_a is read from a file.
-  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp => NULL()
-                    !< A pointer to the control structure of the tracer modules.
 
   !>@{ Diagnostic IDs
-  integer :: id_sw_pen = -1, id_sw_vis_pen = -1, id_chl = -1
+  integer :: id_sw_pen = -1, id_sw_vis_pen = -1
   integer, pointer :: id_opacity(:) => NULL()
   !!@}
 end type opacity_CS
@@ -68,7 +58,7 @@ character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP" !< String to speci
 contains
 
 !> This sets the opacity of sea water based based on one of several different schemes.
-subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, GV, CS)
+subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, GV, CS, chl_2d, chl_3d)
   type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                    !! set based on the opacities.
   real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
@@ -80,6 +70,10 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by
                                                    !! opacity_init.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions[mg m-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(in)    :: chl_3d !< The chlorophyll-A concentractions of each layer [mg m-3]
 
 ! local variables
   integer :: i, j, k, n, is, ie, js, je, nz
@@ -87,22 +81,19 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation.
   logical :: call_for_surface  ! if horizontal slice is the surface layer
-  real :: tmp(SZI_(G),SZJ_(G),SZK_(G))  ! A 3-d temporary array.
-  real :: chl(SZI_(G),SZJ_(G),SZK_(G))  ! The concentration of chlorophyll-A [mg m-3].
+  real :: tmp(SZI_(G),SZJ_(G),SZK_(GV)) ! A 3-d temporary array.
+  real :: chl(SZI_(G),SZJ_(G),SZK_(GV)) ! The concentration of chlorophyll-A [mg m-3].
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
                                         ! summed across all bands [W m-2].
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_opacity: "// &
          "Module must be initialized via opacity_init before it is used.")
 
-  if (CS%var_pen_sw) then
-    if (CS%chl_from_file) then
-      call opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, CS)
-    else
-      call get_chl_from_model(chl, G, CS%tracer_flow_CSp)
-      call opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, CS, chl)
-    endif
+  if (present(chl_2d) .or. present(chl_3d)) then
+    ! The optical properties are based on cholophyll concentrations.
+    call opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, &
+                          G, GV, CS, chl_2d, chl_3d)
   else ! Use sw e-folding scale set by MOM_input
     if (optics%nbands <= 1) then ; Inv_nbands = 1.0
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
@@ -191,19 +182,21 @@ end subroutine set_opacity
 
 !> This sets the "blue" band opacity based on chloophyll A concencentrations
 !! The red portion is lumped into the net heating at the surface.
-subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, CS, chl_in)
-  type(optics_type),     intent(inout) :: optics !< An optics structure that has values
+subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, G, GV, CS, chl_2d, chl_3d)
+  type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                  !! set based on the opacities.
-  real, dimension(:,:),  pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
-  real, dimension(:,:),  pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [W m-2]
-  real, dimension(:,:),  pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [W m-2]
-  real, dimension(:,:),  pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [W m-2]
-  real, dimension(:,:),  pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [W m-2]
-  type(ocean_grid_type), intent(in)    :: G      !< The ocean's grid structure.
-  type(opacity_CS),      pointer       :: CS     !< The control structure.
+  real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [W m-2]
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(opacity_CS),        pointer       :: CS     !< The control structure.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-               optional, intent(in)    :: chl_in !< A 3-d field of chlorophyll A,
-                                                 !! in mg m-3.
+                 optional, intent(in)    :: chl_3d !< A 3-d field of chlorophyll-A concentractions [mg m-3]
 
   real :: chl_data(SZI_(G),SZJ_(G)) ! The chlorophyll A concentrations in a layer [mg m-3].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
@@ -221,7 +214,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
   logical :: multiband_vis_input, multiband_nir_input
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
 !   In this model, the Morel (modified) and Manizza (modified) schemes
 ! use the "blue" band in the parameterizations to determine the e-folding
@@ -231,7 +224,6 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
 ! Morel, A., Optical modeling of the upper ocean in relation to its biogenous
 !   matter content (case-i waters).,J. Geo. Res., {93}, 10,749--10,768, 1988.
 !
-
 ! Manizza, M., C.~L. Quere, A.~Watson, and E.~T. Buitenhuis, Bio-optical
 !   feedbacks amoung phytoplankton, upper ocean physics and sea-ice in a
 !   global model, Geophys. Res. Let., , L05,603, 2005.
@@ -250,36 +242,28 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
                          associated(sw_nir_dif))
 
   chl_data(:,:) = 0.0
-  if (present(chl_in)) then
-    do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,1) ; enddo ; enddo
+  if (present(chl_3d)) then
+    do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,1) ; enddo ; enddo
     do k=1,nz; do j=js,je ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.5) .and. (chl_in(i,j,k) < 0.0)) then
-          write(mesg,'(" Negative chl_in of ",(1pe12.4)," found at i,j,k = ", &
-                    & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
-                     chl_in(i,j,k), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
-          call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
+      if ((G%mask2dT(i,j) > 0.5) .and. (chl_3d(i,j,k) < 0.0)) then
+        write(mesg,'(" Negative chl_3d of ",(1pe12.4)," found at i,j,k = ", &
+                  & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
+                   chl_3d(i,j,k), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
+        call MOM_error(FATAL, "MOM_opacity opacity_from_chl: "//trim(mesg))
       endif
     enddo ; enddo ; enddo
-  else
-    ! Only the 2-d surface chlorophyll can be read in from a file.  The
-    ! same value is assumed for all layers.
-    call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
+  elseif (present(chl_2d)) then
+    do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_2d(i,j) ; enddo ; enddo
     do j=js,je ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
-        write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
+      if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
+        write(mesg,'(" Negative chl_2d of ",(1pe12.4)," at i,j = ", &
                   & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                    chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
-        call MOM_error(FATAL,"MOM_opacity opacity_from_chl: "//trim(mesg))
+        call MOM_error(FATAL, "MOM_opacity opacity_from_chl: "//trim(mesg))
       endif
     enddo ; enddo
-  endif
-
-  if (CS%id_chl > 0) then
-    if (present(chl_in)) then
-      call post_data(CS%id_chl, chl_in(:,:,1), CS%diag)
-    else
-      call post_data(CS%id_chl, chl_data, CS%diag)
-    endif
+  else
+    call MOM_error(FATAL, "Either chl_2d or chl_3d must be preesnt in a call to opacity_form_chl.")
   endif
 
   select case (CS%opacity_scheme)
@@ -328,13 +312,13 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       enddo ; enddo
     case default
       call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
-    end select
+  end select
 
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,CS,G,chl_in,optics,nbands) &
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,CS,G,chl_3d,optics,nbands) &
 !$OMP                     firstprivate(chl_data)
   do k=1,nz
-    if (present(chl_in)) then
-      do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_in(i,j,k) ; enddo ; enddo
+    if (present(chl_3d)) then
+      do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,k) ; enddo ; enddo
     endif
 
     select case (CS%opacity_scheme)
@@ -424,16 +408,13 @@ function opacity_manizza(chl_data)
   opacity_manizza = 0.0232 + 0.074*chl_data**0.674
 end function
 
-subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
+subroutine opacity_init(Time, G, param_file, diag, CS, optics)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(tracer_flow_control_CS), &
-                   target, intent(in)    :: tracer_flow !< A pointer to the tracer flow control
-                                                 !! module's control structure
   type(opacity_CS),        pointer       :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module.
   type(optics_type),       pointer       :: optics !< An optics structure that has parameters
@@ -448,17 +429,12 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 !                  for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=200) :: inputdir   ! The directory where NetCDF input files
-  character(len=240) :: filename
   character(len=200) :: tmpstr
   character(len=40)  :: mdl = "MOM_opacity"
   character(len=40)  :: bandnum, shortname
   character(len=200) :: longname
   character(len=40)  :: scheme_string
   logical :: use_scheme
-  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
-                                 ! when var_pen_sw is defined and reading from file.
-  character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
@@ -469,8 +445,6 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   else ; allocate(CS) ; endif
 
   CS%diag => diag
-  CS%Time => Time
-  CS%tracer_flow_CSp => tracer_flow
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, '')
@@ -507,23 +481,6 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       call MOM_error(WARNING, "opacity_init: No scheme has successfully "//&
                "been specified for the opacity.  Using the default MANIZZA_05.")
       CS%opacity_scheme = MANIZZA_05 ; scheme_string = MANIZZA_05_STRING
-    endif
-
-    call get_param(param_file, mdl, "CHL_FROM_FILE", CS%chl_from_file, &
-                 "If true, chl_a is read from a file.", default=.true.)
-    if (CS%chl_from_file) then
-      call time_interp_external_init()
-
-      call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
-      call get_param(param_file, mdl, "CHL_FILE", chl_file, &
-                 "CHL_FILE is the file containing chl_a concentrations in "//&
-                 "the variable CHL_A. It is used when VAR_PEN_SW and "//&
-                 "CHL_FROM_FILE are true.", fail_if_missing=.true.)
-      filename = trim(slasher(inputdir))//trim(chl_file)
-      call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", filename)
-      call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
-                 "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
-      CS%sbc_chl = init_external_field(filename,trim(chl_varname),domain=G%Domain%mpp_domain)
     endif
 
     call get_param(param_file, mdl, "BLUE_FRAC_SW", CS%blue_frac, &
@@ -626,10 +583,6 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
     CS%id_opacity(n) = register_diag_field('ocean_model', shortname, diag%axesTL, Time, &
       longname, 'm-1')
   enddo
-  if (CS%var_pen_sw) &
-    CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &
-        'Surface chlorophyll A concentration used to find opacity', 'mg m-3')
-
 
 end subroutine opacity_init
 
@@ -650,8 +603,8 @@ end subroutine opacity_end
 
 !> \namespace mom_opacity
 !!
-!! CHL_from_file:
-!!   In this routine, the Morel (modified) and Manizza (modified)
+!! opacity_from_chl:
+!!   In this routine, the Morel (modified) or Manizza (modified)
 !! schemes use the "blue" band in the paramterizations to determine
 !! the e-folding depth of the incoming shortwave attenuation. The red
 !! portion is lumped into the net heating at the surface.
