@@ -26,9 +26,8 @@ use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
 use MOM_offline_aux,          only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
 use MOM_offline_aux,          only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
-use MOM_opacity,              only : opacity_CS
+use MOM_opacity,              only : opacity_CS, optics_type
 use MOM_open_boundary,        only : ocean_OBC_type
-use MOM_shortwave_abs,        only : optics_type
 use MOM_time_manager,         only : time_type
 use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut

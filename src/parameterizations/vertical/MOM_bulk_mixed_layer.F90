@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : extractFluxes1d, forcing
 use MOM_grid,          only : ocean_grid_type
-use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
+use MOM_opacity,       only : absorbRemainingSW, optics_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type

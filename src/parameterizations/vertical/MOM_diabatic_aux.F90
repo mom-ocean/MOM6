@@ -17,7 +17,7 @@ use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher
 use MOM_opacity,       only : set_opacity, opacity_CS
-use MOM_shortwave_abs, only : absorbRemainingSW, optics_type, sumSWoverBands
+use MOM_opacity,       only : absorbRemainingSW, optics_type, sumSWoverBands
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs

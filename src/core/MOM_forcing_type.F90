@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS,           only : calculate_density_derivs
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_shortwave_abs, only : sumSWoverBands, optics_type
+use MOM_opacity,       only : sumSWoverBands, optics_type
 use MOM_spatial_means, only : global_area_integral, global_area_mean
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface, thermo_var_ptrs
