@@ -375,7 +375,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real, dimension(SZI_(G)), intent(out)   :: net_salt       !< surface salt flux into the ocean
                                                             !! accumulated over a time step
                                                             !! [ppt H ~> ppt m or ppt kg m-2].
-  real, dimension(:,:),     intent(out)   :: pen_SW_bnd     !< penetrating SW flux, split into bands.
+  real, dimension(max(1,nsw),G%isd:G%ied), intent(out) :: pen_SW_bnd !< penetrating SW flux, split into bands.
                                                             !! [degC H ~> degC m or degC kg m-2]
                                                             !! and array size nsw x SZI_(G), where
                                                             !! nsw=number of SW bands in pen_SW_bnd.
@@ -398,7 +398,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real, dimension(SZI_(G)), &
                   optional, intent(out)   :: netmassInOut_rate !< Rate of net mass flux into the ocean
                                                             !! [H s-1 ~> m s-1 or kg m-2 s-1].
-  real, dimension(:,:),     &
+  real, dimension(max(1,nsw),G%isd:G%ied), &
                   optional, intent(out)   :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating
                                                              !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1].
   logical,        optional, intent(in)    :: skip_diags      !< If present and true, skip calculating diagnostics
@@ -834,7 +834,7 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
                                                                     !! [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: net_salt       !< surface salt flux into the ocean accumulated
                                                                     !! over a time step [ppt H ~> ppt m or ppt kg m-2]
-  real, dimension(:,:,:),           intent(out)   :: pen_SW_bnd     !< penetrating shortwave flux, split into bands.
+  real, dimension(max(1,nsw),G%isd:G%ied,G%jsd:G%jed), intent(out) :: pen_SW_bnd !< penetrating SW flux, split into bands.
                                                                     !! [degC H ~> degC m or degC kg m-2] array size
                                                                     !! nsw x SZI_(G), where nsw=number of SW bands in
                                                                     !! pen_SW_bnd. This heat flux is not in net_heat.
