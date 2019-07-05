@@ -321,7 +321,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     if (CS%mass_from_file) call update_shelf_mass(G, CS, ISS, Time)
   endif
 
-  if (CS%DEBUG) then
+  if (CS%debug) then
     call hchksum(fluxes%frac_shelf_h, "frac_shelf_h before apply melting", G%HI, haloshift=0)
     call hchksum(state%sst, "sst before apply melting", G%HI, haloshift=0)
     call hchksum(state%sss, "sss before apply melting", G%HI, haloshift=0)
@@ -650,7 +650,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
     endif
   endif
 
-  if (CS%DEBUG) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, US, haloshift=0)
+  if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
 
   call add_shelf_flux(G, CS, state, fluxes)
 
@@ -692,7 +692,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   call cpu_clock_end(id_clock_shelf)
 
-  if (CS%DEBUG) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, US, haloshift=0)
+  if (CS%debug) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, CS%US, haloshift=0)
 
 end subroutine shelf_calc_flux
 
@@ -1055,8 +1055,8 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
       endif
     enddo ; enddo
 
-    if (CS%DEBUG) then
-      write(mesg,*) 'Mean melt flux [kg m-2 s-1], dt = ', mean_melt_flux, CS%time_step
+    if (CS%debug) then
+      write(mesg,*) 'Mean melt flux (kg/(m^2 s)), dt = ', mean_melt_flux, CS%time_step
       call MOM_mesg(mesg)
       call MOM_forcing_chksum("After constant sea level", fluxes, G, CS%US, haloshift=0)
     endif
@@ -1514,7 +1514,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / G%areaT(i,j)
   enddo ; enddo ; endif
 
-  if (CS%DEBUG) then
+  if (CS%debug) then
     call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
   endif
 

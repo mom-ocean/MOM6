@@ -215,7 +215,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
   type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to
                                                    !! all possible mass, heat or salt flux forcing fields.
                                                    !!  Unused fields have NULL ptrs.
-
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
@@ -244,7 +243,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
-  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
 
   logical :: restore_salinity ! local copy of the argument restore_salt, if it
                               ! is present, or false (no restoring) otherwise.
@@ -395,9 +393,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
     enddo; enddo
   endif
 
-  !i0 = is - isc_bnd ; j0 = js - jsc_bnd ???
-  i0 = 0; j0 = 0 ! TODO: is this right?
-
+  ! obtain fluxes from IOB
+  i0 = 0; j0 = 0
   do j=js,je ; do i=is,ie
     ! liquid precipitation (rain)
     if (associated(fluxes%lprec)) &
@@ -456,8 +453,27 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
       fluxes%seaice_melt(i,j) = G%mask2dT(i,j) * IOB%seaice_melt(i-i0,j-j0)
 
     ! latent heat flux (W/m^2)
-    if (associated(fluxes%latent)) &
-      fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
+    ! old method, latent = IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+    !if (associated(fluxes%latent)) &
+    !  fluxes%latent(i,j) = G%mask2dT(i,j) * IOB%latent_flux(i-i0,j-j0)
+    ! new method
+    fluxes%latent(i,j) = 0.0
+    ! contribution from frozen ppt
+    if (associated(fluxes%fprec)) then
+      fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j)   = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+    endif
+    ! contribution from frozen runoff
+    if (associated(fluxes%frunoff)) then
+      fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%rofi_flux(i-i0,j-j0)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)*CS%latent_heat_fusion
+    endif
+    ! contribution from evaporation
+    if (associated(IOB%q_flux)) then
+      fluxes%latent(i,j)             = fluxes%latent(i,j) + IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+      fluxes%latent_evap_diag(i,j)  = G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+    endif
+    fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
 
     if (associated(IOB%sw_flux_vis_dir)) &
       fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
@@ -580,8 +596,9 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
 
  !isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
  !jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
+ !if (is_root_pe()) write(*,*)'isc_bnd, jsc_bnd, iec_bnd, jec_bnd',isc_bnd, jsc_bnd, iec_bnd, jec_bnd
  !i0 = is - isc_bnd ; j0 = js - jsc_bnd
-  i0 = 0; j0 = 0 ! TODO: is this right?
+ i0 = 0; j0 = 0 ! TODO: is this right?
 
   Irho0 = 1.0/CS%Rho0
 
