@@ -177,7 +177,7 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
    !read temp and eta
    filename = trim(inputdir)//trim(state_file)
-   if (.not.file_exists(filename, G%Domain)) &
+   if (.not.file_exists(filename)) &
        call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
    call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
    call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
