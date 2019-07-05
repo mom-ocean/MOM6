@@ -1208,10 +1208,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
                default=.true.)
 
-    allocate(CS%Laplac3_const_u(IsdB:IedB,jsd:jed)) ; CS%Laplac3_const_u(:,:) = 0.0
-    allocate(CS%Laplac3_const_v(isd:ied,JsdB:JedB)) ; CS%Laplac3_const_v(:,:) = 0.0
-    allocate(CS%KH_u_QG(IsdB:IedB,jsd:jed,G%ke)) ; CS%KH_u_QG(:,:,:) = 0.0
-    allocate(CS%KH_v_QG(isd:ied,JsdB:JedB,G%ke)) ; CS%KH_v_QG(:,:,:) = 0.0
+    ALLOC_(CS%Laplac3_const_u(IsdB:IedB,jsd:jed)) ; CS%Laplac3_const_u(:,:) = 0.0
+    ALLOC_(CS%Laplac3_const_v(isd:ied,JsdB:JedB)) ; CS%Laplac3_const_v(:,:) = 0.0
+    ALLOC_(CS%KH_u_QG(IsdB:IedB,jsd:jed,G%ke)) ; CS%KH_u_QG(:,:,:) = 0.0
+    ALLOC_(CS%KH_v_QG(isd:ied,JsdB:JedB,G%ke)) ; CS%KH_v_QG(:,:,:) = 0.0
     ! register diagnostics
 
     CS%id_KH_u_QG = register_diag_field('ocean_model', 'KH_u_QG', diag%axesCuL, Time, &
