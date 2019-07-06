@@ -284,13 +284,15 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   character(len=200) :: filename, tideamp_file, h2_file
 
   real :: mask_itidal
+  real :: max_frac_rough     ! The fraction relating the maximum topographic roughness
+                             ! to the mean depth [nondim]
   real :: utide              ! constant tidal amplitude [m s-1] to be used if
                              ! tidal amplitude file is not present.
   real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height.
   real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling
   real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion [Z ~> m].
-  integer :: tlen_days               !< Time interval from start for adding wave source
-                                     !! for testing internal tides (BDM)
+  integer :: tlen_days       !< Time interval from start for adding wave source
+                             !! for testing internal tides (BDM)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
   if (associated(CS)) then
@@ -370,18 +372,23 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
   call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
+  call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
+                 "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
+                 "or a negative value for no limitations on roughness.", &
+                 units="nondim", default=0.1)
+
   ! The following parameters are used in testing the internal tide code.
   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
-               "If true, apply an arbitrary generation site for internal tide testing", &
-               default=.false.)
+                 "If true, apply an arbitrary generation site for internal tide testing", &
+                 default=.false.)
   if (CS%int_tide_source_test)then
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-               "X Location of generation site for internal tide", default=1.)
+                 "X Location of generation site for internal tide", default=1.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-               "Y Location of generation site for internal tide", default=1.)
+                 "Y Location of generation site for internal tide", default=1.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", tlen_days, &
-               "Time interval from start of experiment for adding wave source", &
-               units="days", default=0)
+                 "Time interval from start of experiment for adding wave source", &
+                 units="days", default=0)
     CS%time_max_source = Time + set_time(0, days=tlen_days)
   endif
 
@@ -391,9 +398,9 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
 
     itide%tideamp(i,j) = itide%tideamp(i,j) * mask_itidal * G%mask2dT(i,j)
 
-    ! Restrict rms topo to 10 percent of column depth.
-    !### Note the use here of a hard-coded nondimensional constant.
-    itide%h2(i,j) = min(0.01*G%bathyT(i,j)**2, itide%h2(i,j))
+    ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
+    if (max_frac_rough >= 0.0) &
+      itide%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
     CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
