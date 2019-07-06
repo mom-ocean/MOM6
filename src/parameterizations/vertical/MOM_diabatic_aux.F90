@@ -17,7 +17,7 @@ use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher
 use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, extract_optics_fields
-use MOM_opacity,       only : absorbRemainingSW, optics_type, sumSWoverBands
+use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
@@ -838,7 +838,7 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
                                     SkinBuoyFlux )
@@ -849,6 +849,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   real,                    intent(in)    :: dt !< Time-step over which forcing is applied [s]
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
+  integer,                 intent(in)    :: nsw !< The number of frequency bands of penetrating
+                                                !! shortwave radiation
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any
@@ -903,10 +905,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
                      ! a layer [kg m-3 Z3 T-2 ~> J m-2]
     dSV_dT_2d        ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
-  real, dimension(SZI_(G),SZK_(G)+1)                    :: netPen
-  real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd, Pen_SW_bnd_rate
-                                                           !^ _rate is w/ dt=1
-  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
+  real, dimension(SZI_(G),SZK_(G)+1) :: netPen
+  real, dimension(max(nsw,1),SZI_(G)) :: &
+    Pen_SW_bnd, &    ! The penetrative shortwave heating integrated over a timestep by band
+                     ! [degC H ~> degC m or degC kg m-2]
+    Pen_SW_bnd_rate  ! The penetrative shortwave heating rate by band
+                     ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(max(nsw,1),SZI_(G),SZK_(G)) :: &
+    opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
+                     ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding
   real    :: Temp_in, Salin_in
 !  real    :: I_G_Earth
@@ -916,7 +923,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                       ! [Z m3 s-2 kg-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
-  integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  integer :: i, j, is, ie, js, je, k, nz, n
   integer :: start, npts
   character(len=45) :: mesg
 
@@ -927,7 +934,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
 
 #define _OLD_ALG_
   dt_in_T = dt * US%s_to_T
-  call extract_optics_fields(optics, nbands=nsw)
   Idt = 1.0/dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
@@ -1050,8 +1056,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW,                &
-                  net_Heat_rate=netheat_rate,net_salt_rate=netsalt_rate,                  &
-                  netmassinout_rate=netmassinout_rate,pen_sw_bnd_rate=pen_sw_bnd_rate)
+                  net_Heat_rate=netheat_rate, net_salt_rate=netsalt_rate,                 &
+                  netmassinout_rate=netmassinout_rate, pen_sw_bnd_rate=pen_sw_bnd_rate)
     else
       call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
