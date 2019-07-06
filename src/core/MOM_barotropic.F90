@@ -56,7 +56,7 @@ implicit none ; private
 #endif
 
 public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
-public register_barotropic_restarts, set_dtbt
+public register_barotropic_restarts, set_dtbt, barotropic_get_tav
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -4362,6 +4362,29 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     id_clock_sync = cpu_clock_id('(Ocean BT global synch)', grain=CLOCK_ROUTINE)
 
 end subroutine barotropic_init
+
+!> Copies ubtav and vbtav from private type into arrays
+subroutine barotropic_get_tav(CS, ubtav, vbtav, G)
+  type(barotropic_CS),                 pointer     :: CS   !< Control structure for
+                                                   !! this module
+  type(ocean_grid_type),               intent(in)  :: G    !< Grid structure
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: ubtav!< zonal barotropic vel.
+                                                   !! ave. over baroclinic time-step (m s-1)
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: vbtav!< meridional barotropic vel.
+                                                   !! ave. over baroclinic time-step (m s-1)
+  ! Local variables
+  integer :: i,j
+
+  do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
+    ubtav(I,j) = CS%ubtav(I,j)
+  enddo ; enddo
+
+  do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
+    vbtav(i,J) = CS%vbtav(i,J)
+  enddo ; enddo
+
+end subroutine barotropic_get_tav
+
 
 !> Clean up the barotropic control structure.
 subroutine barotropic_end(CS)

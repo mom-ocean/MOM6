@@ -8,7 +8,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
 use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type, pass_var
+use MOM_domains,       only : group_pass_type, pass_var, pass_vector
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
 use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
@@ -85,9 +85,23 @@ type, public :: VarMix_CS
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
     slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
+    N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points [s-2]
+    N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points [s-2]
     ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+    Laplac3_const_u       !< Laplacian  metric-dependent constants [nondim]
+
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+    Laplac3_const_v       !< Laplacian  metric-dependent constants [nondim]
+
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
+    KH_u_QG               !< QG Leith GM coefficient at u-points [m2 s-1]
+
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
+    KH_v_QG               !< QG Leith GM coefficient at v-points [m2 s-1]
 
   ! Parameters
+  logical :: use_Visbeck  !< Use Visbeck formulation for thickness diffusivity
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
   real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula
   real :: Res_coef_khth   !< A non-dimensional number that determines the function
@@ -105,12 +119,16 @@ type, public :: VarMix_CS
                                !! and especially 2 are coded to be more efficient.
   real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate [nondim].
 
+  ! Leith parameters
+  logical :: use_QG_Leith_GM      !< If true, uses the QG Leith viscosity as the GM coefficient
+  logical :: use_beta_in_QG_Leith !< If true, includes the beta term in the QG Leith GM coefficient
+
   ! Diagnostics
   !>@{
   !! Diagnostic identifier
   integer :: id_SN_u=-1, id_SN_v=-1, id_L2u=-1, id_L2v=-1, id_Res_fn = -1
   integer :: id_N2_u=-1, id_N2_v=-1, id_S2_u=-1, id_S2_v=-1
-  integer :: id_Rd_dx=-1
+  integer :: id_Rd_dx=-1, id_KH_u_QG = -1, id_KH_v_QG = -1
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
   !>@}
@@ -121,6 +139,7 @@ type, public :: VarMix_CS
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
+public calc_QG_Leith_viscosity
 
 contains
 
@@ -404,12 +423,12 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_SN_u > 0) call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
-    if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
-    if (CS%id_L2u > 0) call post_data(CS%id_L2u, CS%L2u, CS%diag)
-    if (CS%id_L2v > 0) call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
-    if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
+    if (CS%id_SN_u > 0)     call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
+    if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
+    if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
+    if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
+    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
+    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
   endif
 
 end subroutine calc_slope_functions
@@ -682,6 +701,154 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
 
 end subroutine calc_slope_functions_using_just_e
 
+!> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
+subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
+  type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
+!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness (m or kg m-2)
+  integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  !< x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  !< y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vort_xy_dx !< x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity at h-points (m2 s-1)
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity at q-points (m2 s-1)
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity at h-points (m4 s-1)
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity at q-points (m4 s-1)
+
+  ! Local variables
+!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
+!                                        dudy, & ! Meridional shear of zonal velocity (s-1)
+!                                        dvdx    ! Zonal shear of meridional velocity (s-1)
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
+!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
+    dslopey_dz, & ! z-derivative of y-slope at v-points (m-1)
+    h_at_v,     & ! Thickness at v-points (m or kg m-2)
+    beta_v,     & ! Beta at v-points (m-1 s-1)
+    grad_vort_mag_v, & ! mag. of vort. grad. at v-points (s-1)
+    grad_div_mag_v     ! mag. of div. grad. at v-points (s-1)
+
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
+!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+    dslopex_dz, & ! z-derivative of x-slope at u-points (m-1)
+    h_at_u,     & ! Thickness at u-points (m or kg m-2)
+    beta_u,     & ! Beta at u-points (m-1 s-1)
+    grad_vort_mag_u, & ! mag. of vort. grad. at u-points (s-1)
+    grad_div_mag_u     ! mag. of div. grad. at u-points (s-1)
+!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
+!  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
+  real :: h_at_slope_above, h_at_slope_below, Ih, f
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
+  real :: inv_PI3
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  nz = G%ke
+
+  inv_PI3 = 1.0/((4.0*atan(1.0))**3)
+
+  ! update halos
+  call pass_var(h, G%Domain)
+
+  if ((k > 1) .and. (k < nz)) then
+
+  ! Add in stretching term for the QG Leith vsicosity
+!  if (CS%use_QG_Leith) then
+!    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+    do j=js-2,Jeq+2 ; do I=is-2,Ieq+1
+      h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
+                         ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
+                         + ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k-1) + h(i+1,j,k-1) ) + GV%H_subroundoff )
+      h_at_slope_below = 2. * ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) * h(i+1,j,k+1) ) / &
+                         ( ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) + h(i+1,j,k+1) ) &
+                         + ( h(i,j,k+1) * h(i+1,j,k+1) ) * ( h(i,j,k) + h(i+1,j,k) ) + GV%H_subroundoff )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      dslopex_dz(I,j) = 2. * ( CS%slope_x(i,j,k) - CS%slope_x(i,j,k+1) ) * Ih
+      h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
+    enddo ; enddo
+!    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+    do J=js-2,Jeq+1 ; do i=is-2,Ieq+2
+      h_at_slope_above = 2. * ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) * h(i,j+1,k) ) / &
+                         ( ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) + h(i,j+1,k) ) &
+                         + ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k-1) + h(i,j+1,k-1) ) + GV%H_subroundoff )
+      h_at_slope_below = 2. * ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) * h(i,j+1,k+1) ) / &
+                         ( ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) + h(i,j+1,k+1) ) &
+                         + ( h(i,j,k+1) * h(i,j+1,k+1) ) * ( h(i,j,k) + h(i,j+1,k) ) + GV%H_subroundoff )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      dslopey_dz(i,J) = 2. * ( CS%slope_y(i,j,k) - CS%slope_y(i,j,k+1) ) * Ih
+      h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
+    enddo ; enddo
+
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+      f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
+      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * &
+            ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
+            + ( h_at_u(I-1,j) * dslopex_dz(I-1,j) + h_at_u(I,j+1) * dslopex_dz(I,j+1) ) ) / &
+              ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
+    enddo ; enddo
+
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+      f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
+      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * &
+            ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
+            + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
+              ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
+    enddo ; enddo
+  endif ! k > 1
+
+  call pass_vector(vort_xy_dy,vort_xy_dx,G%Domain)
+
+    if (CS%use_QG_Leith_GM) then
+      if (CS%use_beta_in_QG_Leith) then
+        do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+          beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+                        (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
+        enddo ; enddo
+        do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+          beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                        (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        enddo ; enddo
+      endif
+
+      do j=js-1,Jeq+1 ; do I=is-2,Ieq
+        grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
+                             + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
+        grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
+                             + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
+        if (CS%use_beta_in_QG_Leith) then
+          CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)*3) &
+               * CS%Laplac3_const_u(I,j) * inv_PI3
+        else
+          CS%KH_u_QG(I,j,k) = (grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) &
+               * CS%Laplac3_const_u(I,j) * inv_PI3
+        endif
+      enddo ; enddo
+
+      do J=js-2,Jeq ; do i=is-1,Ieq+1
+        grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
+                             + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
+        grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
+                             + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
+        if (CS%use_beta_in_QG_Leith) then
+          CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) &
+               * CS%Laplac3_const_v(i,J) * inv_PI3
+        else
+          CS%KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) &
+               * CS%Laplac3_const_v(i,J) * inv_PI3
+        endif
+      enddo ; enddo
+      ! post diagnostics
+      if (CS%id_KH_v_QG > 0)  call post_data(CS%id_KH_v_QG, CS%KH_v_QG, CS%diag)
+      if (CS%id_KH_u_QG > 0)  call post_data(CS%id_KH_u_QG, CS%KH_u_QG, CS%diag)
+    endif
+
+end subroutine calc_QG_Leith_viscosity
+
 !> Initializes the variables mixing coefficients container
 subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
@@ -699,6 +866,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   real :: MLE_front_length
+  real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity
+  real :: grid_sp_u2, grid_sp_u3
+  real :: grid_sp_v2, grid_sp_v3 ! Intermediate quantities for Leith metrics
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
@@ -732,6 +902,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, "//&
                  "this is set to true regardless of what is in the "//&
                  "parameter file.", default=.false.)
+  call get_param(param_file, mdl, "USE_VISBECK", CS%use_Visbeck,&
+                 "If true, use the Visbeck et al. (1997) formulation for \n"//&
+                 "thickness diffusivity.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KH", CS%Resoln_scaled_Kh, &
                  "If true, the Laplacian lateral viscosity is scaled away "//&
                  "when the first baroclinic deformation radius is well "//&
@@ -803,6 +976,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
+    allocate(CS%N2_u(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%N2_u(:,:,:) = 0.0
+    allocate(CS%N2_v(isd:ied,JsdB:JedB,G%ke+1)) ; CS%N2_v(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
@@ -859,6 +1034,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
          'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
   endif
 
+  oneOrTwo = 1.0
   if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
     CS%calculate_Rd_dx = .true.
     CS%calculate_res_fns = .true.
@@ -922,8 +1098,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "is the more appropriate definition.", default=.false.)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0
-    else
-      oneOrTwo = 1.0
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
@@ -987,6 +1161,49 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     in_use = .true.
     allocate(CS%cg1(isd:ied,jsd:jed)); CS%cg1(:,:) = 0.0
     call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
+  endif
+
+  ! Leith parameters
+  call get_param(param_file, mdl, "USE_QG_LEITH_GM", CS%use_QG_Leith_GM, &
+               "If true, use the QG Leith viscosity as the GM coefficient.", &
+               default=.false.)
+
+  if (CS%Use_QG_Leith_GM) then
+    call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
+               "The nondimensional Laplacian Leith constant, \n"//&
+               "often set to 1.0", units="nondim", default=0.0)
+
+    call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_QG_Leith, &
+               "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
+               default=.true.)
+
+    ALLOC_(CS%Laplac3_const_u(IsdB:IedB,jsd:jed)) ; CS%Laplac3_const_u(:,:) = 0.0
+    ALLOC_(CS%Laplac3_const_v(isd:ied,JsdB:JedB)) ; CS%Laplac3_const_v(:,:) = 0.0
+    ALLOC_(CS%KH_u_QG(IsdB:IedB,jsd:jed,G%ke)) ; CS%KH_u_QG(:,:,:) = 0.0
+    ALLOC_(CS%KH_v_QG(isd:ied,JsdB:JedB,G%ke)) ; CS%KH_v_QG(:,:,:) = 0.0
+    ! register diagnostics
+
+    CS%id_KH_u_QG = register_diag_field('ocean_model', 'KH_u_QG', diag%axesCuL, Time, &
+       'Horizontal viscosity from Leith QG, at u-points', 'm2 s-1')
+    CS%id_KH_v_QG = register_diag_field('ocean_model', 'KH_v_QG', diag%axesCvL, Time, &
+       'Horizontal viscosity from Leith QG, at v-points', 'm2 s-1')
+
+    do j=Jsq,Jeq+1 ; do I=is-1,Ieq
+      ! Static factors in the Leith schemes
+      grid_sp_u2 = G%dyCu(I,j)*G%dxCu(I,j)
+      grid_sp_u3 = grid_sp_u2*sqrt(grid_sp_u2)
+      CS%Laplac3_const_u(I,j) = Leith_Lap_const * grid_sp_u3
+    enddo ; enddo
+    do j=js-1,Jeq ; do I=Isq,Ieq+1
+      ! Static factors in the Leith schemes
+      grid_sp_v2 = G%dyCv(i,J)*G%dxCu(i,J)
+      grid_sp_v3 = grid_sp_v2*sqrt(grid_sp_v2)
+      CS%Laplac3_const_v(i,J) = Leith_Lap_const * grid_sp_v3
+    enddo ; enddo
+
+    if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "USE_STORED_SLOPES must be True when using QG Leith.")
   endif
 
   ! If nothing is being stored in this class then deallocate

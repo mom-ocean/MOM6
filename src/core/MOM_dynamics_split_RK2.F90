@@ -52,6 +52,7 @@ use MOM_open_boundary,         only : open_boundary_zero_normal_flow
 use MOM_open_boundary,         only : open_boundary_test_extern_h
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
+use MOM_thickness_diffuse,     only : thickness_diffuse_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
@@ -184,6 +185,8 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
   !> A pointer to the barotropic stepping control structure
   type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
+  !> A pointer to a structure containing interface height diffusivities
+  type(thickness_diffuse_CS), pointer :: thickness_diffuse_CSp => NULL()
   !> A pointer to the vertical viscosity control structure
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   !> A pointer to the set_visc control structure
@@ -230,7 +233,7 @@ contains
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                  Time_local, dt, forces, p_surf_begin, p_surf_end, &
                  uh, vh, uhtr, vhtr, eta_av, &
-                 G, GV, US, CS, calc_dtbt, VarMix, MEKE, Waves)
+                 G, GV, US, CS, calc_dtbt, VarMix, MEKE, thickness_diffuse_CSp, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
@@ -267,8 +270,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
   type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
+  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp!< Pointer to a structure containing
+                                                                    !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
+
+  ! local variables
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping.
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocity [m s-1].
@@ -682,7 +689,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
-                            MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, OBC=CS%OBC)
+                            MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, &
+                            OBC=CS%OBC, BT=CS%barotropic_CSp)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
@@ -953,7 +961,8 @@ end subroutine register_restarts_dyn_split_RK2
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
-                      VarMix, MEKE, OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                      VarMix, MEKE, thickness_diffuse_CSp,                  &
+                      OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                       visc, dirs, ntrunc, calc_dtbt)
   type(ocean_grid_type),            intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
@@ -981,6 +990,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! diagnostic pointers
   type(VarMix_CS),                  pointer       :: VarMix     !< points to spatially variable viscosities
   type(MEKE_type),                  pointer       :: MEKE       !< points to mesoscale eddy kinetic energy fields
+!  type(Barotropic_CS),              pointer       :: Barotropic_CSp !< Pointer to the control structure for
+!                                                                !! the barotropic module
+  type(thickness_diffuse_CS),       pointer       :: thickness_diffuse_CSp !< Pointer to the control structure
+                                                  !! used for the isopycnal height diffusive transport.
   type(ocean_OBC_type),             pointer       :: OBC        !< points to OBC related fields
   type(update_OBC_CS),              pointer       :: update_OBC_CSp !< points to OBC update related fields
   type(ALE_CS),                     pointer       :: ALE_CSp    !< points to ALE control structure
@@ -992,6 +1005,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! truncated (this should be 0).
   logical,                          intent(out)   :: calc_dtbt  !< If true, recalculate the barotropic time step
 
+  ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units, eta_rest_name
@@ -1136,7 +1150,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, US, CS%hor_visc_CSp, OBC=CS%OBC)
+                              G, GV, US, CS%hor_visc_CSp, &
+                              OBC=CS%OBC, BT=CS%barotropic_CSp)
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
     CS%u_av(:,:,:) = u(:,:,:)

@@ -3392,32 +3392,34 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     enddo
   endif
 
-  CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
-      Time, "Diffusive diapycnal temperature flux across interfaces", &
-      "degC m s-1")
-  CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv",diag%axesTi, &
-      Time, "Advective diapycnal temperature flux across interfaces", &
-      "degC m s-1")
-  CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff",diag%axesTi, &
-      Time, "Diffusive diapycnal salnity flux across interfaces", &
-      "psu m s-1")
-  CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",diag%axesTi, &
-      Time, "Advective diapycnal salnity flux across interfaces", &
-      "psu m s-1")
-  CS%id_MLD_003 = register_diag_field('ocean_model', 'MLD_003', diag%axesT1, Time, &
-      'Mixed layer depth (delta rho = 0.03)', 'm', conversion=US%Z_to_m, &
-      cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
-      cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
-  CS%id_mlotstsq = register_diag_field('ocean_model','mlotstsq',diag%axesT1, Time, &
-      long_name='Square of Ocean Mixed Layer Thickness Defined by Sigma T', &
-      standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t', &
-      units='m2', conversion=US%Z_to_m**2)
-  CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
-      'Mixed layer depth (delta rho = 0.125)', 'm', conversion=US%Z_to_m)
-  CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
-      'Squared buoyancy frequency below mixed layer', 's-2')
-  CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
-      'Mixed layer depth (used defined)', 'm', conversion=US%Z_to_m)
+  if (use_temperature) then
+    CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
+        Time, "Diffusive diapycnal temperature flux across interfaces", &
+        "degC m s-1")
+    CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv",diag%axesTi, &
+        Time, "Advective diapycnal temperature flux across interfaces", &
+        "degC m s-1")
+    CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff",diag%axesTi, &
+        Time, "Diffusive diapycnal salnity flux across interfaces", &
+        "psu m s-1")
+    CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",diag%axesTi, &
+        Time, "Advective diapycnal salnity flux across interfaces", &
+        "psu m s-1")
+    CS%id_MLD_003 = register_diag_field('ocean_model', 'MLD_003', diag%axesT1, Time, &
+        'Mixed layer depth (delta rho = 0.03)', 'm', conversion=US%Z_to_m, &
+        cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
+        cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
+    CS%id_mlotstsq = register_diag_field('ocean_model','mlotstsq',diag%axesT1, Time, &
+        long_name='Square of Ocean Mixed Layer Thickness Defined by Sigma T', &
+        standard_name='square_of_ocean_mixed_layer_thickness_defined_by_sigma_t', &
+        units='m2', conversion=US%Z_to_m**2)
+    CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
+        'Mixed layer depth (delta rho = 0.125)', 'm', conversion=US%Z_to_m)
+    CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
+        'Squared buoyancy frequency below mixed layer', 's-2')
+    CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
+        'Mixed layer depth (used defined)', 'm', conversion=US%Z_to_m)
+  endif
   call get_param(param_file, mdl, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
                  "The density difference used to determine a diagnostic mixed "//&
                  "layer depth, MLD_user, following the definition of Levitus 1982. "//&

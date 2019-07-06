@@ -40,7 +40,11 @@ real, parameter, dimension(ni) :: &
     !< An array of the real precision of each of the integers
 real, parameter, dimension(ni) :: &
   I_pr = (/ 1.0/r_prec**2, 1.0/r_prec, 1.0, r_prec, r_prec**2, r_prec**3 /)
-    !< An array of the inverse of thereal precision of each of the integers
+    !< An array of the inverse of the real precision of each of the integers
+real, parameter :: max_efp_float = pr(1) * (2.**63 - 1.)
+                              !< The largest float with an EFP representation.
+                              !! NOTE: Only the first bin can exceed precision,
+                              !! but is bounded by the largest signed integer.
 
 logical :: overflow_error = .false. !< This becomes true if an overflow is encountered.
 logical :: NaN_error = .false.      !< This becomes true if a NaN is encountered.
@@ -514,6 +518,12 @@ subroutine increment_ints_faster(int_sum, r, max_mag_term)
   sgn = 1 ; if (r<0.0) sgn = -1
   rs = abs(r)
   if (rs > abs(max_mag_term)) max_mag_term = r
+
+  ! Abort if the number has no EFP representation
+  if (rs > max_efp_float) then
+    overflow_error = .true.
+    return
+  endif
 
   do i=1,ni
     ival = int(rs*I_pr(i), 8)
