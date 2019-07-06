@@ -2010,13 +2010,12 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "bottom drag drives BBL diffusion.  This is only "//&
                  "used if BOTTOMDRAGLAW is true.", units="nondim", default=0.20)
     call get_param(param_file, mdl, "BBL_MIXING_MAX_DECAY", decay_length, &
-                 "The maximum decay scale for the BBL diffusion, or 0 "//&
-                 "to allow the mixing to penetrate as far as "//&
-                 "stratification and rotation permit.  The default is 0. "//&
-                 "This is only used if BOTTOMDRAGLAW is true.", &
-                 units="m", default=0.0, scale=US%m_to_Z)
+                 "The maximum decay scale for the BBL diffusion, or 0 to allow the mixing "//&
+                 "to penetrate as far as stratification and rotation permit.  The default "//&
+                 "for now is 200 m. This is only used if BOTTOMDRAGLAW is true.", &
+                 units="m", default=200.0, scale=US%m_to_Z)
 
-    CS%IMax_decay = 1.0 / (200.0*US%m_to_Z)  !### This is inconsistent with the description above.
+    CS%IMax_decay = 0.0
     if (decay_length > 0.0) CS%IMax_decay = 1.0/decay_length
     call get_param(param_file, mdl, "BBL_MIXING_AS_MAX", CS%BBL_mixing_as_max, &
                  "If true, take the maximum of the diffusivity from the "//&
