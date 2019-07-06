@@ -18,13 +18,14 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public set_opacity, opacity_init, opacity_end, opacity_manizza, opacity_morel
+public extract_optics_slice, extract_optics_fields, optics_nbands
 public absorbRemainingSW, sumSWoverBands
 
 !> This type is used to exchange information about ocean optical properties
 type, public :: optics_type
   ! ocean optical properties
 
-  integer :: nbands    !< number of penetrating bands of SW radiation
+  integer :: nbands    !< The number of penetrating bands of SW radiation
 
   real, pointer, dimension(:,:,:,:) :: opacity_band => NULL() !< SW optical depth per unit thickness [m-1]
                             !! The number of radiation bands is most rapidly varying (first) index.
@@ -428,6 +429,62 @@ function opacity_manizza(chl_data)
   opacity_manizza = 0.0232 + 0.074*chl_data**0.674
 end function
 
+!> This subroutine returns a 2-d slice at constant j of fields from an optics_type, with the potential
+!! for rescaling these fields.
+subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_top, penSW_scale)
+  type(optics_type),       intent(in)  :: optics !< An optics structure that has values of opacities
+                                                 !! and shortwave fluxes.
+  integer,                 intent(in)    :: j      !< j-index to extract
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)), &
+                optional, intent(out) :: opacity   !< The opacity in each band, i-point, and layer
+  real, optional,         intent(in)  :: opacity_scale !< A factor by which to rescale the opacity.
+  real, dimension(max(optics%nbands,1),SZI_(G)), &
+                optional, intent(out) :: penSW_top !< The shortwave radiation [W m-2] at the surface
+                            !! in each of the nbands bands that penetrates beyond the surface.
+  real, optional,         intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux.
+
+  ! Local variables
+  real :: scale_opacity, scale_penSW ! Rescaling factors
+  integer :: i, is, ie, k, nz, n
+  is = G%isc ; ie = G%iec ; nz = G%ke
+
+  scale_opacity = 1.0 ; if (present(opacity_scale)) scale_opacity = opacity_scale
+  scale_penSW = 1.0 ; if (present(penSW_scale)) scale_penSW = penSW_scale
+
+  if (present(opacity)) then ; do k=1,nz ; do i=is,ie
+    do n=1,optics%nbands
+      opacity(n,i,k) = scale_opacity * optics%opacity_band(n,i,j,k)
+    enddo
+  enddo ; enddo ; endif
+
+  if (present(penSW_top)) then ; do k=1,nz ; do i=is,ie
+    do n=1,optics%nbands
+      penSW_top(n,i) = scale_penSW * optics%SW_pen_band(n,i,j)
+    enddo
+  enddo ; enddo ; endif
+
+end subroutine extract_optics_slice
+
+!> Set arguments to fields from the optics type.
+subroutine extract_optics_fields(optics, nbands)
+  type(optics_type),       intent(in)  :: optics !< An optics structure that has values of opacities
+                                                 !! and shortwave fluxes.
+  integer, optional,       intent(out) :: nbands !< The number of penetrating bands of SW radiation
+
+  if (present(nbands)) nbands = optics%nbands
+
+end subroutine extract_optics_fields
+
+!> Return the number of bands of penetrating shortwave radiation.
+function optics_nbands(optics)
+  type(optics_type),       intent(in)  :: optics !< An optics structure that has values of opacities
+                                                 !! and shortwave fluxes.
+  integer :: optics_nbands !< The number of penetrating bands of SW radiation
+
+  optics_nbands = optics%nbands
+end function optics_nbands
 
 !> Apply shortwave heating below the boundary layer (when running with the bulk mixed layer inhereted
 !! from GOLD) or throughout the water column.
@@ -692,7 +749,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, j, dt, H_limit_flu
 end subroutine absorbRemainingSW
 
 
-subroutine sumSWoverBands(G, GV, US, h, opacity_band, nsw, j, dt, &
+subroutine sumSWoverBands(G, GV, US, h, optics, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
 !< This subroutine calculates the total shortwave heat flux integrated over
 !! bands as a function of depth.  This routine is only called for computing
@@ -702,11 +759,8 @@ subroutine sumSWoverBands(G, GV, US, h, opacity_band, nsw, j, dt, &
   type(unit_scale_type),    intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZK_(G)), &
                             intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(:,:,:),   intent(in)    :: opacity_band !< opacity in each band of
-                                                 !! penetrating shortwave radiation [m-1].
-                                                 !! The indicies are band, i, k.
-  integer,                  intent(in)    :: nsw !< number of bands of penetrating
-                                                 !! shortwave radiation.
+  type(optics_type),        intent(in)    :: optics !< An optics structure that has values
+                                                   !! set based on the opacities.
   integer,                  intent(in)    :: j   !< j-index to work on.
   real,                     intent(in)    :: dt  !< Time step [T ~> s].
   real,                     intent(in)    :: H_limit_fluxes !< the total depth at which the
@@ -743,11 +797,11 @@ subroutine sumSWoverBands(G, GV, US, h, opacity_band, nsw, j, dt, &
   logical :: SW_Remains   ! If true, some column has shortwave radiation that
                           ! was not entirely absorbed.
 
-  integer :: is, ie, nz, i, k, ks, n
+  integer :: is, ie, nz, i, k, ks, n, nsw
   SW_Remains = .false.
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = G%ke ; nsw = optics%nbands
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
@@ -763,7 +817,7 @@ subroutine sumSWoverBands(G, GV, US, h, opacity_band, nsw, j, dt, &
       if (h(i,k) > 0.0) then
         do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
           ! SW_trans is the SW that is transmitted THROUGH the layer
-          opt_depth = h(i,k)*GV%H_to_m * opacity_band(n,i,k)
+          opt_depth = h(i,k)*GV%H_to_m * optics%opacity_band(n,i,j,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
 

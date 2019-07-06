@@ -16,7 +16,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher
-use MOM_opacity,       only : set_opacity, opacity_CS
+use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, extract_optics_fields
 use MOM_opacity,       only : absorbRemainingSW, optics_type, sumSWoverBands
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
@@ -927,7 +927,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
 
 #define _OLD_ALG_
   dt_in_T = dt * US%s_to_T
-  nsw = optics%nbands
+  call extract_optics_fields(optics, nbands=nsw)
   Idt = 1.0/dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
@@ -977,10 +977,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     do k=1,nz ; do i=is,ie
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
-      do n=1,nsw
-        opacityBand(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band(n,i,j,k)
-      enddo
     enddo ; enddo
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
 
     if (calculate_energetics) then
       ! The partial derivatives of specific volume with temperature and
@@ -1329,8 +1327,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
       netPen(:,:) = 0.0
       ! Sum over bands and attenuate as a function of depth
       ! netPen is the netSW as a function of depth
-      call sumSWoverBands(G, GV, US, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt_in_T, &
-           H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
+      call sumSWoverBands(G, GV, US, h2d(:,:), optics, j, dt_in_T, &
+                          H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
            dRhodT, dRhodS, start, npts, tv%eqn_of_state)

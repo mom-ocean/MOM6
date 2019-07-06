@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : extractFluxes1d, forcing
 use MOM_grid,          only : ocean_grid_type
-use MOM_opacity,       only : absorbRemainingSW, optics_type
+use MOM_opacity,       only : absorbRemainingSW, optics_type, extract_optics_slice
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -454,10 +454,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
       h_orig(i,k) = h_3d(i,j,k)
       eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom_H
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
-      do n=1,nsw
-        opacity_band(n,i,k) = GV%H_to_m*optics%opacity_band(n,i,j,k)
-      enddo
     enddo ; enddo
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacity_band, opacity_scale=GV%H_to_m)
 
     do k=1,nz ; do i=is,ie
       d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0

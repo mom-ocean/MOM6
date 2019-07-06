@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_EOS,           only : calculate_density_derivs
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_opacity,       only : sumSWoverBands, optics_type
+use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
 use MOM_spatial_means, only : global_area_integral, global_area_mean
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface, thermo_var_ptrs
@@ -444,7 +444,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
   ! error checking
 
-  if (nsw > 0) then ; if (nsw /= optics%nbands) call MOM_error(WARNING, &
+  if (nsw > 0) then ; if (nsw /= optics_nbands(optics)) call MOM_error(WARNING, &
     "mismatch in the number of bands of shortwave radiation in MOM_forcing_type extract_fluxes.")
   endif
 
@@ -473,18 +473,22 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   do i=is,ie ; htot(i) = h(i,1) ; enddo
   do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,k) ; enddo ; enddo
 
+  if (nsw >= 1) then
+    call extract_optics_slice(optics, j, G, GV, penSW_top=Pen_SW_bnd) !, penSW_scale=J_m2_to_H*dt
+    if (do_PSWBR) call extract_optics_slice(optics, j, G, GV, penSW_top=Pen_SW_bnd_rate) !, penSW_scale=J_m2_to_H
+  endif
 
   do i=is,ie
 
     scale = 1.0
     if (htot(i)*Ih_limit < 1.0) scale = htot(i)*Ih_limit
 
-    ! Convert the penetrating shortwave forcing to (K * H)
+    ! Convert the penetrating shortwave forcing to (K * H) and reduce fluxes for shallow depths.
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
     Pen_sw_tot(i) = 0.0
     if (nsw >= 1) then
-      do n=1,nsw
-        Pen_SW_bnd(n,i) = J_m2_to_H*scale*dt * max(0.0, optics%sw_pen_band(n,i,j))
+     do n=1,nsw
+        Pen_SW_bnd(n,i) = J_m2_to_H*scale*dt * max(0.0, Pen_SW_bnd(n,i))
         Pen_sw_tot(i)   = Pen_sw_tot(i) + Pen_SW_bnd(n,i)
       enddo
     else
@@ -495,7 +499,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       pen_sw_tot_rate(i) = 0.0
       if (nsw >= 1) then
         do n=1,nsw
-          Pen_SW_bnd_rate(n,i) = J_m2_to_H*scale * max(0.0, optics%sw_pen_band(n,i,j))
+          Pen_SW_bnd_rate(n,i) = J_m2_to_H*scale * max(0.0, Pen_SW_bnd_rate(n,i))
           pen_sw_tot_rate(i) = pen_sw_tot_rate(i) + pen_sw_bnd_rate(n,i)
         enddo
       else
@@ -900,7 +904,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   real    :: depthBeforeScalingFluxes, GoRho
   real    :: H_limit_fluxes
 
-  nsw = optics%nbands
+  nsw = optics_nbands(optics)
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
@@ -928,7 +932,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
-  call sumSWoverBands(G, GV, US, h(:,j,:), optics%opacity_band(:,:,j,:), nsw, j, dt*US%s_to_T, &
+  call sumSWoverBands(G, GV, US, h(:,j,:), optics, j, dt*US%s_to_T, &
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
