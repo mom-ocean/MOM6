@@ -921,22 +921,23 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! ea and eb. We keep a record of the original h in hold.
   ! In the following, the checks for negative values are to guard against
   ! instances where entrainment drives a layer to negative thickness.
-  ! ### This code is probably unnecessary, but will change answers?
+  !### This code may be unnecessary, but the negative-thickness checks do appear to change
+  !    answers slightly in some cases.
   if (CS%use_legacy_diabatic) then
     !$OMP parallel do default(shared)
     do j=js,je
       do i=is,ie
         hold(i,j,1) = h(i,j,1)
-        h(i,j,1) = h(i,j,1) + (eb_s(i,j,1) - ea_s(i,j,2))
+   ! Does nothing with ALE:  h(i,j,1) = h(i,j,1) + (eb_s(i,j,1) - ea_s(i,j,2))
         hold(i,j,nz) = h(i,j,nz)
-        h(i,j,nz) = h(i,j,nz) + (ea_s(i,j,nz) - eb_s(i,j,nz-1))
+   ! Does nothing with ALE:  h(i,j,nz) = h(i,j,nz) + (ea_s(i,j,nz) - eb_s(i,j,nz-1))
         if (h(i,j,1) <= 0.0) h(i,j,1) = GV%Angstrom_H
         if (h(i,j,nz) <= 0.0) h(i,j,nz) = GV%Angstrom_H
       enddo
       do k=2,nz-1 ; do i=is,ie
         hold(i,j,k) = h(i,j,k)
-        h(i,j,k) = h(i,j,k) + ((ea_s(i,j,k) - eb_s(i,j,k-1)) + &
-                      (eb_s(i,j,k) - ea_s(i,j,k+1)))
+   ! Does nothing with ALE:  h(i,j,k) = h(i,j,k) + ((ea_s(i,j,k) - eb_s(i,j,k-1)) + &
+   !                                                (eb_s(i,j,k) - ea_s(i,j,k+1)))
         if (h(i,j,k) <= 0.0) h(i,j,k) = GV%Angstrom_H
       enddo ; enddo
     enddo
@@ -3723,7 +3724,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     call get_param(param_file, mdl, "PEN_SW_NBANDS", nbands, default=1)
     if (nbands > 0) then
       allocate(CS%optics)
-      call opacity_init(Time, G, param_file, diag, CS%opacity_CSp, CS%optics)
+      call opacity_init(Time, G, GV, US, param_file, diag, CS%opacity_CSp, CS%optics)
     endif
   endif
 

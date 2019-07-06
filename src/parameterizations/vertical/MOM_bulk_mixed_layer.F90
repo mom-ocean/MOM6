@@ -568,8 +568,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
                                 cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
                                 Idecay_len_TKE, j, ksort, G, GV, US, CS)
 
-    call absorbRemainingSW(G, GV, US, h(:,1:), opacity_band, nsw, j, dt_in_T, CS%H_limit_fluxes, &
-                           CS%correct_absorption, CS%absorb_all_SW, &
+    call absorbRemainingSW(G, GV, US, h(:,1:), opacity_band, nsw, optics, j, dt_in_T, &
+                           CS%H_limit_fluxes, CS%correct_absorption, CS%absorb_all_SW, &
                            T(:,1:), Pen_SW_bnd, eps, ksort, htot, Ttot)
 
     if (CS%TKE_diagnostics) then ; do i=is,ie

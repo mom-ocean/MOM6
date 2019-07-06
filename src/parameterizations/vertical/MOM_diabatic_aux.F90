@@ -1202,14 +1202,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
           if (h2d(i,k) > 0.) then
             if (calculate_energetics) then
-              ! Calculate the energy required to mix the newly added water over
-              ! the topmost grid cell, assuming that the fluxes of heat and salt
-              ! and rejected brine are initially applied in vanishingly thin
-              ! layers at the top of the layer before being mixed throughout
-              ! the layer.  Note that dThickness is always <= 0. ###CHECK THE SIGNS!!!
+              ! Calculate the energy required to mix the newly added water over the topmost grid
+              ! cell, assuming that the fluxes of heat and salt and rejected brine are initially
+              ! applied in vanishingly thin layers at the top of the layer before being mixed
+              ! throughout the layer.  Note that dThickness is always <= 0 here, and that
+              ! negative cTKE is a deficit that will need to be filled later.
               cTKE(i,j,k) = cTKE(i,j,k) - (0.5*h2d(i,k)*g_Hconv2) * &
-                 ((dTemp - dthickness*T2d(i,k)) * dSV_dT(i,j,k) + &
-                  (dSalt - dthickness*tv%S(i,j,k)) * dSV_dS(i,j,k))
+                            ((dTemp - dthickness*T2d(i,k)) * dSV_dT(i,j,k) + &
+                             (dSalt - dthickness*tv%S(i,j,k)) * dSV_dS(i,j,k))
             endif
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
             T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
@@ -1273,14 +1273,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     endif
 
     if (calculate_energetics) then
-      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, j, dt_in_T, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
         cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
-      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, j, dt_in_T, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd)
     endif
 
