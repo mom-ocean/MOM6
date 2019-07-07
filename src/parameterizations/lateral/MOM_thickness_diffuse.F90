@@ -215,7 +215,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (CS%MEKE_GEOMETRIC) then
       do j=js,je ; do I=is-1,ie
-        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) +  G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
+        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + &
+                          G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
                           (VarMix%SN_u(I,j) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
@@ -293,8 +294,9 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (CS%MEKE_GEOMETRIC) then
       do j=js-1,je ; do I=is,ie
-        Khth_Loc(I,j) = Khth_Loc(I,j) +  G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
-                     (VarMix%SN_v(i,J) + CS%MEKE_GEOMETRIC_epsilon)
+        Khth_Loc(I,j) = Khth_Loc(I,j) + &
+                        G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
+                        (VarMix%SN_v(i,J) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
       do J=js-1,je ; do i=is,ie
@@ -525,12 +527,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   type(MEKE_type),                             pointer     :: MEKE   !< MEKE control structure
   type(thickness_diffuse_CS),                  pointer     :: CS     !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: int_slope_u !< Ratio that determine how much of
-                                                                     !! the isopycnal slopes are taken directly from the
-                                                                     !! interface slopes without consideration of
+                                                                     !! the isopycnal slopes are taken directly from
+                                                                     !! the interface slopes without consideration of
                                                                      !! density gradients.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), optional, intent(in)  :: int_slope_v !< Ratio that determine how much of
-                                                                     !! the isopycnal slopes are taken directly from the
-                                                                     !! interface slopes without consideration of
+                                                                     !! the isopycnal slopes are taken directly from
+                                                                     !! the interface slopes without consideration of
                                                                      !! density gradients.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: slope_x !< Isopycnal slope at u-points
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), optional, intent(in)  :: slope_y !< Isopycnal slope at v-points
@@ -1344,13 +1346,13 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   real,                                        intent(in)    :: dt   !< Time increment [s]
   type(thickness_diffuse_CS),                  pointer       :: CS   !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: int_slope_u !< Ratio that determine how much of
-                                                                     !! the isopycnal slopes are taken directly from the
-                                                                     !! interface slopes without consideration of
-                                                                     !! density gradients.
+                                                                     !! the isopycnal slopes are taken directly from
+                                                                     !! the interface slopes without consideration
+                                                                     !! of density gradients.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: int_slope_v !< Ratio that determine how much of
-                                                                     !! the isopycnal slopes are taken directly from the
-                                                                     !! interface slopes without consideration of
-                                                                     !! density gradients.
+                                                                     !! the isopycnal slopes are taken directly from
+                                                                     !! the interface slopes without consideration
+                                                                     !! of density gradients.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     de_top     ! The distances between the top of a layer and the top of the
