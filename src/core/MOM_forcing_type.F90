@@ -50,9 +50,9 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    ustar         => NULL(), & !< surface friction velocity scale [Z s-1 ~> m s-1].
+    ustar         => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     ustar_gustless => NULL()   !< surface friction velocity scale without any
-                               !! any augmentation for gustiness [Z s-1 ~> m s-1].
+                               !! any augmentation for gustiness [Z T-1 ~> m s-1].
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
@@ -131,16 +131,16 @@ type, public :: forcing
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
     TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer [W m-2]
-    ustar_tidal   => NULL()    !< tidal contribution to bottom ustar [m s-1]
+    ustar_tidal   => NULL()    !< tidal contribution to bottom ustar [Z T-1 ~> m s-1]
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
-    ustar_berg => NULL(), &   !< iceberg contribution to top ustar [Z s-1 ~> m s-1].
+    ustar_berg => NULL(), &   !< iceberg contribution to top ustar [Z T-1 ~> m s-1].
     area_berg  => NULL(), &   !< area of ocean surface covered by icebergs [m2 m-2]
     mass_berg  => NULL()      !< mass of icebergs [kg m-2]
 
   ! land ice-shelf related inputs
-  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves [Z s-1 ~> m s-1].
+  real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves [Z T-1 ~> m s-1].
                                  !! as computed by the ocean at the previous time step.
   real, pointer, dimension(:,:) :: frac_shelf_h => NULL() !< Fractional ice shelf coverage of
                                  !! h-cells, nondimensional from 0 to 1. This is only
@@ -187,7 +187,7 @@ type, public :: mech_forcing
   real, pointer, dimension(:,:) :: &
     taux  => NULL(), & !< zonal wind stress [Pa]
     tauy  => NULL(), & !< meridional wind stress [Pa]
-    ustar => NULL(), & !< surface friction velocity scale [Z s-1 ~> m s-1].
+    ustar => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     net_mass_src => NULL() !< The net mass source to the ocean [kg m-2 s-1].
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
@@ -1013,7 +1013,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI, haloshift=hshift, scale=US%Z_to_m)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%buoy)) &
     call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
   if (associated(fluxes%sw)) &
@@ -1057,7 +1057,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%TKE_tidal)) &
     call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%ustar_tidal)) &
-    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift)
+    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%lrunoff)) &
     call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%frunoff)) &
@@ -1100,7 +1100,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
   if (associated(forces%ustar)) &
-    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m)
+    call hchksum(forces%ustar, mesg//" forces%ustar",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
     call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
                   forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true.)
@@ -1222,12 +1222,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
-      'm s-1', conversion=US%Z_to_m)
+      'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   if (present(use_berg_fluxes)) then
     if (use_berg_fluxes) then
       handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
-          'Friction velocity below iceberg ', 'm s-1', conversion=US%Z_to_m)
+          'Friction velocity below iceberg ', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
       handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
           'Area of grid cell covered by iceberg ', 'm2 m-2')
@@ -1236,7 +1236,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
           'Mass of icebergs ', 'kg m-2')
 
       handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
-          'Friction velocity below iceberg and ice shelf together', 'm s-1', conversion=US%Z_to_m)
+          'Friction velocity below iceberg and ice shelf together', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
       handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
           'Area of grid cell below iceberg and ice shelf together ', 'm2 m-2')
@@ -2076,7 +2076,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      fluxes%ustar_gustless(i,j) = US%m_to_Z * sqrt(sqrt(taux2 + tauy2) / Rho0)
+      fluxes%ustar_gustless(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(taux2 + tauy2) / Rho0)
 !### Change to:
 !      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo

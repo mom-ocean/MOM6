@@ -293,7 +293,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
 
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
-      fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
+      fluxes%ustar_tidal(i,j) = US%m_to_Z*US%T_to_s*CS%ustar_tidal(i,j)
     enddo ; enddo
 
     if (CS%restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
@@ -418,7 +418,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%ustar_berg)) &
-      fluxes%ustar_berg(i,j) = US%m_to_Z * IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+      fluxes%ustar_berg(i,j) = US%m_to_Z*US%T_to_s * IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (associated(IOB%area_berg)) &
       fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
@@ -586,7 +586,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   real, dimension(SZI_(G),SZJ_(G)) :: &
     rigidity_at_h, &  ! Ice rigidity at tracer points [m3 s-1]
     net_mass_src, &   ! A temporary of net mass sources [kg m-2 s-1].
-    ustar_tmp         ! A temporary array of ustar values [m s-1].
+    ustar_tmp         ! A temporary array of ustar values [Z T-1 ~> m s-1].
 
   real :: I_GEarth      ! 1.0 / G%G_Earth [s2 m-1]
   real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) [m5 s-1 kg-1]
@@ -806,10 +806,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(inout) :: tauy !< The meridional wind stresses on a C-grid [Pa].
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(inout) :: ustar !< The surface friction velocity [Z s-1 ~> m s-1].
+                 optional, intent(inout) :: ustar !< The surface friction velocity [Z T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: gustless_ustar !< The surface friction velocity without
-                                                 !! any contributions from gustiness [Z s-1 ~> m s-1].
+                                                 !! any contributions from gustiness [Z T-1 ~> m s-1].
   integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables
@@ -821,7 +821,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZIB_(G),SZJB_(G)) :: tauy_in_B ! Meridional wind stresses [Pa] at q points
 
   real :: gustiness     ! unresolved gustiness that contributes to ustar [Pa]
-  real :: Irho0         ! Inverse of the mean density rescaled to [Z2 m kg-1 ~> m3 kg-1]
+  real :: Irho0         ! Inverse of the mean density rescaled to [Z2 s2 m T-2 kg-1 ~> m3 kg-1]
   real :: taux2, tauy2  ! squared wind stresses [Pa2]
   real :: tau_mag       ! magnitude of the wind stress [Pa]
 
@@ -835,7 +835,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   Isqh = G%IscB-halo ; Ieqh  = G%IecB+halo ; Jsqh = G%JscB-halo ; Jeqh = G%JecB+halo
   i0 = is - index_bounds(1) ; j0 = js - index_bounds(3)
 
-  Irho0 = US%m_to_Z**2 / CS%Rho0
+  Irho0 = (US%m_to_Z*US%T_to_s)**2 / CS%Rho0
 
   do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
 
@@ -950,7 +950,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
       if (do_gustless) then ; do j=js,je ; do i=is,ie
-        gustless_ustar(i,j) = US%m_to_Z * sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
+        gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
 !### Change to:
 !        gustless_ustar(i,j) = sqrt(Irho0 * IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
@@ -967,7 +967,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z * sqrt(tau_mag / CS%Rho0)
+        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
@@ -977,7 +977,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z * sqrt(tau_mag / CS%Rho0)
+        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
@@ -985,18 +985,18 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
       do j=js,je ; do i=is,ie
         taux2 = 0.0 ; tauy2 = 0.0
         if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
-          taux2 = (G%mask2dCu(I-1,j)*taux_in_C(I-1,j)**2 + &
-                   G%mask2dCu(I,j)*taux_in_C(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+          taux2 = (G%mask2dCu(I-1,j)*taux_in_C(I-1,j)**2 + G%mask2dCu(I,j)*taux_in_C(I,j)**2) / &
+                  (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
         if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
-          tauy2 = (G%mask2dCv(i,J-1)*tauy_in_C(i,J-1)**2 + &
-                   G%mask2dCv(i,J)*tauy_in_C(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+          tauy2 = (G%mask2dCv(i,J-1)*tauy_in_C(i,J-1)**2 + G%mask2dCv(i,J)*tauy_in_C(i,J)**2) / &
+                  (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
         tau_mag = sqrt(taux2 + tauy2)
 
         gustiness = CS%gust_const
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z * sqrt(tau_mag / CS%Rho0)
+        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
 !### Change to:
 !        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
       enddo ; enddo
@@ -1363,13 +1363,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
-      CS%ustar_tidal(i,j)=sqrt(CS%cd_tides)*utide
+      CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
     do j=jsd,jed; do i=isd,ied
       utide=CS%utide
       CS%TKE_tidal(i,j) = CS%Rho0*CS%cd_tides*(utide*utide*utide)
-      CS%ustar_tidal(i,j)=sqrt(CS%cd_tides)*utide
+      CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   endif
 

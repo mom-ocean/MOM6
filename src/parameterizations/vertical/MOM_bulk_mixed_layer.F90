@@ -673,12 +673,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
       ! as the third piece will then optimally describe mixed layer
       ! restratification.  For nkml>=4 the whole strategy should be revisited.
       do i=is,ie
-        kU_star = 0.41*US%T_to_s*fluxes%ustar(i,j) ! Maybe could be replaced with u*+w*?
+        kU_star = 0.41*fluxes%ustar(i,j) ! Maybe could be replaced with u*+w*?
         if (associated(fluxes%ustar_shelf) .and. &
             associated(fluxes%frac_shelf_h)) then
           if (fluxes%frac_shelf_h(i,j) > 0.0) &
             kU_star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
-                      fluxes%frac_shelf_h(i,j) * (0.41*US%T_to_s*fluxes%ustar_shelf(i,j))
+                      fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
         absf_x_H = 0.25 * GV%H_to_Z * h(i,0) * &
             ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -1378,11 +1378,11 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
   if (CS%omega_frac >= 1.0) absf = 2.0*CS%omega
   do i=is,ie
-    U_star = US%T_to_s*fluxes%ustar(i,j)
+    U_star = fluxes%ustar(i,j)
     if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
       if (fluxes%frac_shelf_h(i,j) > 0.0) &
         U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                  fluxes%frac_shelf_h(i,j) * US%T_to_s*fluxes%ustar_shelf(i,j)
+                  fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
     endif
 
     if (U_star < CS%ustar_min) U_star = CS%ustar_min

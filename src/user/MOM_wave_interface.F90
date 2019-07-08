@@ -483,7 +483,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
        intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
-       intent(in)    :: ustar !< Wind friction velocity [Z s-1 ~> m s-1].
+       intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
   ! Local Variables
   real    :: Top, MidPoint, Bottom, one_cm
   real    :: DecayScale
@@ -683,7 +683,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   do ii = G%isc,G%iec
     do jj = G%jsc, G%jec
       Top = h(ii,jj,1)*GV%H_to_Z
-      call get_Langmuir_Number( La, G, GV, US, Top, US%T_to_s*ustar(ii,jj), ii, jj, &
+      call get_Langmuir_Number( La, G, GV, US, Top, ustar(ii,jj), ii, jj, &
              H(ii,jj,:),Override_MA=.false.,WAVES=CS)
       CS%La_turb(ii,jj) = La
     enddo
@@ -700,7 +700,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     call post_data(CS%id_3dstokes_x, CS%us_x, CS%diag)
   if (CS%id_La_turb>0) &
     call post_data(CS%id_La_turb, CS%La_turb, CS%diag)
-  return
+
 end subroutine Update_Stokes_Drift
 
 !> A subroutine to fill the Stokes drift from a NetCDF file
