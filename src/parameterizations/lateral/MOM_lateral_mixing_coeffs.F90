@@ -180,7 +180,8 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
         call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
       else
         ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, &
+                        use_ebt_mode=.true.)
         call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
       endif
       call pass_var(CS%ebt_struct, G%Domain)
@@ -729,43 +730,51 @@ end subroutine calc_slope_functions_using_just_e
 !> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
 subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
   type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
-  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness (m or kg m-2)
-  integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  !< x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  !< y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
-  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vort_xy_dx !< x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
-!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity at h-points (m2 s-1)
-!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity at q-points (m2 s-1)
-!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity at h-points (m4 s-1)
-!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity at q-points (m4 s-1)
+! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [m s-1]
+! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
+  integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  !< x-derivative of horizontal divergence
+                                                                 !! (d/dx(du/dx + dv/dy)) [m-1 s-1]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  !< y-derivative of horizontal divergence
+                                                                 !! (d/dy(du/dx + dv/dy)) [m-1 s-1]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vort_xy_dx !< x-derivative of vertical vorticity
+                                                                 !! (d/dx(dv/dx - du/dy)) [m-1 s-1]
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
+                                                                 !! (d/dy(dv/dx - du/dy)) [m-1 s-1]
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
+                                                                 !! at h-points [m2 s-1]
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
+                                                                 !! at q-points [m2 s-1]
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity
+                                                                 !! at h-points [m4 s-1]
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity
+                                                                 !! at q-points [m4 s-1]
 
   ! Local variables
-!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
-!                                        dudy, & ! Meridional shear of zonal velocity (s-1)
-!                                        dvdx    ! Zonal shear of meridional velocity (s-1)
+!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) [s-1]
+!                                        dudy, & ! Meridional shear of zonal velocity [s-1]
+!                                        dvdx    ! Zonal shear of meridional velocity [s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
-!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
-    dslopey_dz, & ! z-derivative of y-slope at v-points (m-1)
-    h_at_v,     & ! Thickness at v-points (m or kg m-2)
-    beta_v,     & ! Beta at v-points (m-1 s-1)
-    grad_vort_mag_v, & ! mag. of vort. grad. at v-points (s-1)
-    grad_div_mag_v     ! mag. of div. grad. at v-points (s-1)
+!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [m-1 s-1]
+!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [m-1 s-1]
+    dslopey_dz, & ! z-derivative of y-slope at v-points [m-1]
+    h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
+    beta_v,     & ! Beta at v-points [m-1 s-1]
+    grad_vort_mag_v, & ! mag. of vort. grad. at v-points [s-1]
+    grad_div_mag_v     ! mag. of div. grad. at v-points [s-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
-!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [m-1 s-1]
+!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [m-1 s-1]
     dslopex_dz, & ! z-derivative of x-slope at u-points (m-1)
-    h_at_u,     & ! Thickness at u-points (m or kg m-2)
-    beta_u,     & ! Beta at u-points (m-1 s-1)
-    grad_vort_mag_u, & ! mag. of vort. grad. at u-points (s-1)
-    grad_div_mag_u     ! mag. of div. grad. at u-points (s-1)
-!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
+    h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
+    beta_u,     & ! Beta at u-points [m-1 s-1]
+    grad_vort_mag_u, & ! mag. of vort. grad. at u-points [s-1]
+    grad_div_mag_u     ! mag. of div. grad. at u-points [s-1]
+!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
 !  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
   real :: h_at_slope_above, h_at_slope_below, Ih, f
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
