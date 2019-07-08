@@ -646,7 +646,8 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
           if (nsw*Pen_SW_bnd(n,i) <= min_SW_heat * (I_Habs*(h(i,k) - h_min_heat))) then
             SW_trans = 0.0
           else
-            SW_trans = 1.0 - (min_SW_heat*(I_Habs*(h(i,k) - h_min_heat))) / (nsw*Pen_SW_bnd(n,i))
+            SW_trans = min(SW_trans, &
+                           1.0 - (min_SW_heat*(I_Habs*(h(i,k) - h_min_heat))) / (nsw*Pen_SW_bnd(n,i)))
           endif
         endif
 
@@ -854,7 +855,8 @@ subroutine sumSWoverBands(G, GV, US, h, optics, j, dt, &
             if (nsw*Pen_SW_bnd(n,i) <= min_SW_heat * (I_Habs*(h(i,k) - h_min_heat))) then
               SW_trans = 0.0
             else
-              SW_trans = 1.0 - (min_SW_heat*(I_Habs*(h(i,k) - h_min_heat))) / (nsw*Pen_SW_bnd(n,i))
+              SW_trans = min(SW_trans, &
+                             1.0 - (min_SW_heat*(I_Habs*(h(i,k) - h_min_heat))) / (nsw*Pen_SW_bnd(n,i)))
             endif
           endif
 
@@ -1023,15 +1025,11 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  "The number of bands of penetrating shortwave radiation.", &
                  default=1)
   if (CS%Opacity_scheme == DOUBLE_EXP ) then
-    if (optics%nbands /= 2) then
-      call MOM_error(FATAL, "set_opacity: "// &
-         "Cannot use a double_exp opacity scheme with nbands!=2.")
-    endif
+    if (optics%nbands /= 2) call MOM_error(FATAL, &
+        "set_opacity: \Cannot use a double_exp opacity scheme with nbands!=2.")
   elseif (CS%Opacity_scheme == SINGLE_EXP ) then
-    if (optics%nbands /= 1) then
-      call MOM_error(FATAL, "set_opacity: "// &
-         "Cannot use a single_exp opacity scheme with nbands!=1.")
-    endif
+    if (optics%nbands /= 1) call MOM_error(FATAL, &
+        "set_opacity: \Cannot use a single_exp opacity scheme with nbands!=1.")
   endif
 
   call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", optics%answers_2018, &
