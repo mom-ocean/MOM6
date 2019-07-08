@@ -101,8 +101,9 @@ type, public :: surface_forcing_CS ; private
 
   logical :: rigid_sea_ice      !< If true, sea-ice exerts a rigidity that acts to damp surface
                                 !! deflections (especially surface gravity waves).  The default is false.
+  real    :: G_Earth            !< Gravitational acceleration [m s-2]
   real    :: Kv_sea_ice         !< Viscosity in sea-ice that resists sheared vertical motions [m2 s-1]
-  real    :: density_sea_ice    !< Typical density of sea-ice (kg/m^3). The value is only used to convert
+  real    :: density_sea_ice    !< Typical density of sea-ice [kg m-3]. The value is only used to convert
                                 !! the ice pressure into appropriate units for use with Kv_sea_ice.
   real    :: rigid_sea_ice_mass !< A mass per unit area of sea-ice beyond which sea-ice viscosity
                                 !! becomes effective [kg m-2], typically of order 1000 kg m-2.
@@ -588,7 +589,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
     net_mass_src, &   ! A temporary of net mass sources [kg m-2 s-1].
     ustar_tmp         ! A temporary array of ustar values [Z T-1 ~> m s-1].
 
-  real :: I_GEarth      ! 1.0 / G%G_Earth [s2 m-1]
+  real :: I_GEarth      ! 1.0 / G_Earth [s2 m-1]
   real :: Kv_rho_ice    ! (CS%kv_sea_ice / CS%density_sea_ice) [m5 s-1 kg-1]
   real :: mass_ice      ! mass of sea ice at a face [kg m-2]
   real :: mass_eff      ! effective mass of sea ice for rigidity [kg m-2]
@@ -752,7 +753,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
 
   if (CS%rigid_sea_ice) then
     call pass_var(forces%p_surf_full, G%Domain, halo=1)
-    I_GEarth = 1.0 / G%G_Earth
+    I_GEarth = 1.0 / CS%G_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
     do I=is-1,ie ; do j=js,je
       mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
@@ -1375,9 +1376,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   call time_interp_external_init
 
-! Optionally read a x-y gustiness field in place of a global
-! constant.
-
+  ! Optionally read a x-y gustiness field in place of a global constant.
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
@@ -1400,6 +1399,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "nonhydrostatic pressure that resist vertical motion.", &
                  default=.false.)
   if (CS%rigid_sea_ice) then
+    call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &
+                 "The gravitational acceleration of the Earth.", &
+                 units="m s-2", default = 9.80)
     call get_param(param_file, mdl, "SEA_ICE_MEAN_DENSITY", CS%density_sea_ice, &
                  "A typical density of sea ice, used with the kinematic "//&
                  "viscosity, when USE_RIGID_SEA_ICE is true.", units="kg m-3", &
