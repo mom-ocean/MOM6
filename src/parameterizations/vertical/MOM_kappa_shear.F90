@@ -740,7 +740,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: b1            ! The inverse of the pivot in the tridiagonal equations.
   real :: bd1           ! A term in the denominator of b1.
   real :: d1            ! 1 - c1 in the tridiagonal equations.
-  real :: gR0           ! Rho_0 times g [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
+  real :: gR0           ! A conversion factor from Z to Pa equal to Rho_0 times g
+                        ! [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
   real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z m3 kg-1 T-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
@@ -788,7 +789,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 #endif
 
   Ri_crit = CS%Rino_crit
-  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = (GV%g_Earth*US%m_to_Z**2*US%T_to_s**2)/GV%Rho0
+  gR0 = GV%z_to_H*GV%H_to_Pa
+  g_R0 = (US%L_to_Z**2 * GV%LZT_g_Earth) / GV%Rho0
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?

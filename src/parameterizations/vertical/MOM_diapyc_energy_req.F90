@@ -199,7 +199,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     pres_Z, &   ! Interface pressures with a rescaling factor to convert interface height
                 ! movements into changes in column potential energy [J m-2 Z-1 ~> J m-3].
     z_Int, &    ! Interface heights relative to the surface [H ~> m or kg m-2].
-    N2, &       ! An estimate of the buoyancy frequency [s-2].
+    N2, &       ! An estimate of the buoyancy frequency [T-2 ~> s-2].
     Kddt_h, &   ! The diapycnal diffusivity times a timestep divided by the
                 ! average thicknesses around a layer [H ~> m or kg m-2].
     Kddt_h_a, & ! The value of Kddt_h for layers above the central point in the
@@ -941,7 +941,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((GV%g_Earth*US%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((US%L_to_Z**2*GV%LZT_g_Earth) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
@@ -952,7 +952,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((GV%g_Earth*US%m_to_Z**2) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((US%L_to_Z**2*GV%LZT_g_Earth) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
@@ -1334,9 +1334,9 @@ subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_Sf = register_diag_field('ocean_model', 'EnReqTest_Sf', diag%axesZL, Time, &
                  "Salinity after mixing", "g kg-1")
   CS%id_N2_0 = register_diag_field('ocean_model', 'EnReqTest_N2_0', diag%axesZi, Time, &
-                 "Squared buoyancy frequency before mixing", "second-2")
+                 "Squared buoyancy frequency before mixing", "second-2", conversion=US%s_to_T**2)
   CS%id_N2_f = register_diag_field('ocean_model', 'EnReqTest_N2_f', diag%axesZi, Time, &
-                 "Squared buoyancy frequency after mixing", "second-2")
+                 "Squared buoyancy frequency after mixing", "second-2", conversion=US%s_to_T**2)
 
 end subroutine diapyc_energy_req_init
 

@@ -141,7 +141,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
   call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true., scale=US%Z_to_m)
@@ -176,7 +176,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
   call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for layer 1.", &
                  units="kg m-3", default=GV%Rho0)
@@ -228,7 +228,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
                  "The initial salinities.", units="PSU", default=35.0)
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
   call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true., scale=US%Z_to_m)
@@ -273,7 +273,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
                  "The file from which the coordinate temperatures and "//&
                  "salinities are read.", fail_if_missing=.true.)
@@ -354,7 +354,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
 
   k_light = GV%nk_rho_varies + 1
 
@@ -401,7 +401,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
@@ -456,7 +456,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
                  units="kg m-3", default=2.0)
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
 
   ! This following sets the target layer densities such that a the
   ! surface interface has density Rlay_ref and the bottom
@@ -494,7 +494,7 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=(GV%g_Earth*US%m_to_Z), scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%Z_to_m)
 
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = 0. ; enddo

@@ -87,7 +87,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    N2_bot        ! The bottom squared buoyancy frequency [s-2].
+    N2_bot        ! The bottom squared buoyancy frequency [T-2 ~> s-2].
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     T_f, S_f      ! The temperature and salinity in [degC] and [ppt] with the values in
@@ -119,7 +119,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
-    itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
+    itide%Nb(i,j) = G%mask2dT(i,j) * US%s_to_T*sqrt(N2_bot(i,j))
     itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
   enddo ; enddo
 
@@ -128,7 +128,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
     avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
     if (time_end <= CS%time_max_source) then
       do j=js,je ; do i=is,ie
-        ! Input  an arbitrary energy point source.
+        ! Input  an arbitrary energy point source.id_
         if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
             ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
           itide%TKE_itidal_input(i,j) = 1.0
@@ -138,13 +138,13 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   endif
 
   if (CS%debug) then
-    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0)
+    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
     call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
   if (CS%id_Nb > 0) call post_data(CS%id_Nb, itide%Nb, CS%diag)
-  if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot,N2_bot,CS%diag)
+  if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot, N2_bot, CS%diag)
 
 end subroutine set_int_tide_input
 
@@ -181,11 +181,11 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
 
   real :: dz_int  ! The thickness associated with an interface [Z ~> m].
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density [Z m3 s-2 kg-1 ~> m4 s-2 kg-1].
+                  ! density [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (GV%g_Earth*US%m_to_Z**2) / GV%Rho0
+  G_Rho0 = (US%L_to_Z**2*GV%LZT_g_Earth) / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -415,7 +415,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
        'Bottom Buoyancy Frequency', 's-1')
 
   CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
-       'Bottom Buoyancy frequency squared', 's-2')
+       'Bottom Buoyancy frequency squared', 's-2', conversion=US%s_to_T**2)
 
 end subroutine int_tide_input_init
 

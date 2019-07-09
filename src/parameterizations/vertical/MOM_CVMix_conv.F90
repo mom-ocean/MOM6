@@ -168,10 +168,11 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl)
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers [m]
   integer :: kOBL                        !< level of OBL extent
-  real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
+  real :: g_o_rho0  ! Gravitational acceleration divided by density in MKS units [m4 s-2]
+  real :: pref, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
-  g_o_rho0 = (GV%g_Earth*US%m_to_Z) / GV%Rho0
+  g_o_rho0 = GV%mks_g_Earth / GV%Rho0
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0

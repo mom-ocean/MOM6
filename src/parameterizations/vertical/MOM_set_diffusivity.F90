@@ -687,10 +687,10 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   I_dt      = 1.0 / dt
   Omega2    = CS%omega**2
   H_neglect = GV%H_subroundoff
-  G_Rho0    = (GV%g_Earth * US%m_to_Z**2 * US%T_to_s**2) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%LZT_g_Earth) / GV%Rho0
   if (CS%answers_2018) then
     I_Rho0    = 1.0 / GV%Rho0
-    G_IRho0 = (GV%g_Earth * US%m_to_Z**2 * US%T_to_s**2) * I_Rho0
+    G_IRho0 = (US%L_to_Z**2 * GV%LZT_g_Earth) * I_Rho0
   else
     G_IRho0 = G_Rho0
   endif
@@ -736,11 +736,11 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
       enddo
     enddo
 
-    call set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
+    call set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   else ! not bulkmixedlayer
     kb_min = 2 ; kmb = 0
     do i=is,ie ; kb(i) = 1 ; enddo
-    call set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1)
+    call set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1)
   endif
 
   ! Determine maxEnt - the maximum permitted entrainment from below by each
@@ -882,7 +882,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = (GV%g_Earth*US%m_to_Z**2 * US%T_to_s**2) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%LZT_g_Earth) / GV%Rho0
   H_neglect = GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -1170,7 +1170,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
 
   I_Rho0 = 1.0/GV%Rho0
-  R0_g = GV%Rho0 / (US%m_to_Z**2 * US%T_to_s**2 * GV%g_Earth)
+  R0_g = GV%Rho0 / (US%L_to_Z**2 * GV%LZT_g_Earth)
 
   do K=2,nz ; Rint(K) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
 
@@ -1766,7 +1766,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
 
 end subroutine set_BBL_TKE
 
-subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
+subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   type(ocean_grid_type),            intent(in)   :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)   :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -1776,6 +1776,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
                                                        !! fields have NULL ptrs.
   integer, dimension(SZI_(G)),      intent(in)   :: kb !< Index of lightest layer denser than the buffer
                                                        !! layer, or -1 without a bulk mixed layer.
+  type(unit_scale_type),            intent(in)   :: US !< A dimensional unit scaling type
   type(set_diffusivity_CS),         pointer      :: CS !< Control structure returned by previous
                                                        !! call to diabatic_entrain_init.
   integer,                          intent(in)   :: j  !< Meridional index upon which to work.
@@ -1788,7 +1789,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
                                                        !! surface press [kg m-3].
 
   ! Local variables
-  real :: g_R0                     ! g_R0 is g/Rho [m5 Z-1 kg-1 s-2 ~> m4 kg-1 s-2]
+  real :: g_R0                     ! g_R0 is a rescaled version of g/Rho [m3 L2 Z-1 kg-1 T-2 ~> m4 kg-1 s-2]
   real :: eps, tmp                 ! nondimensional temproray variables
   real :: a(SZK_(G)), a_0(SZK_(G)) ! nondimensional temporary variables
   real :: p_ref(SZI_(G))           ! an array of tv%P_Ref pressures
@@ -1811,7 +1812,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
   enddo
 
   if (CS%bulkmixedlayer) then
-    g_R0 = GV%g_Earth/GV%Rho0
+    g_R0 = GV%LZT_g_Earth / GV%Rho0
     kmb = GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
@@ -1825,7 +1826,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
 ! interfaces above and below the buffer layer and the next denser layer.
         k = kb(i)
 
-        I_Drho = g_R0 / GV%g_prime(k+1)
+        I_Drho = (US%s_to_T**2*US%L_to_m**2*g_R0) / (GV%g_prime(k+1))
         ! The indexing convention for a is appropriate for the interfaces.
         do k3=1,kmb
           a(k3+1) = (GV%Rlay(k) - Rcv(i,k3)) * I_Drho

@@ -736,20 +736,20 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
   real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixedlayer depth [kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
-  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [s-2].
+  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [T-2 ~> s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
   logical, dimension(SZI_(G)) :: N2_region_set ! If true, all necessary values for calculating N2
                                                ! have been stored already.
-  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [m4 s-2 kg-1].
+  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
   real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
 
   id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
 
-  id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
+  id_SQ = -1 ; if (PRESENT(id_MLDsq)) id_SQ = id_MLDsq
 
-  gE_rho0 = US%m_to_Z**2 * GV%g_Earth / GV%Rho0
+  gE_rho0 = US%L_to_Z**2*GV%LZT_g_Earth / GV%Rho0
   dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -830,7 +830,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   enddo ! j-loop
 
   if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
-  if (id_N2 > 0)  call post_data(id_N2, subMLN2 , diagPtr)
+  if (id_N2 > 0)  call post_data(id_N2, subMLN2, diagPtr)
   if (id_SQ > 0)  call post_data(id_SQ, MLD2, diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
@@ -920,7 +920,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real    :: dt_in_T ! The time step converted to T units [T ~> s]
   real    :: g_Hconv2
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
-                      ! [Z m3 s-2 kg-1 ~> m4 s-2 kg-1]
+                      ! [Z3 m T-2 kg-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
   integer :: i, j, is, ie, js, je, k, nz, n
@@ -945,7 +945,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = GV%g_Earth / GV%Rho0
+    GoRho       = US%L_to_Z**2*GV%LZT_g_Earth / GV%Rho0
     start       = 1 + G%isc - G%isd
     npts        = 1 + G%iec - G%isc
   endif
@@ -1344,9 +1344,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
       do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%m_to_Z**2 * US%T_to_s**3 * ( &
-            dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
-            dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%T_to_s * &
+            (dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
+             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
       enddo
     endif
 

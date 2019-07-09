@@ -1949,7 +1949,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
-!  dG%g_Earth = (GV%g_Earth*US%m_to_Z)
+!  dG%g_Earth = GV%mks_g_Earth
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
@@ -2145,7 +2145,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
-  G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*US%m_to_Z)
+  G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, param_file, &
                             dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -2174,7 +2174,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
     else ; CS%G%Domain_aux => CS%G%Domain ;endif
-    G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*US%m_to_Z)
+    G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
   endif
 
 
@@ -2665,7 +2665,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
       else
         Rho_conv=GV%Rho0
       endif
-      IgR0 = 1.0 / (Rho_conv * (GV%g_Earth*US%m_to_Z))
+      IgR0 = 1.0 / (Rho_conv * GV%mks_g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif

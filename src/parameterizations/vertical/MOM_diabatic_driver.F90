@@ -3416,7 +3416,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_MLD_0125 = register_diag_field('ocean_model','MLD_0125',diag%axesT1,Time, &
         'Mixed layer depth (delta rho = 0.125)', 'm', conversion=US%Z_to_m)
     CS%id_subMLN2  = register_diag_field('ocean_model','subML_N2',diag%axesT1,Time, &
-        'Squared buoyancy frequency below mixed layer', 's-2')
+        'Squared buoyancy frequency below mixed layer', 's-2', conversion=US%s_to_T**2)
     CS%id_MLD_user = register_diag_field('ocean_model','MLD_user',diag%axesT1,Time, &
         'Mixed layer depth (used defined)', 'm', conversion=US%Z_to_m)
   endif

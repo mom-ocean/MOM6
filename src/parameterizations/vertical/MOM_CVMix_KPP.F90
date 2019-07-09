@@ -910,7 +910,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension( 3*G%ke )   :: Salt_1D
 
   real :: surfFricVel, surfBuoyFlux, Coriolis
-  real :: GoRho, pRef, rho1, rhoK, Uk, Vk, sigma, sigmaRatio
+  real :: GoRho  ! Gravitational acceleration divided by density in MKS units [m4 s-2]
+  real :: pRef, rho1, rhoK, Uk, Vk, sigma, sigmaRatio
 
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit [m]
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
@@ -946,7 +947,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 #endif
 
   ! some constants
-  GoRho = (GV%g_Earth*US%m_to_Z) / GV%Rho0
+  GoRho = GV%mks_g_Earth / GV%Rho0
 
   ! loop over horizontal points on processor
   !$OMP parallel do default(shared)

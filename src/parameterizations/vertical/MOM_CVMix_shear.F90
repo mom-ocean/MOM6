@@ -72,8 +72,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
                                                                  !! CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
-  real :: GoRho
-  real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
+  real :: GoRho  ! Gravitational acceleration divided by density in MKS units [m4 s-2]
+  real :: pref, DU, DV, dRho, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) :: Ri_Grad !< Gradient Richardson number
   real, dimension(G%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
@@ -81,7 +81,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real, parameter         :: epsln = 1.e-10 !< Threshold to identify vanished layers
 
   ! some constants
-  GoRho = (GV%g_Earth*US%m_to_Z) / GV%Rho0
+  GoRho = GV%mks_g_Earth / GV%Rho0
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
