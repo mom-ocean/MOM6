@@ -697,13 +697,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   endif
   forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
-  ! TODO: this does not seem correct for NEMS 
+  ! TODO: this does not seem correct for NEMS
 #ifdef CESMCOUPLED
   wind_stagger = AGRID
 #else
   wind_stagger = CS%wind_stagger
 #endif
-  
+
   if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
       (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
   if (wind_stagger == BGRID_NE) then
