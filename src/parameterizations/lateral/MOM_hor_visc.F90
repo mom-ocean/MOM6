@@ -270,7 +270,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_vort_mag_q_2d, & ! Magnitude of 2d vorticity gradient at q-points [m-1 s-1]
     grad_div_mag_q, &  ! Magnitude of divergence gradient at q-points [m-1 s-1]
     grad_vel_mag_q, &  ! Magnitude of the velocity gradient tensor squared at q-points [s-2]
-    hq, &  ! harmonic mean of the harmonic means of the u- & v point thicknesses, in H; This form guarantees that hq/hu < 4.
+    hq, &  ! harmonic mean of the harmonic means of the u- & v point thicknesses [H ~> m or kg m-2]
+           ! This form guarantees that hq/hu < 4.
     grad_vel_mag_bt_q  ! Magnitude of the barotropic velocity gradient tensor squared at q-points [s-2]
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
@@ -1904,8 +1905,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       if (CS%Smagorinsky_Ah) then
         CS%Biharm_const_xx(i,j) = Smag_bi_const * (grid_sp_h2 * grid_sp_h2)
         if (CS%bound_Coriolis) then
-          fmax = MAX(abs(G%CoriolisBu(I-1,J-1)), abs(G%CoriolisBu(I,J-1)), &
-                     abs(G%CoriolisBu(I-1,J)),   abs(G%CoriolisBu(I,J)))
+          fmax = US%s_to_T*MAX(abs(G%CoriolisBu(I-1,J-1)), abs(G%CoriolisBu(I,J-1)), &
+                               abs(G%CoriolisBu(I-1,J)),   abs(G%CoriolisBu(I,J)))
           CS%Biharm_const2_xx(i,j) = (grid_sp_h2 * grid_sp_h2 * grid_sp_h2) * &
                                      (fmax * BoundCorConst)
         endif
