@@ -1889,13 +1889,12 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
 
-  ! local variables
+  ! Local variables
   real :: decay_length
   logical :: ML_use_omega
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-
+  logical :: default_2018_answers
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
   real :: omega_frac_dflt
   integer :: i, j, is, ie, js, je
@@ -1934,10 +1933,13 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5, scale=US%T_to_s)
 
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
   call get_param(param_file, mdl, "SET_DIFF_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=.true.)
+                 "forms of the same expressions.", default=default_2018_answers)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&

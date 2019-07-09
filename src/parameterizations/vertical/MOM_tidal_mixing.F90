@@ -193,7 +193,6 @@ type, public :: tidal_mixing_cs
 end type tidal_mixing_cs
 
 !!@{ Coded parmameters for specifying mixing schemes
-character(len=40)         :: mdl = "MOM_tidal_mixing"     !< This module's name.
 character*(20), parameter :: STLAURENT_PROFILE_STRING   = "STLAURENT_02"
 character*(20), parameter :: POLZIN_PROFILE_STRING      = "POLZIN_09"
 integer,        parameter :: STLAURENT_02 = 1
@@ -218,6 +217,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Local variables
   logical :: read_tideamp
+  logical :: default_2018_answers
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
@@ -226,9 +226,9 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "tidal_mixing_init called when control structure "// &
@@ -263,10 +263,13 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   tidal_mixing_init = CS%int_tide_dissipation
   if (.not. tidal_mixing_init) return
 
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
   call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=.true.)
+                 "forms of the same expressions.", default=default_2018_answers)
 
   if (CS%int_tide_dissipation) then
 

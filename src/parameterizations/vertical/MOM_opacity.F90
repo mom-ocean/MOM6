@@ -927,6 +927,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   real :: PenSW_absorb_minthick ! A thickness that is used to absorb the remaining shortwave heat
                                 ! flux when that flux drops below PEN_SW_FLUX_ABSORB [m].
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
+  logical :: default_2018_answers
   logical :: use_scheme
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -1032,10 +1033,14 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
         "set_opacity: \Cannot use a single_exp opacity scheme with nbands!=1.")
   endif
 
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
   call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", optics%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated expressions for "//&
-                 "handling the absorpption of small remaining shortwave fluxes.", default=.true.)
+                 "handling the absorption of small remaining shortwave fluxes.", &
+                 default=default_2018_answers)
 
   call get_param(param_file, mdl, "PEN_SW_FLUX_ABSORB", optics%PenSW_flux_absorb, &
                  "A minimum remaining shortwave heating rate that will be simply absorbed in "//&

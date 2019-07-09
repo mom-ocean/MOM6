@@ -1969,6 +1969,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   real :: Z3_T3_to_m3_s3 ! A conversion factor for work diagnostics [m3 T3 Z-3 s-3 ~> nondim]
   integer :: isd, ied, jsd, jed
   integer :: mstar_mode, LT_enhance, wT_mode
+  logical :: default_2018_answers
   logical :: use_temperature, use_omega
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2008,10 +2009,13 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "A nondimensional scaling factor controlling the inhibition "//&
                  "of the diffusive length scale by rotation. Making this larger "//&
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
   call get_param(param_file, mdl, "EPBL_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=.true.)
+                 "forms of the same expressions.", default=default_2018_answers)
 
 
   call get_param(param_file, mdl, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc, &

@@ -1777,6 +1777,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                                                  !! structure for this module
   type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
+
   ! Local variables
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
@@ -1789,11 +1790,12 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                            ! representation in a restart file to the internal representation in this run.
   integer :: i, j, k, is, ie, js, je, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  logical :: default_2018_answers
   logical :: use_kappa_shear, adiabatic, use_omega
   logical :: use_CVMix_ddiff, differential_diffusion, use_KPP
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
 
   if (associated(CS)) then
@@ -1815,10 +1817,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call log_version(param_file, mdl, version, "")
   CS%RiNo_mix = .false. ; use_CVMix_ddiff = .false.
   differential_diffusion = .false.
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
   call get_param(param_file, mdl, "SET_VISC_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=.true.)
+                 "forms of the same expressions.", default=default_2018_answers)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
                  "law of the form c_drag*|u|*u. The velocity magnitude "//&
