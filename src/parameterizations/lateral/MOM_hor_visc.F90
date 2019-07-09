@@ -190,8 +190,8 @@ contains
 !!   u[is-2:ie+2,js-2:je+2]
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
-subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic, &
-                                thickness_diffuse, G, GV, US, CS, OBC)
+subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
+                                CS, OBC, BT)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -199,7 +199,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(in)  :: v      !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                                 intent(inout)  :: h      !< Layer thicknesses, in H
+                                 intent(inout)  :: h   !< Layer thicknesses, in H
                                                        !! (usually m or kg m-2).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
@@ -211,14 +211,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
                                                        !! specify the spatially variable viscosities
-  type(barotropic_CS),           pointer     :: Barotropic  !< Pointer to a structure containing
-                                                       !! barotropic velocities
-  type(thickness_diffuse_CS),    pointer     :: thickness_diffuse  !< Pointer to a structure containing
-                                                       !! interface height diffusivities
   type(hor_visc_CS),             pointer     :: CS     !< Control structure returned by a previous
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
                                                        !! call to hor_visc_init.
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
+  type(barotropic_CS),  optional, pointer    :: BT     !< Pointer to a structure containing
+                                                       !! barotropic velocities.
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -386,20 +384,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
   use_MEKE_Ku = associated(MEKE%Ku)
   use_MEKE_Au = associated(MEKE%Au)
 
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
-!$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
-!$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
-!$OMP                                  use_MEKE_Au, MEKE, hq,                         &
-!$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
-!$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &
-!$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
-!$OMP                                  sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
-!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
-!$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
-!$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
-!$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
-
   do j=js,je ; do i=is,ie
     boundary_mask(i,j) = (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
   enddo ; enddo
@@ -419,7 +403,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 !    call pass_var(boundary_mask, G%Domain, complete=.true.)
 
     ! Get barotropic velocities and their gradients
-    call barotropic_get_tav(Barotropic, ubtav, vbtav, G)
+    call barotropic_get_tav(BT, ubtav, vbtav, G)
     call pass_vector(ubtav, vbtav, G%Domain)
 
     do j=js,je ; do i=is,ie
@@ -480,6 +464,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, Barotropic,
 
   endif ! use_GME
 
+  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
+  !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
+  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
+  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
+  !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
+  !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
+  !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &
+  !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
+  !$OMP                                  sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
+  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
+  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
+  !$OMP                                  div_xx, div_xx_dx, div_xx_dy,local_strain,          &
+  !$OMP                                  Shear_mag, h2uq, h2vq, Kh_scale, hrat_min)
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal
@@ -1410,6 +1407,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   logical :: get_all       ! If true, read and log all parameters, regardless of
                            ! whether they are used, to enable spell-checking of
                            ! valid parameters.
+  logical :: split         ! If true, use the split time stepping scheme.
+                           ! If false and USE_GME = True, issue a FATAL error.
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1563,7 +1562,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                  "the grid spacing to calculate the biharmonic viscosity. \n"//&
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky and Leith viscosities, and AH.", &
-                 units="m s-1", default=0.1)
+                 units="m s-1", default=0.0)
     call get_param(param_file, mdl, "SMAGORINSKY_AH", CS%Smagorinsky_Ah, &
                  "If true, use a biharmonic Smagorinsky nonlinear eddy \n"//&
                  "viscosity.", default=.false.)
@@ -1641,6 +1640,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
+
+  if (CS%use_GME) then
+    call get_param(param_file, mdl, "SPLIT", split, &
+                 "Use the split time stepping if true.", default=.true., &
+                  do_not_log=.true.)
+    if (.not. split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
+                                           "cannot be used with SPLIT=False.")
+  endif
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mdl, "DT", dt, &

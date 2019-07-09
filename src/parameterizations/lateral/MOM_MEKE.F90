@@ -1420,9 +1420,13 @@ end subroutine MEKE_end
 !! \subsection section_MEKE_viscosity Viscosity derived from MEKE
 !!
 !! As for \f$ \kappa_M \f$, the predicted eddy velocity scale can be
-!! used to form an eddy viscosity:
+!! used to form a harmonic eddy viscosity,
 !!
-!! \f[  \kappa_u = \gamma_u \sqrt{ U_e^2 A_\Delta } . \f]
+!! \f[  \kappa_u = \gamma_u \sqrt{ U_e^2 A_\Delta }  \f]
+!!
+!! as well as a biharmonic eddy viscosity,
+!!
+!! \f[  \kappa_4 = \gamma_4 \sqrt{ U_e^2 A_\Delta^3 }  \f]
 !!
 !! \subsection section_MEKE_limit_case Limit cases for local source-dissipative balance
 !!
@@ -1459,7 +1463,8 @@ end subroutine MEKE_end
 !! | \f$ \kappa_4 \f$      | <code>MEKE_K4</code> |
 !! | \f$ \gamma_\kappa \f$ | <code>MEKE_KHCOEFF</code> |
 !! | \f$ \gamma_M \f$      | <code>MEKE_KHMEKE_FAC</code> |
-!! | \f$ \gamma_u \f$      | <code>MEKE_VISCOSITY_COEFF</code> |
+!! | \f$ \gamma_u \f$      | <code>MEKE_VISCOSITY_COEFF_KU</code> |
+!! | \f$ \gamma_4 \f$      | <code>MEKE_VISCOSITY_COEFF_AU</code> |
 !! | \f$ \gamma_{min}^2 \f$| <code>MEKE_MIN_GAMMA2</code> |
 !! | \f$ \alpha_d \f$      | <code>MEKE_ALPHA_DEFORM</code> |
 !! | \f$ \alpha_f \f$      | <code>MEKE_ALPHA_FRICT</code> |
