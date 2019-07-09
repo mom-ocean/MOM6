@@ -2,9 +2,9 @@ module MOM_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!### use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
-!### use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
-!### use MOM_controlled_forcing, only : ctrl_forcing_CS
+!#CTRL# use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
+!#CTRL# use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
+!#CTRL# use MOM_controlled_forcing, only : ctrl_forcing_CS
 use MOM_coms,             only : reproducing_sum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -127,6 +127,9 @@ type, public :: surface_forcing_CS ; private
   real    :: max_delta_srestore             !< Maximum delta salinity used for restoring
   real    :: max_delta_trestore             !< Maximum delta sst used for restoring
   real, pointer, dimension(:,:) :: basin_mask => NULL() !< Mask for surface salinity restoring by basin
+  logical :: answers_2018       !< If true, use the order of arithmetic and expressions that recover
+                                !! the answers from the end of 2018.  Otherwise, use a simpler
+                                !! expression to calculate gustiness.
 
   type(diag_ctrl), pointer :: diag => NULL()  !< Structure to regulate diagnostic output timing
   character(len=200) :: inputdir              !< Directory where NetCDF input files are
@@ -149,7 +152,7 @@ type, public :: surface_forcing_CS ; private
 
   type(forcing_diags), public :: handles !< Diagnostics handles
 
-!###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
+!#CTRL#  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
   type(user_revise_forcing_CS), pointer :: urf_CS => NULL() !< A control structure for user forcing revisions
 end type surface_forcing_CS
@@ -492,15 +495,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
     enddo ; enddo
   endif
 
-!### if (associated(CS%ctrl_forcing_CSp)) then
-!###   do j=js,je ; do i=is,ie
-!###     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
-!###     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
-!###     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
-!###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
-!###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
-!### endif
+!#CTRL# if (associated(CS%ctrl_forcing_CSp)) then
+!#CTRL#   do j=js,je ; do i=is,ie
+!#CTRL#     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
+!#CTRL#     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
+!#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
+!#CTRL#   enddo ; enddo
+!#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+!#CTRL#                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
+!#CTRL# endif
 
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
@@ -939,7 +942,6 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
     if (associated(IOB%stress_mag)) then
       if (do_ustar) then ; do j=js,je ; do i=is,ie
         gustiness = CS%gust_const
-        !### SIMPLIFY THE TREATMENT OF GUSTINESS!
         if (CS%read_gust_2d) then
           if ((wind_stagger == CGRID_NE) .or. &
               ((wind_stagger == AGRID) .and. (G%mask2dT(i,j) > 0)) .or. &
@@ -950,11 +952,15 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         endif
         ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
-      if (do_gustless) then ; do j=js,je ; do i=is,ie
-        gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
-!### Change to:
-!        gustless_ustar(i,j) = sqrt(Irho0 * IOB%stress_mag(i-i0,j-j0))
-      enddo ; enddo ; endif
+      if (CS%answers_2018) then
+        if (do_gustless) then ; do j=js,je ; do i=is,ie
+          gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
+        enddo ; enddo ; endif
+      else
+        if (do_gustless) then ; do j=js,je ; do i=is,ie
+          gustless_ustar(i,j) = sqrt(Irho0 * IOB%stress_mag(i-i0,j-j0))
+        enddo ; enddo ; endif
+      endif
     elseif (wind_stagger == BGRID_NE) then
       do j=js,je ; do i=is,ie
         tau_mag = 0.0 ; gustiness = CS%gust_const
@@ -968,9 +974,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
-!### Change to:
-!        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+        if (CS%answers_2018) then
+          if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
+        else
+          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+        endif
       enddo ; enddo
     elseif (wind_stagger == AGRID) then
       do j=js,je ; do i=is,ie
@@ -978,9 +986,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
-!### Change to:
-!        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+        if (CS%answers_2018) then
+          if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
+        else
+          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+        endif
       enddo ; enddo
     else  ! C-grid wind stresses.
       do j=js,je ; do i=is,ie
@@ -997,9 +1007,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
         if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
-        if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
-!### Change to:
-!        if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+        if (CS%answers_2018) then
+          if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
+        else
+          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+        endif
       enddo ; enddo
     endif ! endif for wind friction velocity fields
   endif
@@ -1145,10 +1157,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   real :: utide  ! The RMS tidal velocity [m s-1].
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
+  logical            :: default_2018_answers
   type(time_type)    :: Time_frc
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
   character(len=48)  :: flnam
@@ -1392,6 +1405,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     gust_file = trim(CS%inputdir) // trim(gust_file)
     call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1) ! units should be Pa
   endif
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the answers "//&
+                 "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
+                 default=default_2018_answers)
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &
@@ -1449,8 +1469,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
-!###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
-!###                                      CS%restart_CSp)
+!#CTRL#  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
+!#CTRL#                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)
 
   if (associated(CS%restart_CSp)) then
@@ -1465,7 +1485,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     endif
   endif
 
-!###  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
+!#CTRL#  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
 
   call user_revise_forcing_init(param_file, CS%urf_CS)
 
@@ -1483,7 +1503,7 @@ subroutine surface_forcing_end(CS, fluxes)
 
   if (present(fluxes)) call deallocate_forcing_type(fluxes)
 
-!###  call controlled_forcing_end(CS%ctrl_forcing_CSp)
+!#CTRL#  call controlled_forcing_end(CS%ctrl_forcing_CSp)
 
   if (associated(CS)) deallocate(CS)
   CS => NULL()
