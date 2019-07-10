@@ -50,7 +50,6 @@ type, public :: energetic_PBL_CS ; private
 
   !/ Mixing Length terms
   logical :: Use_MLD_iteration=.false. !< False to use old ePBL method.
-  logical :: Orig_MLD_iteration=.false. !< False to use old MLD value
   logical :: MLD_iteration_guess=.false. !< False to default to guessing half the
                              !! ocean depth for the iteration.
   integer :: max_MLD_its     !< The maximum number of iterations that can be used to find a
@@ -1411,36 +1410,17 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       ! the TKE threshold (ML_DEPTH).  This is because the MSTAR
       ! is now dependent on the ML, and therefore the ML needs to be estimated
       ! more precisely than the grid spacing.
-      if (CS%Orig_MLD_iteration) then
-        ! This is how the iteration was originally conducted
-        MLD_found = 0.0 ; FIRST_OBL = .true.
-        do k=2,nz
-          if (FIRST_OBL) then ! Breaks when OBL found
-            if ((mixvel(K) > 1.e-10*US%m_to_Z*US%T_to_s) .and. k < nz) then
-              MLD_found = MLD_found + h(k-1)*GV%H_to_Z
-            else
-              FIRST_OBL = .false.
-              if (MLD_found - CS%MLD_tol > MLD_guess) then
-                min_MLD = MLD_guess
-              elseif ((MLD_guess - MLD_found) < max(CS%MLD_tol, h(k-1)*GV%H_to_Z)) then
-                OBL_converged = .true. ! Break convergence loop
-              else
-                max_MLD = MLD_guess ! We know this guess was too deep
-              endif
-            endif
-          endif
-        enddo
+
+      !New method uses ML_DEPTH as computed in ePBL routine
+      MLD_found = MLD_output
+      if (MLD_found - CS%MLD_tol > MLD_guess) then
+        min_MLD = MLD_guess
+      elseif (abs(MLD_guess - MLD_found) < CS%MLD_tol) then
+        OBL_converged = .true. ! Break convergence loop
       else
-        !New method uses ML_DEPTH as computed in ePBL routine
-        MLD_found = MLD_output
-        if (MLD_found - CS%MLD_tol > MLD_guess) then
-          min_MLD = MLD_guess
-        elseif (abs(MLD_guess - MLD_found) < CS%MLD_tol) then
-          OBL_converged = .true. ! Break convergence loop
-        else
-          max_MLD = MLD_guess ! We know this guess was too deep
-        endif
+        max_MLD = MLD_guess ! We know this guess was too deep
       endif
+
       ! For next pass, guess average of minimum and maximum values.
       !### We should try using the false position method instead of simple bisection.
       MLD_guess = 0.5*(min_MLD + max_MLD)
@@ -2152,17 +2132,6 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "EPBL_TRANSITION should be greater than 0 and less than 1.")
   endif
 
-  !### Two test cases should be changed to allow this to be obsoleted.
-  call get_param(param_file, mdl, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION, &
-                 "A logical that specifies whether or not to use the "//&
-                 "old method for determining MLD depth in iteration, which "//&
-                 "is limited to resolution.", default=.true.)
-!  if (CS%Orig_MLD_Iteration) then
-!    call MOM_error(FATAL, "Flag ORIG_MLD_ITERATION error: "//&
-!                          "If you need to use this setting please "//&
-!                          "report this error, as the code supporting this option "//&
-!                          "is legacy code that is set to be deleted.")
-!  endif
   call get_param(param_file, mdl, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
                  "A logical that specifies whether or not to use the "//&
                  "previous timestep MLD as a first guess in the MLD iteration. "//&
