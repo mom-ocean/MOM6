@@ -1852,7 +1852,7 @@ subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langm
   real,                  intent(in)  :: UStar !< Surface friction velocity with? gustiness [Z T-1 ~> m s-1]
   real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
   real,                  intent(inout) :: Mstar !< Input/output mstar (Mixing/ustar**3) [nondim]
-  real,                  intent(in)  :: Langmuir_Number !Langmuir number [nondim]
+  real,                  intent(in)  :: Langmuir_Number !< Langmuir number [nondim]
   real,                  intent(out) :: MStar_LT !< Mstar increase due to Langmuir turbulence [nondim]
   real,                  intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
