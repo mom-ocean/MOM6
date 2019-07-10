@@ -505,17 +505,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
       net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j) + fluxes%seaice_melt(i,j)) + &
           (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
           (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
-      !   The following contribution appears to be calculating the volume flux of sea-ice
-      ! melt. This calculation is clearly WRONG if either sea-ice has variable
-      ! salinity or the sea-ice is completely fresh.
-      !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
-      ! is constant.
-      !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      ! GMM: as stated above, the following is wrong. CIME deals with volume/mass and
-      ! heat from sea ice/snow via seaice_melt and seaice_melt_heat, respectively.
-      !if (associated(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-      !    net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
-      !    (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
 
       net_FW2(i,j) = net_FW(i,j)/G%areaT(i,j)
     enddo; enddo
