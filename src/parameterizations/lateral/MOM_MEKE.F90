@@ -232,13 +232,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do j=js,je ; do I=is-1,ie
         drag_vel_u(I,j) = 0.0
         if ((G%mask2dCu(I,j) > 0.0) .and. (visc%bbl_thick_u(I,j) > 0.0)) &
-          drag_vel_u(I,j) = US%Z_to_m*visc%kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
+          drag_vel_u(I,j) = US%Z_to_m*US%s_to_T*visc%Kv_bbl_u(I,j) / visc%bbl_thick_u(I,j)
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
         if ((G%mask2dCv(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
-          drag_vel_v(i,J) = US%Z_to_m*visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
+          drag_vel_v(i,J) = US%Z_to_m*US%s_to_T*visc%Kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo
 
       !$OMP parallel do default(shared)
@@ -400,7 +400,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         K4_here = CS%MEKE_K4
         ! Limit Kh to avoid CFL violations.
         Inv_Kh_max = 64.0*sdt * (((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
-                     max(G%IareaT(i,j),G%IareaT(i+1,j))))**2.0
+                     max(G%IareaT(i,j),G%IareaT(i+1,j))))**2
         if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
         MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
@@ -411,7 +411,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do J=js-1,je ; do i=is,ie
         K4_here = CS%MEKE_K4
         Inv_Kh_max = 64.0*sdt * (((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
-                     max(G%IareaT(i,j),G%IareaT(i,j+1))))**2.0
+                     max(G%IareaT(i,j),G%IareaT(i,j+1))))**2
         if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
         MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &

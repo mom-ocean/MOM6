@@ -55,7 +55,6 @@ use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, updat
 use MOM_coord_initialization,  only : MOM_initialize_coord
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
-use MOM_diabatic_driver,       only : legacy_diabatic
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
@@ -204,8 +203,6 @@ type, public :: MOM_control_struct ; private
                     !! related to the Mesoscale Eddy Kinetic Energy
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
-  logical :: use_legacy_diabatic_driver!< If true (default), use the a legacy version of the diabatic
-                    !! subroutine. This is temporary and is needed to avoid change in answers.
   logical :: diabatic_first !< If true, apply diabatic and thermodynamic processes before time
                     !! stepping the dynamics.
   logical :: use_ALE_algorithm  !< If true, use the ALE algorithm rather than layered
@@ -1188,14 +1185,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     endif
 
     call cpu_clock_begin(id_clock_diabatic)
-    if (CS%use_legacy_diabatic_driver) then
-      ! the following subroutine is legacy and will be deleted in the near future.
-      call legacy_diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                           dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
-    else
-      call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                    dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
-    endif
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                  dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
@@ -1674,10 +1665,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "true. This assumes that KD = KDML = 0.0 and that "//&
                  "there is no buoyancy forcing, but makes the model "//&
                  "faster by eliminating subroutine calls.", default=.false.)
-  call get_param(param_file, "MOM", "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic_driver, &
-                 "If true, use a legacy version of the diabatic subroutine. "//&
-                 "This is temporary and is needed to avoid change in answers.", &
-                 default=.true.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as "//&
                  "the gravity wave adjustment to h. This is a fragile feature and "//&
@@ -1962,7 +1949,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
-!  dG%g_Earth = (GV%g_Earth*US%m_to_Z)
+!  dG%g_Earth = GV%mks_g_Earth
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
@@ -2158,7 +2145,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else ; G%Domain_aux => G%Domain ; endif
   ! Copy common variables from the vertical grid to the horizontal grid.
   ! Consider removing this later?
-  G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*US%m_to_Z)
+  G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, param_file, &
                             dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -2187,7 +2174,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%debug .or. CS%G%symmetric) then
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
     else ; CS%G%Domain_aux => CS%G%Domain ;endif
-    G%ke = GV%ke ; G%g_Earth = (GV%g_Earth*US%m_to_Z)
+    G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
   endif
 
 
@@ -2639,7 +2626,11 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, &
                               "Height unit conversion factor", "Z meter-1")
   call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, &
-                              "Thickness unit conversion factor", "Z meter-1")
+                              "Thickness unit conversion factor", "H meter-1")
+  call register_restart_field(US%m_to_Z_restart, "m_to_L", .false., restart_CSp, &
+                              "Length unit conversion factor", "L meter-1")
+  call register_restart_field(US%s_to_T_restart, "s_to_T", .false., restart_CSp, &
+                              "Time unit conversion factor", "T second-1")
 
 end subroutine set_restart_fields
 
@@ -2674,7 +2665,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
       else
         Rho_conv=GV%Rho0
       endif
-      IgR0 = 1.0 / (Rho_conv * (GV%g_Earth*US%m_to_Z))
+      IgR0 = 1.0 / (Rho_conv * GV%mks_g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif
