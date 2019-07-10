@@ -73,7 +73,7 @@ type, public :: Kappa_shear_CS ; private
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0 [m s-1].
+                             !! are set to 0 [Z T-1 ~> m s-1].
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -128,16 +128,17 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    h_2d, &                         ! A 2-D version of h, but converted to m.
-    u_2d, v_2d, T_2d, S_2d, rho_2d  ! 2-D versions of u_in, v_in, T, S, and rho.
+    h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
+    u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
+    T_2d, S_2d, rho_2d  ! 2-D versions of T, S, and rho.
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, & ! 2-D version of kappa_io [Z2 T-1 ~> m2 s-1].
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
   real, dimension(SZK_(GV)) :: &
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     dz, &       ! The layer thickness [Z ~> m].
-    u0xdz, &    ! The initial zonal velocity times dz [Z m s-1 ~> m2 s-1].
-    v0xdz, &    ! The initial meridional velocity times dz [Z m s-1 ~> m2 s-1].
+    u0xdz, &    ! The initial zonal velocity times dz [Z L T-1 ~> m2 s-1].
+    v0xdz, &    ! The initial meridional velocity times dz [Z L T-1 ~> m2 s-1].
     T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
     S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
@@ -188,7 +189,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   do j=js,je
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h(i,j,k)*GV%H_to_Z
-      u_2d(i,k) = u_in(i,j,k) ; v_2d(i,k) = v_in(i,j,k)
+      u_2d(i,k) = u_in(i,j,k)*US%m_s_to_L_T ; v_2d(i,k) = v_in(i,j,k)*US%m_s_to_L_T
     enddo ; enddo
     if (use_temperature) then ; do k=1,nz ; do i=is,ie
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
@@ -393,8 +394,9 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
   ! Local variables
   real, dimension(SZIB_(G),SZK_(GV)) :: &
-    h_2d, &                         ! A 2-D version of h, but converted to m.
-    u_2d, v_2d, T_2d, S_2d, rho_2d  ! 2-D versions of u_in, v_in, T, S, and rho.
+    h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
+    u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
+    T_2d, S_2d, rho_2d  ! 2-D versions of T, S, and rho.
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
     kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
@@ -402,8 +404,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZK_(GV)) :: &
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     dz, &       ! The layer thickness [Z ~> m].
-    u0xdz, &    ! The initial zonal velocity times dz [m Z s-1 ~> m2 s-1].
-    v0xdz, &    ! The initial meridional velocity times dz [m Z s-1 ~> m2 s-1].
+    u0xdz, &    ! The initial zonal velocity times dz [L Z T-1 ~> m2 s-1].
+    v0xdz, &    ! The initial meridional velocity times dz [L Z T-1 ~> m2 s-1].
     T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
     S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
@@ -460,11 +462,13 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
     ! Interpolate the various quantities to the corners, using masks.
     do k=1,nz ; do I=IsB,IeB
-      u_2d(I,k) = (u_in(I,j,k)   * (G%mask2dCu(I,j)   * (h(i,j,k)   + h(i+1,j,k))) + &
+      u_2d(I,k) = US%m_s_to_L_T * &
+                  (u_in(I,j,k)   * (G%mask2dCu(I,j)   * (h(i,j,k)   + h(i+1,j,k))) + &
                    u_in(I,j+1,k) * (G%mask2dCu(I,j+1) * (h(i,j+1,k) + h(i+1,j+1,k))) ) / &
                   ((G%mask2dCu(I,j)   * (h(i,j,k)   + h(i+1,j,k)) + &
                     G%mask2dCu(I,j+1) * (h(i,j+1,k) + h(i+1,j+1,k))) + GV%H_subroundoff)
-      v_2d(I,k) = (v_in(i,J,k)   * (G%mask2dCv(i,J)   * (h(i,j,k)   + h(i,j+1,k))) + &
+      v_2d(I,k) = US%m_s_to_L_T * &
+                  (v_in(i,J,k)   * (G%mask2dCv(i,J)   * (h(i,j,k)   + h(i,j+1,k))) + &
                    v_in(i+1,J,k) * (G%mask2dCv(i+1,J) * (h(i+1,j,k) + h(i+1,j+1,k))) ) / &
                   ((G%mask2dCv(i,J)   * (h(i,j,k)   + h(i,j+1,k)) + &
                     G%mask2dCv(i+1,J) * (h(i+1,j,k) + h(i+1,j+1,k))) + GV%H_subroundoff)
@@ -670,9 +674,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real, dimension(SZK_(GV)), &
                      intent(in)    :: dz   !< The layer thickness [Z ~> m].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: u0xdz !< The initial zonal velocity times dz [Z m s-1 ~> m2 s-1].
+                     intent(in)    :: u0xdz !< The initial zonal velocity times dz [Z L T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: v0xdz !< The initial meridional velocity times dz [Z m s-1 ~> m2 s-1].
+                     intent(in)    :: v0xdz !< The initial meridional velocity times dz [Z L T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)), &
                      intent(in)    :: T0xdz !< The initial temperature times dz [degC Z ~> degC m].
   real, dimension(SZK_(GV)), &
@@ -694,12 +698,13 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                                                !! as used in calculating kappa and TKE [Z ~> m].
 
   real, dimension(nzc) :: &
-    u, &        ! The zonal velocity after a timestep of mixing [m s-1].
-    v, &        ! The meridional velocity after a timestep of mixing [m s-1].
+    u, &        ! The zonal velocity after a timestep of mixing [L T-1 ~> m s-1].
+    v, &        ! The meridional velocity after a timestep of mixing [L T-1 ~> m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
     T, &        ! The potential temperature after a timestep of mixing [degC].
     Sal, &      ! The salinity after a timestep of mixing [ppt].
-    u_test, v_test, T_test, S_test
+    u_test, v_test, & ! Temporary velocities [L T-1 ~> m s-1].
+    T_test, S_test ! Temporary temperatures [degC] and salinities [ppt].
 
   real, dimension(nzc+1) :: &
     N2, &       ! The squared buoyancy frequency at an interface [T-2 ~> s-2].
@@ -1315,7 +1320,8 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   endif
 
   if (present(S2)) then
-    L2_to_Z2 = US%m_to_Z**2 * US%T_to_s**2
+    ! L2_to_Z2 = US%m_to_Z**2 * US%T_to_s**2
+    L2_to_Z2 = US%L_to_Z**2
     S2(1) = 0.0 ; S2(nz+1) = 0.0
     if (ks > 1) &
       S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (L2_to_Z2*I_dz_int(ks)**2)
@@ -2050,7 +2056,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "A negligibly small velocity magnitude below which velocity "//&
                  "components are set to 0.  A reasonable value might be "//&
                  "1e-30 m/s, which is less than an Angstrom divided by "//&
-                 "the age of the universe.", units="m s-1", default=0.0)
+                 "the age of the universe.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
   call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only "//&
