@@ -82,9 +82,9 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of mixing due to double diffusion processes via CVMix")
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_init, &
-                 "If true, turns on double diffusive processes via CVMix.  \n"// &
-                 "Note that double diffusive processes on viscosity are ignored \n"// &
-                 "in CVMix, see http://cvmix.github.io/ for justification.",&
+                 "If true, turns on double diffusive processes via CVMix. "//&
+                 "Note that double diffusive processes on viscosity are ignored "//&
+                 "in CVMix, see http://cvmix.github.io/ for justification.", &
                  default=.false.)
 
   if (.not. CVMix_ddiff_init) return
@@ -100,7 +100,7 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=2.55)
 
   call get_param(param_file, mdl, "KAPPA_DDIFF_S", CS%kappa_ddiff_s, &
-                 "Leading coefficient in formula for salt-fingering regime \n"// &
+                 "Leading coefficient in formula for salt-fingering regime "//&
                  "for salinity diffusion.", units="m2 s-1", default=1.0e-4)
 
   call get_param(param_file, mdl, "DDIFF_EXP1", CS%ddiff_exp1, &

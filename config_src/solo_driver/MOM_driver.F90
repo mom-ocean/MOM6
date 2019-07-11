@@ -350,8 +350,8 @@ program MOM_main
   call log_version(param_file, mod_name, version, "")
   call get_param(param_file, mod_name, "DT", dt, fail_if_missing=.true.)
   call get_param(param_file, mod_name, "DT_FORCING", dt_forcing, &
-                 "The time step for changing forcing, coupling with other \n"//&
-                 "components, or potentially writing certain diagnostics. \n"//&
+                 "The time step for changing forcing, coupling with other "//&
+                 "components, or potentially writing certain diagnostics. "//&
                  "The default value is given by DT.", units="s", default=dt)
   if (offline_tracer_mode) then
     call get_param(param_file, mod_name, "DT_OFFLINE", dt_forcing, &
@@ -375,35 +375,35 @@ program MOM_main
     call get_param(param_file, mod_name, "DAYMAX", daymax, timeunit=Time_unit, &
                    default=Time_end, do_not_log=.true.)
     call log_param(param_file, mod_name, "DAYMAX", daymax, &
-                 "The final time of the whole simulation, in units of \n"//&
-                 "TIMEUNIT seconds.  This also sets the potential end \n"//&
-                 "time of the present run segment if the end time is \n"//&
+                 "The final time of the whole simulation, in units of "//&
+                 "TIMEUNIT seconds.  This also sets the potential end "//&
+                 "time of the present run segment if the end time is "//&
                  "not set via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit)
   else
     call get_param(param_file, mod_name, "DAYMAX", daymax, &
-                 "The final time of the whole simulation, in units of \n"//&
-                 "TIMEUNIT seconds.  This also sets the potential end \n"//&
-                 "time of the present run segment if the end time is \n"//&
+                 "The final time of the whole simulation, in units of "//&
+                 "TIMEUNIT seconds.  This also sets the potential end "//&
+                 "time of the present run segment if the end time is "//&
                  "not set via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit, fail_if_missing=.true.)
     Time_end = daymax
   endif
 
   call get_param(param_file, mod_name, "SINGLE_STEPPING_CALL", single_step_call, &
-                 "If true, advance the state of MOM with a single step \n"//&
-                 "including both dynamics and thermodynamics.  If false \n"//&
+                 "If true, advance the state of MOM with a single step "//&
+                 "including both dynamics and thermodynamics.  If false "//&
                  "the two phases are advanced with separate calls.", default=.true.)
   call get_param(param_file, mod_name, "DT_THERM", dt_therm, &
-                 "The thermodynamic and tracer advection time step. \n"//&
-                 "Ideally DT_THERM should be an integer multiple of DT \n"//&
-                 "and less than the forcing or coupling time-step, unless \n"//&
-                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
-                 "can be an integer multiple of the coupling timestep.  By \n"//&
+                 "The thermodynamic and tracer advection time step. "//&
+                 "Ideally DT_THERM should be an integer multiple of DT "//&
+                 "and less than the forcing or coupling time-step, unless "//&
+                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM "//&
+                 "can be an integer multiple of the coupling timestep.  By "//&
                  "default DT_THERM is set to DT.", units="s", default=dt)
   call get_param(param_file, mod_name, "DIABATIC_FIRST", diabatic_first, &
-                 "If true, apply diabatic and thermodynamic processes, \n"//&
-                 "including buoyancy forcing and mass gain or loss, \n"//&
+                 "If true, apply diabatic and thermodynamic processes, "//&
+                 "including buoyancy forcing and mass gain or loss, "//&
                  "before stepping the dynamics forward.", default=.false.)
 
 
@@ -411,19 +411,19 @@ program MOM_main
     "MOM_driver: The run has been started at or after the end time of the run.")
 
   call get_param(param_file, mod_name, "RESTART_CONTROL", Restart_control, &
-                 "An integer whose bits encode which restart files are \n"//&
-                 "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
-                 "(bit 0) for a non-time-stamped file. A non-time-stamped \n"//&
-                 "restart file is saved at the end of the run segment \n"//&
+                 "An integer whose bits encode which restart files are "//&
+                 "written. Add 2 (bit 1) for a time-stamped file, and odd "//&
+                 "(bit 0) for a non-time-stamped file. A non-time-stamped "//&
+                 "restart file is saved at the end of the run segment "//&
                  "for any non-negative value.", default=1)
   call get_param(param_file, mod_name, "RESTINT", restint, &
-                 "The interval between saves of the restart file in units \n"//&
-                 "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
+                 "The interval between saves of the restart file in units "//&
+                 "of TIMEUNIT.  Use 0 (the default) to not save "//&
                  "incremental restart files at all.", default=real_to_time(0.0), &
                  timeunit=Time_unit)
   call get_param(param_file, mod_name, "WRITE_CPU_STEPS", cpu_steps, &
-                 "The number of coupled timesteps between writing the cpu \n"//&
-                 "time. If this is not positive, do not check cpu time, and \n"//&
+                 "The number of coupled timesteps between writing the cpu "//&
+                 "time. If this is not positive, do not check cpu time, and "//&
                  "the segment run-length can not be set via an elapsed CPU time.", &
                  default=1000)
   call get_param(param_file, "MOM", "DEBUG", debug, &

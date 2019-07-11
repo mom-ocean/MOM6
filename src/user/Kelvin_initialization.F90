@@ -75,11 +75,11 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
   call get_param(param_file, mdl, "TOPO_CONFIG", config, do_not_log=.true.)
   if (trim(config) == "Kelvin") then
     call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", CS%coast_offset1, &
-                   "The distance along the southern and northern boundaries \n"//&
+                   "The distance along the southern and northern boundaries "//&
                    "at which the coasts angle in.", &
                    units="km", default=100.0)
     call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", CS%coast_offset2, &
-                   "The distance from the southern and northern boundaries \n"//&
+                   "The distance from the southern and northern boundaries "//&
                    "at which the coasts angle in.", &
                    units="km", default=10.0)
     call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", CS%coast_angle, &

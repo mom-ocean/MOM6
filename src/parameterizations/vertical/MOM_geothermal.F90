@@ -341,8 +341,8 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   ! write parameters to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "GEOTHERMAL_SCALE", scale, &
-                 "The constant geothermal heat flux, a rescaling \n"//&
-                 "factor for the heat flux read from GEOTHERMAL_FILE, or \n"//&
+                 "The constant geothermal heat flux, a rescaling "//&
+                 "factor for the heat flux read from GEOTHERMAL_FILE, or "//&
                  "0 to disable the geothermal heating.", &
                  units="W m-2 or various", default=0.0)
   CS%apply_geothermal = .not.(scale == 0.0)
@@ -351,14 +351,14 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   call safe_alloc_ptr(CS%geo_heat, isd, ied, jsd, jed) ; CS%geo_heat(:,:) = 0.0
 
   call get_param(param_file, mdl, "GEOTHERMAL_FILE", geo_file, &
-                 "The file from which the geothermal heating is to be \n"//&
+                 "The file from which the geothermal heating is to be "//&
                  "read, or blank to use a constant heating rate.", default=" ")
   call get_param(param_file, mdl, "GEOTHERMAL_THICKNESS", CS%geothermal_thick, &
                  "The thickness over which to apply geothermal heating.", &
                  units="m", default=0.1)
   call get_param(param_file, mdl, "GEOTHERMAL_DRHO_DT_INPLACE", CS%dRcv_dT_inplace, &
-                 "The value of drho_dT above which geothermal heating \n"//&
-                 "simply heats water in place instead of moving it between \n"//&
+                 "The value of drho_dT above which geothermal heating "//&
+                 "simply heats water in place instead of moving it between "//&
                  "isopycnal layers.  This must be negative.", &
                  units="kg m-3 K-1",  default=-0.01)
   if (CS%dRcv_dT_inplace >= 0.0) call MOM_error(FATAL, "geothermal_init: "//&
@@ -370,7 +370,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     filename = trim(inputdir)//trim(geo_file)
     call log_param(param_file, mdl, "INPUTDIR/GEOTHERMAL_FILE", filename)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
-                 "The name of the geothermal heating variable in \n"//&
+                 "The name of the geothermal heating variable in "//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
     call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
     do j=jsd,jed ; do i=isd,ied

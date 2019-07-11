@@ -60,15 +60,15 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Parameters read by cartesian grid initialization
   call get_param(param_file, mdl, "DISK_RADIUS", diskrad, &
-                 "The radius of the initially elevated disk in the \n"//&
+                 "The radius of the initially elevated disk in the "//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
-                 "The x-offset of the initially elevated disk in the \n"//&
+                 "The x-offset of the initially elevated disk in the "//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  default = 0.0, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
-                 "Initial amplitude of interface height displacements \n"//&
+                 "Initial amplitude of interface height displacements "//&
                  "in the circle_obcs test case.", &
                  units='m', default=5.0, scale=GV%m_to_H, do_not_log=just_read)
 

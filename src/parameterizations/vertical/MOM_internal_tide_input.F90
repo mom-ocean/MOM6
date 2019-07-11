@@ -7,7 +7,6 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
-use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -294,7 +293,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
   call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", min_zbot_itides, &
-               "Turn off internal tidal dissipation when the total \n"//&
+               "Turn off internal tidal dissipation when the total "//&
                "ocean depth is less than this value.", units="m", default=0.0, scale=US%m_to_Z)
 
   call get_param(param_file, mdl, "UTIDE", utide, &
@@ -308,7 +307,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed)) ; CS%TKE_itidal_coef(:,:) = 0.0
 
   call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
-               "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
+               "A topographic wavenumber used with INT_TIDE_DISSIPATION. "//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0))
 
@@ -316,16 +315,16 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "A scaling factor for the roughness amplitude with n"//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
-               "The maximum internal tide energy source availble to mix \n"//&
+               "The maximum internal tide energy source available to mix "//&
                "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
                units="W m-2",  default=1.0e3)
 
   call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
-               "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
+               "If true, read a file (given by TIDEAMP_FILE) containing "//&
                "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
   if (read_tideamp) then
     call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
-               "The path to the file containing the spatially varying \n"//&
+               "The path to the file containing the spatially varying "//&
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
     call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
@@ -333,7 +332,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   endif
 
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
-               "The path to the file containing the sub-grid-scale \n"//&
+               "The path to the file containing the sub-grid-scale "//&
                "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)

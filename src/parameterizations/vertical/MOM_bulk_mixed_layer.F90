@@ -3429,81 +3429,81 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
 
   CS%nkml = GV%nkml
   call log_param(param_file, mdl, "NKML", CS%nkml, &
-                 "The number of sublayers within the mixed layer if \n"//&
+                 "The number of sublayers within the mixed layer if "//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
   CS%nkbl = GV%nk_rho_varies - GV%nkml
   call log_param(param_file, mdl, "NKBL", CS%nkbl, &
-                 "The number of variable density buffer layers if \n"//&
+                 "The number of variable density buffer layers if "//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
   call get_param(param_file, mdl, "MSTAR", CS%mstar, &
-                 "The ratio of the friction velocity cubed to the TKE \n"//&
+                 "The ratio of the friction velocity cubed to the TKE "//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
   call get_param(param_file, mdl, "NSTAR", CS%nstar, &
-                 "The portion of the buoyant potential energy imparted by \n"//&
-                 "surface fluxes that is available to drive entrainment \n"//&
+                 "The portion of the buoyant potential energy imparted by "//&
+                 "surface fluxes that is available to drive entrainment "//&
                  "at the base of mixed layer when that energy is positive.", &
                  units="nondim", default=0.15)
   call get_param(param_file, mdl, "BULK_RI_ML", CS%bulk_Ri_ML, &
-                 "The efficiency with which mean kinetic energy released \n"//&
-                 "by mechanically forced entrainment of the mixed layer \n"//&
+                 "The efficiency with which mean kinetic energy released "//&
+                 "by mechanically forced entrainment of the mixed layer "//&
                  "is converted to turbulent kinetic energy.", units="nondim",&
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "ABSORB_ALL_SW", CS%absorb_all_sw, &
-                 "If true,  all shortwave radiation is absorbed by the \n"//&
+                 "If true,  all shortwave radiation is absorbed by the "//&
                  "ocean, instead of passing through to the bottom mud.", &
                  default=.false.)
   call get_param(param_file, mdl, "TKE_DECAY", CS%TKE_decay, &
-                 "TKE_DECAY relates the vertical rate of decay of the \n"//&
-                 "TKE available for mechanical entrainment to the natural \n"//&
+                 "TKE_DECAY relates the vertical rate of decay of the "//&
+                 "TKE available for mechanical entrainment to the natural "//&
                  "Ekman depth.", units="nondim", default=2.5)
   call get_param(param_file, mdl, "NSTAR2", CS%nstar2, &
-                 "The portion of any potential energy released by \n"//&
-                 "convective adjustment that is available to drive \n"//&
-                 "entrainment at the base of mixed layer. By default \n"//&
+                 "The portion of any potential energy released by "//&
+                 "convective adjustment that is available to drive "//&
+                 "entrainment at the base of mixed layer. By default "//&
                  "NSTAR2=NSTAR.", units="nondim", default=CS%nstar)
   call get_param(param_file, mdl, "BULK_RI_CONVECTIVE", CS%bulk_Ri_convective, &
-                 "The efficiency with which convectively released mean \n"//&
-                 "kinetic energy is converted to turbulent kinetic \n"//&
+                 "The efficiency with which convectively released mean "//&
+                 "kinetic energy is converted to turbulent kinetic "//&
                  "energy.  By default BULK_RI_CONVECTIVE=BULK_RI_ML.", &
                  units="nondim", default=CS%bulk_Ri_ML)
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
-                 "The minimum mixed layer depth if the mixed layer depth \n"//&
+                 "The minimum mixed layer depth if the mixed layer depth "//&
                  "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H, &
                  unscaled=Hmix_min_m)
 
   call get_param(param_file, mdl, "LIMIT_BUFFER_DETRAIN", CS%limit_det, &
-                 "If true, limit the detrainment from the buffer layers \n"//&
+                 "If true, limit the detrainment from the buffer layers "//&
                  "to not be too different from the neighbors.", default=.false.)
   call get_param(param_file, mdl, "ALLOWED_DETRAIN_TEMP_CHG", CS%Allowed_T_chg, &
-                 "The amount by which temperature is allowed to exceed \n"//&
+                 "The amount by which temperature is allowed to exceed "//&
                  "previous values during detrainment.", units="K", default=0.5)
   call get_param(param_file, mdl, "ALLOWED_DETRAIN_SALT_CHG", CS%Allowed_S_chg, &
-                 "The amount by which salinity is allowed to exceed \n"//&
+                 "The amount by which salinity is allowed to exceed "//&
                  "previous values during detrainment.", units="PSU", default=0.1)
   call get_param(param_file, mdl, "ML_DT_DS_WEIGHT", CS%dT_dS_wt, &
-                 "When forced to extrapolate T & S to match the layer \n"//&
-                 "densities, this factor (in deg C / PSU) is combined \n"//&
-                 "with the derivatives of density with T & S to determine \n"//&
-                 "what direction is orthogonal to density contours. It \n"//&
-                 "should be a typical value of (dR/dS) / (dR/dT) in \n"//&
+                 "When forced to extrapolate T & S to match the layer "//&
+                 "densities, this factor (in deg C / PSU) is combined "//&
+                 "with the derivatives of density with T & S to determine "//&
+                 "what direction is orthogonal to density contours. It "//&
+                 "should be a typical value of (dR/dS) / (dR/dT) in "//&
                  "oceanic profiles.", units="degC PSU-1", default=6.0)
   call get_param(param_file, mdl, "BUFFER_LAYER_EXTRAP_LIMIT", CS%BL_extrap_lim, &
-                 "A limit on the density range over which extrapolation \n"//&
-                 "can occur when detraining from the buffer layers, \n"//&
-                 "relative to the density range within the mixed and \n"//&
-                 "buffer layers, when the detrainment is going into the \n"//&
-                 "lightest interior layer, nondimensional, or a negative \n"//&
+                 "A limit on the density range over which extrapolation "//&
+                 "can occur when detraining from the buffer layers, "//&
+                 "relative to the density range within the mixed and "//&
+                 "buffer layers, when the detrainment is going into the "//&
+                 "lightest interior layer, nondimensional, or a negative "//&
                  "value not to apply this limit.", units="nondim", default = -1.0)
   call get_param(param_file, mdl, "DEPTH_LIMIT_FLUXES", CS%H_limit_fluxes, &
-                 "The surface fluxes are scaled away when the total ocean \n"//&
+                 "The surface fluxes are scaled away when the total ocean "//&
                  "depth is less than DEPTH_LIMIT_FLUXES.", &
                  units="m", default=0.1*Hmix_min_m, scale=GV%m_to_H)
   call get_param(param_file, mdl, "OMEGA",CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
   call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
-                 "If true, use the absolute rotation rate instead of the \n"//&
-                 "vertical component of rotation when setting the decay \n"//&
+                 "If true, use the absolute rotation rate instead of the "//&
+                 "vertical component of rotation when setting the decay "//&
                  "scale for turbulence.", default=.false., do_not_log=.true.)
   omega_frac_dflt = 0.0
   if (use_omega) then
@@ -3511,58 +3511,58 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
     omega_frac_dflt = 1.0
   endif
   call get_param(param_file, mdl, "ML_OMEGA_FRAC", CS%omega_frac, &
-                 "When setting the decay scale for turbulence, use this \n"//&
-                 "fraction of the absolute rotation rate blended with the \n"//&
+                 "When setting the decay scale for turbulence, use this "//&
+                 "fraction of the absolute rotation rate blended with the "//&
                  "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
                  units="nondim", default=omega_frac_dflt)
   call get_param(param_file, mdl, "ML_RESORT", CS%ML_resort, &
-                 "If true, resort the topmost layers by potential density \n"//&
+                 "If true, resort the topmost layers by potential density "//&
                  "before the mixed layer calculations.", default=.false.)
   if (CS%ML_resort) &
     call get_param(param_file, mdl, "ML_PRESORT_NK_CONV_ADJ", CS%ML_presort_nz_conv_adj, &
-                 "Convectively mix the first ML_PRESORT_NK_CONV_ADJ \n"//&
+                 "Convectively mix the first ML_PRESORT_NK_CONV_ADJ "//&
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA.
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   ustar_min_dflt = 2e-4*CS%omega*(GV%Angstrom_m + GV%H_to_m*GV%H_subroundoff)
   call get_param(param_file, mdl, "BML_USTAR_MIN", CS%ustar_min, &
-                 "The minimum value of ustar that should be used by the \n"//&
-                 "bulk mixed layer model in setting vertical TKE decay \n"//&
+                 "The minimum value of ustar that should be used by the "//&
+                 "bulk mixed layer model in setting vertical TKE decay "//&
                  "scales. This must be greater than 0.", units="m s-1", &
                  default=ustar_min_dflt, scale=US%m_to_Z)
   if (CS%ustar_min<=0.0) call MOM_error(FATAL, "BML_USTAR_MIN must be positive.")
 
   call get_param(param_file, mdl, "RESOLVE_EKMAN", CS%Resolve_Ekman, &
-                 "If true, the NKML>1 layers in the mixed layer are \n"//&
-                 "chosen to optimally represent the impact of the Ekman \n"//&
-                 "transport on the mixed layer TKE budget.  Otherwise, \n"//&
-                 "the sublayers are distributed uniformly through the \n"//&
+                 "If true, the NKML>1 layers in the mixed layer are "//&
+                 "chosen to optimally represent the impact of the Ekman "//&
+                 "transport on the mixed layer TKE budget.  Otherwise, "//&
+                 "the sublayers are distributed uniformly through the "//&
                  "mixed layer.", default=.false.)
   call get_param(param_file, mdl, "CORRECT_ABSORPTION_DEPTH", CS%correct_absorption, &
-                 "If true, the average depth at which penetrating shortwave \n"//&
-                 "radiation is absorbed is adjusted to match the average \n"//&
-                 "heating depth of an exponential profile by moving some \n"//&
+                 "If true, the average depth at which penetrating shortwave "//&
+                 "radiation is absorbed is adjusted to match the average "//&
+                 "heating depth of an exponential profile by moving some "//&
                  "of the heating upward in the water column.", default=.false.)
   call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
-                 "If true, apply additional mixing whereever there is \n"//&
-                 "runoff, so that it is mixed down to RIVERMIX_DEPTH, \n"//&
+                 "If true, apply additional mixing wherever there is "//&
+                 "runoff, so that it is mixed down to RIVERMIX_DEPTH, "//&
                  "if the ocean is that deep.", default=.false.)
   if (CS%do_rivermix) &
     call get_param(param_file, mdl, "RIVERMIX_DEPTH", CS%rivermix_depth, &
-                 "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
+                 "The depth to which rivers are mixed if DO_RIVERMIX is "//&
                  "defined.", units="m", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
-                 "If true, use the fluxes%runoff_Hflx field to set the \n"//&
+                 "If true, use the fluxes%runoff_Hflx field to set the "//&
                  "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
                  default=.false.)
   call get_param(param_file, mdl, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
-                 "If true, use the fluxes%calving_Hflx field to set the \n"//&
+                 "If true, use the fluxes%calving_Hflx field to set the "//&
                  "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
                  default=.false.)
 
   call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &
-                 "If true, clocks can be called from inside loops that can \n"//&
+                 "If true, clocks can be called from inside loops that can "//&
                  "be threaded. To run with multiple threads, set to False.", &
                  default=.true.)
 
@@ -3602,17 +3602,17 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
  !CS%lim_det_dH_sfc = 0.5 ; CS%lim_det_dH_bathy = 0.2 ! Technically these should not get used if limit_det is false?
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) then
     call get_param(param_file, mdl, "LIMIT_BUFFER_DET_DH_SFC", CS%lim_det_dH_sfc, &
-                 "The fractional limit in the change between grid points \n"//&
+                 "The fractional limit in the change between grid points "//&
                  "of the surface region (mixed & buffer layer) thickness.", &
                  units="nondim", default=0.5)
     call get_param(param_file, mdl, "LIMIT_BUFFER_DET_DH_BATHY", CS%lim_det_dH_bathy, &
-                 "The fraction of the total depth by which the thickness \n"//&
-                 "of the surface region (mixed & buffer layer) is allowed \n"//&
+                 "The fraction of the total depth by which the thickness "//&
+                 "of the surface region (mixed & buffer layer) is allowed "//&
                  "to change between grid points.", units="nondim", default=0.2)
   endif
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
-                 "If true, temperature and salinity are used as state \n"//&
+                 "If true, temperature and salinity are used as state "//&
                  "variables.", default=.true.)
   CS%nsw = 0
   if (use_temperature) then

@@ -305,8 +305,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries
   allocate(OBC)
 
-  call log_version(param_file, mdl, version, "Controls where open boundaries are located, what "//&
-                 "kind of boundary condition to impose, and what data to apply, if any.")
+  call log_version(param_file, mdl, version, &
+                 "Controls where open boundaries are located, what kind of boundary condition "//&
+                 "to impose, and what data to apply, if any.")
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
@@ -314,7 +315,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
   call get_param(param_file, mdl, "OBC_USER_CONFIG", config1, &
-                 "A string that sets how the open boundary conditions are \n"//&
+                 "A string that sets how the open boundary conditions are "//&
                  " configured: \n", default="none", do_not_log=.true.)
   call get_param(param_file, mdl, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
@@ -326,16 +327,16 @@ subroutine open_boundary_config(G, US, param_file, OBC)
          "If true, sets relative vorticity to zero on open boundaries.", &
          default=.false.)
     call get_param(param_file, mdl, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
-         "If true, sets the normal gradient of tangential velocity to\n"// &
-         "zero in the relative vorticity on open boundaries. This cannot\n"// &
+         "If true, sets the normal gradient of tangential velocity to "//&
+         "zero in the relative vorticity on open boundaries. This cannot "//&
          "be true if another OBC_XXX_VORTICITY option is True.", default=.true.)
     call get_param(param_file, mdl, "OBC_COMPUTED_VORTICITY", OBC%computed_vorticity, &
-         "If true, uses the external values of tangential velocity\n"// &
-         "in the relative vorticity on open boundaries. This cannot\n"// &
+         "If true, uses the external values of tangential velocity "//&
+         "in the relative vorticity on open boundaries. This cannot "//&
          "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
     call get_param(param_file, mdl, "OBC_SPECIFIED_VORTICITY", OBC%specified_vorticity, &
-         "If true, uses the external values of tangential velocity\n"// &
-         "in the relative vorticity on open boundaries. This cannot\n"// &
+         "If true, uses the external values of tangential velocity "//&
+         "in the relative vorticity on open boundaries. This cannot "//&
          "be true if another OBC_XXX_VORTICITY option is True.", default=.false.)
     if ((OBC%zero_vorticity .and. OBC%freeslip_vorticity) .or.  &
         (OBC%zero_vorticity .and. OBC%computed_vorticity) .or.  &
@@ -350,16 +351,16 @@ subroutine open_boundary_config(G, US, param_file, OBC)
          "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
          default=.false.)
     call get_param(param_file, mdl, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
-         "If true, sets the normal gradient of tangential velocity to\n"// &
-         "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+         "If true, sets the normal gradient of tangential velocity to "//&
+         "zero in the strain use in the stress tensor on open boundaries. This cannot "//&
          "be true if another OBC_XXX_STRAIN option is True.", default=.true.)
     call get_param(param_file, mdl, "OBC_COMPUTED_STRAIN", OBC%computed_strain, &
-         "If true, sets the normal gradient of tangential velocity to\n"// &
-         "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+         "If true, sets the normal gradient of tangential velocity to "//&
+         "zero in the strain use in the stress tensor on open boundaries. This cannot "//&
          "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
     call get_param(param_file, mdl, "OBC_SPECIFIED_STRAIN", OBC%specified_strain, &
-         "If true, sets the normal gradient of tangential velocity to\n"// &
-         "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+         "If true, sets the normal gradient of tangential velocity to "//&
+         "zero in the strain use in the stress tensor on open boundaries. This cannot "//&
          "be true if another OBC_XXX_STRAIN option is True.", default=.false.)
     if ((OBC%zero_strain .and. OBC%freeslip_strain) .or.  &
         (OBC%zero_strain .and. OBC%computed_strain) .or.  &
@@ -367,11 +368,11 @@ subroutine open_boundary_config(G, US, param_file, OBC)
         (OBC%freeslip_strain .and. OBC%computed_strain) .or.  &
         (OBC%freeslip_strain .and. OBC%specified_strain) .or.  &
         (OBC%computed_strain .and. OBC%specified_strain))  &
-         call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config:\n"//&
-         "Only one of OBC_ZERO_STRAIN, OBC_FREESLIP_STRAIN, OBC_COMPUTED_STRAIN\n"//&
+         call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config: \n"//&
+         "Only one of OBC_ZERO_STRAIN, OBC_FREESLIP_STRAIN, OBC_COMPUTED_STRAIN \n"//&
          "and OBC_IMPORTED_STRAIN can be True at once.")
     call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
-         "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
+         "If true, zeros the Laplacian of flow on open boundaries in the biharmonic "//&
          "viscosity term.", default=.false.)
     call get_param(param_file, mdl, "MASK_OUTSIDE_OBCS", mask_outside, &
          "If true, set the areas outside open boundaries to be land.", &
@@ -381,16 +382,16 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=.false.)
     if (debug_OBC .or. debug) &
       call log_param(param_file, mdl, "DEBUG_OBC", debug_OBC, &
-                 "If true, do additional calls to help debug the performance \n"//&
+                 "If true, do additional calls to help debug the performance "//&
                  "of the open boundary condition code.", default=.false., &
                  debuggingParam=.true.)
 
     call get_param(param_file, mdl, "OBC_SILLY_THICK", OBC%silly_h, &
-                 "A silly value of thicknesses used outside of open boundary \n"//&
+                 "A silly value of thicknesses used outside of open boundary "//&
                  "conditions for debugging.", units="m", default=0.0, &
                  do_not_log=.not.debug_OBC, debuggingParam=.true.)
     call get_param(param_file, mdl, "OBC_SILLY_VEL", OBC%silly_u, &
-                 "A silly value of velocities used outside of open boundary \n"//&
+                 "A silly value of velocities used outside of open boundary "//&
                  "conditions for debugging.", units="m/s", default=0.0, &
                  do_not_log=.not.debug_OBC, debuggingParam=.true.)
     reentrant_x = .false.
@@ -448,15 +449,15 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
-                   "The maximum magnitude of the baroclinic radiation \n"//&
-                   "velocity (or speed of characteristics).  This is only \n"//&
+                   "The maximum magnitude of the baroclinic radiation "//&
+                   "velocity (or speed of characteristics).  This is only "//&
                    "used if one of the open boundary segments is using Orlanski.", &
                    units="m s-1", default=10.0)
       call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
-                   "The relative weighting for the baroclinic radiation \n"//&
-                   "velocities (or speed of characteristics) at the new \n"//&
-                   "time level (1) or the running mean (0) for velocities. \n"//&
-                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "The relative weighting for the baroclinic radiation "//&
+                   "velocities (or speed of characteristics) at the new "//&
+                   "time level (1) or the running mean (0) for velocities. "//&
+                   "Valid values range from 0 to 1. This is only used if "//&
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.3)
     endif
@@ -465,13 +466,13 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     Lscale_out = 0.
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT ", Lscale_out, &
-                 "An effective length scale for restoring the tracer concentration \n"//&
-                 "at the boundaries to externally imposed values when the flow \n"//&
+                 "An effective length scale for restoring the tracer concentration "//&
+                 "at the boundaries to externally imposed values when the flow "//&
                  "is exiting the domain.", units="m", default=0.0)
 
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_IN ", Lscale_in, &
-                 "An effective length scale for restoring the tracer concentration \n"//&
-                 "at the boundaries to values from the interior when the flow \n"//&
+                 "An effective length scale for restoring the tracer concentration "//&
+                 "at the boundaries to values from the interior when the flow "//&
                  "is entering the domain.", units="m", default=0.0)
     endif
 
@@ -546,21 +547,21 @@ subroutine initialize_segment_data(G, OBC, PF)
   inputdir = slasher(inputdir)
 
   call get_param(PF, mdl, "REMAPPING_SCHEME", remappingScheme, &
-          "This sets the reconstruction scheme used\n"//&
-          "for vertical remapping for all variables.\n"//&
-          "It can be one of the following schemes:\n"//&
+          "This sets the reconstruction scheme used "//&
+          "for vertical remapping for all variables. "//&
+          "It can be one of the following schemes: \n"//&
           trim(remappingSchemesDoc), default=remappingDefaultScheme,do_not_log=.true.)
   call get_param(PF, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
-          "If true, cell-by-cell reconstructions are checked for\n"//&
-          "consistency and if non-monotonicity or an inconsistency is\n"//&
+          "If true, cell-by-cell reconstructions are checked for "//&
+          "consistency and if non-monotonicity or an inconsistency is "//&
           "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
   call get_param(PF, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
-          "If true, the results of remapping are checked for\n"//&
-          "conservation and new extrema and if an inconsistency is\n"//&
+          "If true, the results of remapping are checked for "//&
+          "conservation and new extrema and if an inconsistency is "//&
           "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
   call get_param(PF, mdl, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
-          "If true, the values on the intermediate grid used for remapping\n"//&
-          "are forced to be bounded, which might not be the case due to\n"//&
+          "If true, the values on the intermediate grid used for remapping "//&
+          "are forced to be bounded, which might not be the case due to "//&
           "round off.", default=.false.,do_not_log=.true.)
     call get_param(PF, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
          "If true, read external OBC data on the supergrid.", &
@@ -862,8 +863,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
       write(segment_param_str(1:43),"('OBC_SEGMENT_',i3.3,'_VELOCITY_NUDGING_TIMESCALES')") l_seg
       allocate(tnudge(2))
       call get_param(PF, mdl, segment_param_str(1:43), tnudge, &
-           "Timescales in days for nudging along a segment,\n"//&
-           "for inflow, then outflow. Setting both to zero should\n"//&
+           "Timescales in days for nudging along a segment, "//&
+           "for inflow, then outflow. Setting both to zero should "//&
            "behave like SIMPLE obcs for the baroclinic velocities.", &
                 fail_if_missing=.true.,default=0.,units="days")
       OBC%segment(l_seg)%Velocity_nudging_timescale_in = tnudge(1)*86400.
@@ -891,7 +892,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
   call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
   if (OBC%segment(l_seg)%oblique .and.  OBC%segment(l_seg)%radiation) &
-         call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc:\n"//&
+         call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: \n"//&
          "Orlanski and Oblique OBC options cannot be used together on one segment.")
 
 end subroutine setup_u_point_obc
@@ -986,8 +987,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
       write(segment_param_str(1:43),"('OBC_SEGMENT_',i3.3,'_VELOCITY_NUDGING_TIMESCALES')") l_seg
       allocate(tnudge(2))
       call get_param(PF, mdl, segment_param_str(1:43), tnudge, &
-           "Timescales in days for nudging along a segment,\n"//&
-           "for inflow, then outflow. Setting both to zero should\n"//&
+           "Timescales in days for nudging along a segment, "//&
+           "for inflow, then outflow. Setting both to zero should "//&
            "behave like SIMPLE obcs for the baroclinic velocities.", &
                 fail_if_missing=.true.,default=0.,units="days")
       OBC%segment(l_seg)%Velocity_nudging_timescale_in = tnudge(1)*86400.
@@ -1015,7 +1016,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
   call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
   if (OBC%segment(l_seg)%oblique .and.  OBC%segment(l_seg)%radiation) &
-         call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc:\n"//&
+         call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: \n"//&
          "Orlanski and Oblique OBC options cannot be used together on one segment.")
 
 end subroutine setup_v_point_obc

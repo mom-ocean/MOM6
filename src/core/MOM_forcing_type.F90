@@ -2239,10 +2239,19 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
     if (handles%id_net_massout > 0 .or. handles%id_total_net_massout > 0) then
       do j=js,je ; do i=is,ie
         res(i,j) = 0.0
-        if (fluxes%lprec(i,j)       < 0.0) res(i,j) = res(i,j) + fluxes%lprec(i,j)
-        if (fluxes%vprec(i,j)       < 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
-        if (fluxes%evap(i,j)        < 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
-        if (fluxes%seaice_melt(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%seaice_melt(i,j)
+        if (associated(fluxes%lprec)) then
+          if (fluxes%lprec(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%lprec(i,j)
+        endif
+        if (associated(fluxes%vprec)) then
+          if (fluxes%vprec(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
+        endif
+        if (associated(fluxes%evap)) then
+          if (fluxes%evap(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
+        endif
+        if (associated(fluxes%seaice_melt)) then
+          if (fluxes%seaice_melt(i,j) < 0.0) &
+            res(i,j) = res(i,j) + fluxes%seaice_melt(i,j)
+        endif
       enddo ; enddo
       if (handles%id_net_massout > 0) call post_data(handles%id_net_massout, res, diag)
       if (handles%id_total_net_massout > 0) then
@@ -2251,16 +2260,34 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       endif
     endif
 
-    if (handles%id_massout_flux > 0) call post_data(handles%id_massout_flux,fluxes%netMassOut,diag)
+    if (handles%id_massout_flux > 0 .and. associated(fluxes%netMassOut)) &
+      call post_data(handles%id_massout_flux,fluxes%netMassOut,diag)
 
     if (handles%id_net_massin > 0 .or. handles%id_total_net_massin > 0) then
       do j=js,je ; do i=is,ie
-        res(i,j) = fluxes%fprec(i,j) + fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)
-        if (fluxes%lprec(i,j)       > 0.0) res(i,j) = res(i,j) + fluxes%lprec(i,j)
-        if (fluxes%vprec(i,j)       > 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
+        res(i,j) = 0.0
+
+        if (associated(fluxes%fprec)) &
+          res(i,j) = res(i,j) + fluxes%fprec(i,j)
+        if (associated(fluxes%lrunoff)) &
+          res(i,j) = res(i,j) + fluxes%lrunoff(i,j)
+        if (associated(fluxes%frunoff)) &
+          res(i,j) = res(i,j) + fluxes%frunoff(i,j)
+
+        if (associated(fluxes%lprec)) then
+          if (fluxes%lprec(i,j) > 0.0) res(i,j) = res(i,j) + fluxes%lprec(i,j)
+        endif
+        if (associated(fluxes%vprec)) then
+          if (fluxes%vprec(i,j) > 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
+        endif
         ! fluxes%cond is not needed because it is derived from %evap > 0
-        if (fluxes%evap(i,j)        > 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
-        if (fluxes%seaice_melt(i,j) > 0.0) res(i,j) = res(i,j) + fluxes%seaice_melt(i,j)
+        if (associated(fluxes%evap)) then
+          if (fluxes%evap(i,j) > 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
+        endif
+        if (associated(fluxes%seaice_melt)) then
+          if (fluxes%seaice_melt(i,j) > 0.0) &
+            res(i,j) = res(i,j) + fluxes%seaice_melt(i,j)
+        endif
       enddo ; enddo
       if (handles%id_net_massin > 0) call post_data(handles%id_net_massin, res, diag)
       if (handles%id_total_net_massin > 0) then
@@ -2269,7 +2296,8 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
       endif
     endif
 
-    if (handles%id_massin_flux > 0) call post_data(handles%id_massin_flux,fluxes%netMassIn,diag)
+    if (handles%id_massin_flux > 0 .and. associated(fluxes%netMassIn)) &
+      call post_data(handles%id_massin_flux,fluxes%netMassIn,diag)
 
     if ((handles%id_evap > 0) .and. associated(fluxes%evap)) &
       call post_data(handles%id_evap, fluxes%evap, diag)

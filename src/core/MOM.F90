@@ -61,8 +61,6 @@ use MOM_diagnostics,           only : register_transport_diags, post_transport_d
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
 use MOM_diagnostics,           only : post_surface_dyn_diags, post_surface_thermo_diags
 use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs, transport_diag_IDs
-use MOM_diag_to_Z,             only : calculate_Z_diag_fields, register_Z_tracer
-use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, MOM_diag_to_Z_end, diag_to_Z_CS
 use MOM_dynamics_unsplit,      only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
@@ -247,9 +245,6 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: dtbt_reset_time !< The next time DTBT should be calculated.
 
 
-  type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
-  type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
-
   real, dimension(:,:,:), pointer :: &
     h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
     T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].
@@ -354,8 +349,6 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the globally summed output control structure
   type(diagnostics_CS),          pointer :: diagnostics_CSp => NULL()
     !< Pointer to the MOM diagnostics control structure
-  type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp => NULL()
-    !< Pointer to the MOM Z-space diagnostics control structure
   type(offline_transport_CS),    pointer :: offline_CSp => NULL()
     !< Pointer to the offline tracer transport control structure
 
@@ -799,18 +792,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call disable_averaging(CS%diag)
       CS%t_dyn_rel_diag = 0.0
 
-      call cpu_clock_begin(id_clock_Z_diag)
-      if (Time_local + real_to_time(0.5*dt_therm) > CS%Z_diag_time) then
-        call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
-                              CS%Z_diag_time, CS%diag)
-      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
-        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, &
-                                     G, GV, US, CS%diag_to_Z_CSp)
-        CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
-        call disable_averaging(CS%diag)
-        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
-      endif
-      call cpu_clock_end(id_clock_Z_diag)
       call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
     endif
 
@@ -1113,7 +1094,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, Time_local)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
   call post_transport_diagnostics(G, GV, CS%uhtr, CS%vhtr, h, CS%transport_IDs, &
-           CS%diag_pre_dyn, CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, CS%tracer_reg)
+           CS%diag_pre_dyn, CS%diag, CS%t_dyn_rel_adv, CS%tracer_reg)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -1520,7 +1501,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           count_calls, tracer_flow_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
-  type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
+  type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
   type(MOM_restart_CS),      pointer       :: restart_CSp !< pointer set in this routine to the
@@ -1666,86 +1647,86 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   call get_param(param_file, "MOM", "CALC_RHO_FOR_SEA_LEVEL", CS%calc_rho_for_sea_lev, &
-                 "If true, the in-situ density is used to calculate the\n"//&
-                 "effective sea level that is returned to the coupler. If false,\n"//&
+                 "If true, the in-situ density is used to calculate the "//&
+                 "effective sea level that is returned to the coupler. If false, "//&
                  "the Boussinesq parameter RHO_0 is used.", default=.false.)
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
   call get_param(param_file, "MOM", "USE_EOS", use_EOS, &
-                 "If true,  density is calculated from temperature and \n"//&
-                 "salinity with an equation of state.  If USE_EOS is \n"//&
+                 "If true,  density is calculated from temperature and "//&
+                 "salinity with an equation of state.  If USE_EOS is "//&
                  "true, ENABLE_THERMODYNAMICS must be true as well.", &
                  default=use_temperature)
   call get_param(param_file, "MOM", "DIABATIC_FIRST", CS%diabatic_first, &
-                 "If true, apply diabatic and thermodynamic processes, \n"//&
-                 "including buoyancy forcing and mass gain or loss, \n"//&
+                 "If true, apply diabatic and thermodynamic processes, "//&
+                 "including buoyancy forcing and mass gain or loss, "//&
                  "before stepping the dynamics forward.", default=.false.)
   call get_param(param_file, "MOM", "USE_CONTEMP_ABSSAL", use_conT_absS, &
-                 "If true, the prognostics T&S are the conservative temperature \n"//&
-                 "and absolute salinity. Care should be taken to convert them \n"//&
-                 "to potential temperature and practical salinity before \n"//&
-                 "exchanging them with the coupler and/or reporting T&S diagnostics.\n", &
+                 "If true, the prognostics T&S are the conservative temperature "//&
+                 "and absolute salinity. Care should be taken to convert them "//&
+                 "to potential temperature and practical salinity before "//&
+                 "exchanging them with the coupler and/or reporting T&S diagnostics.", &
                  default=.false.)
   CS%tv%T_is_conT = use_conT_absS ; CS%tv%S_is_absS = use_conT_absS
   call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
-                 "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
-                 "true. This assumes that KD = KDML = 0.0 and that \n"//&
-                 "there is no buoyancy forcing, but makes the model \n"//&
+                 "There are no diapycnal mass fluxes if ADIABATIC is "//&
+                 "true. This assumes that KD = KDML = 0.0 and that "//&
+                 "there is no buoyancy forcing, but makes the model "//&
                  "faster by eliminating subroutine calls.", default=.false.)
   call get_param(param_file, "MOM", "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic_driver, &
-                 "If true, use a legacy version of the diabatic subroutine. \n"//&
+                 "If true, use a legacy version of the diabatic subroutine. "//&
                  "This is temporary and is needed to avoid change in answers.", &
                  default=.true.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
-                 "If False, skips the dynamics calls that update u & v, as well as \n"//&
-                 "the gravity wave adjustment to h. This is a fragile feature and \n"//&
+                 "If False, skips the dynamics calls that update u & v, as well as "//&
+                 "the gravity wave adjustment to h. This is a fragile feature and "//&
                  "thus undocumented.", default=.true., do_not_log=.true. )
   call get_param(param_file, "MOM", "ADVECT_TS", advect_TS, &
-                 "If True, advect temperature and salinity horizontally \n"//&
-                 "If False, T/S are registered for advection.\n"//&
-                 "This is intended only to be used in offline tracer mode \n"//&
+                 "If True, advect temperature and salinity horizontally "//&
+                 "If False, T/S are registered for advection. "//&
+                 "This is intended only to be used in offline tracer mode "//&
                  "and is by default false in that case.", &
                  do_not_log = .true., default=.true. )
   if (present(offline_tracer_mode)) then ! Only read this parameter in enabled modes
     call get_param(param_file, "MOM", "OFFLINE_TRACER_MODE", CS%offline_tracer_mode, &
-                 "If true, barotropic and baroclinic dynamics, thermodynamics\n"//&
-                 "are all bypassed with all the fields necessary to integrate\n"//&
-                 "the tracer advection and diffusion equation are read in from\n"//&
-                 "files stored from a previous integration of the prognostic model.\n"//&
+                 "If true, barotropic and baroclinic dynamics, thermodynamics "//&
+                 "are all bypassed with all the fields necessary to integrate "//&
+                 "the tracer advection and diffusion equation are read in from "//&
+                 "files stored from a previous integration of the prognostic model. "//&
                  "NOTE: This option only used in the ocean_solo_driver.", default=.false.)
     if (CS%offline_tracer_mode) then
       call get_param(param_file, "MOM", "ADVECT_TS", advect_TS, &
-                   "If True, advect temperature and salinity horizontally\n"//&
-                   "If False, T/S are registered for advection.\n"//&
+                   "If True, advect temperature and salinity horizontally "//&
+                   "If False, T/S are registered for advection. "//&
                    "This is intended only to be used in offline tracer mode."//&
                    "and is by default false in that case", &
                    default=.false. )
     endif
   endif
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm, &
-                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, "MOM", "BULKMIXEDLAYER", bulkmixedlayer, &
-                 "If true, use a Kraus-Turner-like bulk mixed layer \n"//&
-                 "with transitional buffer layers.  Layers 1 through  \n"//&
-                 "NKML+NKBL have variable densities. There must be at \n"//&
-                 "least NKML+NKBL+1 layers if BULKMIXEDLAYER is true. \n"//&
-                 "BULKMIXEDLAYER can not be used with USE_REGRIDDING. \n"//&
+                 "If true, use a Kraus-Turner-like bulk mixed layer "//&
+                 "with transitional buffer layers.  Layers 1 through "//&
+                 "NKML+NKBL have variable densities. There must be at "//&
+                 "least NKML+NKBL+1 layers if BULKMIXEDLAYER is true. "//&
+                 "BULKMIXEDLAYER can not be used with USE_REGRIDDING. "//&
                  "The default is influenced by ENABLE_THERMODYNAMICS.", &
                  default=use_temperature .and. .not.CS%use_ALE_algorithm)
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
-                 "If true, interface heights are diffused with a \n"//&
+                 "If true, interface heights are diffused with a "//&
                  "coefficient of KHTH.", default=.false.)
   call get_param(param_file, "MOM",  "THICKNESSDIFFUSE_FIRST", &
                                       CS%thickness_diffuse_first, &
-                 "If true, do thickness diffusion before dynamics.\n"//&
+                 "If true, do thickness diffusion before dynamics. "//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
   if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
-                 "If true, there are separate values for the basin depths \n"//&
-                 "at velocity points.  Otherwise the effects of topography \n"//&
+                 "If true, there are separate values for the basin depths "//&
+                 "at velocity points.  Otherwise the effects of topography "//&
                  "are entirely determined from thickness points.", &
                  default=.false.)
   call get_param(param_file, "MOM", "USE_WAVES", CS%UseWaves, default=.false., &
@@ -1755,56 +1736,51 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
   call get_param(param_file, "MOM", "DEBUG_TRUNCATIONS", debug_truncations, &
-                 "If true, calculate all diagnostics that are useful for \n"//&
+                 "If true, calculate all diagnostics that are useful for "//&
                  "debugging truncations.", default=.false., debuggingParam=.true.)
 
   call get_param(param_file, "MOM", "DT", CS%dt, &
-                 "The (baroclinic) dynamics time step.  The time-step that \n"//&
-                 "is actually used will be an integer fraction of the \n"//&
-                 "forcing time-step (DT_FORCING in ocean-only mode or the \n"//&
+                 "The (baroclinic) dynamics time step.  The time-step that "//&
+                 "is actually used will be an integer fraction of the "//&
+                 "forcing time-step (DT_FORCING in ocean-only mode or the "//&
                  "coupling timestep in coupled mode.)", units="s", &
                  fail_if_missing=.true.)
   call get_param(param_file, "MOM", "DT_THERM", CS%dt_therm, &
-                 "The thermodynamic and tracer advection time step. \n"//&
-                 "Ideally DT_THERM should be an integer multiple of DT \n"//&
-                 "and less than the forcing or coupling time-step, unless \n"//&
-                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
-                 "can be an integer multiple of the coupling timestep.  By \n"//&
+                 "The thermodynamic and tracer advection time step. "//&
+                 "Ideally DT_THERM should be an integer multiple of DT "//&
+                 "and less than the forcing or coupling time-step, unless "//&
+                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM "//&
+                 "can be an integer multiple of the coupling timestep.  By "//&
                  "default DT_THERM is set to DT.", units="s", default=CS%dt)
   call get_param(param_file, "MOM", "THERMO_SPANS_COUPLING", CS%thermo_spans_coupling, &
-                 "If true, the MOM will take thermodynamic and tracer \n"//&
-                 "timesteps that can be longer than the coupling timestep. \n"//&
-                 "The actual thermodynamic timestep that is used in this \n"//&
-                 "case is the largest integer multiple of the coupling \n"//&
+                 "If true, the MOM will take thermodynamic and tracer "//&
+                 "timesteps that can be longer than the coupling timestep. "//&
+                 "The actual thermodynamic timestep that is used in this "//&
+                 "case is the largest integer multiple of the coupling "//&
                  "timestep that is less than or equal to DT_THERM.", default=.false.)
 
   if (bulkmixedlayer) then
     CS%Hmix = -1.0 ; CS%Hmix_UV = -1.0
   else
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
-                 "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
-                 "over which to average to find surface properties like \n"//&
+                 "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth "//&
+                 "over which to average to find surface properties like "//&
                  "SST and SSS or density (but not surface velocities).", &
                  units="m", default=1.0, scale=US%m_to_Z)
     call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
-                 "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
-                 "over which to average to find surface flow properties,\n"//&
+                 "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth "//&
+                 "over which to average to find surface flow properties, "//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
                  units="m", default=0.0, scale=US%m_to_Z)
   endif
   call get_param(param_file, "MOM", "HFREEZE", CS%HFrz, &
-                 "If HFREEZE > 0, melt potential will be computed. The actual depth \n"//&
-                 "over which melt potential is computed will be min(HFREEZE, OBLD), \n"//&
-                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), \n"//&
+                 "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
+                 "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
+                 "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
                  "melt potential will not be computed.", units="m", default=-1.0)
-  call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
-                 "The minimum amount of time in seconds between \n"//&
-                 "calculations of depth-space diagnostics. Making this \n"//&
-                 "larger than DT_THERM reduces the  performance penalty \n"//&
-                 "of regridding to depth online.", units="s", default=0.0)
   call get_param(param_file, "MOM", "INTERPOLATE_P_SURF", CS%interp_p_surf, &
-                 "If true, linearly interpolate the surface pressure \n"//&
-                 "over the coupling time step, using the specified value \n"//&
+                 "If true, linearly interpolate the surface pressure "//&
+                 "over the coupling time step, using the specified value "//&
                  "at the end of the step.", default=.false.)
 
   if (CS%split) then
@@ -1812,10 +1788,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     default_val = CS%dt_therm ; if (dtbt > 0.0) default_val = -1.0
     CS%dtbt_reset_period = -1.0
     call get_param(param_file, "MOM", "DTBT_RESET_PERIOD", CS%dtbt_reset_period, &
-                 "The period between recalculations of DTBT (if DTBT <= 0). \n"//&
-                 "If DTBT_RESET_PERIOD is negative, DTBT is set based \n"//&
-                 "only on information available at initialization.  If 0, \n"//&
-                 "DTBT will be set every dynamics time step. The default \n"//&
+                 "The period between recalculations of DTBT (if DTBT <= 0). "//&
+                 "If DTBT_RESET_PERIOD is negative, DTBT is set based "//&
+                 "only on information available at initialization.  If 0, "//&
+                 "DTBT will be set every dynamics time step. The default "//&
                  "is set by DT_THERM.  This is only used if SPLIT is true.", &
                  units="s", default=default_val, do_not_read=(dtbt > 0.0))
   endif
@@ -1824,42 +1800,46 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   use_frazil = .false. ; bound_salinity = .false. ; CS%tv%P_Ref = 2.0e7
   if (use_temperature) then
     call get_param(param_file, "MOM", "FRAZIL", use_frazil, &
-                 "If true, water freezes if it gets too cold, and the \n"//&
-                 "the accumulated heat deficit is returned in the \n"//&
-                 "surface state.  FRAZIL is only used if \n"//&
+                 "If true, water freezes if it gets too cold, and the "//&
+                 "the accumulated heat deficit is returned in the "//&
+                 "surface state.  FRAZIL is only used if "//&
                  "ENABLE_THERMODYNAMICS is true.", default=.false.)
     call get_param(param_file, "MOM", "DO_GEOTHERMAL", use_geothermal, &
                  "If true, apply geothermal heating.", default=.false.)
     call get_param(param_file, "MOM", "BOUND_SALINITY", bound_salinity, &
-                 "If true, limit salinity to being positive. (The sea-ice \n"//&
-                 "model may ask for more salt than is available and \n"//&
+                 "If true, limit salinity to being positive. (The sea-ice "//&
+                 "model may ask for more salt than is available and "//&
                  "drive the salinity negative otherwise.)", default=.false.)
+    call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
+                 "The minimum value of salinity when BOUND_SALINITY=True. "//&
+                 "The default is 0.01 for backward compatibility but ideally "//&
+                 "should be 0.", units="PPT", default=0.01, do_not_log=.not.bound_salinity)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
-                 "The heat capacity of sea water, approximated as a \n"//&
-                 "constant. This is only used if ENABLE_THERMODYNAMICS is \n"//&
-                 "true. The default value is from the TEOS-10 definition \n"//&
+                 "The heat capacity of sea water, approximated as a "//&
+                 "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
+                 "true. The default value is from the TEOS-10 definition "//&
                  "of conservative temperature.", units="J kg-1 K-1", &
                  default=3991.86795711963)
   endif
   if (use_EOS) call get_param(param_file, "MOM", "P_REF", CS%tv%P_Ref, &
-                 "The pressure that is used for calculating the coordinate \n"//&
-                 "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) \n"//&
-                 "This is only used if USE_EOS and ENABLE_THERMODYNAMICS \n"//&
+                 "The pressure that is used for calculating the coordinate "//&
+                 "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
+                 "This is only used if USE_EOS and ENABLE_THERMODYNAMICS "//&
                  "are true.", units="Pa", default=2.0e7)
 
   if (bulkmixedlayer) then
     call get_param(param_file, "MOM", "NKML", nkml, &
-                 "The number of sublayers within the mixed layer if \n"//&
+                 "The number of sublayers within the mixed layer if "//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
     call get_param(param_file, "MOM", "NKBL", nkbl, &
-                 "The number of layers that are used as variable density \n"//&
+                 "The number of layers that are used as variable density "//&
                  "buffer layers if BULKMIXEDLAYER is true.", units="nondim", &
                  default=2)
   endif
 
   call get_param(param_file, "MOM", "GLOBAL_INDEXING", global_indexing, &
-                 "If true, use a global lateral indexing convention, so \n"//&
-                 "that corresponding points on different processors have \n"//&
+                 "If true, use a global lateral indexing convention, so "//&
+                 "that corresponding points on different processors have "//&
                  "the same index. This does not work with static memory.", &
                  default=.false., layoutParam=.true.)
 #ifdef STATIC_MEMORY_
@@ -1867,9 +1847,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
        "GLOBAL_INDEXING can not be true with STATIC_MEMORY.")
 #endif
   call get_param(param_file, "MOM", "FIRST_DIRECTION", first_direction, &
-                 "An integer that indicates which direction goes first \n"//&
-                 "in parts of the code that use directionally split \n"//&
-                 "updates, with even numbers (or 0) used for x- first \n"//&
+                 "An integer that indicates which direction goes first "//&
+                 "in parts of the code that use directionally split "//&
+                 "updates, with even numbers (or 0) used for x- first "//&
                  "and odd numbers used for y-first.", default=0)
 
   call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", CS%check_bad_sfc_vals, &
@@ -1877,37 +1857,37 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  default=.false.)
   if (CS%check_bad_sfc_vals) then
     call get_param(param_file, "MOM", "BAD_VAL_SSH_MAX", CS%bad_val_ssh_max, &
-                 "The value of SSH above which a bad value message is \n"//&
+                 "The value of SSH above which a bad value message is "//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                  default=20.0)
     call get_param(param_file, "MOM", "BAD_VAL_SSS_MAX", CS%bad_val_sss_max, &
-                 "The value of SSS above which a bad value message is \n"//&
+                 "The value of SSS above which a bad value message is "//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="PPT", &
                  default=45.0)
     call get_param(param_file, "MOM", "BAD_VAL_SST_MAX", CS%bad_val_sst_max, &
-                 "The value of SST above which a bad value message is \n"//&
+                 "The value of SST above which a bad value message is "//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=45.0)
     call get_param(param_file, "MOM", "BAD_VAL_SST_MIN", CS%bad_val_sst_min, &
-                 "The value of SST below which a bad value message is \n"//&
+                 "The value of SST below which a bad value message is "//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=-2.1)
     call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_val_col_thick, &
-                 "The value of column thickness below which a bad value message is \n"//&
+                 "The value of column thickness below which a bad value message is "//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                  default=0.0)
   endif
 
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
-                 "If true, write the initial conditions to a file given \n"//&
+                 "If true, write the initial conditions to a file given "//&
                  "by IC_OUTPUT_FILE.", default=.false.)
   call get_param(param_file, "MOM", "IC_OUTPUT_FILE", CS%IC_file, &
                  "The file into which to write the initial conditions.", &
                  default="MOM_IC")
   call get_param(param_file, "MOM", "WRITE_GEOM", write_geom, &
-                 "If =0, never write the geometry and vertical grid files.\n"//&
-                 "If =1, write the geometry and vertical grid files only for\n"//&
-                 "a new simulation. If =2, always write the geometry and\n"//&
+                 "If =0, never write the geometry and vertical grid files. "//&
+                 "If =1, write the geometry and vertical grid files only for "//&
+                 "a new simulation. If =2, always write the geometry and "//&
                  "vertical grid files. Other values are invalid.", default=1)
   if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
          "WRITE_GEOM must be equal to 0, 1 or 2.")
@@ -1947,9 +1927,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
-                 "If False, The model is being run in serial mode as a single realization.\n"//&
-                 "If True, The current model realization is part of a larger ensemble \n"//&
-                 "and at the end of step MOM, we will perform a gather of the ensemble\n"//&
+                 "If False, The model is being run in serial mode as a single realization. "//&
+                 "If True, The current model realization is part of a larger ensemble "//&
+                 "and at the end of step MOM, we will perform a gather of the ensemble "//&
                  "members for statistical evaluation and/or data assimilation.", default=.false.)
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
@@ -2366,11 +2346,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
-  CS%Z_diag_interval = real_to_time(CS%dt_therm * max(1,floor(0.01 + Z_diag_int/CS%dt_therm)))
-  call MOM_diag_to_Z_init(Time, G, GV, US, param_file, diag, CS%diag_to_Z_CSp)
-  CS%Z_diag_time = Start_time + CS%Z_diag_interval * (1 + &
-    ((Time + real_to_time(CS%dt_therm)) - Start_time) / CS%Z_diag_interval)
-
   if (associated(CS%sponge_CSp)) &
     call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
 
@@ -2379,11 +2354,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (CS%adiabatic) then
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
-                               CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
+                               CS%tracer_flow_CSp)
   else
     call diabatic_driver_init(Time, G, GV, US, param_file, CS%use_ALE_algorithm, diag, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+                              CS%sponge_CSp, CS%ALE_sponge_CSp)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
@@ -2398,7 +2373,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_diags(Time, G, GV, CS%IDs, CS%diag)
   call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
-                                   CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
+                                   CS%use_ALE_algorithm)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, US, diag, CS%ALE_CSp)
   endif
@@ -2407,7 +2382,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   new_sim = is_new_run(restart_CSp)
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, US, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
-             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
+             CS%ALE_sponge_CSp, CS%tv)
   if (present(tracer_flow_CSp)) tracer_flow_CSp => CS%tracer_flow_CSp
 
   ! If running in offline tracer mode, initialize the necessary control structure and
@@ -2778,10 +2753,10 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%SST(i,j) = CS%tv%T(i,j,1)
       sfc_state%SSS(i,j) = CS%tv%S(i,j,1)
     enddo ; enddo ; endif
-    do j=js,je ; do I=IscB,IecB
+    do j=js,je ; do I=is-1,ie
       sfc_state%u(I,j) = u(I,j,1)
     enddo ; enddo
-    do J=JscB,JecB ; do i=is,ie
+    do J=js-1,je ; do i=is,ie
       sfc_state%v(i,J) = v(i,J,1)
     enddo ; enddo
 
@@ -2833,12 +2808,15 @@ subroutine extract_surface_state(CS, sfc_state)
     enddo ! end of j loop
 
 !   Determine the mean velocities in the uppermost depth_ml fluid.
+    ! NOTE: Velocity loops start on `[ij]s-1` in order to update halo values
+    !       required by the speed diagnostic on the non-symmetric grid.
+    !       This assumes that u and v halos have already been updated.
     if (CS%Hmix_UV>0.) then
       !### This calculation should work in thickness (H) units instead of Z, but that
       !### would change answers at roundoff in non-Boussinesq cases.
       depth_ml = CS%Hmix_UV
       !$OMP parallel do default(shared) private(depth,dh,hv)
-      do J=jscB,jecB
+      do J=js-1,ie
         do i=is,ie
           depth(i) = 0.0
           sfc_state%v(i,J) = 0.0
@@ -2865,11 +2843,11 @@ subroutine extract_surface_state(CS, sfc_state)
 
       !$OMP parallel do default(shared) private(depth,dh,hu)
       do j=js,je
-        do I=iscB,iecB
+        do I=is-1,ie
           depth(I) = 0.0
           sfc_state%u(I,j) = 0.0
         enddo
-        do k=1,nz ; do I=iscB,iecB
+        do k=1,nz ; do I=is-1,ie
           hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_Z
           if (depth(i) + hu < depth_ml) then
             dh = hu
@@ -2882,17 +2860,17 @@ subroutine extract_surface_state(CS, sfc_state)
           depth(I) = depth(I) + dh
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
-        do I=iscB,iecB
+        do I=is-1,ie
           if (depth(I) < GV%H_subroundoff*GV%H_to_Z) &
               depth(I) = GV%H_subroundoff*GV%H_to_Z
           sfc_state%u(I,j) = sfc_state%u(I,j) / depth(I)
         enddo
       enddo ! end of j loop
     else ! Hmix_UV<=0.
-      do j=js,je ; do I=IscB,IecB
+      do j=js,je ; do I=is-1,ie
         sfc_state%u(I,j) = u(I,j,1)
       enddo ; enddo
-      do J=JscB,JecB ; do i=is,ie
+      do J=js-1,je ; do i=is,ie
         sfc_state%v(i,J) = v(i,J,1)
       enddo ; enddo
     endif
@@ -3415,7 +3393,7 @@ end subroutine MOM_end
 !!  * src/tracer:
 !!    These files handle the lateral transport and diffusion of
 !!    tracers, or are the code to implement various passive tracer
-!!    packages.  Additional tracer packages are readily accomodated.
+!!    packages.  Additional tracer packages are readily accommodated.
 !!
 !!  * src/user:
 !!    These are either stub routines that a user could use to change
