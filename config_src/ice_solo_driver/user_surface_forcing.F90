@@ -106,7 +106,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
 
 !   This subroutine sets the surface wind stresses, forces%taux and forces%tauy [Pa].
 ! In addition, this subroutine can be used to set the surface friction velocity,
-! forces%ustar [Z s-1 ~> m s-1], which is needed with a bulk mixed layer.
+! forces%ustar [Z T-1 ~> m s-1], which is needed with a bulk mixed layer.
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -139,7 +139,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   !  Set the surface friction velocity [Z s-1 ~> m s-1].  ustar is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
        sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo ; endif

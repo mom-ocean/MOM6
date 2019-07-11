@@ -41,11 +41,6 @@ type, public :: VarMix_CS
                                   !! of first baroclinic wave for calculating the resolution fn.
   logical :: khth_use_ebt_struct  !< If true, uses the equivalent barotropic structure
                                   !! as the vertical structure of thickness diffusivity.
-  logical :: use_Visbeck_slope_bug !< If true, then retain a legacy bug in the calculation of weights
-                                   !! applied to isoneutral slopes. There was an erroneous k-indexing
-                                   !! for layer thicknesses. In addition, masking at coastlines was not
-                                   !! used which introduced potential restart issues.  This flag will be
-                                   !! deprecated in a future release.
   logical :: calculate_cg1        !< If true, calls wave_speed() to calculate the first
                                   !! baroclinic wave speed and populate CS%cg1.
                                   !! This parameter is set depending on other parameters.
@@ -495,26 +490,16 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      if (CS%use_Visbeck_slope_bug) then
-        wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1)
-        wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1)
-        wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1)
-        wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1)
-        S2 =  slope_x(I,j,K)**2  + ( &
-             (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
-             +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
-             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
-      else
-        wSE = G%mask2dCv(i+1,J-1) * ( (h(i+1,j,k)*h(i+1,j-1,k)) * (h(i+1,j,k-1)*h(i+1,j-1,k-1)) )
-        wNW = G%mask2dCv(i  ,J  ) * ( (h(i  ,j,k)*h(i  ,j+1,k)) * (h(i  ,j,k-1)*h(i  ,j+1,k-1)) )
-        wNE = G%mask2dCv(i+1,J  ) * ( (h(i+1,j,k)*h(i+1,j+1,k)) * (h(i+1,j,k-1)*h(i+1,j+1,k-1)) )
-        wSW = G%mask2dCv(i  ,J-1) * ( (h(i  ,j,k)*h(i  ,j-1,k)) * (h(i  ,j,k-1)*h(i  ,j-1,k-1)) )
-        S2 =  slope_x(I,j,K)**2  + ( &
-             (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
-             +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
-             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
-      endif
+      wSE = G%mask2dCv(i+1,J-1) * ( (h(i+1,j,k)*h(i+1,j-1,k)) * (h(i+1,j,k-1)*h(i+1,j-1,k-1)) )
+      wNW = G%mask2dCv(i  ,J  ) * ( (h(i  ,j,k)*h(i  ,j+1,k)) * (h(i  ,j,k-1)*h(i  ,j+1,k-1)) )
+      wNE = G%mask2dCv(i+1,J  ) * ( (h(i+1,j,k)*h(i+1,j+1,k)) * (h(i+1,j,k-1)*h(i+1,j+1,k-1)) )
+      wSW = G%mask2dCv(i  ,J-1) * ( (h(i  ,j,k)*h(i  ,j-1,k)) * (h(i  ,j,k-1)*h(i  ,j-1,k-1)) )
+      S2 =  slope_x(I,j,K)**2 + &
+              ((wNW*slope_y(i,J,K)**2 + wSE*slope_y(i+1,J-1,K)**2) + &
+               (wNE*slope_y(i+1,J,K)**2 + wSW*slope_y(i,J-1,K)**2) ) / &
+              ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
+
       N2 = max(0., N2_u(I,j,k))
       CS%SN_u(I,j) = CS%SN_u(I,j) + sqrt( S2*N2 )*H_geom
       S2_u(I,j) = S2_u(I,j) + S2*H_geom
@@ -541,26 +526,16 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      if (CS%use_Visbeck_slope_bug) then
-        wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1)
-        wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1)
-        wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1)
-        wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1)
-        S2 =  slope_y(i,J,K)**2  + ( &
-             (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
-             +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
-             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
-      else
-        wSE = G%mask2dCu(I,j)     * ( (h(i,j  ,k)*h(i+1,j  ,k)) * (h(i,j  ,k-1)*h(i+1,j  ,k-1)) )
-        wNW = G%mask2dCu(I-1,j+1) * ( (h(i,j+1,k)*h(i-1,j+1,k)) * (h(i,j+1,k-1)*h(i-1,j+1,k-1)) )
-        wNE = G%mask2dCu(I,j+1)   * ( (h(i,j+1,k)*h(i+1,j+1,k)) * (h(i,j+1,k-1)*h(i+1,j+1,k-1)) )
-        wSW = G%mask2dCu(I-1,j)   * ( (h(i,j  ,k)*h(i-1,j  ,k)) * (h(i,j  ,k-1)*h(i-1,j  ,k-1)) )
-        S2 =  slope_y(i,J,K)**2  + ( &
-             (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
-             +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
-             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 ) !### This should be **4 for consistent units.
-      endif
+      wSE = G%mask2dCu(I,j)     * ( (h(i,j  ,k)*h(i+1,j  ,k)) * (h(i,j  ,k-1)*h(i+1,j  ,k-1)) )
+      wNW = G%mask2dCu(I-1,j+1) * ( (h(i,j+1,k)*h(i-1,j+1,k)) * (h(i,j+1,k-1)*h(i-1,j+1,k-1)) )
+      wNE = G%mask2dCu(I,j+1)   * ( (h(i,j+1,k)*h(i+1,j+1,k)) * (h(i,j+1,k-1)*h(i+1,j+1,k-1)) )
+      wSW = G%mask2dCu(I-1,j)   * ( (h(i,j  ,k)*h(i-1,j  ,k)) * (h(i,j  ,k-1)*h(i-1,j  ,k-1)) )
+      S2 = slope_y(i,J,K)**2 + &
+             ((wSE*slope_x(I,j,K)**2 + wNW*slope_x(I-1,j+1,K)**2) + &
+              (wNE*slope_x(I,j+1,K)**2 + wSW*slope_x(I-1,j,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
+
       N2 = max(0., N2_v(i,J,K))
       CS%SN_v(i,J) = CS%SN_v(i,J) + sqrt( S2*N2 )*H_geom
       S2_v(i,J) = S2_v(i,J) + S2*H_geom
@@ -926,7 +901,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
   CS%calculate_Eady_growth_rate = .false.
-  absurdly_small_freq2 = 1e-34  !### Note the hard-coded dimensional parameter.
+  absurdly_small_freq2 = 1e-34  !### Note the hard-coded dimensional parameter in [s-2].
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -993,7 +968,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
-                 units='m', default=2000.)
+                 units="m", default=2000.)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
 
@@ -1015,7 +990,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6, scale=US%m_to_Z**2) !### Add units argument.
+                 units="m2 s-1", default=1.0e-6, scale=US%m_to_Z**2)
   endif
 
   if (CS%calculate_Eady_growth_rate) then
@@ -1115,12 +1090,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "velocity points from the thickness points; otherwise "//&
                  "interpolate the wave speed and calculate the resolution "//&
                  "function independently at each point.", default=.true.)
-    call get_param(param_file, mdl, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
-                 "If true, then retain a legacy bug in the calculation of weights "//&
-                 "applied to isoneutral slopes. There was an erroneous k-indexing "//&
-                 "for layer thicknesses. In addition, masking at coastlines was not "//&
-                 "used which introduced potential restart issues.  This flag will be "//&
-                 "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&

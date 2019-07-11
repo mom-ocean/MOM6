@@ -866,7 +866,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
       !     pbo = (mass * g) + p_surf
       ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = mass(i,j) * (GV%g_Earth*US%m_to_Z)
+        btm_pres(i,j) = mass(i,j) * GV%mks_g_Earth
         if (associated(p_surf)) then
           btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif

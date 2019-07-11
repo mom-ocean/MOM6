@@ -356,11 +356,11 @@ subroutine wind_forcing_zero(sfc_state, forces, day, G, US, CS)
 
   if (CS%read_gust_2d) then
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = US%m_to_Z * sqrt(CS%gust(i,j)/CS%Rho0)
+      forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust(i,j)/CS%Rho0)
     enddo ; enddo ; endif
   else
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = US%m_to_Z * sqrt(CS%gust_const/CS%Rho0)
+      forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust_const/CS%Rho0)
     enddo ; enddo ; endif
   endif
 
@@ -479,7 +479,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
 
   ! set the friction velocity
   do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = US%m_to_Z * sqrt(sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + &
+    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + &
       forces%tauy(i,j)*forces%tauy(i,j) + forces%taux(i-1,j)*forces%taux(i-1,j) + &
       forces%taux(i,j)*forces%taux(i,j)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
   enddo ; enddo
@@ -540,12 +540,12 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
 
       if (CS%read_gust_2d) then
         do j=js,je ; do i=is,ie
-          forces%ustar(i,j) = US%m_to_Z * sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
+          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
               temp_y(i,j)*temp_y(i,j)) + CS%gust(i,j)) / CS%Rho0)
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
-          forces%ustar(i,j) = US%m_to_Z * sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
+          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
               temp_y(i,j)*temp_y(i,j))/CS%Rho0 + (CS%gust_const/CS%Rho0))
         enddo ; enddo
       endif
@@ -565,13 +565,13 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
       if (CS%read_gust_2d) then
         do j=js, je ; do i=is, ie
-          forces%ustar(i,j) = US%m_to_Z * sqrt((sqrt(0.5*((forces%tauy(i,j-1)**2 + &
+          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt((sqrt(0.5*((forces%tauy(i,j-1)**2 + &
             forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
             forces%taux(i,j)**2))) + CS%gust(i,j)) / CS%Rho0 )
         enddo ; enddo
       else
         do j=js, je ; do i=is, ie
-          forces%ustar(i,j) = US%m_to_Z * sqrt(sqrt(0.5*((forces%tauy(i,j-1)**2 + &
+          forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(0.5*((forces%tauy(i,j-1)**2 + &
             forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
             forces%taux(i,j)**2)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
         enddo ; enddo

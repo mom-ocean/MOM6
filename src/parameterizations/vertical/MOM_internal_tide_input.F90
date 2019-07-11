@@ -5,7 +5,7 @@ module MOM_int_tide_input
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_diag_mediator, only : diag_ctrl, query_averaging_enabled
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
@@ -14,6 +14,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, vardesc, MOM_read_data
 use MOM_thickness_diffuse, only : vert_fill_TS
+use MOM_time_manager, only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid, only : verticalGrid_type
@@ -37,10 +38,21 @@ type, public :: int_tide_input_CS ; private
                         !! regulate the timing of diagnostic output.
   real :: TKE_itide_max !< Maximum Internal tide conversion
                         !! available to mix above the BBL [W m-2]
+  real :: kappa_fill    !< Vertical diffusivity used to interpolate sensible values
+                        !! of T & S into thin layers [Z2 T-1 ~> m2 s-1].
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
             !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
   character(len=200) :: inputdir !< The directory for input files.
+
+  logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
+                                     !! for internal tide testing (BDM)
+  type(time_type) :: time_max_source !< A time for use in testing internal tides
+  real    :: int_tide_source_x       !< X Location of generation site
+                                     !! for internal tide for testing (BDM)
+  real    :: int_tide_source_y       !< Y Location of generation site
+                                     !! for internal tide for testing (BDM)
+
 
   !>@{ Diagnostic IDs
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
@@ -75,18 +87,20 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    N2_bot        ! The bottom squared buoyancy frequency [s-2].
+    N2_bot        ! The bottom squared buoyancy frequency [T-2 ~> s-2].
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     T_f, S_f      ! The temperature and salinity in [degC] and [ppt] with the values in
                   ! the massless layers filled vertically by diffusion.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
+  logical :: avg_enabled  ! for testing internal tides (BDM)
+  type(time_type) :: time_end        !< For use in testing internal tides (BDM)
+
+
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
-  real :: kappa_fill  ! diffusivity used to fill massless layers
-  real :: dt_fill     ! timestep used to fill massless layers
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -94,32 +108,43 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  kappa_fill = 1.e-3*US%m_to_Z**2 !### Dimensional constant [m2 s-1].
-  dt_fill    = 7200.              !### Dimensionalconstant [s].
-
   use_EOS = associated(tv%eqn_of_state)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill, dt*US%s_to_T, T_f, S_f, G, GV)
   endif
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,itide,N2_bot,CS)
+  !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
-    itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
-    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j),CS%TKE_itide_max)
+    itide%Nb(i,j) = G%mask2dT(i,j) * US%s_to_T*sqrt(N2_bot(i,j))
+    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
   enddo ; enddo
 
+  if (CS%int_tide_source_test) then
+    itide%TKE_itidal_input(:,:) = 0.0
+    avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+    if (time_end <= CS%time_max_source) then
+      do j=js,je ; do i=is,ie
+        ! Input  an arbitrary energy point source.id_
+        if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
+            ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
+          itide%TKE_itidal_input(i,j) = 1.0
+        endif
+      enddo ; enddo
+    endif
+  endif
+
   if (CS%debug) then
-    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0)
+    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
     call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
   if (CS%id_Nb > 0) call post_data(CS%id_Nb, itide%Nb, CS%diag)
-  if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot,N2_bot,CS%diag)
+  if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot, N2_bot, CS%diag)
 
 end subroutine set_int_tide_input
 
@@ -156,11 +181,11 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
 
   real :: dz_int  ! The thickness associated with an interface [Z ~> m].
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density [Z m3 s-2 kg-1 ~> m4 s-2 kg-1].
+                  ! density [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (GV%g_Earth*US%m_to_Z**2) / GV%Rho0
+  G_Rho0 = (US%L_to_Z**2*GV%LZT_g_Earth) / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -259,11 +284,15 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   character(len=200) :: filename, tideamp_file, h2_file
 
   real :: mask_itidal
+  real :: max_frac_rough     ! The fraction relating the maximum topographic roughness
+                             ! to the mean depth [nondim]
   real :: utide              ! constant tidal amplitude [m s-1] to be used if
                              ! tidal amplitude file is not present.
   real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height.
   real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling
   real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion [Z ~> m].
+  integer :: tlen_days       !< Time interval from start for adding wave source
+                             !! for testing internal tides (BDM)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
   if (associated(CS)) then
@@ -295,6 +324,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", min_zbot_itides, &
                "Turn off internal tidal dissipation when the total "//&
                "ocean depth is less than this value.", units="m", default=0.0, scale=US%m_to_Z)
+  call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_fill, &
+                 "A diapycnal diffusivity that is used to interpolate "//&
+                 "more sensible values of T & S into thin layers.", &
+                 default=1.0e-6, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "UTIDE", utide, &
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
@@ -339,15 +372,35 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
   call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
+  call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
+                 "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
+                 "or a negative value for no limitations on roughness.", &
+                 units="nondim", default=0.1)
+
+  ! The following parameters are used in testing the internal tide code.
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
+                 "If true, apply an arbitrary generation site for internal tide testing", &
+                 default=.false.)
+  if (CS%int_tide_source_test)then
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+                 "X Location of generation site for internal tide", default=1.)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+                 "Y Location of generation site for internal tide", default=1.)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", tlen_days, &
+                 "Time interval from start of experiment for adding wave source", &
+                 units="days", default=0)
+    CS%time_max_source = Time + set_time(0, days=tlen_days)
+  endif
+
   do j=js,je ; do i=is,ie
     mask_itidal = 1.0
     if (G%bathyT(i,j) < min_zbot_itides) mask_itidal = 0.0
 
     itide%tideamp(i,j) = itide%tideamp(i,j) * mask_itidal * G%mask2dT(i,j)
 
-    ! Restrict rms topo to 10 percent of column depth.
-    !### Note the use here of a hard-coded nondimensional constant.
-    itide%h2(i,j) = min(0.01*G%bathyT(i,j)**2, itide%h2(i,j))
+    ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
+    if (max_frac_rough >= 0.0) &
+      itide%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
     CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
@@ -362,7 +415,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
        'Bottom Buoyancy Frequency', 's-1')
 
   CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
-       'Bottom Buoyancy frequency squared', 's-2')
+       'Bottom Buoyancy frequency squared', 's-2', conversion=US%s_to_T**2)
 
 end subroutine int_tide_input_init
 
