@@ -275,7 +275,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! nkmb = nz, on the expectation that loops nkmb+1,nz will not iterate.
   ! This behavior is ANSI F77 but some compiler options can force at least
   ! one iteration that would break the following one-line workaround!
-  if (nkmb==0) nkmb = nz
+  if (nkmb==0 .and. nz > 1) nkmb = nz
 
   if (loc(CS)==0) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
