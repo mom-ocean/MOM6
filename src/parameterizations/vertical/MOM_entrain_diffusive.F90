@@ -48,15 +48,11 @@ contains
 !! the buoyancy flux in a layer and inversely proportional to the density
 !! differences between layers.  The scheme that is used here is described in
 !! detail in Hallberg, Mon. Wea. Rev. 2000.
-subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
+subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
                                  kb_out, Kd_Lay, Kd_int)
   type(ocean_grid_type),      intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  &
-                              intent(in)  :: u  !< The zonal velocity [m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  &
-                              intent(in)  :: v  !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                               intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(in)  :: tv !< A structure containing pointers to any available
@@ -64,7 +60,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
                                                 !! ptrs.
   type(forcing),              intent(in)  :: fluxes !< A structure of surface fluxes that may
                                                 !! be used.
-  real,                       intent(in)  :: dt !< The time increment [s].
+  real,                       intent(in)  :: dt !< The time increment [T ~> s].
   type(entrain_diffusive_CS), pointer     :: CS !< The control structure returned by a previous
                                                 !! call to entrain_diffusive_init.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
@@ -113,7 +109,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real, allocatable, dimension(:,:,:) :: &
     Kd_eff, &     ! The effective diffusivity that actually applies to each
                   ! layer after the effects of boundary conditions are
-                  ! considered [Z2 s-1 ~> m2 s-1].
+                  ! considered [Z2 T-1 ~> m2 s-1].
     diff_work     ! The work actually done by diffusion across each
                   ! interface [W m-2].  Sum vertically for the total work.
 
@@ -175,7 +171,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real :: dRHo      ! The change in locally referenced potential density between
                     ! the layers above and below an interface [kg m-3].
   real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors
-                    ! [m3 H-2 s-3 ~> m s-3 or m7 kg-2 s-3].
+                    ! [m3 H-2 s-2 T-1 ~> m s-3 or m7 kg-2 s-3].
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
@@ -197,7 +193,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   real :: ea_cor     ! The corrective adjustment to eakb [H ~> m or kg m-2].
   real :: h1         ! The layer thickness after entrainment through the
                      ! interface below is taken into account [H ~> m or kg m-2].
-  real :: Idt        ! The inverse of the time step [s-1].
+  real :: Idt        ! The inverse of the time step [T-1 ~> s-1].
 
   logical :: do_any
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
@@ -271,25 +267,23 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
 
     if (present(Kd_Lay)) then
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = GV%Z_to_H**2 * (dt * (US%s_to_T * Kd_lay(i,j,k)))
+        dtKd(i,k) = GV%Z_to_H**2 * (dt * Kd_lay(i,j,k))
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
-          dtKd_int(i,K) = GV%Z_to_H**2 * (dt * (US%s_to_T * Kd_int(i,j,K)))
+          dtKd_int(i,K) = GV%Z_to_H**2 * (dt * Kd_int(i,j,K))
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
-          dtKd_int(i,K) = GV%Z_to_H**2 * (0.5 * dt &
-              * (US%s_to_T * (Kd_lay(i,j,k-1) + Kd_lay(i,j,k))))
+          dtKd_int(i,K) = GV%Z_to_H**2 * (0.5 * dt * (Kd_lay(i,j,k-1) + Kd_lay(i,j,k)))
         enddo ; enddo
       endif
     else ! Kd_int must be present, or there already would have been an error.
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = GV%Z_to_H**2 * (0.5 * dt &
-            * (US%T_to_s * (Kd_int(i,j,K)+Kd_int(i,j,K+1))))
+        dtKd(i,k) = GV%Z_to_H**2 * (0.5 * dt * (Kd_int(i,j,K)+Kd_int(i,j,K+1)))
       enddo ; enddo
       dO K=1,nz+1 ; do i=is,ie
-        dtKd_int(i,K) = GV%Z_to_H**2 * (dt * (US%T_to_s * Kd_int(i,j,K)))
+        dtKd_int(i,K) = GV%Z_to_H**2 * (dt * Kd_int(i,j,K))
       enddo ; enddo
     endif
 
@@ -2132,9 +2126,10 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H)
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z_to_m**2)
+      'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
-      'Work actually done by diapycnal diffusion across each interface', 'W m-2', conversion=US%Z_to_m)
+      'Work actually done by diapycnal diffusion across each interface', 'W m-2', &
+      conversion=US%Z_to_m*US%s_to_T)
 
 end subroutine entrain_diffusive_init
 

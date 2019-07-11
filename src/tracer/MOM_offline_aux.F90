@@ -18,7 +18,7 @@ use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
 use MOM_variables,        only : vertvisc_type
 use MOM_forcing_type,     only : forcing
-use MOM_shortwave_abs,    only : optics_type
+use MOM_opacity,          only : optics_type
 use MOM_diag_mediator,    only : post_data
 use MOM_forcing_type,     only : forcing
 

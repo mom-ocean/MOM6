@@ -162,6 +162,8 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "RINO_CRIT_EQ")
   call obsolete_real(param_file, "SHEARMIX_RATE_EQ")
 
+  call obsolete_real(param_file, "VSTAR_SCALE_FACTOR", hint="Use EPBL_VEL_SCALE_FACTOR instead.")
+
   call obsolete_logical(param_file, "CONTINUITY_PPM", .true.)
 
   call obsolete_logical(param_file, "USE_LOCAL_PREF", .true.)
@@ -203,6 +205,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
+  call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
 
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
