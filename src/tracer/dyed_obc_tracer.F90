@@ -4,7 +4,6 @@ module dyed_obc_tracer
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,      only : diag_ctrl
-use MOM_diag_to_Z,          only : diag_to_Z_CS
 use MOM_error_handler,      only : MOM_error, FATAL, WARNING
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,       only : forcing
@@ -83,14 +82,14 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", CS%ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate boundary segment.", default=0)
   allocate(CS%ind_tr(CS%ntr))
   allocate(CS%tr_desc(CS%ntr))
 
   call get_param(param_file, mdl, "dyed_obc_TRACER_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the dyed_obc tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the dyed_obc tracers, or blank to initialize "//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -132,7 +131,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_dyed_obc_tracer
 
 !> Initializes the CS%ntr tracer fields in tr(:,:,:,:) and sets up the tracer output.
-subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, diag_to_Z_CSp)
+subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                               intent(in) :: restart !< .true. if the fields have already
@@ -143,8 +142,6 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, dia
   type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
   type(dyed_obc_tracer_CS),              pointer    :: CS      !< The control structure returned by a previous
                                                                !! call to dyed_obc_register_tracer.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                     !! for diagnostics in depth space.
 
 ! Local variables
   real, allocatable :: temp(:,:,:)

@@ -118,8 +118,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "SPONGE", use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   if (.not.use_sponge) return
@@ -188,7 +188,7 @@ end subroutine initialize_sponge
 
 !> This subroutine sets up diagnostics for the sponges.  It is separate
 !! from initialize_sponge because it requires fields that are not readily
-!! availble where initialize_sponge is called.
+!! available where initialize_sponge is called.
 subroutine init_sponge_diags(Time, G, diag, CS)
   type(time_type),       target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
