@@ -113,7 +113,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
 
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
-  if (CS%restorebuoy .and. first_call) then !### .or. associated(CS%ctrl_forcing_CSp)) then
+  if (CS%restorebuoy .and. first_call) then !#CTRL# .or. associated(CS%ctrl_forcing_CSp)) then
     call safe_alloc_ptr(CS%T_Restore, isd, ied, jsd, jed)
     call safe_alloc_ptr(CS%S_Restore, isd, ied, jsd, jed)
     call safe_alloc_ptr(CS%Heat, isd, ied, jsd, jed)

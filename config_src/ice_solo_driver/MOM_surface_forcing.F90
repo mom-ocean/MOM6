@@ -46,9 +46,6 @@ module MOM_surface_forcing
 !*  The boundaries always run through q grid points (x).               *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
-!### use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
-!### use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
-!### use MOM_controlled_forcing, only : ctrl_forcing_CS
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE
 use MOM_diag_mediator,       only : post_data, query_averaging_enabled
@@ -131,7 +128,6 @@ type, public :: surface_forcing_CS ; private
   character(len=8) :: wind_stagger
 
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp  => NULL()
-!###  type(ctrl_forcing_CS), pointer    :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer         :: restart_CSp      => NULL()
 
   type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
@@ -706,7 +702,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
     enddo ; enddo
 
 !     Read the SST and SSS fields for damping.
-    if (CS%restorebuoy) then !### .or. associated(CS%ctrl_forcing_CSp)) then
+    if (CS%restorebuoy) then
       call MOM_read_data(trim(CS%inputdir)//trim(CS%SSTrestore_file), "TEMP", &
                CS%T_Restore(:,:), G%Domain, timelevel=time_lev_monthly)
       call MOM_read_data(trim(CS%inputdir)//trim(CS%salinityrestore_file), "SALT", &
@@ -768,16 +764,6 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
                      "The fluxes need to be defined without RESTOREBUOY.")
     endif
   endif                                             ! end RESTOREBUOY
-
-!### if (associated(CS%ctrl_forcing_CSp)) then
-!###   do j=js,je ; do i=is,ie
-!###     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
-!###     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
-!###     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
-!###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
-!###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
-!### endif
 
   call callTree_leave("buoyancy_forcing_from_files")
 end subroutine buoyancy_forcing_from_files
@@ -1149,15 +1135,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MOM_error(FATAL, "MESO forcing is not available with the ice-shelf"//&
                "version of MOM_surface_forcing.")
-!    call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   endif
 
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles)
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
-!###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
-!###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)
 
   if (associated(CS%restart_CSp)) then
@@ -1171,8 +1154,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                          G, CS%restart_CSp)
     endif
   endif
-
-!###  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
 
   call user_revise_forcing_init(param_file, CS%urf_CS)
 
@@ -1188,8 +1169,6 @@ subroutine surface_forcing_end(CS, fluxes)
                                                     !! forcing fields that will be deallocated here.
 
   if (present(fluxes)) call deallocate_forcing_type(fluxes)
-
-!###  call controlled_forcing_end(CS%ctrl_forcing_CSp)
 
   if (associated(CS)) deallocate(CS)
   CS => NULL()
