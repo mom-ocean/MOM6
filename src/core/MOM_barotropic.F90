@@ -966,7 +966,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Set up fields related to the open boundary conditions.
   if (apply_OBCs) then
-    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, MS, ievf-ie, use_BT_cont, &
+    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, US, MS, ievf-ie, use_BT_cont, &
                        Datu, Datv, BTCL_u, BTCL_v)
   endif
 
@@ -2279,7 +2279,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! the effective open face areas as a
                                                       !! function of barotropic flow.
   real,               optional, intent(in)    :: gtot_est !< An estimate of the total gravitational
-                                                      !! acceleration [m2 Z-1 s-2 ~> m s-2].
+                                                      !! acceleration [L2 Z-1 T-2 ~> m s-2].
   real,               optional, intent(in)    :: SSH_add  !< An additional contribution to SSH to
                                                       !! provide a margin of error when
                                                       !! calculating the external wave speed [Z ~> m].
@@ -2352,8 +2352,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * GV%H_to_Z ; gtot_W(i,j) = gtot_est * GV%H_to_Z
-      gtot_N(i,j) = gtot_est * GV%H_to_Z ; gtot_S(i,j) = gtot_est * GV%H_to_Z
+      gtot_E(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z ; gtot_W(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z
+      gtot_N(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z ; gtot_S(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z
     enddo ; enddo
   endif
 
@@ -2557,7 +2557,7 @@ end subroutine apply_velocity_OBCs
 
 !> This subroutine sets up the private structure used to apply the open
 !! boundary conditions, as developed by Mehmet Ilicak.
-subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
+subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
   type(ocean_OBC_type),                  pointer       :: OBC    !< An associated pointer to an OBC type.
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
@@ -2569,6 +2569,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
   type(MOM_domain_type),                 intent(inout) :: BT_Domain !< MOM_domain_type associated with wide arrays
   type(ocean_grid_type),                 intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),                 intent(in)    :: US     !< A dimensional unit scaling type
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                  !! transports.
@@ -2658,7 +2659,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
             BT_OBC%H_u(I,j) = eta(i+1,j)
           endif
         endif
-        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
+        BT_OBC%Cg_u(I,j) = US%L_T_to_m_s*SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -2710,7 +2711,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
             BT_OBC%H_v(i,J) = eta(i,j+1)
           endif
         endif
-        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
+        BT_OBC%Cg_v(i,J) = US%L_T_to_m_s*SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
@@ -3729,7 +3730,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G))   ! Zonal open face area [H m ~> m2 or kg m-1].
   real :: Datv(SZI_(G),SZJBS_(G))   ! Meridional open face area [H m ~> m2 or kg m-1].
-  real :: gtot_estimate ! Summed GV%g_prime [m2 Z-1 s-2 ~> m s-2], to give an upper-bound estimate for pbce.
+  real :: gtot_estimate ! Summed GV%g_prime [L2 Z-1 T-2 ~> m s-2], to give an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed [Z ~> m].
   real :: dtbt_input, dtbt_tmp

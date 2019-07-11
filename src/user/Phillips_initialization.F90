@@ -164,11 +164,11 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
 ! This uses d/d y_2 atan(y_2 / jet_width)
 !    u(I,j,k) = u(I,j,k+1) + (1e-3 * jet_height / &
 !           (jet_width * (1.0 + (y_2 / jet_width)**2))) * &
-!           (2.0 * GV%g_prime(K+1) * US%T_to_s / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+!           (2.0 * US%L_to_m**2*US%s_to_T**2*GV%g_prime(K+1) * US%T_to_s / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
     u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / jet_width) * &
            (sech(y_2 / jet_width))**2 ) * &
-           (2.0 * GV%g_prime(K+1) * US%T_to_s / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+           (2.0 * US%L_to_m**2*US%s_to_T**2*GV%g_prime(K+1) * US%T_to_s / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
   enddo ; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie

@@ -49,7 +49,7 @@ type, public :: verticalGrid_type
                         !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real, allocatable, dimension(:) :: &
-    g_prime, &          !< The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+    g_prime, &          !< The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
     Rlay                !< The target coordinate value (potential density) in each layer [kg m-3].
   integer :: nkml = 0   !< The number of layers at the top that should be treated
                         !! as parts of a homogeneous region.

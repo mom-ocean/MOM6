@@ -646,7 +646,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i+1,j,k)*h(i+1,j,k-1) / (h(i+1,j,k) + h(i+1,j,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k)*US%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
+      N2 = US%s_to_T**2*GV%g_prime(k)*US%L_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
       SN_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
@@ -657,7 +657,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i,j+1,k)*h(i,j+1,k-1) / (h(i,j+1,k) + h(i,j+1,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k)*US%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
+      N2 = US%s_to_T**2*GV%g_prime(k)*US%L_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
       SN_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2

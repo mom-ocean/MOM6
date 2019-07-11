@@ -749,7 +749,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   enddo
 
   if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, GV, CS%Rho0, CS%GFS_scale, pbce)
+    call set_pbce_Bouss(e, tv_tmp, G, GV, US, CS%Rho0, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
@@ -840,7 +840,7 @@ subroutine PressureForce_blk_AFV_init(Time, G, GV, US, param_file, diag, CS, tid
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
+  if (GV%g_prime(1) /= GV%LZT_g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%LZT_g_Earth
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 

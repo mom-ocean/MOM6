@@ -530,17 +530,17 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        M(i,j,1) = GV%g_prime(1) * e(i,j,1)
+        M(i,j,1) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(1) * e(i,j,1)
         if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
-        M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * e(i,j,K)
+        M(i,j,k) = M(i,j,k-1) + US%L_to_m**2*US%s_to_T**2*GV%g_prime(K) * e(i,j,K)
       enddo ; enddo
     enddo
   endif ! use_EOS
 
   if (present(pbce)) then
-    call Set_pbce_Bouss(e, tv_tmp, G, GV, CS%Rho0, CS%GFS_scale, pbce, rho_star)
+    call Set_pbce_Bouss(e, tv_tmp, G, GV, US, CS%Rho0, CS%GFS_scale, pbce, rho_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -603,11 +603,12 @@ end subroutine PressureForce_Mont_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
-subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
+subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height [Z ~> m].
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
+  type(unit_scale_type),                intent(in)  :: US   !< A dimensional unit scaling type
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density [kg m-3].
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top
                                                             !! interface and the gravitational acceleration of
@@ -690,11 +691,11 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
-        pbce(i,j,1) = GV%g_prime(1) * GV%H_to_Z
+        pbce(i,j,1) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(1) * GV%H_to_Z
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &
-                      (GV%g_prime(K)*GV%H_to_Z) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
+                      (US%L_to_m**2*US%s_to_T**2*GV%g_prime(K)*GV%H_to_Z) * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
      enddo ; enddo
     enddo ! end of j loop
   endif ! use_EOS
@@ -873,7 +874,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
+  if (GV%g_prime(1) /= GV%LZT_g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%LZT_g_Earth
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 
