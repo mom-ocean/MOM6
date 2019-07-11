@@ -401,7 +401,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
                                                          !! due to free surface height anomalies
-                                                         !! [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
+                                                         !! [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
                                                          !! column mass anomaly) that was used to calculate the input
                                                          !! pressure gradient accelerations (or its final value if
@@ -927,15 +927,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$OMP parallel do default(shared)
   do j=js,je
     do k=1,nz ; do I=is-1,ie
-      gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
-      gtot_W(i+1,j) = gtot_W(i+1,j) + pbce(i+1,j,k) * wt_u(I,j,k)
+      gtot_E(i,j)   = gtot_E(i,j)   + US%L_T_to_m_s**2*pbce(i,j,k)   * wt_u(I,j,k)
+      gtot_W(i+1,j) = gtot_W(i+1,j) + US%L_T_to_m_s**2*pbce(i+1,j,k) * wt_u(I,j,k)
     enddo ; enddo
   enddo
   !$OMP parallel do default(shared)
   do J=js-1,je
      do k=1,nz ; do i=is,ie
-      gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
-      gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
+      gtot_N(i,j)   = gtot_N(i,j)   + US%L_T_to_m_s**2*pbce(i,j,k)   * wt_v(i,J,k)
+      gtot_S(i,j+1) = gtot_S(i,j+1) + US%L_T_to_m_s**2*pbce(i,j+1,k) * wt_v(i,J,k)
     enddo ; enddo
   enddo
 
@@ -2132,14 +2132,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
-           ((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
-            (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j)
+           ((US%L_T_to_m_s**2*pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
+            (US%L_T_to_m_s**2*pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j)
       if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       accel_layer_v(i,J,k) = v_accel_bt(i,J) - &
-           ((pbce(i,j+1,k) - gtot_S(i,j+1))*e_anom(i,j+1) - &
-            (pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
+           ((US%L_T_to_m_s**2*pbce(i,j+1,k) - gtot_S(i,j+1))*e_anom(i,j+1) - &
+            (US%L_T_to_m_s**2*pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
       if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
     enddo ; enddo
   enddo
@@ -2274,7 +2274,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: pbce  !< The baroclinic pressure
                                                       !! anomaly in each layer due to free surface
-                                                      !! height anomalies [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
+                                                      !! height anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   type(BT_cont_type), optional, pointer       :: BT_cont  !< A structure with elements that describe
                                                       !! the effective open face areas as a
                                                       !! function of barotropic flow.
@@ -2345,10 +2345,10 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
       gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
     enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_E(i,j) + pbce(i,j,k) * CS%frhatu(I,j,k)
-      gtot_W(i,j) = gtot_W(i,j) + pbce(i,j,k) * CS%frhatu(I-1,j,k)
-      gtot_N(i,j) = gtot_N(i,j) + pbce(i,j,k) * CS%frhatv(i,J,k)
-      gtot_S(i,j) = gtot_S(i,j) + pbce(i,j,k) * CS%frhatv(i,J-1,k)
+      gtot_E(i,j) = gtot_E(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatu(I,j,k)
+      gtot_W(i,j) = gtot_W(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatu(I-1,j,k)
+      gtot_N(i,j) = gtot_N(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatv(i,J,k)
+      gtot_S(i,j) = gtot_S(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatv(i,J-1,k)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie

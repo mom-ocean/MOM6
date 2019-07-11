@@ -121,7 +121,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                                                   !! vhbt is roughly equal to vertical sum of vh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce   !< pbce times eta gives the baroclinic pressure
                                                                   !! anomaly in each layer due to free surface height
-                                                                  !! anomalies [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
+                                                                  !! anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor [Pa]
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor [Pa]
@@ -462,7 +462,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_accel_chksum("pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel, &
+                          CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
     call check_redundant("pre-btstep CS%Ca ", CS%Cau, CS%Cav, G)
     call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
@@ -571,7 +571,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                   symmetric=sym, scale=GV%H_to_m)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-             CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
+             CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
     call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, haloshift=2, &
                           symmetric=sym)
     call check_redundant("Predictor 1 up", up, vp, G)
@@ -721,7 +721,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_accel_chksum("corr pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel, &
+                          CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
     call check_redundant("corr pre-btstep CS%Ca ", CS%Cau, CS%Cav, G)
     call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
@@ -775,7 +775,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                   symmetric=sym, scale=GV%H_to_m)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
+                          CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
                           symmetric=sym)
   endif
 

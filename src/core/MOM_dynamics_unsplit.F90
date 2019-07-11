@@ -336,7 +336,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   if (CS%debug) then
     call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV)
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
-                          CS%diffu, CS%diffv, G, GV)
+                          CS%diffu, CS%diffv, G, GV, US)
   endif
 
  ! up <- up + dt/2 d/dz visc d/dz up
@@ -404,7 +404,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   if (CS%debug) then
     call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV)
     call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
-                          CS%diffu, CS%diffv, G, GV)
+                          CS%diffu, CS%diffv, G, GV, US)
   endif
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
@@ -489,7 +489,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   if (CS%debug) then
     call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV)
+                          CS%diffu, CS%diffv, G, GV, US)
   endif
 
   if (GV%Boussinesq) then

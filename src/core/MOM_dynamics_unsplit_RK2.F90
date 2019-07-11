@@ -333,7 +333,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 
   if (CS%debug) &
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
-                          CS%diffu, CS%diffv, G, GV)
+                          CS%diffu, CS%diffv, G, GV, US)
 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
@@ -428,7 +428,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (CS%debug) then
     call MOM_state_chksum("Corrector", u_in, v_in, h_in, uh, vh, G, GV)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV)
+                          CS%diffu, CS%diffv, G, GV, US)
   endif
 
   if (GV%Boussinesq) then
