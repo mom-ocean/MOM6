@@ -101,7 +101,7 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
         'dyed_channel_set_OBC_data() was called but OBC type was not initialized!')
 
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate boundary segment.", default=0,   &
                  do_not_log=.true.)
 

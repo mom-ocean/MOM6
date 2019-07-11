@@ -1048,12 +1048,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  default=".")
   CS%inputdir = slasher(CS%inputdir)
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
@@ -1061,51 +1061,51 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
                  "The latent heat of fusion.", units="J/kg", default=hlv)
   call get_param(param_file, mdl, "MAX_P_SURF", CS%max_p_surf, &
-                 "The maximum surface pressure that can be exerted by the \n"//&
-                 "atmosphere and floating sea-ice or ice shelves. This is \n"//&
-                 "needed because the FMS coupling structure does not \n"//&
-                 "limit the water that can be frozen out of the ocean and \n"//&
-                 "the ice-ocean heat fluxes are treated explicitly.  No \n"//&
+                 "The maximum surface pressure that can be exerted by the "//&
+                 "atmosphere and floating sea-ice or ice shelves. This is "//&
+                 "needed because the FMS coupling structure does not "//&
+                 "limit the water that can be frozen out of the ocean and "//&
+                 "the ice-ocean heat fluxes are treated explicitly.  No "//&
                  "limit is applied if a negative value is used.", units="Pa", &
                  default=-1.0)
   call get_param(param_file, mdl, "ADJUST_NET_SRESTORE_TO_ZERO", &
                  CS%adjust_net_srestore_to_zero, &
-                 "If true, adjusts the salinity restoring seen to zero\n"//&
+                 "If true, adjusts the salinity restoring seen to zero "//&
                  "whether restoring is via a salt flux or virtual precip.",&
                  default=restore_salt)
   call get_param(param_file, mdl, "ADJUST_NET_SRESTORE_BY_SCALING", &
                  CS%adjust_net_srestore_by_scaling, &
-                 "If true, adjustments to salt restoring to achieve zero net are\n"//&
+                 "If true, adjustments to salt restoring to achieve zero net are "//&
                  "made by scaling values without moving the zero contour.",&
                  default=.false.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_TO_ZERO", &
                  CS%adjust_net_fresh_water_to_zero, &
-                 "If true, adjusts the net fresh-water forcing seen \n"//&
+                 "If true, adjusts the net fresh-water forcing seen "//&
                  "by the ocean (including restoring) to zero.", default=.false.)
   if (CS%adjust_net_fresh_water_to_zero) &
     call get_param(param_file, mdl, "USE_NET_FW_ADJUSTMENT_SIGN_BUG", &
                  CS%use_net_FW_adjustment_sign_bug, &
-                   "If true, use the wrong sign for the adjustment to\n"//&
+                   "If true, use the wrong sign for the adjustment to "//&
                    "the net fresh-water.", default=.false.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
                  CS%adjust_net_fresh_water_by_scaling, &
-                 "If true, adjustments to net fresh water to achieve zero net are\n"//&
+                 "If true, adjustments to net fresh water to achieve zero net are "//&
                  "made by scaling values without moving the zero contour.",&
                  default=.false.)
   call get_param(param_file, mdl, "ICE_SALT_CONCENTRATION", &
                  CS%ice_salt_concentration, &
-                 "The assumed sea-ice salinity needed to reverse engineer the \n"//&
+                 "The assumed sea-ice salinity needed to reverse engineer the "//&
                  "melt flux (or ice-ocean fresh-water flux).", &
                  units="kg/kg", default=0.005)
   call get_param(param_file, mdl, "USE_LIMITED_PATM_SSH", CS%use_limited_P_SSH, &
-                 "If true, return the sea surface height with the \n"//&
-                 "correction for the atmospheric (and sea-ice) pressure \n"//&
-                 "limited by max_p_surf instead of the full atmospheric \n"//&
+                 "If true, return the sea surface height with the "//&
+                 "correction for the atmospheric (and sea-ice) pressure "//&
+                 "limited by max_p_surf instead of the full atmospheric "//&
                  "pressure.", default=.true.)
 
   call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
-                 "A case-insensitive character string to indicate the \n"//&
-                 "staggering of the input wind stress field.  Valid \n"//&
+                 "A case-insensitive character string to indicate the "//&
+                 "staggering of the input wind stress field.  Valid "//&
                  "values are 'A', 'B', or 'C'.", default="C")
   if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
   elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
@@ -1113,14 +1113,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
   call get_param(param_file, mdl, "WIND_STRESS_MULTIPLIER", CS%wind_stress_multiplier, &
-                 "A factor multiplying the wind-stress given to the ocean by the\n"//&
-                 "coupler. This is used for testing and should be =1.0 for any\n"//&
+                 "A factor multiplying the wind-stress given to the ocean by the "//&
+                 "coupler. This is used for testing and should be =1.0 for any "//&
                  "production runs.", default=1.0)
 
   if (restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes \n"//&
-                 "to the relative surface anomalies (akin to a piston \n"//&
+                 "The constant that relates the restoring surface fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
@@ -1134,19 +1134,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
     CS%Flux_const = CS%Flux_const / 86400.0
 
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
-                 "If true, the restoring of salinity is applied as a salt \n"//&
+                 "If true, the restoring of salinity is applied as a salt "//&
                  "flux instead of as a freshwater flux.", default=.false.)
     call get_param(param_file, mdl, "MAX_DELTA_SRESTORE", CS%max_delta_srestore, &
                  "The maximum salinity difference used in restoring terms.", &
                  units="PSU or g kg-1", default=999.0)
     call get_param(param_file, mdl, "MASK_SRESTORE_UNDER_ICE", &
                  CS%mask_srestore_under_ice, &
-                 "If true, disables SSS restoring under sea-ice based on a frazil\n"//&
+                 "If true, disables SSS restoring under sea-ice based on a frazil "//&
                  "criteria (SST<=Tf). Only used when RESTORE_SALINITY is True.",      &
                  default=.false.)
     call get_param(param_file, mdl, "MASK_SRESTORE_MARGINAL_SEAS", &
                  CS%mask_srestore_marginal_seas, &
-                 "If true, disable SSS restoring in marginal seas. Only used when\n"//&
+                 "If true, disable SSS restoring in marginal seas. Only used when "//&
                  "RESTORE_SALINITY is True.", default=.false.)
     call get_param(param_file, mdl, "BASIN_FILE", basin_file, &
                  "A file in which to find the basin masks, in variable 'basin'.", &
@@ -1161,14 +1161,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
       enddo ; enddo
     endif
     call get_param(param_file, mdl, "MASK_SRESTORE", CS%mask_srestore, &
-                 "If true, read a file (salt_restore_mask) containing \n"//&
+                 "If true, read a file (salt_restore_mask) containing "//&
                  "a mask for SSS restoring.", default=.false.)
   endif
 
   if (restore_temp) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes \n"//&
-                 "to the relative surface anomalies (akin to a piston \n"//&
+                 "The constant that relates the restoring surface fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
@@ -1185,7 +1185,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "The maximum sst difference used in restoring terms.", &
                  units="degC ", default=999.0)
     call get_param(param_file, mdl, "MASK_TRESTORE", CS%mask_trestore, &
-                 "If true, read a file (temp_restore_mask) containing \n"//&
+                 "If true, read a file (temp_restore_mask) containing "//&
                  "a mask for SST restoring.", default=.false.)
 
   endif
@@ -1198,11 +1198,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "The drag coefficient that applies to the tides.", &
                  units="nondim", default=1.0e-4)
   call get_param(param_file, mdl, "READ_TIDEAMP", CS%read_TIDEAMP, &
-                 "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
+                 "If true, read a file (given by TIDEAMP_FILE) containing "//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
   if (CS%read_TIDEAMP) then
     call get_param(param_file, mdl, "TIDEAMP_FILE", TideAmp_file, &
-                 "The path to the file containing the spatially varying \n"//&
+                 "The path to the file containing the spatially varying "//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", &
                  default="tideamp.nc")
     CS%utide=0.0
@@ -1237,14 +1237,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 ! constant.
 
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
-                 "If true, use a 2-dimensional gustiness supplied from \n"//&
+                 "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                "The background gustiness in the winds.", units="Pa", &
                default=0.02)
   if (CS%read_gust_2d) then
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
-                 "The file in which the wind gustiness is found in \n"//&
+                 "The file in which the wind gustiness is found in "//&
                  "variable gustiness.")
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
@@ -1254,31 +1254,31 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &
-                 "If true, sea-ice is rigid enough to exert a \n"//&
+                 "If true, sea-ice is rigid enough to exert a "//&
                  "nonhydrostatic pressure that resist vertical motion.", &
                  default=.false.)
   if (CS%rigid_sea_ice) then
     call get_param(param_file, mdl, "SEA_ICE_MEAN_DENSITY", CS%density_sea_ice, &
-                 "A typical density of sea ice, used with the kinematic \n"//&
+                 "A typical density of sea ice, used with the kinematic "//&
                  "viscosity, when USE_RIGID_SEA_ICE is true.", units="kg m-3", &
                  default=900.0)
     call get_param(param_file, mdl, "SEA_ICE_VISCOSITY", CS%Kv_sea_ice, &
-                 "The kinematic viscosity of sufficiently thick sea ice \n"//&
+                 "The kinematic viscosity of sufficiently thick sea ice "//&
                  "for use in calculating the rigidity of sea ice.", &
                  units="m2 s-1", default=1.0e9)
     call get_param(param_file, mdl, "SEA_ICE_RIGID_MASS", CS%rigid_sea_ice_mass, &
-                 "The mass of sea-ice per unit area at which the sea-ice \n"//&
+                 "The mass of sea-ice per unit area at which the sea-ice "//&
                  "starts to exhibit rigidity", units="kg m-2", default=1000.0)
   endif
 
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
-                 "If true, makes available diagnostics of fluxes from icebergs\n"//&
+                 "If true, makes available diagnostics of fluxes from icebergs "//&
                  "as seen by MOM6.", default=.false.)
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
                                    use_berg_fluxes=iceberg_flux_diags)
 
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
-                 "If true, allows flux adjustments to specified via the \n"//&
+                 "If true, allows flux adjustments to specified via the "//&
                  "data_table using the component name 'OCN'.", default=.false.)
   if (CS%allow_flux_adjustments) then
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)

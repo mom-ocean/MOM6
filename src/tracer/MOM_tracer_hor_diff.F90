@@ -1403,8 +1403,8 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS)
                  "The background along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0)
   call get_param(param_file, mdl, "KHTR_SLOPE_CFF", CS%KhTr_Slope_Cff, &
-                 "The scaling coefficient for along-isopycnal tracer \n"//&
-                 "diffusivity using a shear-based (Visbeck-like) \n"//&
+                 "The scaling coefficient for along-isopycnal tracer "//&
+                 "diffusivity using a shear-based (Visbeck-like) "//&
                  "parameterization.  A non-zero value enables this param.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "KHTR_MIN", CS%KhTr_Min, &
@@ -1414,34 +1414,34 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS)
                  "The maximum along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", CS%KhTr_passivity_coeff, &
-                 "The coefficient that scales deformation radius over \n"//&
-                 "grid-spacing in passivity, where passiviity is the ratio \n"//&
-                 "between along isopycnal mxiing of tracers to thickness mixing. \n"//&
+                 "The coefficient that scales deformation radius over "//&
+                 "grid-spacing in passivity, where passivity is the ratio "//&
+                 "between along isopycnal mixing of tracers to thickness mixing. "//&
                  "A non-zero value enables this parameterization.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_MIN", CS%KhTr_passivity_min, &
-                 "The minimum passivity which is the ratio between \n"//&
-                 "along isopycnal mxiing of tracers to thickness mixing. \n", &
+                 "The minimum passivity which is the ratio between "//&
+                 "along isopycnal mixing of tracers to thickness mixing.", &
                  units="nondim", default=0.5)
   call get_param(param_file, mdl, "DIFFUSE_ML_TO_INTERIOR", CS%Diffuse_ML_interior, &
-                 "If true, enable epipycnal mixing between the surface \n"//&
+                 "If true, enable epipycnal mixing between the surface "//&
                  "boundary layer and the interior.", default=.false.)
   call get_param(param_file, mdl, "CHECK_DIFFUSIVE_CFL", CS%check_diffusive_CFL, &
-                 "If true, use enough iterations the diffusion to ensure \n"//&
-                 "that the diffusive equivalent of the CFL limit is not \n"//&
-                 "violated.  If false, always use the greater of 1 or \n"//&
+                 "If true, use enough iterations the diffusion to ensure "//&
+                 "that the diffusive equivalent of the CFL limit is not "//&
+                 "violated.  If false, always use the greater of 1 or "//&
                  "MAX_TR_DIFFUSION_CFL iteration.", default=.false.)
   call get_param(param_file, mdl, "MAX_TR_DIFFUSION_CFL", CS%max_diff_CFL, &
-                 "If positive, locally limit the along-isopycnal tracer \n"//&
-                 "diffusivity to keep the diffusive CFL locally at or \n"//&
-                 "below this value.  The number of diffusive iterations \n"//&
+                 "If positive, locally limit the along-isopycnal tracer "//&
+                 "diffusivity to keep the diffusive CFL locally at or "//&
+                 "below this value.  The number of diffusive iterations "//&
                  "is often this value or the next greater integer.", &
                  units="nondim", default=-1.0)
   CS%ML_KhTR_scale = 1.0
   if (CS%Diffuse_ML_interior) then
     call get_param(param_file, mdl, "ML_KHTR_SCALE", CS%ML_KhTR_scale, &
-                 "With Diffuse_ML_interior, the ratio of the truly \n"//&
-                 "horizontal diffusivity in the mixed layer to the \n"//&
+                 "With Diffuse_ML_interior, the ratio of the truly "//&
+                 "horizontal diffusivity in the mixed layer to the "//&
                  "epipycnal diffusivity.  The valid range is 0 to 1.", &
                  units="nondim", default=1.0)
   endif

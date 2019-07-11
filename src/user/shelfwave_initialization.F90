@@ -69,7 +69,7 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
                  "Length scale of shelfwave in x-direction.",&
                  units="Same as x,y", default=100.)
   call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",CS%Ly, &
-                 "Length scale of exponential dropoff of topography\n"//&
+                 "Length scale of exponential dropoff of topography "//&
                  "in the y-direction.", &
                  units="Same as x,y", default=50.)
   call get_param(param_file, mdl,"SHELFWAVE_Y_MODE",CS%jj, &

@@ -79,9 +79,9 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of enhanced mixing due to convection via CVMix")
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, &
-                 "If true, turns on the enhanced mixing due to convection  \n"// &
-                 "via CVMix. This scheme increases diapycnal diffs./viscs. \n"// &
-                 " at statically unstable interfaces. Relevant parameters are \n"// &
+                 "If true, turns on the enhanced mixing due to convection "//&
+                 "via CVMix. This scheme increases diapycnal diffs./viscs. "//&
+                 "at statically unstable interfaces. Relevant parameters are "//&
                  "contained in the CVMix_CONVECTION% parameter block.", &
                  default=.false.)
 
@@ -105,17 +105,17 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   call openParameterBlock(param_file,'CVMix_CONVECTION')
 
   call get_param(param_file, mdl, "PRANDTL_CONV", prandtl_conv, &
-                 "The turbulent Prandtl number applied to convective \n"//&
+                 "The turbulent Prandtl number applied to convective "//&
                  "instabilities (i.e., used to convert KD_CONV into KV_CONV)", &
                  units="nondim", default=1.0)
 
   call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv_const, &
-                 "Diffusivity used in convective regime. Corresponding viscosity \n" // &
+                 "Diffusivity used in convective regime. Corresponding viscosity "//&
                  "(KV_CONV) will be set to KD_CONV * PRANDTL_TURB.", &
                  units='m2/s', default=1.00)
 
   call get_param(param_file, mdl, 'BV_SQR_CONV', CS%bv_sqr_conv, &
-                 "Threshold for squared buoyancy frequency needed to trigger \n" // &
+                 "Threshold for squared buoyancy frequency needed to trigger "//&
                  "Brunt-Vaisala parameterization.", &
                  units='1/s^2', default=0.0)
 

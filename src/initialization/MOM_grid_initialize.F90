@@ -72,7 +72,7 @@ subroutine set_grid_metrics(G, param_file, US)
   call callTree_enter("set_grid_metrics(), MOM_grid_initialize.F90")
   call log_version(param_file, "MOM_grid_init", version, "")
   call get_param(param_file, "MOM_grid_init", "GRID_CONFIG", config, &
-                 "A character string that determines the method for \n"//&
+                 "A character string that determines the method for "//&
                  "defining the horizontal grid.  Current options are: \n"//&
                  " \t mosaic - read the grid from a mosaic (supergrid) \n"//&
                  " \t          file set by GRID_FILE.\n"//&
@@ -202,7 +202,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
                  "Name of the file from which to read horizontal grid data.", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "USE_TRIPOLAR_GEOLONB_BUG", lon_bug, &
-                 "If true, use older code that incorrectly sets the longitude \n"//&
+                 "If true, use older code that incorrectly sets the longitude "//&
                  "in some points along the tripolar fold to be off by 360 degrees.", &
                  default=.true.)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
@@ -443,14 +443,14 @@ subroutine set_grid_metrics_cartesian(G, param_file)
                  " \t degrees - degrees of latitude and longitude \n"//&
                  " \t m - meters \n \t k - kilometers", default="degrees")
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
+                 "The southern latitude of the domain or the equivalent "//&
                  "starting value for the y-axis.", units=units_temp, &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "LENLAT", G%len_lat, &
                  "The latitudinal or y-direction length of the domain.", &
                  units=units_temp, fail_if_missing=.true.)
   call get_param(param_file, mdl, "WESTLON", G%west_lon, &
-                 "The western longitude of the domain or the equivalent \n"//&
+                 "The western longitude of the domain or the equivalent "//&
                  "starting value for the x-axis.", units=units_temp, &
                  default=0.0)
   call get_param(param_file, mdl, "LENLON", G%len_lon, &
@@ -746,24 +746,24 @@ subroutine set_grid_metrics_mercator(G, param_file)
   G%west_lon = GP%west_lon ; G%len_lon = GP%len_lon
   G%Rad_Earth = GP%Rad_Earth
   call get_param(param_file, mdl, "ISOTROPIC", GP%isotropic, &
-                 "If true, an isotropic grid on a sphere (also known as \n"//&
-                 "a Mercator grid) is used. With an isotropic grid, the \n"//&
-                 "meridional extent of the domain (LENLAT), the zonal \n"//&
-                 "extent (LENLON), and the number of grid points in each \n"//&
-                 "direction are _not_ independent. In MOM the meridional \n"//&
-                 "extent is determined to fit the zonal extent and the \n"//&
+                 "If true, an isotropic grid on a sphere (also known as "//&
+                 "a Mercator grid) is used. With an isotropic grid, the "//&
+                 "meridional extent of the domain (LENLAT), the zonal "//&
+                 "extent (LENLON), and the number of grid points in each "//&
+                 "direction are _not_ independent. In MOM the meridional "//&
+                 "extent is determined to fit the zonal extent and the "//&
                  "number of grid points, while grid is perfectly isotropic.", &
                  default=.false.)
   call get_param(param_file, mdl, "EQUATOR_REFERENCE", GP%equator_reference, &
-                 "If true, the grid is defined to have the equator at the \n"//&
+                 "If true, the grid is defined to have the equator at the "//&
                  "nearest q- or h- grid point to (-LOWLAT*NJGLOBAL/LENLAT).", &
                  default=.true.)
   call get_param(param_file, mdl, "LAT_ENHANCE_FACTOR", GP%Lat_enhance_factor, &
-                 "The amount by which the meridional resolution is \n"//&
+                 "The amount by which the meridional resolution is "//&
                  "enhanced within LAT_EQ_ENHANCE of the equator.", &
                  units="nondim", default=1.0)
   call get_param(param_file, mdl, "LAT_EQ_ENHANCE", GP%Lat_eq_enhance, &
-                 "The latitude range to the north and south of the equator \n"//&
+                 "The latitude range to the north and south of the equator "//&
                  "over which the resolution is enhanced.", units="degrees", &
                  default=0.0)
 
@@ -1236,13 +1236,13 @@ subroutine initialize_masks(G, PF, US)
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
   m_to_Z_scale = 1.0 ; if (present(US)) m_to_Z_scale = US%m_to_Z
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
-                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
-                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "If MASKING_DEPTH is unspecified, then anything shallower than "//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than "//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0, scale=m_to_Z_scale)
   call get_param(PF, mdl, "MASKING_DEPTH", mask_depth, &
-                 "The depth below which to mask points as land points, for which all\n"//&
+                 "The depth below which to mask points as land points, for which all "//&
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
                  units="m", default=-9999.0, scale=m_to_Z_scale)
 

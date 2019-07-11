@@ -42,7 +42,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
   character(len=200) :: config
 
   call get_param(PF, mdl, "ICE_PROFILE_CONFIG", config, &
-                 "This specifies how the initial ice profile is specified. \n"//&
+                 "This specifies how the initial ice profile is specified. "//&
                  "Valid values are: CHANNEL, FILE, and USER.", &
                  fail_if_missing=.true.)
 
@@ -180,9 +180,9 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
   call get_param(PF, mdl, "SHELF_EDGE_POS_0", edge_pos, &
                  units="axis_units", default=0.0)
 !  call get_param(param_file, mdl, "RHO_0", Rho_ocean, &
-!                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-!                 "calculate accelerations and the mass for conservation \n"//&
-!                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+!                 "The mean ocean density used with BOUSSINESQ true to "//&
+!                 "calculate accelerations and the mass for conservation "//&
+!                 "properties, or with BOUSSINSEQ false to convert some "//&
 !                 "parameters from vertical units of m to kg m-2.", &
 !                 units="kg m-3", default=1035.0, scale=US%Z_to_m)
 
@@ -272,11 +272,11 @@ end subroutine initialize_ice_thickness_channel
 !   logical flux_bdry
 
 !   call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
-!                  "This specifies how the ice domain boundary is specified. \n"//&
+!                  "This specifies how the ice domain boundary is specified. "//&
 !                  "valid values include CHANNEL, FILE and USER.", &
 !                  fail_if_missing=.true.)
 !   call get_param(PF, mdl, "ICE_BOUNDARY_FLUX_CONDITION", flux_bdry, &
-!                  "This specifies whether mass input is a dirichlet or \n"//&
+!                  "This specifies whether mass input is a dirichlet or "//&
 !                  "flux condition", default=.true.)
 
 !   select case ( trim(config) )
