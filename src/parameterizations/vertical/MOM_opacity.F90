@@ -771,13 +771,15 @@ end subroutine absorbRemainingSW
 !> This subroutine calculates the total shortwave heat flux integrated over
 !! bands as a function of depth.  This routine is only called for computing
 !! buoyancy fluxes for use in KPP. This routine does not updat e the state.
-subroutine sumSWoverBands(G, GV, US, h, optics, j, dt, &
+subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
   type(ocean_grid_type),    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
+  integer,                  intent(in)    :: nsw !< The number of bands of penetrating shortwave
+                                                 !! radiation, perhaps from optics_nbands(optics),
   type(optics_type),        intent(in)    :: optics !< An optics structure that has values
                                                    !! set based on the opacities.
   integer,                  intent(in)    :: j   !< j-index to work on.
@@ -787,7 +789,7 @@ subroutine sumSWoverBands(G, GV, US, h, optics, j, dt, &
                                                  !! excessive heating of a thin ocean [H ~> m or kg m-2]
   logical,                  intent(in)    :: absorbAllSW !< If true, ensure that all shortwave
                                                  !! radiation is absorbed in the ocean water column.
-  real, dimension(:,:),     intent(in)    :: iPen_SW_bnd !< The incident penetrating shortwave
+  real, dimension(max(nsw,1),SZI_(G)), intent(in) :: iPen_SW_bnd !< The incident penetrating shortwave
                                                  !! heating in each band that hits the bottom and
                                                  !! will be redistributed through the water column
                                                  !! [degC H ~> degC m or degC kg m-2]; size nsw x SZI_(G).
@@ -803,7 +805,8 @@ subroutine sumSWoverBands(G, GV, US, h, optics, j, dt, &
                               ! and will be redistributed through the water column
                               ! [degC H ~> degC m or degC kg m-2]
 
-  real, dimension(size(iPen_SW_bnd,1),size(iPen_SW_bnd,2)) :: Pen_SW_bnd
+  real, dimension(max(nsw,1),SZI_(G)) :: Pen_SW_bnd ! The remaining penetrating shortwave radiation
+                          ! in each band, initially iPen_SW_bnd [degC H ~> degC m or degC kg m-2]
   real :: SW_trans        ! fraction of shortwave radiation not
                           ! absorbed in a layer [nondim]
   real :: unabsorbed      ! fraction of the shortwave radiation
@@ -820,14 +823,14 @@ subroutine sumSWoverBands(G, GV, US, h, optics, j, dt, &
   logical :: SW_Remains   ! If true, some column has shortwave radiation that
                           ! was not entirely absorbed.
 
-  integer :: is, ie, nz, i, k, ks, n, nsw
+  integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
   min_SW_heat = optics%PenSW_flux_absorb*dt ! Default of 2.5e-11*US%T_to_s*GV%m_to_H
   I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
-  is = G%isc ; ie = G%iec ; nz = G%ke ; nsw = optics%nbands
+  is = G%isc ; ie = G%iec ; nz = G%ke
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo

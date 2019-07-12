@@ -1333,7 +1333,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       netPen(:,:) = 0.0
       ! Sum over bands and attenuate as a function of depth
       ! netPen is the netSW as a function of depth
-      call sumSWoverBands(G, GV, US, h2d(:,:), optics, j, dt_in_T, &
+      call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt_in_T, &
                           H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &

@@ -999,13 +999,11 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                                    !! over a time step [ppt H ~> ppt m or ppt kg m-2].
   integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
                                                    !! shortwave radiation.
-  real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
-                                                   !! heating at the sea surface in each
-                                                   !! penetrating band [degC H ~> degC m or degC kg m-2],
-                                                   !! size nsw x SZI_(G).
-  real, dimension(:,:,:),   intent(in)    :: opacity_band !< The opacity in each band of penetrating
-                                                   !! shortwave radiation [H-1 ~> m-1 or m2 kg-1].
-                                                   !! The indicies of opacity_band are band, i, k.
+  real, dimension(max(nsw,1),SZI_(G)), intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
+                                                   !! heating at the sea surface in each penetrating
+                                                   !! band [degC H ~> degC m or degC kg m-2].
+  real, dimension(max(nsw,1),SZI_(G),SZK_(GV)), intent(in) :: opacity_band !< The opacity in each band of
+                                                   !! penetrating shortwave radiation [H-1 ~> m-1 or m2 kg-1].
   real, dimension(SZI_(G)), intent(out)   :: Conv_en !< The buoyant turbulent kinetic energy source
                                                    !! due to free convection [Z m2 T-2 ~> m3 s-2].
   real, dimension(SZI_(G)), intent(out)   :: dKE_FC !< The vertically integrated change in kinetic
@@ -1545,13 +1543,11 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                                    !! time interval [T-1 ~> s-1].
   integer,                  intent(in)    :: nsw   !< The number of bands of penetrating
                                                    !! shortwave radiation.
-  real, dimension(:,:),     intent(inout) :: Pen_SW_bnd !< The penetrating shortwave heating at the
-                                                   !! sea surface in each penetrating band
-                                                   !! [degC H ~> degC m or degC kg m-2],
-                                                   !! size nsw x SZI_(G).
-  real, dimension(:,:,:),   intent(in)    :: opacity_band !< The opacity in each band of penetrating
-                                                   !! shortwave radiation [H-1 ~> m-1 or m2 kg-1].
-                                                   !! The indicies of opacity_band are (band, i, k).
+  real, dimension(max(nsw,1),SZI_(G)), intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
+                                                   !! heating at the sea surface in each penetrating
+                                                   !! band [degC H ~> degC m or degC kg m-2].
+  real, dimension(max(nsw,1),SZI_(G),SZK_(GV)), intent(in) :: opacity_band !< The opacity in each band of
+                                                   !! penetrating shortwave radiation [H-1 ~> m-1 or m2 kg-1].
   real, dimension(SZI_(G)), intent(inout) :: TKE   !< The turbulent kinetic energy
                                                    !! available for mixing over a time
                                                    !! step [Z m2 T-2 ~> m3 s-2].
