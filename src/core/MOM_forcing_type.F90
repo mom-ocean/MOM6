@@ -56,7 +56,7 @@ type, public :: forcing
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
-    buoy          => NULL()  !< buoyancy flux [m2 s-3]
+    buoy          => NULL()  !< buoyancy flux [L2 T-3 ~> m2 s-3]
 
   ! radiative heat fluxes into the ocean [W m-2]
   real, pointer, dimension(:,:) :: &
@@ -1015,7 +1015,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%ustar)) &
     call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI, haloshift=hshift, scale=US%L_to_m**2*US%s_to_T**3)
   if (associated(fluxes%sw)) &
     call hchksum(fluxes%sw, mesg//" fluxes%sw",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dir)) &
@@ -1253,7 +1253,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   if (.not. use_temperature) then
     handles%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
-          'Buoyancy forcing', 'm2 s-3')
+          'Buoyancy forcing', 'm2 s-3', conversion=US%L_to_m**2*US%s_to_T**3)
     return
   endif
 

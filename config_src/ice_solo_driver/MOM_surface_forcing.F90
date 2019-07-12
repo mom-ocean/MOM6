@@ -98,7 +98,7 @@ type, public :: surface_forcing_CS ; private
   real    :: len_lat            ! domain length in latitude
 
   real :: Rho0                  ! Boussinesq reference density [kg m-3]
-  real :: G_Earth               ! gravitational acceleration [m s-2]
+  real :: G_Earth               ! gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const            ! piston velocity for surface restoring [m s-1]
 
   real    :: gust_const                 ! constant unresolved background gustiness for ustar [Pa]
@@ -752,7 +752,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth*CS%Flux_const/CS%Rho0)
+                             (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -886,8 +886,8 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
                      "RESTOREBUOY to linear not written yet.")
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
-     !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-     !                       (CS%G_Earth*CS%Flux_const/CS%Rho0)
+     !   fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+     !                       (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0
      !  endif
@@ -1109,7 +1109,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   endif
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
