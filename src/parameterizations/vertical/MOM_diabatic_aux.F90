@@ -916,7 +916,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding
   real    :: Temp_in, Salin_in
-!  real    :: I_G_Earth
+!  real   :: I_G_Earth ! The inverse of the gravitational acceleration with conversion factors [s2 m-1].
   real    :: dt_in_T ! The time step converted to T units [T ~> s]
   real    :: g_Hconv2
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
@@ -939,7 +939,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
-!  I_G_Earth = 1.0 / GV%g_Earth
+!  I_G_Earth = US%Z_to_m / (US%L_T_to_m_s**2 * GV%LZT_g_Earth)
   g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
@@ -1001,8 +1001,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                  dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
 !        do i=is,ie
-!          dT_to_dPE(i,k) = I_G_Earth * US%Z_to_m * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
-!          dS_to_dPE(i,k) = I_G_Earth * US%Z_to_m * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
+!          dT_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
+!          dS_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
 !        enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
