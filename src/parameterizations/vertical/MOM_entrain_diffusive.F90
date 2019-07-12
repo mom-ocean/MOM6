@@ -822,7 +822,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     endif
 
     if (CS%id_diff_work > 0) then
-      g_2dt = 0.5 * GV%H_to_Z**2 * (GV%g_Earth / dt)
+      g_2dt = 0.5 * GV%H_to_Z**2*US%L_to_Z**2 * (GV%LZT_g_Earth / dt)
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
         if (associated(fluxes%p_surf)) then
@@ -2129,7 +2129,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
       'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
       'Work actually done by diapycnal diffusion across each interface', 'W m-2', &
-      conversion=US%Z_to_m*US%s_to_T)
+      conversion=US%Z_to_m**3*US%s_to_T**3)
 
 end subroutine entrain_diffusive_init
 
