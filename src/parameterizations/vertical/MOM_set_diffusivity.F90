@@ -772,7 +772,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
       maxEnt(i,kb(i)) = mFkb(i)
     elseif (k > kb(i)) then
       maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
-!        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) ! BITWISE CHG
+!        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) !### BITWISE CHG
       htot(i) = htot(i) + GV%H_to_Z*(h(i,j,k) - GV%Angstrom_H)
     endif
   enddo ; enddo
@@ -813,16 +813,18 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
       TKE_to_Kd(i,k) = 0.0
     else
       ! maxTKE is found by determining the kappa that gives maxEnt.
-      ! ### This should be 1 / G_Earth * (delta rho_InSitu)
       !  kappa_max = I_dt * dRho_int(i,K+1) * maxEnt(i,k) * &
-      !             (GV%H_to_m*h(i,j,k) + dh_max) / dRho_lay
-      !  maxTKE(i,k) = (GV%g_Earth*US%m_to_Z) * dRho_lay * kappa_max
+      !             (GV%H_to_Z*h(i,j,k) + dh_max) / dRho_lay
+      !  maxTKE(i,k) = (GV%LZT_g_Earth*US%L_to_Z**2) * dRho_lay * kappa_max
       ! dRho_int should already be non-negative, so the max is redundant?
       dh_max = maxEnt(i,k) * (1.0 + dsp1_ds(i,k))
       dRho_lay = 0.5 * max(dRho_int(i,K) + dRho_int(i,K+1), 0.0)
       maxTKE(i,k) = I_dt * (G_IRho0 * &
           (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K), 0.0))) * &
            ((GV%H_to_Z*h(i,j,k) + dh_max) * maxEnt(i,k))
+      ! TKE_to_Kd should be rho_InSitu / G_Earth * (delta rho_InSitu)
+      ! The omega^2 term in TKE_to_Kd is due to a rescaling of the efficiency of turbulent
+      ! mixing by a factor of N^2 / (N^2 + Omega^2), as proposed by Melet et al., 2013?
       TKE_to_Kd(i,k) = 1.0 / (G_Rho0 * dRho_lay + &
                               CS%omega**2 * GV%H_to_Z*(h(i,j,k) + H_neglect))
     endif
