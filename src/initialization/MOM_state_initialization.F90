@@ -52,6 +52,7 @@ use DOME_initialization, only : DOME_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_thickness
 use ISOMIP_initialization, only : ISOMIP_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
+use RGC_initialization, only : RGC_initialize_sponges
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -229,9 +230,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! is just to make sure that all valid parameters are read to enable the
   ! detection of unused parameters.
   call get_param(PF, mdl, "INIT_LAYERS_FROM_Z_FILE", from_Z_file, &
-             "If true, intialize the layer thicknesses, temperatures, \n"//&
-             "and salnities from a Z-space file on a latitude- \n"//&
-             "longitude grid.", default=.false., do_not_log=just_read)
+             "If true, initialize the layer thicknesses, temperatures, "//&
+             "and salinities from a Z-space file on a latitude-longitude "//&
+             "grid.", default=.false., do_not_log=just_read)
 
   if (from_Z_file) then
     ! Initialize thickness and T/S from z-coordinate data in a file.
@@ -243,7 +244,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   else
     ! Initialize thickness, h.
     call get_param(PF, mdl, "THICKNESS_CONFIG", config, &
-             "A string that determines how the initial layer \n"//&
+             "A string that determines how the initial layer "//&
              "thicknesses are specified for a new run: \n"//&
              " \t file - read interface heights from the file specified \n"//&
              " \t thickness_file - read thicknesses from the file specified \n"//&
@@ -325,7 +326,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     ! Initialize temperature and salinity (T and S).
     if ( use_temperature ) then
       call get_param(PF, mdl, "TS_CONFIG", config, &
-             "A string that determines how the initial tempertures \n"//&
+             "A string that determines how the initial tempertures "//&
              "and salinities are specified for a new run: \n"//&
              " \t file - read velocities from the file specified \n"//&
              " \t\t by (TS_FILE). \n"//&
@@ -392,7 +393,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! Initialize velocity components, u and v
   call get_param(PF, mdl, "VELOCITY_CONFIG", config, &
-       "A string that determines how the initial velocities \n"//&
+       "A string that determines how the initial velocities "//&
        "are specified for a new run: \n"//&
        " \t file - read velocities from the file specified \n"//&
        " \t\t by (VELOCITY_FILE). \n"//&
@@ -431,9 +432,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! Optionally convert the thicknesses from m to kg m-2.  This is particularly
   ! useful in a non-Boussinesq model.
   call get_param(PF, mdl, "CONVERT_THICKNESS_UNITS", convert, &
-               "If true,  convert the thickness initial conditions from \n"//&
-               "units of m to kg m-2 or vice versa, depending on whether \n"//&
-               "BOUSSINESQ is defined. This does not apply if a restart \n"//&
+               "If true,  convert the thickness initial conditions from "//&
+               "units of m to kg m-2 or vice versa, depending on whether "//&
+               "BOUSSINESQ is defined. This does not apply if a restart "//&
                "file is read.", default=.not.GV%Boussinesq, do_not_log=just_read)
 
   if (new_sim .and. convert .and. .not.GV%Boussinesq) &
@@ -442,12 +443,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! Remove the mass that would be displaced by an ice shelf or inverse barometer.
   call get_param(PF, mdl, "DEPRESS_INITIAL_SURFACE", depress_sfc, &
-               "If true,  depress the initial surface to avoid huge \n"//&
+               "If true,  depress the initial surface to avoid huge "//&
                "tsunamis when a large surface pressure is applied.", &
                default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
-               "If true, cuts way the top of the column for initial conditions\n"//&
-               "at the depth where the hydrostatic presure matches the imposed\n"//&
+               "If true, cuts way the top of the column for initial conditions "//&
+               "at the depth where the hydrostatic pressure matches the imposed "//&
                "surface pressure which is read from file.", default=.false., &
                do_not_log=just_read)
   if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
@@ -461,13 +462,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! iterations here so the initial grid is consistent with the coordinate
   if (useALE) then
     call get_param(PF, mdl, "REGRID_ACCELERATE_INIT", regrid_accelerate, &
-         "If true, runs REGRID_ACCELERATE_ITERATIONS iterations of the regridding\n"//&
-         "algorithm to push the initial grid to be consistent with the initial\n"//&
+         "If true, runs REGRID_ACCELERATE_ITERATIONS iterations of the regridding "//&
+         "algorithm to push the initial grid to be consistent with the initial "//&
          "condition. Useful only for state-based and iterative coordinates.", &
          default=.false., do_not_log=just_read)
     if (regrid_accelerate) then
       call get_param(PF, mdl, "REGRID_ACCELERATE_ITERATIONS", regrid_iterations, &
-           "The number of regridding iterations to perform to generate\n"//&
+           "The number of regridding iterations to perform to generate "//&
            "an initial grid that is consistent with the initial conditions.", &
            default=1, do_not_log=just_read)
 
@@ -513,8 +514,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   endif
 
   call get_param(PF, mdl, "SPONGE", use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified via SPONGE_CONFIG.", default=.false.)
   if ( use_sponge ) then
     call get_param(PF, mdl, "SPONGE_CONFIG", config, &
@@ -522,6 +523,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                  " \t file - read sponge properties from the file \n"//&
                  " \t\t specified by (SPONGE_FILE).\n"//&
                  " \t ISOMIP - apply ale sponge in the ISOMIP case \n"//&
+                 " \t RGC - apply sponge in the rotating_gravity_current case \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t BFB - Sponge at the southern boundary of the domain\n"//&
@@ -533,6 +535,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
+      case("RGC"); call RGC_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
+                                                     sponge_CSp, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, GV, use_temperature, tv, PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, PF, &
                                                           sponge_CSp, h)
@@ -554,8 +558,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
-                 "A string that sets how the user code is invoked to set open\n"//&
-                 " boundary data: \n"//&
+                 "A string that sets how the user code is invoked to set open boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&
                  "   dyed_channel - supercritical with dye on the inflow boundary\n"//&
                  "   dyed_obcs - circle_obcs with dyes on the open boundaries\n"//&
@@ -655,8 +658,8 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
-                 "If true, all mass below the bottom removed if the \n"//&
-                 "topography is shallower than the thickness input file \n"//&
+                 "If true, all mass below the bottom removed if the "//&
+                 "topography is shallower than the thickness input file "//&
                  "would indicate.", default=.false., do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -854,10 +857,10 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "INTERFACE_IC_FILE", eta_file, &
-                 "The file from which horizontal mean initial conditions \n"//&
+                 "The file from which horizontal mean initial conditions "//&
                  "for interface depths can be read.", fail_if_missing=.true.)
   call get_param(param_file, mdl, "INTERFACE_IC_VAR", eta_var, &
-                 "The variable name for horizontal mean initial conditions \n"//&
+                 "The variable name for horizontal mean initial conditions "//&
                  "for interface depths relative to mean sea level.", &
                  default="eta")
 
@@ -1029,7 +1032,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
     call log_param(param_file,  mdl, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
   call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_SCALE", scale_factor, &
-                 "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into \n"//&
+                 "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into "//&
                  "units of m", units="variable", default=1.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -1108,7 +1111,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   if (.not.just_read) call log_param(PF,  mdl, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
   call get_param(PF, mdl, "SURFACE_PRESSURE_SCALE", scale_factor, &
-                 "A scaling factor to convert SURFACE_PRESSURE_VAR from\n"//&
+                 "A scaling factor to convert SURFACE_PRESSURE_VAR from "//&
                  "file SURFACE_PRESSURE_FILE into a surface pressure.", &
                  units="file dependent", default=1., do_not_log=just_read)
   call get_param(PF, mdl, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
@@ -1371,7 +1374,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "CIRCULAR_MAX_U", circular_max_u, &
-                 "The amplitude of zonal flow from which to scale the\n"// &
+                 "The amplitude of zonal flow from which to scale the "// &
                  "circular stream function [m s-1].", &
                  units="m s-1", default=0., do_not_log=just_read)
 
@@ -1487,7 +1490,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
   call get_param(param_file, mdl, "TS_FILE", ts_file, &
-                 "The file with the reference profiles for temperature \n"//&
+                 "The file with the reference profiles for temperature "//&
                  "and salinity.", fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -1551,7 +1554,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
                  "A reference salinity used in initialization.", units="PSU", &
                  default=35.0, do_not_log=just_read)
   call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
-                 "If true, accept the prescribed temperature and fit the \n"//&
+                 "If true, accept the prescribed temperature and fit the "//&
                  "salinity; otherwise take salinity and fit temperature.", &
                  default=.false., do_not_log=just_read)
 
@@ -1724,27 +1727,27 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
                  "The name of the file with the state to damp toward.", &
                  default=damping_file)
   call get_param(param_file, mdl, "SPONGE_PTEMP_VAR", potemp_var, &
-                 "The name of the potential temperature variable in \n"//&
+                 "The name of the potential temperature variable in "//&
                  "SPONGE_STATE_FILE.", default="PTEMP")
   call get_param(param_file, mdl, "SPONGE_SALT_VAR", salin_var, &
-                 "The name of the salinity variable in \n"//&
+                 "The name of the salinity variable in "//&
                  "SPONGE_STATE_FILE.", default="SALT")
   call get_param(param_file, mdl, "SPONGE_ETA_VAR", eta_var, &
-                 "The name of the interface height variable in \n"//&
+                 "The name of the interface height variable in "//&
                  "SPONGE_STATE_FILE.", default="ETA")
   call get_param(param_file, mdl, "SPONGE_IDAMP_VAR", Idamp_var, &
-                 "The name of the inverse damping rate variable in \n"//&
+                 "The name of the inverse damping rate variable in "//&
                  "SPONGE_DAMPING_FILE.", default="IDAMP")
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
 
   call get_param(param_file, mdl, "NEW_SPONGES", new_sponges, &
-                 "Set True if using the newer sponging code which \n"//&
+                 "Set True if using the newer sponging code which "//&
                  "performs on-the-fly regridding in lat-lon-time.",&
                  "of sponge restoring data.", default=.false.)
 
 !  if (use_ALE) then
 !    call get_param(param_file, mdl, "SPONGE_RESTORE_ETA", restore_eta, &
-!                 "If true, then restore the interface positions towards \n"//&
+!                 "If true, then restore the interface positions towards "//&
 !                 "target values (in ALE mode)", default = .false.)
 !  endif
 
@@ -2024,45 +2027,45 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call get_param(PF, mdl, "NKBL",nkbl,default=0)
 
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE",filename, &
-                 "The name of the z-space input file used to initialize \n"//&
-                 "temperatures (T) and salinities (S). If T and S are not \n" //&
-                 "in the same file, TEMP_Z_INIT_FILE and SALT_Z_INIT_FILE \n" //&
+                 "The name of the z-space input file used to initialize "//&
+                 "temperatures (T) and salinities (S). If T and S are not "//&
+                 "in the same file, TEMP_Z_INIT_FILE and SALT_Z_INIT_FILE "//&
                  "must be set.",default="temp_salt_z.nc",do_not_log=just_read)
   call get_param(PF, mdl, "TEMP_Z_INIT_FILE",tfilename, &
-                 "The name of the z-space input file used to initialize \n"//&
+                 "The name of the z-space input file used to initialize "//&
                  "temperatures, only.", default=trim(filename),do_not_log=just_read)
   call get_param(PF, mdl, "SALT_Z_INIT_FILE",sfilename, &
-                 "The name of the z-space input file used to initialize \n"//&
+                 "The name of the z-space input file used to initialize "//&
                  "temperatures, only.", default=trim(filename),do_not_log=just_read)
   filename = trim(inputdir)//trim(filename)
   tfilename = trim(inputdir)//trim(tfilename)
   sfilename = trim(inputdir)//trim(sfilename)
   call get_param(PF, mdl, "Z_INIT_FILE_PTEMP_VAR", potemp_var, &
-                 "The name of the potential temperature variable in \n"//&
+                 "The name of the potential temperature variable in "//&
                  "TEMP_Z_INIT_FILE.", default="ptemp",do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_FILE_SALT_VAR", salin_var, &
-                 "The name of the salinity variable in \n"//&
+                 "The name of the salinity variable in "//&
                  "SALT_Z_INIT_FILE.", default="salt",do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_HOMOGENIZE", homogenize, &
-                 "If True, then horizontally homogenize the interpolated \n"//&
+                 "If True, then horizontally homogenize the interpolated "//&
                  "initial conditions.", default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_ALE_REMAPPING", useALEremapping, &
-                 "If True, then remap straight to model coordinate from file.",&
+                 "If True, then remap straight to model coordinate from file.", &
                  default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remappingScheme, &
-                 "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
+                 "The remapping scheme to use if using Z_INIT_ALE_REMAPPING "//&
                  "is True.", default="PPM_IH4", do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_GENERAL", remap_general, &
-                 "If false, only initializes to z* coordinates.\n"//&
+                 "If false, only initializes to z* coordinates. "//&
                  "If true, allows initialization directly to general coordinates.",&
                  default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
-                 "If false, only reconstructs profiles for valid data points.\n"//&
-                 "If true, inserts vanished layers below the valid data.",&
+                 "If false, only reconstructs profiles for valid data points. "//&
+                 "If true, inserts vanished layers below the valid data.", &
                  default=remap_general, do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_OLD_ALG", remap_old_alg, &
-                 "If false, uses the preferred remapping algorithm for initialization.\n"//&
-                 "If true, use an older, less robust algorithm for remapping.",&
+                 "If false, uses the preferred remapping algorithm for initialization. "//&
+                 "If true, use an older, less robust algorithm for remapping.", &
                  default=.true., do_not_log=just_read)
   call get_param(PF, mdl, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
@@ -2077,14 +2080,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   endif
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
-                 "If true, all mass below the bottom removed if the \n"//&
-                 "topography is shallower than the thickness input file \n"//&
+                 "If true, all mass below the bottom removed if the "//&
+                 "topography is shallower than the thickness input file "//&
                  "would indicate.", default=.false., do_not_log=just_read)
 
     call get_param(PF, mdl, "FIT_TO_TARGET_DENSITY_IC", adjust_temperature, &
-                 "If true, all the interior layers are adjusted to \n"//&
-                 "their target densities using mostly temperature \n"//&
-                 "This approach can be problematic, particularly in the \n"//&
+                 "If true, all the interior layers are adjusted to "//&
+                 "their target densities using mostly temperature "//&
+                 "This approach can be problematic, particularly in the "//&
                  "high latitudes.", default=.true., do_not_log=just_read)
   endif
   if (just_read) then

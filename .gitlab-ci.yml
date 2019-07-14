@@ -116,8 +116,8 @@ run:
     - time tar zxf $CACHE_DIR/build-intel-repro-$CI_PIPELINE_ID.tgz
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
-    - echo "make -f MRS/Makefile.tests all -B" > job.sh
-    - msub -l partition=c4,nodes=29,walltime=00:31:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
+    - (echo '#!/bin/tcsh';echo 'make -f MRS/Makefile.tests all -B') > job.sh
+    - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh
     - cat log.$CI_PIPELINE_ID
     - test -f restart_results_gnu.tar.gz
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz

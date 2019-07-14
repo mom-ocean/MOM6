@@ -1313,27 +1313,27 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   call get_param(param_file, mdl, "DT_OFFLINE", CS%dt_offline, &
     "Length of time between reading in of input fields",      fail_if_missing = .true.)
   call get_param(param_file, mdl, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
-    "Length of the offline timestep for tracer column sources/sinks\n" //&
-    "This should be set to the length of the coupling timestep for \n" //&
+    "Length of the offline timestep for tracer column sources/sinks " //&
+    "This should be set to the length of the coupling timestep for " //&
     "tracers which need shortwave fluxes",                    fail_if_missing = .true.)
   call get_param(param_file, mdl, "START_INDEX", CS%start_index, &
     "Which time index to start from", default=1)
   call get_param(param_file, mdl, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
-    "True if the time-averaged fields and snapshot fields\n"//&
+    "True if the time-averaged fields and snapshot fields "//&
     "are offset by one time level", default=.false.)
   call get_param(param_file, mdl, "REDISTRIBUTE_METHOD", redistribute_method, &
-    "Redistributes any remaining horizontal fluxes throughout\n"    //&
-    "the rest of water column. Options are 'barotropic' which\n"    //&
-    "evenly distributes flux throughout the entire water column,\n" //&
-    "'upwards' which adds the maximum of the remaining flux in\n"   //&
-    "each layer above, both which first applies upwards and then\n" //&
+    "Redistributes any remaining horizontal fluxes throughout "    //&
+    "the rest of water column. Options are 'barotropic' which "    //&
+    "evenly distributes flux throughout the entire water column, " //&
+    "'upwards' which adds the maximum of the remaining flux in "   //&
+    "each layer above, both which first applies upwards and then " //&
     "barotropic, and 'none' which does no redistribution", &
     default='barotropic')
   call get_param(param_file, mdl, "NUM_OFF_ITER", CS%num_off_iter, &
     "Number of iterations to subdivide the offline tracer advection and diffusion", &
     default = 60)
   call get_param(param_file, mdl, "OFF_ALE_MOD", CS%off_ale_mod, &
-    "Sets how many horizontal advection steps are taken before an ALE\n" //&
+    "Sets how many horizontal advection steps are taken before an ALE " //&
     "remapping step is done. 1 would be x->y->ALE, 2 would be"           //&
     "x->y->x->y->ALE", default = 1)
   call get_param(param_file, mdl, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
@@ -1350,21 +1350,21 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
     "Name of the variable containing the depth of active mixing",&
     default='ePBL_h_ML')
   call get_param(param_file, mdl, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
-    "Adds a synthetic diurnal cycle in the same way that the ice\n" // &
-    "model would have when time-averaged fields of shortwave\n"    // &
+    "Adds a synthetic diurnal cycle in the same way that the ice " // &
+    "model would have when time-averaged fields of shortwave "    // &
     "radiation are read in", default=.false.)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
-    "The maximum permitted increment for the diapycnal \n"//&
-    "diffusivity from TKE-based parameterizations, or a \n"//&
+    "The maximum permitted increment for the diapycnal "//&
+    "diffusivity from TKE-based parameterizations, or a "//&
     "negative value for no limit.", units="m2 s-1", default=-1.0)
   call get_param(param_file, mdl, "MIN_RESIDUAL_TRANSPORT", CS%min_residual, &
-    "How much remaining transport before the main offline advection\n"// &
-    "is exited. The default value corresponds to about 1 meter of\n"  // &
+    "How much remaining transport before the main offline advection "// &
+    "is exited. The default value corresponds to about 1 meter of "  // &
     "difference in a grid cell", default = 1.e9)
   call get_param(param_file, mdl, "READ_ALL_TS_UVH", CS%read_all_ts_uvh,  &
-    "Reads all time levels of a subset of the fields necessary to run \n"    //      &
-    "the model offline. This can require a large amount of memory\n"//      &
-    "and will make initialization very slow. However, for offline\n"//      &
+    "Reads all time levels of a subset of the fields necessary to run "    //      &
+    "the model offline. This can require a large amount of memory "//      &
+    "and will make initialization very slow. However, for offline "//      &
     "runs spanning more than a year this can reduce total I/O overhead",    &
     default = .false.)
 

@@ -719,9 +719,9 @@ subroutine EOS_init(param_file, EOS)
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "EQN_OF_STATE", tmpstr, &
-                 "EQN_OF_STATE determines which ocean equation of state \n"//&
-                 "should be used.  Currently, the valid choices are \n"//&
-                 '"LINEAR", "UNESCO", "WRIGHT", "NEMO" and "TEOS10". \n'//&
+                 "EQN_OF_STATE determines which ocean equation of state "//&
+                 "should be used.  Currently, the valid choices are "//&
+                 '"LINEAR", "UNESCO", "WRIGHT", "NEMO" and "TEOS10". '//&
                  "This is only used if USE_EOS is true.", default=EOS_DEFAULT)
   select case (uppercase(tmpstr))
     case (EOS_LINEAR_STRING)
@@ -744,26 +744,26 @@ subroutine EOS_init(param_file, EOS)
   if (EOS%form_of_EOS == EOS_LINEAR) then
     EOS%Compressible = .false.
     call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", \n"//&
+                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
                  "this is the density at T=0, S=0.", units="kg m-3", &
                  default=1000.0)
     call get_param(param_file, mdl, "DRHO_DT", EOS%dRho_dT, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", \n"//&
-                 "this is the partial derivative of density with \n"//&
+                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
+                 "this is the partial derivative of density with "//&
                  "temperature.", units="kg m-3 K-1", default=-0.2)
     call get_param(param_file, mdl, "DRHO_DS", EOS%dRho_dS, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", \n"//&
-                 "this is the partial derivative of density with \n"//&
+                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
+                 "this is the partial derivative of density with "//&
                  "salinity.", units="kg m-3 PSU-1", default=0.8)
   endif
 
   call get_param(param_file, mdl, "EOS_QUADRATURE", EOS%EOS_quadrature, &
-                 "If true, always use the generic (quadrature) code \n"//&
+                 "If true, always use the generic (quadrature) code "//&
                  "code for the integrals of density.", default=.false.)
 
   call get_param(param_file, mdl, "TFREEZE_FORM", tmpstr, &
-                 "TFREEZE_FORM determines which expression should be \n"//&
-                 "used for the freezing point.  Currently, the valid \n"//&
+                 "TFREEZE_FORM determines which expression should be "//&
+                 "used for the freezing point.  Currently, the valid "//&
                  'choices are "LINEAR", "MILLERO_78", "TEOS10"', &
                  default=TFREEZE_DEFAULT)
   select case (uppercase(tmpstr))
@@ -780,17 +780,17 @@ subroutine EOS_init(param_file, EOS)
 
   if (EOS%form_of_TFreeze == TFREEZE_LINEAR) then
     call get_param(param_file, mdl, "TFREEZE_S0_P0",EOS%TFr_S0_P0, &
-                 "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", \n"//&
-                 "this is the freezing potential temperature at \n"//&
+                 "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
+                 "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="deg C", default=0.0)
     call get_param(param_file, mdl, "DTFREEZE_DS",EOS%dTFr_dS, &
-                 "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", \n"//&
-                 "this is the derivative of the freezing potential \n"//&
+                 "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
+                 "this is the derivative of the freezing potential "//&
                  "temperature with salinity.", &
                  units="deg C PSU-1", default=-0.054)
     call get_param(param_file, mdl, "DTFREEZE_DP",EOS%dTFr_dP, &
-                 "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", \n"//&
-                 "this is the derivative of the freezing potential \n"//&
+                 "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
+                 "this is the derivative of the freezing potential "//&
                  "temperature with pressure.", &
                  units="deg C Pa-1", default=0.0)
   endif
@@ -1142,7 +1142,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real :: dz(HIO%iscB:HIO%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m].
   real :: dz_x(5,HIO%iscB:HIO%iecB) ! Layer thicknesses along an x-line of subrid locations [Z ~> m].
   real :: dz_y(5,HIO%isc:HIO%iec)   ! Layer thicknesses along a y-line of subrid locations [Z ~> m].
-  real :: weight_t, weight_b        ! Nondimensional wieghts of the top and bottom.
+  real :: weight_t, weight_b        ! Nondimensional weights of the top and bottom.
   real :: massWeightToggle          ! A nondimensional toggle factor (0 or 1).
   real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC].
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt].

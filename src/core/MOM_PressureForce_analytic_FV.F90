@@ -810,36 +810,36 @@ subroutine PressureForce_AFV_init(Time, G, GV, US, param_file, diag, CS, tides_C
   mdl = "MOM_PressureForce_AFV"
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
-                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
-                 "If true, use mass weighting when interpolating T/S for\n"//&
-                 "integrals near the bathymetry in AFV pressure gradient\n"//&
+                 "If true, use mass weighting when interpolating T/S for "//&
+                 "integrals near the bathymetry in AFV pressure gradient "//&
                  "calculations.", default=.false.)
   call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", CS%reconstruct, &
-                 "If True, use vertical reconstruction of T & S within\n"//&
-                 "the integrals of the FV pressure gradient calculation.\n"//&
-                 "If False, use the constant-by-layer algorithm.\n"//&
+                 "If True, use vertical reconstruction of T & S within "//&
+                 "the integrals of the FV pressure gradient calculation. "//&
+                 "If False, use the constant-by-layer algorithm. "//&
                  "The default is set by USE_REGRIDDING.", &
                  default=use_ALE )
   call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", CS%Recon_Scheme, &
-                 "Order of vertical reconstruction of T/S to use in the\n"//&
-                 "integrals within the FV pressure gradient calculation."//&
+                 "Order of vertical reconstruction of T/S to use in the "//&
+                 "integrals within the FV pressure gradient calculation.\n"//&
                  " 0: PCM or no reconstruction.\n"//&
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=1)
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION_PRESSURE", CS%boundary_extrap, &
-                 "If true, the reconstruction of T & S for pressure in \n"//&
-                 "boundary cells is extrapolated, rather than using PCM \n"//&
-                 "in these cells. If true, the same order polynomial is \n"//&
+                 "If true, the reconstruction of T & S for pressure in "//&
+                 "boundary cells is extrapolated, rather than using PCM "//&
+                 "in these cells. If true, the same order polynomial is "//&
                  "used as is used for the interior cells.", default=.true.)
 
   if (CS%tides) then

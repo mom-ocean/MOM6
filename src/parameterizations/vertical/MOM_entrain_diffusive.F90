@@ -79,10 +79,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
   ! At least one of the two following arguments must be present.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
                   optional, intent(in)    :: Kd_Lay !< The diapycnal diffusivity of layers
-                                                !! [Z2 s-1 ~> m2 s-1].
+                                                !! [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
                   optional, intent(in)    :: Kd_int !< The diapycnal diffusivity of interfaces
-                                                !! [Z2 s-1 ~> m2 s-1].
+                                                !! [Z2 T-1 ~> m2 s-1].
 
 !   This subroutine calculates ea and eb, the rates at which a layer entrains
 ! from the layers above and below.  The entrainment rates are proportional to
@@ -271,23 +271,25 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, US, CS, ea, eb,
 
     if (present(Kd_Lay)) then
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = GV%Z_to_H**2 * (dt*Kd_lay(i,j,k))
+        dtKd(i,k) = GV%Z_to_H**2 * (dt * (US%s_to_T * Kd_lay(i,j,k)))
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
-          dtKd_int(i,K) = GV%Z_to_H**2 * (dt*Kd_int(i,j,K))
+          dtKd_int(i,K) = GV%Z_to_H**2 * (dt * (US%s_to_T * Kd_int(i,j,K)))
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
-          dtKd_int(i,K) = GV%Z_to_H**2 * (0.5*dt*(Kd_lay(i,j,k-1) + Kd_lay(i,j,k)))
+          dtKd_int(i,K) = GV%Z_to_H**2 * (0.5 * dt &
+              * (US%s_to_T * (Kd_lay(i,j,k-1) + Kd_lay(i,j,k))))
         enddo ; enddo
       endif
     else ! Kd_int must be present, or there already would have been an error.
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = GV%Z_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
+        dtKd(i,k) = GV%Z_to_H**2 * (0.5 * dt &
+            * (US%T_to_s * (Kd_int(i,j,K)+Kd_int(i,j,K+1))))
       enddo ; enddo
       dO K=1,nz+1 ; do i=is,ie
-        dtKd_int(i,K) = GV%Z_to_H**2 * (dt*Kd_int(i,j,K))
+        dtKd_int(i,K) = GV%Z_to_H**2 * (dt * (US%T_to_s * Kd_int(i,j,K)))
       enddo ; enddo
     endif
 
@@ -2112,12 +2114,12 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CORRECT_DENSITY", CS%correct_density, &
-                 "If true, and USE_EOS is true, the layer densities are \n"//&
-                 "restored toward their target values by the diapycnal \n"//&
+                 "If true, and USE_EOS is true, the layer densities are "//&
+                 "restored toward their target values by the diapycnal "//&
                  "mixing, as described in Hallberg (MWR, 2000).", &
                  default=.true.)
   call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
-                 "The maximum number of iterations that may be used to \n"//&
+                 "The maximum number of iterations that may be used to "//&
                  "calculate the interior diapycnal entrainment.", default=5)
 ! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
   call get_param(param_file, mdl, "KD", Kd, fail_if_missing=.true.)

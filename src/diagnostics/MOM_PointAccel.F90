@@ -758,17 +758,17 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "U_TRUNC_FILE", CS%u_trunc_file, &
-                 "The absolute path to the file where the accelerations \n"//&
+                 "The absolute path to the file where the accelerations "//&
                  "leading to zonal velocity truncations are written. \n"//&
-                 "Leave this empty for efficiency if this diagnostic is \n"//&
+                 "Leave this empty for efficiency if this diagnostic is "//&
                  "not needed.", default="", debuggingParam=.true.)
   call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
-                 "The absolute path to the file where the accelerations \n"//&
+                 "The absolute path to the file where the accelerations "//&
                  "leading to meridional velocity truncations are written. \n"//&
-                 "Leave this empty for efficiency if this diagnostic is \n"//&
+                 "Leave this empty for efficiency if this diagnostic is "//&
                  "not needed.", default="", debuggingParam=.true.)
   call get_param(param_file, mdl, "MAX_TRUNC_FILE_SIZE_PER_PE", CS%max_writes, &
-                 "The maximum number of colums of truncations that any PE \n"//&
+                 "The maximum number of colums of truncations that any PE "//&
                  "will write out during a run.", default=50, debuggingParam=.true.)
 
   if (len_trim(dirs%output_directory) > 0) then

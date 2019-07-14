@@ -2258,66 +2258,66 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
 ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MONOTONIC_CONTINUITY", CS%monotonic, &
-                 "If true, CONTINUITY_PPM uses the Colella and Woodward \n"//&
-                 "monotonic limiter.  The default (false) is to use a \n"//&
+                 "If true, CONTINUITY_PPM uses the Colella and Woodward "//&
+                 "monotonic limiter.  The default (false) is to use a "//&
                  "simple positive definite limiter.", default=.false.)
   call get_param(param_file, mdl, "SIMPLE_2ND_PPM_CONTINUITY", CS%simple_2nd, &
-                 "If true, CONTINUITY_PPM uses a simple 2nd order \n"//&
-                 "(arithmetic mean) interpolation of the edge values. \n"//&
-                 "This may give better PV conservation propterties. While \n"//&
-                 "it formally reduces the accuracy of the continuity \n"//&
-                 "solver itself in the strongly advective limit, it does \n"//&
-                 "not reduce the overall order of accuracy of the dynamic \n"//&
+                 "If true, CONTINUITY_PPM uses a simple 2nd order "//&
+                 "(arithmetic mean) interpolation of the edge values. "//&
+                 "This may give better PV conservation properties. While "//&
+                 "it formally reduces the accuracy of the continuity "//&
+                 "solver itself in the strongly advective limit, it does "//&
+                 "not reduce the overall order of accuracy of the dynamic "//&
                  "core.", default=.false.)
   call get_param(param_file, mdl, "UPWIND_1ST_CONTINUITY", CS%upwind_1st, &
-                 "If true, CONTINUITY_PPM becomes a 1st-order upwind \n"//&
-                 "continuity solver.  This scheme is highly diffusive \n"//&
-                 "but may be useful for debugging or in single-column \n"//&
+                 "If true, CONTINUITY_PPM becomes a 1st-order upwind "//&
+                 "continuity solver.  This scheme is highly diffusive "//&
+                 "but may be useful for debugging or in single-column "//&
                  "mode where its minimal stencil is useful.", default=.false.)
   call get_param(param_file, mdl, "ETA_TOLERANCE", CS%tol_eta, &
-                 "The tolerance for the differences between the \n"//&
-                 "barotropic and baroclinic estimates of the sea surface \n"//&
-                 "height due to the fluxes through each face.  The total \n"//&
-                 "tolerance for SSH is 4 times this value.  The default \n"//&
-                 "is 0.5*NK*ANGSTROM, and this should not be set less x\n"//&
+                 "The tolerance for the differences between the "//&
+                 "barotropic and baroclinic estimates of the sea surface "//&
+                 "height due to the fluxes through each face.  The total "//&
+                 "tolerance for SSH is 4 times this value.  The default "//&
+                 "is 0.5*NK*ANGSTROM, and this should not be set less "//&
                  "than about 10^-15*MAXIMUM_DEPTH.", units="m", scale=GV%m_to_H, &
                  default=0.5*G%ke*GV%Angstrom_m, unscaled=tol_eta_m)
 
   call get_param(param_file, mdl, "ETA_TOLERANCE_AUX", CS%tol_eta_aux, &
-                 "The tolerance for free-surface height discrepancies \n"//&
-                 "between the barotropic solution and the sum of the \n"//&
-                 "layer thicknesses when calculating the auxiliary \n"//&
-                 "corrected velocities. By default, this is the same as \n"//&
+                 "The tolerance for free-surface height discrepancies "//&
+                 "between the barotropic solution and the sum of the "//&
+                 "layer thicknesses when calculating the auxiliary "//&
+                 "corrected velocities. By default, this is the same as "//&
                  "ETA_TOLERANCE, but can be made larger for efficiency.", &
                  units="m", default=tol_eta_m, scale=GV%m_to_H)
   call get_param(param_file, mdl, "VELOCITY_TOLERANCE", CS%tol_vel, &
-                 "The tolerance for barotropic velocity discrepancies \n"//&
-                 "between the barotropic solution and  the sum of the \n"//&
+                 "The tolerance for barotropic velocity discrepancies "//&
+                 "between the barotropic solution and  the sum of the "//&
                  "layer thicknesses.", units="m s-1", default=3.0e8) ! The speed of light is the default.
 
   call get_param(param_file, mdl, "CONT_PPM_AGGRESS_ADJUST", CS%aggress_adjust,&
-                 "If true, allow the adjusted velocities to have a \n"//&
+                 "If true, allow the adjusted velocities to have a "//&
                  "relative CFL change up to 0.5.", default=.false.)
   CS%vol_CFL = CS%aggress_adjust
   call get_param(param_file, mdl, "CONT_PPM_VOLUME_BASED_CFL", CS%vol_CFL, &
-                 "If true, use the ratio of the open face lengths to the \n"//&
-                 "tracer cell areas when estimating CFL numbers.  The \n"//&
+                 "If true, use the ratio of the open face lengths to the "//&
+                 "tracer cell areas when estimating CFL numbers.  The "//&
                  "default is set by CONT_PPM_AGGRESS_ADJUST.", &
                  default=CS%aggress_adjust, do_not_read=CS%aggress_adjust)
   call get_param(param_file, mdl, "CONTINUITY_CFL_LIMIT", CS%CFL_limit_adjust, &
                  "The maximum CFL of the adjusted velocities.", units="nondim", &
                  default=0.5)
   call get_param(param_file, mdl, "CONT_PPM_BETTER_ITER", CS%better_iter, &
-                 "If true, stop corrective iterations using a velocity \n"//&
-                 "based criterion and only stop if the iteration is \n"//&
+                 "If true, stop corrective iterations using a velocity "//&
+                 "based criterion and only stop if the iteration is "//&
                  "better than all predecessors.", default=.true.)
   call get_param(param_file, mdl, "CONT_PPM_USE_VISC_REM_MAX", &
                                  CS%use_visc_rem_max, &
-                 "If true, use more appropriate limiting bounds for \n"//&
+                 "If true, use more appropriate limiting bounds for "//&
                  "corrections in strongly viscous columns.", default=.true.)
   call get_param(param_file, mdl, "CONT_PPM_MARGINAL_FACE_AREAS", CS%marginal_faces, &
-                 "If true, use the marginal face areas from the continuity \n"//&
-                 "solver for use as the weights in the barotropic solver. \n"//&
+                 "If true, use the marginal face areas from the continuity "//&
+                 "solver for use as the weights in the barotropic solver. "//&
                  "Otherwise use the transport averaged areas.", default=.true.)
 
   CS%diag => diag

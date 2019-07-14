@@ -322,10 +322,11 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   integer,       optional, intent(in)    :: halo !< Halo width over which to work
 
   ! local variables
-  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement
-  real :: S_min      !< The minimum salinity
-  real :: mc         !< A layer's mass kg  m-2 .
+  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [gSalt m-2]
+  real :: S_min      !< The minimum salinity [ppt].
+  real :: mc         !< A layer's mass [kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
@@ -333,17 +334,15 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
 
 !  call cpu_clock_begin(id_clock_adjust_salt)
 
-!### MAKE THIS A RUN_TIME PARAMETER.  COULD IT BE 0?
-  S_min = 0.01
+  S_min = tv%min_salinity
 
   salt_add_col(:,:) = 0.0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,tv,h,salt_add_col, S_min) &
-!$OMP                          private(mc)
+  !$OMP parallel do default(none) private(mc)
   do j=js,je
     do k=nz,1,-1 ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.0) .and. &
-           ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
+      if ( (G%mask2dT(i,j) > 0.0) .and. &
+           ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0)) ) then
         mc = GV%H_to_kg_m2 * h(i,j,k)
         if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
           ! Very thin layers should not be adjusted by the salt flux
@@ -351,14 +350,12 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
             salt_add_col(i,j) = salt_add_col(i,j) +  mc * (S_min - tv%S(i,j,k))
             tv%S(i,j,k) = S_min
           endif
+        elseif (salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k)) <= 0.0) then
+          tv%S(i,j,k) = tv%S(i,j,k) - salt_add_col(i,j) / mc
+          salt_add_col(i,j) = 0.0
         else
-          if (salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k)) <= 0.0) then
-            tv%S(i,j,k) = tv%S(i,j,k) - salt_add_col(i,j)/mc
-            salt_add_col(i,j) = 0.0
-          else
-            salt_add_col(i,j) = salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k))
-            tv%S(i,j,k) = S_min
-          endif
+          salt_add_col(i,j) = salt_add_col(i,j) + mc * (S_min - tv%S(i,j,k))
+          tv%S(i,j,k) = S_min
         endif
       endif
     enddo ; enddo
@@ -643,7 +640,8 @@ end subroutine find_uv_at_h
 
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
-subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US, diagPtr, id_N2subML, id_MLDsq)
+subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US, diagPtr, &
+                                          id_N2subML, id_MLDsq, dz_subML)
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
@@ -656,19 +654,25 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
   integer,       optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
+  real,          optional, intent(in) :: dz_subML    !< The distance over which to calculate N2subML
+                                                     !! or 50 m if missing [Z ~> m]
 
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [kg m-3].
-  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2     ! Reference pressures [Pa].
-  real, dimension(SZI_(G)) :: dK, dKm1, d1          ! Depths [Z ~> m].
-  real, dimension(SZI_(G)) :: rhoSurf, rhoAtK, rho1 ! Densities used for N2 [kg m-3].
+  real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [Pa].
+  real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m].
+  real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [degC].
+  real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [ppt].
+  real, dimension(SZI_(G)) :: rho_subML, rho_deeper ! Densities used in the N2 calculation [kg m-3].
+  real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
+  real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixedlayer depth [kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
-  real :: Rho_x_gE         ! The product of density, gravitational acceleartion and a unit
-                           ! conversion factor [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
+  logical, dimension(SZI_(G)) :: N2_region_set ! If true, all necessary values for calculating N2
+                                               ! have been stored already.
   real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [m4 s-2 kg-1].
-  real :: dz_subML         ! Depth below ML over which to diagnose stratification [Z ~> m].
+  real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
 
@@ -676,12 +680,12 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
   id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
 
-  Rho_x_gE = GV%g_Earth * GV%Rho0
   gE_rho0 = US%m_to_Z**2 * GV%g_Earth / GV%Rho0
-  dz_subML = 50.*US%m_to_Z
+  dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  pRef_MLD(:) = 0. ; pRef_N2(:) = 0.
+
+  pRef_MLD(:) = 0.0
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
     call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, tv%eqn_of_state)
@@ -689,11 +693,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
       if (id_N2>0) then
-        subMLN2(i,j) = 0.
-        rho1(i) = 0.
-        d1(i) = 0.
-        pRef_N2(i) = Rho_x_gE * h(i,j,1) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
-        !### This should be: pRef_N2(i) = GV%H_to_Pa * h(i,j,1) ! This might change answers at roundoff.
+        subMLN2(i,j) = 0.0
+        H_subML(i) = h(i,j,1) ; dH_N2(i) = 0.0
+        T_subML(i) = 0.0  ; S_subML(i) = 0.0 ; T_deeper(i) = 0.0 ; S_deeper(i) = 0.0
+        N2_region_set(i) = (G%mask2dT(i,j)<0.5) ! Only need to work on ocean points.
       endif
     enddo
     do k=2,nz
@@ -702,27 +705,23 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
         dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) * GV%H_to_Z ! Depth of center of layer K
       enddo
 
-      ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
+      ! Prepare to calculate stratification, N2, immediately below the mixed layer by finding
+      ! the cells that extend over at least dz_subML.
       if (id_N2>0) then
-        do i=is,ie
-          pRef_N2(i) = pRef_N2(i) + Rho_x_gE * h(i,j,k) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
-          !### This should be: pRef_N2(i) = pRev_N2(i) + GV%H_to_Pa * h(i,j,k)
-          !### This might change answers at roundoff.
-        enddo
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
-        do i=is,ie
-          if (MLD(i,j)>0. .and. subMLN2(i,j)==0.) then ! This block is below the mixed layer
-            if (d1(i)==0.) then ! Record the density, depth and pressure, immediately below the ML
-              rho1(i) = rhoAtK(i)
-              d1(i) = dK(i)
-              !### It looks to me like there is bad logic here. - RWH
-              ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
-              pRef_N2(i) = pRef_N2(i) + Rho_x_gE * h(i,j,k) * GV%H_to_Z ! Boussinesq approximation!!!! ?????
-              !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%H_to_Pa * h(i,j,k)
-              !### This might change answers at roundoff.
-            endif
-            if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
-              subMLN2(i,j) = gE_rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+         do i=is,ie
+          if (MLD(i,j)==0.0) then  ! Still in the mixed layer.
+            H_subML(i) = H_subML(i) + h(i,j,k)
+          elseif (.not.N2_region_set(i)) then ! This block is below the mixed layer, but N2 has not been found yet.
+            if (dH_N2(i)==0.0) then ! Record the temperature, salinity, pressure, immediately below the ML
+              T_subML(i) = tv%T(i,j,k) ; S_subML(i) = tv%S(i,j,k)
+              H_subML(i) = H_subML(i) + 0.5 * h(i,j,k) ! Start midway through this layer.
+              dH_N2(i) = 0.5 * h(i,j,k)
+            elseif (dH_N2(i) + h(i,j,k) < dH_subML) then
+              dH_N2(i) = dH_N2(i) + h(i,j,k)
+            else  ! This layer includes the base of the region where N2 is calculated.
+              T_deeper(i) = tv%T(i,j,k) ; S_deeper(i) = tv%S(i,j,k)
+              dH_N2(i) = dH_N2(i) + 0.5 * h(i,j,k)
+              N2_region_set(i) = .true.
             endif
           endif
         enddo ! i-loop
@@ -744,11 +743,21 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
     enddo ! k-loop
     do i=is,ie
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
-   !  if (id_N2>0 .and. subMLN2(i,j)==0. .and. d1(i)>0. .and. dK(i)-d1(i)>0.) then
-   !    ! Use what ever stratification we can, measured over what ever distance is available
-   !    subMLN2(i,j) = gE_rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
-   !  endif
     enddo
+
+    if (id_N2>0) then  ! Now actually calculate stratification, N2, below the mixed layer.
+      do i=is,ie ; pRef_N2(i) = GV%H_to_Pa * (H_subML(i) + 0.5*dH_N2(i)) ; enddo
+      ! if ((.not.N2_region_set(i)) .and. (dH_N2(i) > 0.5*dH_subML)) then
+      !    ! Use whatever stratification we can, measured over whatever distance is available?
+      !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
+      !    N2_region_set(i) = .true.
+      ! endif
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, is, ie-is+1, tv%eqn_of_state)
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, is, ie-is+1, tv%eqn_of_state)
+      do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
+        subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
+      endif ; enddo
+    endif
   enddo ! j-loop
 
   if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
@@ -1101,13 +1110,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         tv%T(i,j,k) * max(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         tv%T(i,j,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         tv%T(i,j,k) * dThickness * GV%H_to_kg_m2
-!### NOTE: tv%T should be T2d in the expressions above.
+                         T2d(i,k) * dThickness * GV%H_to_kg_m2
 
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
@@ -1329,31 +1337,31 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
                    "The following parameters are used for auxiliary diabatic processes.")
 
   call get_param(param_file, mdl, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
-                 "If true, try to use any frazil heat deficit to cool any\n"//&
-                 "overlying layers down to the freezing point, thereby \n"//&
-                 "avoiding the creation of thin ice when the SST is above \n"//&
+                 "If true, try to use any frazil heat deficit to cool any "//&
+                 "overlying layers down to the freezing point, thereby "//&
+                 "avoiding the creation of thin ice when the SST is above "//&
                  "the freezing point.", default=.true.)
   call get_param(param_file, mdl, "PRESSURE_DEPENDENT_FRAZIL", &
                                 CS%pressure_dependent_frazil, &
-                 "If true, use a pressure dependent freezing temperature \n"//&
-                 "when making frazil. The default is false, which will be \n"//&
+                 "If true, use a pressure dependent freezing temperature "//&
+                 "when making frazil. The default is false, which will be "//&
                  "faster but is inappropriate with ice-shelf cavities.", &
                  default=.false.)
 
   if (use_ePBL) then
     call get_param(param_file, mdl, "IGNORE_FLUXES_OVER_LAND", CS%ignore_fluxes_over_land,&
-         "If true, the model does not check if fluxes are being applied\n"//&
-         "over land points. This is needed when the ocean is coupled \n"//&
-         "with ice shelves and sea ice, since the sea ice mask needs to \n"//&
-         "be different than the ocean mask to avoid sea ice formation \n"//&
+         "If true, the model does not check if fluxes are being applied "//&
+         "over land points. This is needed when the ocean is coupled "//&
+         "with ice shelves and sea ice, since the sea ice mask needs to "//&
+         "be different than the ocean mask to avoid sea ice formation "//&
          "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
     call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
-                 "If true, apply additional mixing whereever there is \n"//&
-                 "runoff, so that it is mixed down to RIVERMIX_DEPTH \n"//&
+                 "If true, apply additional mixing wherever there is "//&
+                 "runoff, so that it is mixed down to RIVERMIX_DEPTH "//&
                  "if the ocean is that deep.", default=.false.)
     if (CS%do_rivermix) &
       call get_param(param_file, mdl, "RIVERMIX_DEPTH", CS%rivermix_depth, &
-                 "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
+                 "The depth to which rivers are mixed if DO_RIVERMIX is "//&
                  "defined.", units="m", default=0.0, scale=US%m_to_Z)
   else
     CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; CS%ignore_fluxes_over_land = .false.
@@ -1361,11 +1369,11 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 
   if (GV%nkml == 0) then
     call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
-                   "If true, use the fluxes%runoff_Hflx field to set the \n"//&
+                   "If true, use the fluxes%runoff_Hflx field to set the "//&
                    "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
                    default=.false.)
     call get_param(param_file, mdl, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
-                   "If true, use the fluxes%calving_Hflx field to set the \n"//&
+                   "If true, use the fluxes%calving_Hflx field to set the "//&
                    "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
                    default=.false.)
   else

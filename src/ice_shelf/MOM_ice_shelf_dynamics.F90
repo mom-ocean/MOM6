@@ -225,7 +225,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
                  default=.false., do_not_log=.true.)
   if (shelf_mass_is_dynamic) then
     call get_param(param_file, mdl, "OVERRIDE_SHELF_MOVEMENT", override_shelf_movement, &
-                 "If true, user provided code specifies the ice-shelf \n"//&
+                 "If true, user provided code specifies the ice-shelf "//&
                  "movement instead of the dynamic ice model.", default=.false., do_not_log=.true.)
     active_shelf_dynamics = .not.override_shelf_movement
   endif
@@ -312,29 +312,29 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   override_shelf_movement = .false. ; active_shelf_dynamics = .false.
   if (shelf_mass_is_dynamic) then
     call get_param(param_file, mdl, "OVERRIDE_SHELF_MOVEMENT", override_shelf_movement, &
-                 "If true, user provided code specifies the ice-shelf \n"//&
+                 "If true, user provided code specifies the ice-shelf "//&
                  "movement instead of the dynamic ice model.", default=.false., do_not_log=.true.)
     active_shelf_dynamics = .not.override_shelf_movement
 
     call get_param(param_file, mdl, "GROUNDING_LINE_INTERPOLATE", CS%GL_regularize, &
-                 "If true, regularize the floatation condition at the \n"//&
+                 "If true, regularize the floatation condition at the "//&
                  "grounding line as in Goldberg Holland Schoof 2009.", default=.false.)
     call get_param(param_file, mdl, "GROUNDING_LINE_INTERP_SUBGRID_N", CS%n_sub_regularize, &
-                 "The number of sub-partitions of each cell over which to \n"//&
-                 "integrate for the interpolated grounding line. Each cell \n"//&
-                 "is divided into NxN equally-sized rectangles, over which the \n"//&
+                 "The number of sub-partitions of each cell over which to "//&
+                 "integrate for the interpolated grounding line. Each cell "//&
+                 "is divided into NxN equally-sized rectangles, over which the "//&
                  "basal contribution is integrated by iterative quadrature.", &
                  default=0)
     call get_param(param_file, mdl, "GROUNDING_LINE_COUPLE", CS%GL_couple, &
-                 "If true, let the floatation condition be determined by \n"//&
-                 "ocean column thickness. This means that update_OD_ffrac \n"//&
+                 "If true, let the floatation condition be determined by "//&
+                 "ocean column thickness. This means that update_OD_ffrac "//&
                  "will be called.  GL_REGULARIZE and GL_COUPLE are exclusive.", &
                  default=.false., do_not_log=CS%GL_regularize)
     if (CS%GL_regularize) CS%GL_couple = .false.
     if (CS%GL_regularize .and. (CS%n_sub_regularize == 0)) call MOM_error (FATAL, &
       "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
     call get_param(param_file, mdl, "ICE_SHELF_CFL_FACTOR", CS%CFL_factor, &
-                 "A factor used to limit timestep as CFL_FACTOR * min (\Delta x / u). \n"// &
+                 "A factor used to limit timestep as CFL_FACTOR * min (\Delta x / u). "//&
                  "This is only used with an ice-only model.", default=0.25)
   endif
   call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
@@ -372,14 +372,14 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call get_param(param_file, mdl, "CONJUGATE_GRADIENT_MAXIT", CS%cg_max_iterations, &
                 "max iteratiions in CG solver", default=2000)
     call get_param(param_file, mdl, "THRESH_FLOAT_COL_DEPTH", CS%thresh_float_col_depth, &
-                "min ocean thickness to consider ice *floating*; \n"// &
+                "min ocean thickness to consider ice *floating*; "//&
                 "will only be important with use of tides", &
                 units="m", default=1.e-3, scale=US%m_to_Z)
     call get_param(param_file, mdl, "NONLIN_SOLVE_ERR_MODE", CS%nonlin_solve_err_mode, &
-                "Choose whether nonlin error in vel solve is based on nonlinear \n"// &
+                "Choose whether nonlin error in vel solve is based on nonlinear "//&
                 "residual (1) or relative change since last iteration (2)", default=1)
     call get_param(param_file, mdl, "SHELF_DYN_REPRODUCING_SUMS", CS%use_reproducing_sums, &
-                "If true, use the reproducing extended-fixed-point sums in \n"//&
+                "If true, use the reproducing extended-fixed-point sums in "//&
                 "the ice shelf dynamics solvers.", default=.true.)
 
     call get_param(param_file, mdl, "SHELF_MOVING_FRONT", CS%moving_shelf_front, &

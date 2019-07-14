@@ -1291,14 +1291,14 @@ subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
-                 "A scaling factor for the diapycnal diffusivity used in \n"//&
+                 "A scaling factor for the diapycnal diffusivity used in "//&
                  "testing the energy requirements.", default=1.0, units="nondim")
   call get_param(param_file, mdl, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
-                 "A scaling factor for the column height change correction \n"//&
+                 "A scaling factor for the column height change correction "//&
                  "used in testing the energy requirements.", default=1.0, units="nondim")
   call get_param(param_file, mdl, "ENERGY_REQ_USE_TEST_PROFILE", &
                  CS%use_test_Kh_profile, &
-                 "If true, use the internal test diffusivity profile in \n"//&
+                 "If true, use the internal test diffusivity profile in "//&
                  "place of any that might be passed in as an argument.", default=.false.)
 
   CS%id_ERt = register_diag_field('ocean_model', 'EnReqTest_ERt', diag%axesZi, Time, &
