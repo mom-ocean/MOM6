@@ -147,7 +147,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  I_gEarth = 1.0 / GV%g_Earth
+  I_gEarth = 1.0 / (US%L_T_to_m_s**2 * GV%LZT_g_Earth)
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
@@ -206,12 +206,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = -US%L_T_to_m_s**2 * GV%LZT_g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
+      geopot_bot(i,j) = -US%L_T_to_m_s**2 * GV%LZT_g_Earth*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -435,7 +435,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
 
   h_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/CS%Rho0
-  G_Rho0 = GV%g_Earth/GV%Rho0
+  G_Rho0 = US%L_T_to_m_s**2 * GV%LZT_g_Earth/GV%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -639,7 +639,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
-  Rho0xG = Rho0*GV%g_Earth
+  Rho0xG = Rho0*US%L_T_to_m_s**2 * GV%LZT_g_Earth
   G_Rho0 = GV%LZT_g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   z_neglect = GV%H_subroundoff*GV%H_to_Z

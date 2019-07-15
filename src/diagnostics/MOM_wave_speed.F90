@@ -132,8 +132,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth / GV%Rho0
-  Z_to_Pa = GV%g_Earth * GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%LZT_g_Earth / GV%Rho0
+  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
   use_EOS = associated(tv%eqn_of_state)
 
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
@@ -599,9 +599,9 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth / GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%LZT_g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
-  Z_to_Pa = GV%g_Earth * GV%Rho0
+  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
 
   min_h_frac = tol1 / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &

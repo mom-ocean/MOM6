@@ -191,7 +191,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
-  g_Earth_z = GV%g_Earth
+  g_Earth_z = US%L_T_to_m_s**2 * GV%LZT_g_Earth
   I_gEarth = 1.0 / g_Earth_z
 
   if (use_p_atm) then
@@ -516,7 +516,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/GV%Rho0
-  g_Earth_z = GV%g_Earth
+  g_Earth_z = US%L_T_to_m_s**2 * GV%LZT_g_Earth
   G_Rho0 = g_Earth_z / GV%Rho0
   rho_ref = CS%Rho0
 

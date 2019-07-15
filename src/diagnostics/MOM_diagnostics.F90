@@ -832,7 +832,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / (GV%g_Earth*US%m_to_Z)
+        IG_Earth = 1.0 / GV%mks_g_Earth
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
@@ -841,7 +841,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
+                              z_top, z_bot, 0.0, GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth

@@ -562,11 +562,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*US%m_to_Z**2))
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%LZT_g_Earth))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*US%m_to_Z**2) !bgr bug-fix missing g
+                WN = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%LZT_g_Earth) !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -606,11 +606,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*US%m_to_Z**2))
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%LZT_g_Earth))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*US%m_to_Z**2)
+                WN = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%LZT_g_Earth)
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -824,7 +824,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       endif
       NUMBANDS = ID
       do B = 1,NumBands
-        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*US%m_to_Z**2)
+        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%LZT_g_Earth)
       enddo
     endif
 
@@ -1344,7 +1344,7 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
     CT=CT+1
     u10a = u10
     alpha = min(0.028, 0.0017 * u10 - 0.005)
-    z0rough = alpha * USTair**2 / GV%g_Earth ! Compute z0rough from ustar guess
+    z0rough = alpha * (US%m_s_to_L_T*USTair)**2 / GV%LZT_g_Earth ! Compute z0rough from ustar guess
     z0 = z0sm + z0rough
     CD = ( vonkar / log(10.*US%m_to_Z / z0) )**2 ! Compute CD from derived roughness
     u10 = USTair/sqrt(CD)  ! Compute new u10 from derived CD, while loop
