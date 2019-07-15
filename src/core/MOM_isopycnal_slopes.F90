@@ -331,65 +331,79 @@ end subroutine calc_isoneutral_slopes
 
 !> Returns tracer arrays (nominally T and S) with massless layers filled with
 !! sensible values, by diffusing vertically with a small but constant diffusivity.
-subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
+subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, larger_h_denom)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in !< Input temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in !< Input salinity [ppt]
   real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
                                                                 !! times a smoothing timescale [Z2 ~> m2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f  !< Filled temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filed salinity [ppt]
-  integer,                        optional, intent(in)  :: halo_here !< Halo width over which to compute
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f  !< Filled salinity [ppt]
+  integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
+                                                                !! 0 by default
+  logical,                        optional, intent(in)  :: larger_h_denom !< Present and true, add a large
+                                                                !! enough minimal thickness in the denominator of
+                                                                !! the flux calculations so that the fluxes are
+                                                                !! never so large as eliminate the transmission
+                                                                !! of information across groups of massless layers.
   ! Local variables
   real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
                                    ! between layers in a timestep [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
-  real :: kap_dt_x2                ! The product of 2*kappa*dt, converted to
-                                   ! the same units as h squared, [H2 ~> m2 or kg2 m-4].
-  real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to
-                                   ! allow for zero thicknesses.
+  real :: kap_dt_x2                ! The 2*kappa_dt converted to H units [H2 ~> m2 or kg2 m-4].
+  real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to allow for zero thicknesses.
+  real :: h0                       ! A negligible thickness to allow for zero thickness layers without
+                                   ! completely decouping groups of layers [H ~> m or kg m-2].
+                                   ! Often 0 < h_neglect << h0.
+  real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
+                                   ! added to ensure positive definiteness [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, halo
 
   halo=0 ; if (present(halo_here)) halo = max(halo_here,0)
 
-  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  nz = G%ke
+  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
-  kap_dt_x2 = (2.0*kappa_dt)*GV%Z_to_H**2
   h_neglect = GV%H_subroundoff
+  kap_dt_x2 = (2.0*kappa_dt)*GV%Z_to_H**2
+  h0 = h_neglect
+  if (present(larger_h_denom)) then
+    if (larger_h_denom) h0 = 1.0e-16*sqrt(kappa_dt)*GV%Z_to_H
+  endif
 
   if (kap_dt_x2 <= 0.0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
+    !$OMP parallel do default(shared)
     do k=1,nz ; do j=js,je ; do i=is,ie
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
-!$OMP parallel do default(none) private(ent,b1,d1,c1)   &
-!$OMP                            shared(is,ie,js,je,nz,kap_dt_x2,h,h_neglect,T_f,S_f,T_in,S_in)
+   !$OMP parallel do default(shared) private(ent,b1,d1,c1,h_tr)
     do j=js,je
       do i=is,ie
-        ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h_neglect)
-        b1(i) = 1.0 / (h(i,j,1)+ent(i,2))
-        d1(i) = b1(i) * h(i,j,1)
-        T_f(i,j,1) = (b1(i)*h(i,j,1))*T_in(i,j,1)
-        S_f(i,j,1) = (b1(i)*h(i,j,1))*S_in(i,j,1)
+        ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
+        h_tr = h(i,j,1) + h_neglect
+        b1(i) = 1.0 / (h_tr + ent(i,2))
+        d1(i) = b1(i) * h_tr
+        T_f(i,j,1) = (b1(i)*h_tr)*T_in(i,j,1)
+        S_f(i,j,1) = (b1(i)*h_tr)*S_in(i,j,1)
       enddo
       do k=2,nz-1 ; do i=is,ie
-        ent(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h_neglect)
+        ent(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h0)
+        h_tr = h(i,j,k) + h_neglect
         c1(i,k) = ent(i,K) * b1(i)
-        b1(i) = 1.0 / ((h(i,j,k) + d1(i)*ent(i,K)) + ent(i,K+1))
-        d1(i) = b1(i) * (h(i,j,k) + d1(i)*ent(i,K))
-        T_f(i,j,k) = b1(i) * (h(i,j,k)*T_in(i,j,k) + ent(i,K)*T_f(i,j,k-1))
-        S_f(i,j,k) = b1(i) * (h(i,j,k)*S_in(i,j,k) + ent(i,K)*S_f(i,j,k-1))
+        b1(i) = 1.0 / ((h_tr + d1(i)*ent(i,K)) + ent(i,K+1))
+        d1(i) = b1(i) * (h_tr + d1(i)*ent(i,K))
+        T_f(i,j,k) = b1(i) * (h_tr*T_in(i,j,k) + ent(i,K)*T_f(i,j,k-1))
+        S_f(i,j,k) = b1(i) * (h_tr*S_in(i,j,k) + ent(i,K)*S_f(i,j,k-1))
       enddo ; enddo
       do i=is,ie
         c1(i,nz) = ent(i,nz) * b1(i)
-        b1(i) = 1.0 / (h(i,j,nz) + d1(i)*ent(i,nz) + h_neglect)
-        T_f(i,j,nz) = b1(i) * (h(i,j,nz)*T_in(i,j,nz) + ent(i,nz)*T_f(i,j,nz-1))
-        S_f(i,j,nz) = b1(i) * (h(i,j,nz)*S_in(i,j,nz) + ent(i,nz)*S_f(i,j,nz-1))
+        h_tr = h(i,j,nz) + h_neglect
+        b1(i) = 1.0 / (h_tr + d1(i)*ent(i,nz))
+        T_f(i,j,nz) = b1(i) * (h_tr*T_in(i,j,nz) + ent(i,nz)*T_f(i,j,nz-1))
+        S_f(i,j,nz) = b1(i) * (h_tr*S_in(i,j,nz) + ent(i,nz)*S_f(i,j,nz-1))
       enddo
       do k=nz-1,1,-1 ; do i=is,ie
         T_f(i,j,k) = T_f(i,j,k) + c1(i,k+1)*T_f(i,j,k+1)

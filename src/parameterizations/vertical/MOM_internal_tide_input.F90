@@ -112,7 +112,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill, dt*US%s_to_T, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt*US%s_to_T, T_f, S_f, G, GV)
   endif
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)

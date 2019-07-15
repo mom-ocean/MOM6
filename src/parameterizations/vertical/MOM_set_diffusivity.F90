@@ -81,6 +81,8 @@ type, public :: set_diffusivity_CS ; private
                              !! Set to a negative value to have no limit.
   real    :: Kd_add          !< uniform diffusivity added everywhere without
                              !! filtering or scaling [Z2 T-1 ~> m2 s-1].
+  real    :: Kd_smooth       !< Vertical diffusivity used to interpolate more
+                             !! sensible values of T & S into thin layers [Z2 T-1 ~> m2 s-1].
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostic output timing
 
   logical :: limit_dissipation !< If enabled, dissipation is limited to be larger
@@ -267,8 +269,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
-  real      :: kappa_fill   ! diffusivity used to fill massless layers [Z2 T-1 ~> m2 s-1]
-  real      :: dt_fill      ! timestep used to fill massless layers [T ~> s]
+  real      :: kappa_dt_fill ! diffusivity times a timestep used to fill massless layers [Z2 ~> m2]
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -280,8 +281,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
 
   I_Rho0     = 1.0 / GV%Rho0
   ! ### Dimensional parameters
-  kappa_fill = 1.e-3 * US%m2_s_to_Z2_T
-  dt_fill    = 7200. * US%s_to_T
+  if (CS%answers_2018) then
+    kappa_dt_fill = US%m_to_Z**2 * 1.e-3 * 7200.
+  else
+    kappa_dt_fill = CS%Kd_smooth * dt_in_T
+  endif
   Omega2     = CS%omega * CS%omega
 
   use_EOS = associated(tv%eqn_of_state)
@@ -334,7 +338,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
       call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
       call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
-    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
@@ -350,7 +354,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
     call cpu_clock_begin(id_clock_kappaShear)
     if (CS%Vertex_shear) then
       call full_convection(G, GV, h, tv, T_adj, S_adj, fluxes%p_surf, &
-                           (GV%Z_to_H**2)*kappa_fill*dt_fill, halo=1)
+                           (GV%Z_to_H**2)*kappa_dt_fill, halo=1)
 
       call calc_kappa_shear_vertex(u, v, h, T_adj, S_adj, tv, fluxes%p_surf, visc%Kd_shear, &
                                    visc%TKE_turb, visc%Kv_shear_Bu, dt_in_T, G, GV, US, CS%kappaShear_CSp)
@@ -771,8 +775,11 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
     if (k == kb(i)) then
       maxEnt(i,kb(i)) = mFkb(i)
     elseif (k > kb(i)) then
-      maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
-!        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) !### BITWISE CHG
+      if (CS%answers_2018) then
+        maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
+      else
+        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i))
+      endif
       htot(i) = htot(i) + GV%H_to_Z*(h(i,j,k) - GV%Angstrom_H)
     endif
   enddo ; enddo
@@ -1595,7 +1602,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, US, CS, Kd_lay, TKE_to_Kd,
     do i=is,ie ; if (do_i(i)) then
       dzL = GV%H_to_Z*h(i,j,k) ;  z1 = dzL*I_decay(i)
       if (CS%ML_Rad_bug) then
-        !### These expresssions are dimensionally inconsistent. -RWH
+        ! These expresssions are dimensionally inconsistent. -RWH
         ! This is supposed to be the integrated energy deposited in the layer,
         ! not the average over the layer as in these expressions.
         if (z1 > 1e-5) then
@@ -2082,6 +2089,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   if (CS%use_LOTW_BBL_diffusivity .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
                  "set_diffusivity_init: KD_MAX must be set (positive) when "// &
                  "USE_LOTW_BBL_DIFFUSIVITY=True.")
+  call get_param(param_file, mdl, "KD_SMOOTH", CS%Kd_smooth, &
+                 "A diapycnal diffusivity that is used to interpolate "//&
+                 "more sensible values of T & S into thin layers.", &
+                 default=1.0e-6, scale=US%m_to_Z**2*US%T_to_s)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &

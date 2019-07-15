@@ -664,7 +664,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   find_work = (associated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, GV, 1)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, 1)
   endif
 
   if (CS%use_FGNV_streamfn .and. .not. associated(cg1)) call MOM_error(FATAL, &
@@ -1745,16 +1745,16 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 
 end subroutine add_detangling_Kh
 
-!> Fills tracer values in massless layers with sensible values by diffusing
+!> Fills tracer values (nominally T and S) in massless layers with sensible values by diffusing
 !! vertically with a (small) constant diffusivity.
-subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
-  type(ocean_grid_type),                    intent(in)  :: G     !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV    !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
+subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here)
+  type(ocean_grid_type),                    intent(in)  :: G     !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV    !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity [ppt]
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 T-1 ~> m2 s-1]
-  real,                                     intent(in)  :: dt    !< Time increment [T ~> s]
+  real,                                     intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
+                                                                 !! times a smoothing timescale [Z2 ~> m2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity [ppt]
   integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
@@ -1764,37 +1764,36 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
                                    ! between layers in a timestep [H ~> m or kg m-2].
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
-  real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
-  real :: h0                       ! A negligible thickness to allow for zero
-                                   ! thicknesses [H ~> m or kg m-2].
-  real :: h_neglect                ! A thickness that is so small it is usually lost in roundoff
-                                   ! and can be neglected [H ~> m or kg m-2]. 0 < h_neglect << h0.
+  real :: kap_dt_x2                ! The 2*kappa_dt converted to H units [H2 ~> m2 or kg2 m-4].
+  real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to allow for zero thicknesses.
+  real :: h0                       ! A negligible thickness to allow for zero thickness layers without
+                                   ! completely decouping groups of layers [H ~> m or kg m-2].
+                                   ! Often 0 < h_neglect << h0.
   real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
                                    ! added to ensure positive definiteness [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, halo
 
   halo=0 ; if (present(halo_here)) halo = max(halo_here,0)
 
-  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  nz = G%ke
+  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
+
   h_neglect = GV%H_subroundoff
-  kap_dt_x2 = (2.0*kappa*dt)*GV%Z_to_H**2
-  h0 = 1.0e-16*sqrt(kappa*dt)*GV%Z_to_H
+  kap_dt_x2 = (2.0*kappa_dt)*GV%Z_to_H**2
+  h0 = 1.0e-16*sqrt(kappa_dt)*GV%Z_to_H
 
   if (kap_dt_x2 <= 0.0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
+    !$OMP parallel do default(shared)
     do k=1,nz ; do j=js,je ; do i=is,ie
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
-!$OMP parallel do default(none) private(ent,b1,d1,c1,h_tr)   &
-!$OMP             shared(is,ie,js,je,nz,kap_dt_x2,h,h0,h_neglect,T_f,S_f,T_in,S_in)
-    do j=js,je
+   !$OMP parallel do default(shared) private(ent,b1,d1,c1,h_tr)
+   do j=js,je
       do i=is,ie
         ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
         h_tr = h(i,j,1) + h_neglect
         b1(i) = 1.0 / (h_tr + ent(i,2))
-        d1(i) = b1(i) * h(i,j,1)
+        d1(i) = b1(i) * h_tr
         T_f(i,j,1) = (b1(i)*h_tr)*T_in(i,j,1)
         S_f(i,j,1) = (b1(i)*h_tr)*S_in(i,j,1)
       enddo
