@@ -13,7 +13,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calc_isoneutral_slopes
+public calc_isoneutral_slopes, vert_fill_TS
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with

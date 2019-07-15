@@ -17,6 +17,7 @@ use MOM_forcing_type,        only : forcing, optics_type
 use MOM_full_convection,     only : full_convection
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
+use MOM_isopycnal_slopes,    only : vert_fill_TS
 use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing
 use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnostics
 use MOM_intrinsic_functions, only : invcosh
@@ -30,7 +31,6 @@ use MOM_CVMix_ddiff,         only : compute_ddiff_coeffs
 use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
 use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
 use MOM_string_functions,    only : uppercase
-use MOM_thickness_diffuse,   only : vert_fill_TS
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -338,7 +338,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
       call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
       call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
-    call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, larger_h_denom=.true.)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
