@@ -1008,7 +1008,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_adv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
+        CS%KE_adv(i,j,k) = GV%H_to_m * (KE_h(i,j) - 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo

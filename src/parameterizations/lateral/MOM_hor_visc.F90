@@ -19,8 +19,6 @@ use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 
-use mpp_mod, only : mpp_pe
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -1118,7 +1116,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           max_diss_rate(i,j,k) = 2.0*MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
           FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
           FrictWorkMax(i,j,k) = -max_diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
-          print *, "rank", mpp_pe(), i, j, k, max_diss_rate(i,j,k), h(i,j,k)
 
         ! Determine how much work GME needs to do to reach the "target" ratio between
         ! the amount of work actually done and the maximum allowed by theory. Note that

@@ -672,7 +672,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     ! Term - d(KE)/dx.
     do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
-      if (associated(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
+      if (associated(AD%gradKEu)) AD%gradKEu(I,j,k) = KEx(I,j)
     enddo ; enddo
 
 
@@ -778,7 +778,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     ! Term - d(KE)/dy.
     do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
-      if (associated(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
+      if (associated(AD%gradKEv)) AD%gradKEv(i,J,k) = KEy(i,J)
     enddo ; enddo
 
     if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then

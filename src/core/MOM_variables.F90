@@ -174,8 +174,8 @@ type, public :: accel_diag_ptrs
                            !! not due to any explicit accelerations [m s-1].
 
   ! These accelerations are sub-terms included in the accelerations above.
-  real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [m s-2]
-  real, pointer :: gradKEv(:,:,:) => NULL()  !< gradKEv = - d/dy(u2) [m s-2]
+  real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = d/dx(u2) [m s-2]
+  real, pointer :: gradKEv(:,:,:) => NULL()  !< gradKEv = d/dy(u2) [m s-2]
   real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u [m s-2]
   real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v [m s-2]
 
