@@ -185,7 +185,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (US%L_to_Z**2*GV%LZT_g_Earth) / GV%Rho0
+  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie

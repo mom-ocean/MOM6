@@ -640,10 +640,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = GV%LZT_g_Earth*US%L_to_m**2*US%s_to_T**2 * GV%H_to_m
+  G_scale = GV%g_Earth*US%L_to_m**2*US%s_to_T**2 * GV%H_to_m
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
-  G_rho0 = GV%LZT_g_Earth*US%L_to_m**2*US%s_to_T**2 / GV%Rho0
+  G_rho0 = GV%g_Earth*US%L_to_m**2*US%s_to_T**2 / GV%Rho0
   N2_floor = CS%N2_floor*US%Z_to_m**2
 
   use_EOS = associated(tv%eqn_of_state)

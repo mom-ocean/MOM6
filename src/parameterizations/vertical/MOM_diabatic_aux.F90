@@ -749,7 +749,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
   id_SQ = -1 ; if (PRESENT(id_MLDsq)) id_SQ = id_MLDsq
 
-  gE_rho0 = US%L_to_Z**2*GV%LZT_g_Earth / GV%Rho0
+  gE_rho0 = US%L_to_Z**2*GV%g_Earth / GV%Rho0
   dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -939,13 +939,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
-!  I_G_Earth = US%Z_to_m / (US%L_T_to_m_s**2 * GV%LZT_g_Earth)
+!  I_G_Earth = US%Z_to_m / (US%L_T_to_m_s**2 * GV%g_Earth)
   g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = US%L_to_Z**2*GV%LZT_g_Earth / GV%Rho0
+    GoRho       = US%L_to_Z**2*GV%g_Earth / GV%Rho0
     start       = 1 + G%isc - G%isd
     npts        = 1 + G%iec - G%isc
   endif

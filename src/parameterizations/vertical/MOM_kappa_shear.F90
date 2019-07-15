@@ -795,7 +795,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%z_to_H*GV%H_to_Pa
-  g_R0 = (US%L_to_Z**2 * GV%LZT_g_Earth) / GV%Rho0
+  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?

@@ -514,7 +514,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
       ! rivermix_depth =  The prescribed depth over which to mix river inflow
       ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
       ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
-      RmixConst = 0.5*CS%rivermix_depth * (US%L_to_m**2*GV%LZT_g_Earth*US%m_to_Z) * Irho0**2
+      RmixConst = 0.5*CS%rivermix_depth * (US%L_to_m**2*GV%g_Earth*US%m_to_Z) * Irho0**2
       do i=is,ie
         TKE_river(i) = max(0.0, RmixConst*dR0_dS(i)* &
             US%T_to_s*(fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * S(i,1))
@@ -865,7 +865,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
   integer :: is, ie, nz, i, k, k1, nzc, nkmb
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
-  g_H2_2Rho0 = (US%L_to_m**2*GV%LZT_g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0)
+  g_H2_2Rho0 = (US%L_to_m**2*GV%g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0)
   nzc = nz ; if (present(nz_conv)) nzc = nz_conv
   nkmb = CS%nkml+CS%nkbl
 
@@ -1068,7 +1068,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
 
   Angstrom = GV%Angstrom_H
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
-  g_H2_2Rho0 = (US%L_to_m**2*GV%LZT_g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0)
+  g_H2_2Rho0 = (US%L_to_m**2*GV%g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0)
   Idt = 1.0 / dt_in_T
   is = G%isc ; ie = G%iec ; nz = GV%ke
 
@@ -1609,7 +1609,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   integer :: is, ie, nz, i, k, ks, itt, n
 
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
-  g_H_2Rho0 = (US%L_to_m**2*GV%LZT_g_Earth * GV%H_to_Z) / (2.0 * GV%Rho0)
+  g_H_2Rho0 = (US%L_to_m**2*GV%g_Earth * GV%H_to_Z) / (2.0 * GV%Rho0)
   Hmix_min = CS%Hmix_min
   h_neglect = GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = GV%ke
@@ -2359,8 +2359,8 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea
   kb1 = CS%nkml+1; kb2 = CS%nkml+2
   nkmb = CS%nkml+CS%nkbl
   h_neglect = GV%H_subroundoff
-  g_2 = 0.5 * US%L_to_m**2*GV%LZT_g_Earth
-  Rho0xG = GV%Rho0 * US%L_to_m**2*GV%LZT_g_Earth
+  g_2 = 0.5 * US%L_to_m**2*GV%g_Earth
+  Rho0xG = GV%Rho0 * US%L_to_m**2*GV%g_Earth
   Idt_H2 = GV%H_to_Z**2 / dt_diag
   I2Rho0 = 0.5 / GV%Rho0
   Angstrom = GV%Angstrom_H
@@ -3161,8 +3161,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea
                         "CS%nkbl must be 1 in mixedlayer_detrain_1.")
 
   dt_Time = dt_in_T / CS%BL_detrain_time
-  g_H2_2Rho0dt = (US%L_to_m**2*GV%LZT_g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0 * dt_diag)
-  g_H2_2dt = (US%L_to_m**2*GV%LZT_g_Earth * GV%H_to_Z**2) / (2.0 * dt_diag)
+  g_H2_2Rho0dt = (US%L_to_m**2*GV%g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0 * dt_diag)
+  g_H2_2dt = (US%L_to_m**2*GV%g_Earth * GV%H_to_Z**2) / (2.0 * dt_diag)
 
   ! Move detrained water into the buffer layer.
   do k=1,CS%nkml

@@ -178,7 +178,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   Pi = (4.0*atan(1.0))
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%LZT_g_Earth /GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth /GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
   H_to_pres = GV%Z_to_H*GV%H_to_Pa

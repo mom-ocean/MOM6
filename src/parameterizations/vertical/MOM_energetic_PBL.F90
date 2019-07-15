@@ -806,7 +806,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   pres_Z(1) = 0.0
   do k=1,nz
     dMass = US%m_to_Z * GV%H_to_kg_m2 * h(k)
-    dPres = US%L_to_Z**2 * GV%LZT_g_Earth * dMass  ! Equivalent to GV%H_to_Pa * h(k) with rescaling
+    dPres = US%L_to_Z**2 * GV%g_Earth * dMass  ! Equivalent to GV%H_to_Pa * h(k) with rescaling
     dT_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dS(k)
     dT_to_dColHt(k) = dMass * dSV_dT(k)

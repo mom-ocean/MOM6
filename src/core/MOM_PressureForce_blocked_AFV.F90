@@ -191,7 +191,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
-  g_Earth_z = US%L_T_to_m_s**2 * GV%LZT_g_Earth
+  g_Earth_z = US%L_T_to_m_s**2 * GV%g_Earth
   I_gEarth = 1.0 / g_Earth_z
 
   if (use_p_atm) then
@@ -516,7 +516,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/GV%Rho0
-  g_Earth_z = US%L_T_to_m_s**2 * GV%LZT_g_Earth
+  g_Earth_z = US%L_T_to_m_s**2 * GV%g_Earth
   G_Rho0 = g_Earth_z / GV%Rho0
   rho_ref = CS%Rho0
 
@@ -840,7 +840,7 @@ subroutine PressureForce_blk_AFV_init(Time, G, GV, US, param_file, diag, CS, tid
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= GV%LZT_g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%LZT_g_Earth
+  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 

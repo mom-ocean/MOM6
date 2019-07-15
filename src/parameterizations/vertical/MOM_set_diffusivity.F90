@@ -687,10 +687,10 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   I_dt      = 1.0 / dt
   Omega2    = CS%omega**2
   H_neglect = GV%H_subroundoff
-  G_Rho0    = (US%L_to_Z**2 * GV%LZT_g_Earth) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
   if (CS%answers_2018) then
     I_Rho0    = 1.0 / GV%Rho0
-    G_IRho0 = (US%L_to_Z**2 * GV%LZT_g_Earth) * I_Rho0
+    G_IRho0 = (US%L_to_Z**2 * GV%g_Earth) * I_Rho0
   else
     G_IRho0 = G_Rho0
   endif
@@ -815,7 +815,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
       ! maxTKE is found by determining the kappa that gives maxEnt.
       !  kappa_max = I_dt * dRho_int(i,K+1) * maxEnt(i,k) * &
       !             (GV%H_to_Z*h(i,j,k) + dh_max) / dRho_lay
-      !  maxTKE(i,k) = (GV%LZT_g_Earth*US%L_to_Z**2) * dRho_lay * kappa_max
+      !  maxTKE(i,k) = (GV%g_Earth*US%L_to_Z**2) * dRho_lay * kappa_max
       ! dRho_int should already be non-negative, so the max is redundant?
       dh_max = maxEnt(i,k) * (1.0 + dsp1_ds(i,k))
       dRho_lay = 0.5 * max(dRho_int(i,K) + dRho_int(i,K+1), 0.0)
@@ -884,7 +884,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = (US%L_to_Z**2 * GV%LZT_g_Earth) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
   H_neglect = GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -1172,7 +1172,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
 
   I_Rho0 = 1.0/GV%Rho0
-  R0_g = GV%Rho0 / (US%L_to_Z**2 * GV%LZT_g_Earth)
+  R0_g = GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)
 
   do K=2,nz ; Rint(K) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
 
@@ -1814,7 +1814,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   enddo
 
   if (CS%bulkmixedlayer) then
-    g_R0 = GV%LZT_g_Earth / GV%Rho0
+    g_R0 = GV%g_Earth / GV%Rho0
     kmb = GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo

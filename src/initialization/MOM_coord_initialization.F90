@@ -149,7 +149,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = g_int ; enddo
   Rlay(1) = GV%Rho0
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%LZT_g_Earth) ; enddo
+  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
   call callTree_leave(trim(mdl)//'()')
 
@@ -191,7 +191,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
   enddo
 !    These statements set the interface reduced gravities.           !
   do k=2,nz
-     g_prime(k) = (GV%LZT_g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+     g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
   call callTree_leave(trim(mdl)//'()')
@@ -243,7 +243,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
   call calculate_density(T_ref, S_ref, P_ref, Rlay(1), eqn_of_state)
 
 !    These statements set the layer densities.                       !
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%LZT_g_Earth) ; enddo
+  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_ref
@@ -291,7 +291,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   g_prime(1) = g_fs
   do k=1,nz ; Pref(k) = P_ref ; enddo
   call calculate_density(T0, S0, Pref, Rlay, 1,nz,eqn_of_state)
-  do k=2,nz; g_prime(k) = (GV%LZT_g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
+  do k=2,nz; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_profile
@@ -375,7 +375,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
   do k=k_light-1,1,-1
     Rlay(k) = 2.0*Rlay(k+1) -  Rlay(k+2)
   enddo
-  do k=2,nz; g_prime(k) = (GV%LZT_g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
+  do k=2,nz; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_range
@@ -417,7 +417,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
 
   call read_axis_data(filename, coord_var, Rlay)
   g_prime(1) = g_fs
-  do k=2,nz ; g_prime(k) = (GV%LZT_g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
+  do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
   do k=1,nz ; if (g_prime(k) <= 0.0) then
     call MOM_error(FATAL, "MOM_initialization set_coord_from_file: "//&
        "Zero or negative g_primes read from variable "//"Layer"//" in file "//&
@@ -467,7 +467,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
   ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
   do k=2,nz
-     g_prime(k) = (GV%LZT_g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+     g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
   call callTree_leave(trim(mdl)//'()')
@@ -499,7 +499,7 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = 0. ; enddo
   Rlay(1) = GV%Rho0
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%LZT_g_Earth) ; enddo
+  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
   call callTree_leave(trim(mdl)//'()')
 

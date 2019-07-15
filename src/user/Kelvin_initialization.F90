@@ -220,7 +220,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
     val1 = US%m_to_Z * sin(omega * time_sec)
   else
-    N0 = US%L_to_m*US%s_to_T * sqrt((CS%rho_range / CS%rho_0) * GV%LZT_g_Earth * (US%m_to_Z * CS%H0))
+    N0 = US%L_to_m*US%s_to_T * sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (US%m_to_Z * CS%H0))
     ! Two wavelengths in domain
     plx = 4.0 * PI / G%len_lon
     pmz = PI * CS%mode / CS%H0
@@ -253,7 +253,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%LZT_g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
           val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = US%L_T_to_m_s * (val2 * (val1 * cff * cosa / &
@@ -292,7 +292,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
                  (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) + G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) ))
             enddo ; endif
           else
-            cff =sqrt(GV%LZT_g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+            cff =sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
             val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
             if (CS%mode == 0) then ; do k=1,nz
               segment%tangential_vel(I,J,k) = US%L_T_to_m_s * (val1 * val2 * cff * sina) / &
@@ -311,7 +311,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%LZT_g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = US%L_T_to_m_s * (val1 * cff * sina / &
@@ -348,7 +348,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
                  (0.25*(G%bathyT(i+1,j) + G%bathyT(i,j) +  G%bathyT(i+1,j+1) + G%bathyT(i,j+1)))))
             enddo ; endif
           else
-            cff = sqrt(GV%LZT_g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+            cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
             val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
             if (CS%mode == 0) then ; do k=1,nz
               segment%tangential_vel(I,J,k) = US%L_T_to_m_s * ((val1 * val2 * cff * sina) / &
