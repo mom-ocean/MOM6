@@ -140,7 +140,7 @@ end type ocean_public_type
 !> The ocean_state_type contains all information about the state of the ocean,
 !! with a format that is private so it can be readily changed without disrupting
 !! other coupled components.
-type, public :: ocean_state_type ; 
+type, public :: ocean_state_type ;
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
   type(time_type) :: Time     !< The ocean model's time and master clock.
@@ -539,7 +539,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state, &
                                OS%restore_salinity, OS%restore_temp)
-    
+
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
       if (do_thermo) &
