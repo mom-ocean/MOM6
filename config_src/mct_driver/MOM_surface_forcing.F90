@@ -205,7 +205,7 @@ contains
 !! See \ref section_ocn_import for a summary of the surface fluxes that are
 !! passed from MCT to MOM6, including fluxes that need to be included in
 !! the future.
-subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
+subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
                                  sfc_state, restore_salt, restore_temp)
 
   type(ice_ocean_boundary_type), &
@@ -215,6 +215,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, Time, G, US, CS, &
   type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to
                                                    !! all possible mass, heat or salt flux forcing fields.
                                                    !!  Unused fields have NULL ptrs.
+  integer, dimension(4),   intent(in)    :: index_bounds !< The i- and j- size of the arrays in IOB.
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
