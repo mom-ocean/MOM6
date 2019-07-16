@@ -240,9 +240,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     div_xx, &     ! Estimate of horizontal divergence at h-points [s-1]
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) including metric terms [s-1]
     sh_xx_bt, &   ! barotropic horizontal tension (du/dx - dv/dy) including metric terms [s-1]
-    str_xx,&      ! str_xx is the diagonal term in the stress tensor [H m2 s-2 ~> m3 s-2 or kg s-2]
-    str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [H m2 s-2]
-    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution [H m2 s-2 ~> m3 s-2 or kg s-2]
+    str_xx,&      ! str_xx is the diagonal term in the stress tensor [H m2 s-1 T-1 ~> m3 s-2 or kg s-2]
+    str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [H m2 s-1 T-1 ~> m3 s-2 or kg s-2]
+    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution [H m2 T-1 s-1 ~> m3 s-2 or kg s-2]
     FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [W m-2]
     Leith_Kh_h, & ! Leith Laplacian viscosity at h-points [m2 s-1]
     Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points [m4 s-1]
@@ -895,7 +895,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if ((CS%id_Kh_h>0) .or. find_FrictWork) Kh_h(i,j,k) = Kh
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
 
-        str_xx(i,j) = -Kh * sh_xx(i,j)
+        str_xx(i,j) = -US%T_to_s*Kh * sh_xx(i,j)
       else   ! not Laplacian
         str_xx(i,j) = 0.0
       endif ! Laplacian
@@ -904,7 +904,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Shearing-strain averaged to h-points
         local_strain = 0.25 * ( (sh_xy(I,J) + sh_xy(I-1,J-1)) + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
         ! *Add* the shear-strain contribution to the xx-component of stress
-        str_xx(i,j) = str_xx(i,j) - CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
+        str_xx(i,j) = str_xx(i,j) - US%T_to_s*CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
       endif
 
       if (CS%biharmonic) then
@@ -936,12 +936,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if ((CS%id_Ah_h>0) .or. find_FrictWork) Ah_h(i,j,k) = Ah
 
-        str_xx(i,j) = str_xx(i,j) + Ah * &
+        str_xx(i,j) = str_xx(i,j) + US%T_to_s*Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
            CS%DX_dyT(i,j) *(G%IdxCv(i,J)*v0(i,J) - G%IdxCv(i,J-1)*v0(i,J-1)))
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xx(i,j) =             Ah * &
+        bhstr_xx(i,j) =             US%T_to_s*Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
            CS%DX_dyT(i,j) *(G%IdxCv(i,J)*v0(i,J) - G%IdxCv(i,J-1)*v0(i,J-1)))
         bhstr_xx(i,j) = bhstr_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
@@ -1061,7 +1061,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if (CS%id_Kh_q>0) Kh_q(I,J,k) = Kh
         if (CS%id_vort_xy_q>0) vort_xy_q(I,J,k) = vort_xy(I,J)
 
-        str_xy(I,J) = -Kh * sh_xy(I,J)
+        str_xy(I,J) = -US%T_to_s*Kh * sh_xy(I,J)
       else   ! not Laplacian
         str_xy(I,J) = 0.0
       endif ! Laplacian
@@ -1070,7 +1070,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Horizontal-tension averaged to q-points
         local_strain = 0.25 * ( (sh_xx(i,j) + sh_xx(i+1,j+1)) + (sh_xx(i+1,j) + sh_xx(i,j+1)) )
         ! *Add* the tension contribution to the xy-component of stress
-        str_xy(I,J) = str_xy(I,J) - CS%Kh_aniso * CS%n1n2_q(i,j) * CS%n1n1_m_n2n2_q(i,j) * local_strain
+        str_xy(I,J) = str_xy(I,J) - US%T_to_s*CS%Kh_aniso * CS%n1n2_q(i,j) * CS%n1n1_m_n2n2_q(i,j) * local_strain
       endif
 
       if (CS%biharmonic) then
@@ -1105,10 +1105,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_Ah_q>0) Ah_q(I,J,k) = Ah
 
-        str_xy(I,J) = str_xy(I,J) + Ah * ( dvdx(I,J) + dudy(I,J) )
+        str_xy(I,J) = str_xy(I,J) + US%T_to_s*Ah * ( dvdx(I,J) + dudy(I,J) )
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xy(I,J) = Ah * ( dvdx(I,J) + dudy(I,J) ) * &
+        bhstr_xy(I,J) = US%T_to_s*Ah * ( dvdx(I,J) + dudy(I,J) ) * &
                         (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
 
       endif  ! biharmonic
@@ -1194,7 +1194,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if ((CS%id_GME_coeff_h>0) .or. find_FrictWork) GME_coeff_h(i,j,k) = GME_coeff
 
-        str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
+        str_xx_GME(i,j) = US%T_to_s*GME_coeff * sh_xx_bt(i,j)
 
       enddo ; enddo
 
@@ -1213,7 +1213,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
-        str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
+        str_xy_GME(I,J) = US%T_to_s*GME_coeff * sh_xy_bt(I,J)
 
       enddo ; enddo
 
@@ -1257,7 +1257,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
-      diffu(I,j,k) = US%T_to_s*((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
+      diffu(I,j,k) = ((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
@@ -1279,7 +1279,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
-      diffv(i,J,k) = US%T_to_s*((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
+      diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
@@ -1301,7 +1301,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
       ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       ! This is the old formulation that includes energy diffusion
-      FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
+      FrictWork(i,j,k) = US%s_to_T*GV%H_to_kg_m2 * ( &
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
        +0.25*((str_xy(I,J)*(                                     &
@@ -1352,7 +1352,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
             endif
           endif
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * (                   &
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + US%s_to_T*GV%H_to_kg_m2 * (         &
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
                 -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
          +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
