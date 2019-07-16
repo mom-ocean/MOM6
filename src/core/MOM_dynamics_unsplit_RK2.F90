@@ -106,12 +106,12 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    !< CAu = f*v - u.grad(u) [m s-2].
     PFu, &    !< PFu = -dM/dx [m s-2].
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    !< CAv = -f*u - u.grad(v) [m s-2].
     PFv, &    !< PFv = -dM/dy [m s-2].
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-2].
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean to the seafloor (Pa)
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean to the seafloor (Pa)
@@ -323,11 +323,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt_pred * &
-                   ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
+                   ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt_pred * &
-                   ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
+                   ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -380,15 +380,15 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! u*[n+1] = u[n] + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * (1.+CS%begw) * &
-            ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
+            ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
     u_in(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * &
-            ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
+            ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * (1.+CS%begw) * &
-            ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
+            ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
     v_in(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * &
-            ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
+            ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! up[n] <- up* + dt d/dz visc d/dz up

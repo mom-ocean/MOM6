@@ -207,10 +207,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                  intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
-                                                       !! along-coordinate stress tensor [m s-2]
+                                                       !! along-coordinate stress tensor [m s-1 T-1 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
-                                                       !! of along-coordinate stress tensor [m s-2].
+                                                       !! of along-coordinate stress tensor [m s-1 T-1 ~> m s-2].
   type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
@@ -1257,7 +1257,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
-      diffu(I,j,k) = ((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
+      diffu(I,j,k) = US%T_to_s*((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
@@ -1279,7 +1279,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
-      diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
+      diffv(i,J,k) = US%T_to_s*((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
@@ -2088,10 +2088,10 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   ! Register fields for output from this module.
 
   CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
-      'Zonal Acceleration from Horizontal Viscosity', 'm s-2')
+      'Zonal Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%s_to_T)
 
   CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
-      'Meridional Acceleration from Horizontal Viscosity', 'm s-2')
+      'Meridional Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%s_to_T)
 
   if (CS%biharmonic) then
     CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &

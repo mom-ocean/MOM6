@@ -266,7 +266,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
     call diag_restore_grids(CS%diag)
 
-    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
+    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS)
   endif
 
   ! smg: is the following robust to ALE? It seems a bit opaque.
@@ -878,7 +878,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
 end subroutine calculate_vertical_integrals
 
 !> This subroutine calculates terms in the mechanical energy budget.
-subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
+subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -895,6 +895,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
                                                  !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< Structure pointing to accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< Structure pointing to terms in continuity equations.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a previous call to
                                                  !! diagnostics_init.
 
@@ -1036,10 +1037,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   if (associated(CS%KE_horvisc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%diffu(I,j,k)
+        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*US%s_to_T*ADp%diffu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%diffv(i,J,k)
+        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*US%s_to_T*ADp%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
