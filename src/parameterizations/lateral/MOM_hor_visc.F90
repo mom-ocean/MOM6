@@ -1371,7 +1371,7 @@ end subroutine horizontal_viscosity
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
 !! hor_visc_init calculates and stores the values of a number of metric functions that
 !! are used in horizontal_viscosity().
-subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
+subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -1379,6 +1379,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure to regulate diagnostic output.
   type(hor_visc_CS), pointer             :: CS   !< Pointer to the control structure for this module
+  type(MEKE_type), pointer               :: MEKE !< MEKE data
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
@@ -1419,7 +1420,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
                            ! valid parameters.
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
-  logical :: use_MEKE      ! True if MEKE has been enabled
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1692,9 +1692,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       "LAPLACIAN or BIHARMONIC viscosity.")
     return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
   endif
-
-  call get_param(param_file, mdl, "USE_MEKE", use_MEKE, default=.false., &
-                 do_not_log=.true.)
 
   deg2rad = atan(1.0) / 45.
 
@@ -2086,9 +2083,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   CS%id_FrictWork_diss = register_diag_field('ocean_model','FrictWork_diss',diag%axesTL,Time,&
       'Integral work done by lateral friction terms (excluding diffusion of energy)', 'W m-2')
 
-  if (use_MEKE) then
-    CS%id_FrictWorkMax = register_diag_field('ocean_model','FrictWorkMax',diag%axesTL,Time,&
-        'Maximum possible integral work done by lateral friction terms', 'W m-2')
+  if (associated(MEKE)) then
+    if (associated(MEKE%mom_src)) then
+      CS%id_FrictWorkMax = register_diag_field('ocean_model', 'FrictWorkMax', diag%axesTL, Time,&
+          'Maximum possible integral work done by lateral friction terms', 'W m-2')
+    endif
   endif
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
