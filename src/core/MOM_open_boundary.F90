@@ -3389,12 +3389,12 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo ; enddo ; enddo
-          if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
+          if (.not. segment%tr_Reg%Tr(2)%is_initialized) then
             !if the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
             enddo ; enddo ; enddo
-            segment%tr_Reg%Tr(1)%is_initialized=.true.
+            segment%tr_Reg%Tr(2)%is_initialized=.true.
           endif
         else
           segment%tr_Reg%Tr(2)%OBC_inflow_conc = segment%field(m)%value
