@@ -562,13 +562,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         call cpu_clock_begin(CS%id_clock_pass)
         call do_group_pass(CS%pass_Kh, G%Domain)
         call cpu_clock_end(CS%id_clock_pass)
-     endif
+      endif
     endif
 
     ! Calculate viscosity for the main model to use
     if (CS%viscosity_coeff_Ku /=0.) then
       do j=js,je ; do i=is,ie
-        MEKE%Ku(i,j) = CS%viscosity_coeff_Ku*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)
+        MEKE%Ku(i,j) = US%T_to_s*CS%viscosity_coeff_Ku*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)
       enddo ; enddo
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_Ku, G%Domain)
@@ -577,7 +577,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
     if (CS%viscosity_coeff_Au /=0.) then
       do j=js,je ; do i=is,ie
-        MEKE%Au(i,j) = CS%viscosity_coeff_Au*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)**3
+        MEKE%Au(i,j) = US%T_to_s*CS%viscosity_coeff_Au*sqrt(2.*max(0.,MEKE%MEKE(i,j)))*LmixScale(i,j)**3
       enddo ; enddo
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_Au, G%Domain)
@@ -929,22 +929,26 @@ end subroutine MEKE_lengthScales_0d
 
 !> Initializes the MOM_MEKE module and reads parameters.
 !! Returns True if module is to be used, otherwise returns False.
-logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
+logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   type(time_type),         intent(in)    :: Time       !< The current model time.
   type(ocean_grid_type),   intent(inout) :: G          !< The ocean's grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
   type(MEKE_CS),           pointer       :: CS         !< MEKE control structure.
   type(MEKE_type),         pointer       :: MEKE       !< MEKE-related fields.
   type(MOM_restart_CS),    pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
-! Local variables
-  integer :: is, ie, js, je, isd, ied, jsd, jed, nz
+
+  ! Local variables
+  real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this
+                           ! run to the representation in a restart file.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   logical :: laplacian, biharmonic, useVarMix, coldStart
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_MEKE" ! This module's name.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! Determine whether this module will be used
@@ -1139,36 +1143,8 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 
   ! Identify if any lateral diffusive processes are active
   CS%kh_flux_enabled = .false.
-  if (CS%MEKE_KH >= 0.0 &
-      .or. CS%KhMEKE_FAC > 0.0 &
-      .or. CS%MEKE_advection_factor >0.0) &
+  if ((CS%MEKE_KH >= 0.0)  .or. (CS%KhMEKE_FAC > 0.0) .or. (CS%MEKE_advection_factor >0.0)) &
     CS%kh_flux_enabled = .true.
-
-! In the case of a restart, these fields need a halo update
-  if (associated(MEKE%MEKE)) then
-    call create_group_pass(CS%pass_MEKE, MEKE%MEKE, G%Domain)
-    call do_group_pass(CS%pass_MEKE, G%Domain)
-  endif
-  if (associated(MEKE%Kh)) then
-    call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
-    call do_group_pass(CS%pass_Kh, G%Domain)
-  endif
-  if (associated(MEKE%Kh_diff)) then
-    call create_group_pass(CS%pass_Kh_diff, MEKE%Kh_diff, G%Domain)
-    call do_group_pass(CS%pass_Kh_diff, G%Domain)
-  endif
-  if (associated(MEKE%Ku)) then
-    call create_group_pass(CS%pass_Ku, MEKE%Ku, G%Domain)
-    call do_group_pass(CS%pass_Ku, G%Domain)
-  endif
-  if (associated(MEKE%Au)) then
-    call create_group_pass(CS%pass_Au, MEKE%Au, G%Domain)
-    call do_group_pass(CS%pass_Au, G%Domain)
-  endif
-  if (allocated(CS%del2MEKE)) then
-    call create_group_pass(CS%pass_del2MEKE, CS%del2MEKE, G%Domain)
-    call do_group_pass(CS%pass_del2MEKE, G%Domain)
-  endif
 
 ! Register fields for output from this module.
   CS%diag => diag
@@ -1179,10 +1155,10 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
      'MEKE derived diffusivity', 'm2 s-1')
   if (.not. associated(MEKE%Kh)) CS%id_Kh = -1
   CS%id_Ku = register_diag_field('ocean_model', 'MEKE_KU', diag%axesT1, Time, &
-     'MEKE derived lateral viscosity', 'm2 s-1')
+     'MEKE derived lateral viscosity', 'm2 s-1', conversion=US%s_to_T)
   if (.not. associated(MEKE%Ku)) CS%id_Ku = -1
   CS%id_Au = register_diag_field('ocean_model', 'MEKE_AU', diag%axesT1, Time, &
-     'MEKE derived lateral biharmonic viscosity', 'm4 s-1')
+     'MEKE derived lateral biharmonic viscosity', 'm4 s-1', conversion=US%s_to_T)
   if (.not. associated(MEKE%Au)) CS%id_Au = -1
   CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
      'MEKE derived eddy-velocity scale', 'm s-1')
@@ -1226,13 +1202,59 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
-  ! Detect whether this instant of MEKE_init() is at the beginning of a run
+  ! Detect whether this instance of MEKE_init() is at the beginning of a run
   ! or after a restart. If at the beginning, we will initialize MEKE to a local
   ! equilibrium.
-  CS%initialize = .not.query_initialized(MEKE%MEKE,"MEKE",restart_CS)
+  CS%initialize = .not.query_initialized(MEKE%MEKE, "MEKE", restart_CS)
   if (coldStart) CS%initialize = .false.
   if (CS%initialize) call MOM_error(WARNING, &
                        "MEKE_init: Initializing MEKE with a local equilibrium balance.")
+
+  ! Account for possible changes in dimensional scaling for variables that have been
+  ! read from a restart file.
+  I_T_rescale = 1.0
+  if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= US%s_to_T)) &
+    I_T_rescale = US%s_to_T_restart / US%s_to_T
+
+  if (I_T_rescale /= 1.0) then
+    if (associated(MEKE%Ku)) then ; if (query_initialized(MEKE%Ku, "MEKE_Ku", restart_CS)) then
+      do j=js,je ; do i=is,ie
+        MEKE%Ku(i,j) = I_T_rescale * MEKE%Ku(i,j)
+      enddo ; enddo
+    endif ; endif
+    if (associated(MEKE%Au)) then ; if (query_initialized(MEKE%Au, "MEKE_Au", restart_CS)) then
+      do j=js,je ; do i=is,ie
+        MEKE%Au(i,j) = I_T_rescale * MEKE%Au(i,j)
+      enddo ; enddo
+    endif ; endif
+  endif
+
+  ! Set up group passes.  In the case of a restart, these fields need a halo update now.
+  !### At least 4 of these group passes can be combined.
+  if (associated(MEKE%MEKE)) then
+    call create_group_pass(CS%pass_MEKE, MEKE%MEKE, G%Domain)
+    if (.not.CS%initialize) call do_group_pass(CS%pass_MEKE, G%Domain)
+  endif
+  if (associated(MEKE%Kh)) then
+    call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
+    call do_group_pass(CS%pass_Kh, G%Domain)
+  endif
+  if (associated(MEKE%Kh_diff)) then
+    call create_group_pass(CS%pass_Kh_diff, MEKE%Kh_diff, G%Domain)
+    call do_group_pass(CS%pass_Kh_diff, G%Domain)
+  endif
+  if (associated(MEKE%Ku)) then
+    call create_group_pass(CS%pass_Ku, MEKE%Ku, G%Domain)
+    call do_group_pass(CS%pass_Ku, G%Domain)
+  endif
+  if (associated(MEKE%Au)) then
+    call create_group_pass(CS%pass_Au, MEKE%Au, G%Domain)
+    call do_group_pass(CS%pass_Au, G%Domain)
+  endif
+  if (allocated(CS%del2MEKE)) then
+    call create_group_pass(CS%pass_del2MEKE, CS%del2MEKE, G%Domain)
+    call do_group_pass(CS%pass_del2MEKE, G%Domain)
+  endif
 
 end function MEKE_init
 
