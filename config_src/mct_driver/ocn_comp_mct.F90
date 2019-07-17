@@ -24,8 +24,6 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
                                shr_file_getLogUnit, shr_file_getLogLevel, &
                                shr_file_setLogUnit, shr_file_setLogLevel
 
-use MOM_surface_forcing, only: IOB_allocate, ice_ocean_boundary_type
-
 ! MOM6 modules
 use MOM,                  only: extract_surface_state
 use MOM_variables,        only: surface
@@ -49,7 +47,7 @@ use mpp_domains_mod,      only: mpp_get_compute_domain
 use MOM_ocean_model,      only: ocean_public_type, ocean_state_type
 use MOM_ocean_model,      only: ocean_model_init , update_ocean_model, ocean_model_end
 use MOM_ocean_model,      only: convert_state_to_ocean_type
-use MOM_surface_forcing,  only: surface_forcing_CS, forcing_save_restart
+use MOM_surface_forcing,  only: surface_forcing_CS, forcing_save_restart, ice_ocean_boundary_type
 use ocn_cap_methods,      only: ocn_import, ocn_export
 
 ! FMS modules
@@ -812,5 +810,62 @@ end subroutine ocean_model_init_sfc
 !! Boundary layer depth
 !! CO2
 !! DMS
+
+!> Allocates ice-ocean boundary type containers and sets to 0.
+subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
+  type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
+  integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
+
+  allocate ( IOB% rofl_flux (isc:iec,jsc:jec),       &
+             IOB% rofi_flux (isc:iec,jsc:jec),       &
+             IOB% u_flux (isc:iec,jsc:jec),          &
+             IOB% v_flux (isc:iec,jsc:jec),          &
+             IOB% t_flux (isc:iec,jsc:jec),          &
+             IOB% seaice_melt_heat (isc:iec,jsc:jec),&
+             IOB% seaice_melt (isc:iec,jsc:jec),     &
+             IOB% q_flux (isc:iec,jsc:jec),          &
+             IOB% salt_flux (isc:iec,jsc:jec),       &
+             IOB% lw_flux (isc:iec,jsc:jec),         &
+             IOB% sw_flux_vis_dir (isc:iec,jsc:jec), &
+             IOB% sw_flux_vis_dif (isc:iec,jsc:jec), &
+             IOB% sw_flux_nir_dir (isc:iec,jsc:jec), &
+             IOB% sw_flux_nir_dif (isc:iec,jsc:jec), &
+             IOB% lprec (isc:iec,jsc:jec),           &
+             IOB% fprec (isc:iec,jsc:jec),           &
+             IOB% ustar_berg (isc:iec,jsc:jec),      &
+             IOB% area_berg (isc:iec,jsc:jec),       &
+             IOB% mass_berg (isc:iec,jsc:jec),       &
+             IOB% calving (isc:iec,jsc:jec),         &
+             IOB% runoff_hflx (isc:iec,jsc:jec),     &
+             IOB% calving_hflx (isc:iec,jsc:jec),    &
+             IOB% mi (isc:iec,jsc:jec),              &
+             IOB% p (isc:iec,jsc:jec))
+
+  IOB%rofl_flux        = 0.0
+  IOB%rofi_flux        = 0.0
+  IOB%u_flux           = 0.0
+  IOB%v_flux           = 0.0
+  IOB%t_flux           = 0.0
+  IOB%seaice_melt_heat = 0.0
+  IOB%seaice_melt      = 0.0
+  IOB%q_flux           = 0.0
+  IOB%salt_flux        = 0.0
+  IOB%lw_flux          = 0.0
+  IOB%sw_flux_vis_dir  = 0.0
+  IOB%sw_flux_vis_dif  = 0.0
+  IOB%sw_flux_nir_dir  = 0.0
+  IOB%sw_flux_nir_dif  = 0.0
+  IOB%lprec            = 0.0
+  IOB%fprec            = 0.0
+  IOB%ustar_berg       = 0.0
+  IOB%area_berg        = 0.0
+  IOB%mass_berg        = 0.0
+  IOB%calving          = 0.0
+  IOB%runoff_hflx      = 0.0
+  IOB%calving_hflx     = 0.0
+  IOB%mi               = 0.0
+  IOB%p                = 0.0
+
+end subroutine IOB_allocate
 
 end module ocn_comp_mct

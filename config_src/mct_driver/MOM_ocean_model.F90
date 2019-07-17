@@ -353,19 +353,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_alter_ocean, &
                  "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
 
-  ! MV: question for Gustavo - what to do with the following?
-
-  ! call get_param(param_file, mdl, "KV_ICEBERG",  OS%kv_iceberg, &
-  !      "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
-  ! call get_param(param_file, mdl, "DENSITY_ICEBERGS",  OS%density_iceberg, &
-  !      "A typical density of icebergs.", units="kg m-3", default=917.0)
-  ! call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
-  !      "The latent heat of fusion.", units="J/kg", default=hlf)
-  ! call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
-  !      "Fraction of grid cell which iceberg must occupy, so that fluxes "//&
-  !      "below berg are set to zero. Not applied for negative "//&
-  !      " values.", units="non-dim", default=-1.0)
-
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
   call get_param(param_file, mdl, "HFREEZE", HFrz, &
@@ -406,13 +393,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
-
-  ! MV - what to do with the following?
-  ! if (OS%icebergs_apply_rigid_boundary)  then
-  !   !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
-  !   !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-  !   if (.not. OS%use_ice_shelf) call allocate_forcing_type(OS%grid, OS%fluxes, ustar=.true., shelf=.true.)
-  ! endif
 
   if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
@@ -556,13 +536,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
-    ! GMM, check ocean_model_MOM.F90 to enable the following option
-    !if (OS%icebergs_apply_rigid_boundary)  then
-    !  This assumes that the iceshelf and ocean are on the same grid. I hope this is true.
-    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg, &
-    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, dt_coupling, OS%berg_area_threshold)
-    !endif
-
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
     call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
 
@@ -597,13 +570,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         call iceberg_fluxes(OS%grid, OS%flux_tmp, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
-
-    ! GMM, check ocean_model_MOM.F90 to enable the following option
-    !if (OS%icebergs_apply_rigid_boundary)  then
-     !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg, &
-    !          OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, dt_coupling, OS%berg_area_threshold)
-    !endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
 
