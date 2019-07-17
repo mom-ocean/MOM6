@@ -66,14 +66,14 @@ type, public :: hor_visc_CS ; private
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
-                             !! viscosity [m2 s-1]. The default is 0.0
+                             !! viscosity [m2 T-1 ~> m2 s-1]. The default is 0.0
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
                              !! Default is False to maintain answers with legacy experiments
                              !! but should be changed to True for new experiments.
   logical :: anisotropic     !< If true, allow anisotropic component to the viscosity.
-  real    :: Kh_aniso        !< The anisotropic viscosity [m2 s-1].
+  real    :: Kh_aniso        !< The anisotropic viscosity [m2 T-1 ~> m2 s-1].
   logical :: dynamic_aniso   !< If true, the anisotropic viscosity is recomputed as a function
                              !! of state. This is set depending on ANISOTROPIC_MODE.
   logical :: res_scale_MEKE  !< If true, the viscosity contribution from MEKE is scaled by
@@ -84,15 +84,15 @@ type, public :: hor_visc_CS ; private
                              !! forms of the same expressions.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
-                      !< The background Laplacian viscosity at h points [m2 s-1].
+                      !< The background Laplacian viscosity at h points [m2 T-1 ~> m2 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_2d
-                      !< The background Laplacian viscosity at h points [m2 s-1].
+                      !< The background Laplacian viscosity at h points [m2 T-1 ~> m2 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Ah_bg_xx
-                      !< The background biharmonic viscosity at h points [m4 s-1].
+                      !< The background biharmonic viscosity at h points [m4 T-1 ~> m4 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Biharm5_const2_xx
@@ -104,17 +104,17 @@ type, public :: hor_visc_CS ; private
                       !< The amount by which stresses through h points are reduced
                       !! due to partial barriers. Nondimensional.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [m2 s-1].
-    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [m4 s-1].
+    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [m2 T-1 ~> m2 s-1].
+    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [m4 T-1 ~> m4 s-1].
     n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
     n1n1_m_n2n2_h     !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
-                      !< The background Laplacian viscosity at q points [m2 s-1].
+                      !< The background Laplacian viscosity at q points [m2 T-1 ~> m2 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Ah_bg_xy
-                      !< The background biharmonic viscosity at q points [m4 s-1].
+                      !< The background biharmonic viscosity at q points [m4 T-1 ~> m4 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Biharm5_const2_xy
@@ -126,8 +126,8 @@ type, public :: hor_visc_CS ; private
                       !< The amount by which stresses through q points are reduced
                       !! due to partial barriers [nondim].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity [m2 s-1].
-    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity [m4 s-1].
+    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity [m2 T-1 ~> m2 s-1].
+    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity [m4 T-1 ~> m4 s-1].
     n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points
     n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
 
@@ -278,7 +278,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_vel_mag_bt_q  ! Magnitude of the barotropic velocity gradient tensor squared at q-points [s-2]
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
-    Ah_q, &      ! biharmonic viscosity at corner points [m4 s-1]
+    Ah_q, &      ! biharmonic viscosity at corner points [m4 T-1 ~> m4 s-1]
     Kh_q, &      ! Laplacian viscosity at corner points [m2 s-1]
     vort_xy_q, & ! vertical vorticity at corner points [s-1]
     GME_coeff_q  !< GME coeff. at q-points [m2 s-1]
@@ -288,8 +288,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1) :: &
     KH_v_GME  !< interface height diffusivities in v-columns [m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    Ah_h, &          ! biharmonic viscosity at thickness points [m4 s-1]
-    Kh_h, &          ! Laplacian viscosity at thickness points [m2 s-1]
+    Ah_h, &          ! biharmonic viscosity at thickness points [m4 T-1 ~> m4 s-1]
+    Kh_h, &          ! Laplacian viscosity at thickness points [m2 T-1 ~> m2 s-1]
     diss_rate, & ! MKE dissipated by parameterized shear production [m2 s-3]
     max_diss_rate, & ! maximum possible energy dissipated by lateral friction [m2 s-3]
     target_diss_rate_GME, & ! the maximum theoretical dissipation plus the amount spuriously dissipated
@@ -303,11 +303,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     KH_t_GME, &      !< interface height diffusivities in t-columns [m2 s-1]
     GME_coeff_h      !< GME coeff. at h-points [m2 s-1]
-  real :: Ah         ! biharmonic viscosity [m4 s-1]
-  real :: Kh         ! Laplacian  viscosity [m2 s-1]
-  real :: AhSm       ! Smagorinsky biharmonic viscosity [m4 s-1]
-  real :: KhSm       ! Smagorinsky Laplacian viscosity  [m2 s-1]
-  real :: AhLth      ! 2D Leith biharmonic viscosity [m4 s-1]
+  real :: Ah         ! biharmonic viscosity [m4 T-1 ~> m4 s-1]
+  real :: Kh         ! Laplacian  viscosity [m2 T-1 ~> m2 s-1]
+  real :: AhSm       ! Smagorinsky biharmonic viscosity [m4 T-1 ~> m4 s-1]
+!  real :: KhSm       ! Smagorinsky Laplacian viscosity  [m2 T-1 ~> m2 s-1]
+  real :: AhLth      ! 2D Leith biharmonic viscosity [m4 T-1 ~> m4 s-1]
   real :: KhLth      ! 2D Leith Laplacian viscosity  [m2 s-1]
   real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
                      ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
@@ -499,7 +499,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
   !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
   !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem, &
-  !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
+  !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, dvdx, dudy, &
   !$OMP                                  sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
   !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
   !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
@@ -869,15 +869,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Determine the Laplacian viscosity at h points, using the
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xx(i,j) ! Static (pre-computed) background viscosity
-        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%Laplac2_const_xx(i,j) * US%s_to_T*Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, CS%Laplac3_const_xx(i,j) * vert_vort_mag*inv_PI3)
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%Laplac2_const_xx(i,j) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%Laplac3_const_xx(i,j) * US%T_to_s*vert_vort_mag*inv_PI3)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_h(i,j) * Kh
         if (CS%res_scale_MEKE) meke_res_fn = VarMix%Res_fn_h(i,j)
         ! Older method of bounding for stability
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xx(i,j))
         Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
-        if (use_MEKE_Ku) Kh = Kh + MEKE%Ku(i,j) * meke_res_fn ! *Add* the MEKE contribution (might be negative)
+        if (use_MEKE_Ku) Kh = Kh + US%T_to_s*MEKE%Ku(i,j) * meke_res_fn ! *Add* the MEKE contribution (might be negative)
         if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * ( 1. - CS%n1n2_h(i,j)**2 ) ! *Add* the tension component
                                                                                ! of anisotropic viscosity
 
@@ -895,7 +895,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if ((CS%id_Kh_h>0) .or. find_FrictWork) Kh_h(i,j,k) = Kh
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
 
-        str_xx(i,j) = -US%T_to_s*Kh * sh_xx(i,j)
+        str_xx(i,j) = -Kh * sh_xx(i,j)
       else   ! not Laplacian
         str_xx(i,j) = 0.0
       endif ! Laplacian
@@ -904,7 +904,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Shearing-strain averaged to h-points
         local_strain = 0.25 * ( (sh_xy(I,J) + sh_xy(I-1,J-1)) + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
         ! *Add* the shear-strain contribution to the xx-component of stress
-        str_xx(i,j) = str_xx(i,j) - US%T_to_s*CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
+        str_xx(i,j) = str_xx(i,j) - CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
       endif
 
       if (CS%biharmonic) then
@@ -914,21 +914,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah)) then
           if (CS%Smagorinsky_Ah) then
             if (CS%bound_Coriolis) then
-              AhSm =  US%s_to_T*Shear_mag * (CS%Biharm_const_xx(i,j) + &
-                                   CS%Biharm_const2_xx(i,j)*Shear_mag)
+              AhSm = Shear_mag * (CS%Biharm_const_xx(i,j) + &
+                                  CS%Biharm_const2_xx(i,j)*Shear_mag)
             else
-              AhSm = CS%Biharm_const_xx(i,j) * US%s_to_T*Shear_mag
+              AhSm = CS%Biharm_const_xx(i,j) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) AhLth = CS%biharm5_const_xx(i,j) * vert_vort_mag * inv_PI5
-          Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
+          if (CS%Leith_Ah) AhLth = CS%biharm5_const_xx(i,j) * US%T_to_s*vert_vort_mag * inv_PI5
+          Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm), AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
         else
           Ah = CS%Ah_bg_xx(i,j)
         endif ! Smagorinsky_Ah or Leith_Ah
 
-        if (use_MEKE_Au) Ah = Ah + MEKE%Au(i,j) ! *Add* the MEKE contribution
+        if (use_MEKE_Au) Ah = Ah + US%T_to_s*MEKE%Au(i,j) ! *Add* the MEKE contribution
 
         if (CS%better_bound_Ah) then
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
@@ -936,12 +936,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if ((CS%id_Ah_h>0) .or. find_FrictWork) Ah_h(i,j,k) = Ah
 
-        str_xx(i,j) = str_xx(i,j) + US%T_to_s*Ah * &
+        str_xx(i,j) = str_xx(i,j) + Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
            CS%DX_dyT(i,j) *(G%IdxCv(i,J)*v0(i,J) - G%IdxCv(i,J-1)*v0(i,J-1)))
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xx(i,j) =             US%T_to_s*Ah * &
+        bhstr_xx(i,j) =             Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
            CS%DX_dyT(i,j) *(G%IdxCv(i,J)*v0(i,J) - G%IdxCv(i,J-1)*v0(i,J-1)))
         bhstr_xx(i,j) = bhstr_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
@@ -1031,8 +1031,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Determine the Laplacian viscosity at q points, using the
         ! largest value from several parameterizations.
         Kh = CS%Kh_bg_xy(i,j) ! Static (pre-computed) background viscosity
-        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%Laplac2_const_xy(I,J) * US%s_to_T*Shear_mag )
-        if (CS%Leith_Kh) Kh = max( Kh, CS%Laplac3_const_xy(I,J) * vert_vort_mag*inv_PI3)
+        if (CS%Smagorinsky_Kh) Kh = max( Kh, CS%Laplac2_const_xy(I,J) * Shear_mag )
+        if (CS%Leith_Kh) Kh = max( Kh, CS%Laplac3_const_xy(I,J) * US%T_to_s*vert_vort_mag*inv_PI3)
         ! All viscosity contributions above are subject to resolution scaling
         if (rescale_Kh) Kh = VarMix%Res_fn_q(i,j) * Kh
         if (CS%res_scale_MEKE) meke_res_fn = VarMix%Res_fn_q(i,j)
@@ -1040,7 +1040,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
         Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
         if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
-          Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
+          Kh = Kh + US%T_to_s*0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) ) * meke_res_fn
         endif
         ! Older method of bounding for stability
@@ -1061,7 +1061,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if (CS%id_Kh_q>0) Kh_q(I,J,k) = Kh
         if (CS%id_vort_xy_q>0) vort_xy_q(I,J,k) = vort_xy(I,J)
 
-        str_xy(I,J) = -US%T_to_s*Kh * sh_xy(I,J)
+        str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
         str_xy(I,J) = 0.0
       endif ! Laplacian
@@ -1070,7 +1070,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Horizontal-tension averaged to q-points
         local_strain = 0.25 * ( (sh_xx(i,j) + sh_xx(i+1,j+1)) + (sh_xx(i+1,j) + sh_xx(i,j+1)) )
         ! *Add* the tension contribution to the xy-component of stress
-        str_xy(I,J) = str_xy(I,J) - US%T_to_s*CS%Kh_aniso * CS%n1n2_q(i,j) * CS%n1n1_m_n2n2_q(i,j) * local_strain
+        str_xy(I,J) = str_xy(I,J) - CS%Kh_aniso * CS%n1n2_q(i,j) * CS%n1n1_m_n2n2_q(i,j) * local_strain
       endif
 
       if (CS%biharmonic) then
@@ -1080,14 +1080,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
           if (CS%Smagorinsky_Ah) then
             if (CS%bound_Coriolis) then
-              AhSm =  US%s_to_T*Shear_mag * (CS%Biharm_const_xy(I,J) + &
-                                 CS%Biharm_const2_xy(I,J)*Shear_mag)
+              AhSm = Shear_mag * (CS%Biharm_const_xy(I,J) + &
+                                  CS%Biharm_const2_xy(I,J)*Shear_mag)
             else
-              AhSm = CS%Biharm_const_xy(I,J) * US%s_to_T*Shear_mag
+              AhSm = CS%Biharm_const_xy(I,J) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) AhLth = CS%Biharm5_const_xy(I,J) * vert_vort_mag * inv_PI5
-          Ah = MAX(MAX(CS%Ah_bg_xy(I,J), AhSm),AhLth)
+          if (CS%Leith_Ah) AhLth = CS%Biharm5_const_xy(I,J) * US%T_to_s*vert_vort_mag * inv_PI5
+          Ah = MAX(MAX(CS%Ah_bg_xy(I,J), AhSm), AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xy(I,J))
         else
@@ -1095,8 +1095,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif ! Smagorinsky_Ah or Leith_Ah
 
         if (use_MEKE_Au) then ! *Add* the MEKE contribution
-          Ah = Ah + 0.25*( (MEKE%Au(I,J)+MEKE%Au(I+1,J+1))    &
-                          +(MEKE%Au(I+1,J)+MEKE%Au(I,J+1)) )
+          Ah = Ah + US%T_to_s*0.25*( (MEKE%Au(I,J)+MEKE%Au(I+1,J+1))    &
+                                    +(MEKE%Au(I+1,J)+MEKE%Au(I,J+1)) )
         endif
 
         if (CS%better_bound_Ah) then
@@ -1105,10 +1105,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_Ah_q>0) Ah_q(I,J,k) = Ah
 
-        str_xy(I,J) = str_xy(I,J) + US%T_to_s*Ah * ( dvdx(I,J) + dudy(I,J) )
+        str_xy(I,J) = str_xy(I,J) + Ah * ( dvdx(I,J) + dudy(I,J) )
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xy(I,J) = US%T_to_s*Ah * ( dvdx(I,J) + dudy(I,J) ) * &
+        bhstr_xy(I,J) = Ah * ( dvdx(I,J) + dudy(I,J) ) * &
                         (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
 
       endif  ! biharmonic
@@ -1150,8 +1150,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       do j=js,je ; do i=is,ie
         ! Diagnose  -Kh * |del u|^2 - Ah * |del^2 u|^2
-        diss_rate(i,j,k) = -Kh_h(i,j,k) * grad_vel_mag_h(i,j) - &
-                              Ah_h(i,j,k) * grad_d2vel_mag_h(i,j)
+        diss_rate(i,j,k) = -US%s_to_T*Kh_h(i,j,k) * grad_vel_mag_h(i,j) - &
+                              US%s_to_T*Ah_h(i,j,k) * grad_d2vel_mag_h(i,j)
 
         if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
           ! This is the maximum possible amount of energy that can be converted
@@ -1435,18 +1435,18 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2) [m3]
   real :: grid_sp_q2       ! spacings at h and q points [m2]
   real :: grid_sp_q3       ! spacings at h and q points^(3/2) [m3]
-  real :: Kh_Limit         ! A coefficient [s-1] used, along with the
+  real :: Kh_Limit         ! A coefficient [T-1 ~> s-1] used, along with the
                            ! grid spacing, to limit Laplacian viscosity.
   real :: fmax             ! maximum absolute value of f at the four
                            ! vorticity points around a thickness point [T-1 ~> s-1]
   real :: BoundCorConst    ! A constant used when using viscosity to bound the Coriolis accelerations [T2 L-2 ~> s2 m-2]
-  real :: Ah_Limit         ! coefficient [s-1] used, along with the
+  real :: Ah_Limit         ! coefficient [T-1 ~> s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
   real :: Kh               ! Lapacian horizontal viscosity [m2 s-1]
   real :: Ah               ! biharmonic horizontal viscosity [m4 s-1]
-  real :: Kh_vel_scale     ! this speed [m s-1] times grid spacing gives Lap visc
-  real :: Ah_vel_scale     ! this speed [m s-1] times grid spacing cubed gives bih visc
-  real :: Ah_time_scale    ! damping time-scale for biharmonic visc
+  real :: Kh_vel_scale     ! this speed [m T-1 ~> m s-1] times grid spacing gives Lap visc
+  real :: Ah_vel_scale     ! this speed [m T-1 ~> m s-1] times grid spacing cubed gives bih visc
+  real :: Ah_time_scale    ! damping time-scale for biharmonic visc [T ~> s]
   real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
   real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
   real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
@@ -1458,7 +1458,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value
                            ! the quadratically varying biharmonic viscosity
                            ! balances Coriolis acceleration [L T-1 ~> m s-1]
-  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity [m2 s-1]
+  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity [m2 T-1 ~> m2 s-1]
   real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat
   logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS
   logical :: get_all       ! If true, read and log all parameters, regardless of
@@ -1527,20 +1527,20 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   if (CS%Laplacian .or. get_all) then
     call get_param(param_file, mdl, "KH", Kh,                      &
                  "The background Laplacian horizontal viscosity.", &
-                 units = "m2 s-1", default=0.0)
+                 units = "m2 s-1", default=0.0, scale=US%T_to_s)
     call get_param(param_file, mdl, "KH_BG_MIN", CS%Kh_bg_min, &
                  "The minimum value allowed for Laplacian horizontal viscosity, KH.", &
-                 units = "m2 s-1",  default=0.0)
+                 units = "m2 s-1",  default=0.0, scale=US%T_to_s)
     call get_param(param_file, mdl, "KH_VEL_SCALE", Kh_vel_scale, &
                  "The velocity scale which is multiplied by the grid "//&
                  "spacing to calculate the Laplacian viscosity. "//&
                  "The final viscosity is the largest of this scaled "//&
                  "viscosity, the Smagorinsky and Leith viscosities, and KH.", &
-                 units="m s-1", default=0.0)
+                 units="m s-1", default=0.0, scale=US%T_to_s)
     call get_param(param_file, mdl, "KH_SIN_LAT", Kh_sin_lat, &
                  "The amplitude of a latitudinally-dependent background "//&
                  "viscosity of the form KH_SIN_LAT*(SIN(LAT)**KH_PWR_OF_SINE).", &
-                 units = "m2 s-1",  default=0.0)
+                 units = "m2 s-1",  default=0.0, scale=US%T_to_s)
     if (Kh_sin_lat>0. .or. get_all) &
       call get_param(param_file, mdl, "KH_PWR_OF_SINE", Kh_pwr_of_sine, &
                  "The power used to raise SIN(LAT) when using a latitudinally "//&
@@ -1603,7 +1603,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   if (CS%anisotropic .or. get_all) then
     call get_param(param_file, mdl, "KH_ANISO", CS%Kh_aniso, &
                  "The background Laplacian anisotropic horizontal viscosity.", &
-                 units = "m2 s-1", default=0.0)
+                 units = "m2 s-1", default=0.0, scale=US%T_to_s)
     call get_param(param_file, mdl, "ANISOTROPIC_MODE", aniso_mode, &
                  "Selects the mode for setting the direction of anistropy.\n"//&
                  "\t 0 - Points along the grid i-direction.\n"//&
@@ -1631,19 +1631,19 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   if (CS%biharmonic .or. get_all) then
     call get_param(param_file, mdl, "AH", Ah, &
                  "The background biharmonic horizontal viscosity.", &
-                 units = "m4 s-1", default=0.0)
+                 units = "m4 s-1", default=0.0, scale=US%T_to_s)
     call get_param(param_file, mdl, "AH_VEL_SCALE", Ah_vel_scale, &
                  "The velocity scale which is multiplied by the cube of "//&
                  "the grid spacing to calculate the biharmonic viscosity. "//&
                  "The final viscosity is the largest of this scaled "//&
                  "viscosity, the Smagorinsky and Leith viscosities, and AH.", &
-                 units="m s-1", default=0.0)
+                 units="m s-1", default=0.0, scale=US%T_to_s)
     call get_param(param_file, mdl, "AH_TIME_SCALE", Ah_time_scale, &
                  "A time scale whose inverse is multiplied by the fourth "//&
                  "power of the grid spacing to calculate biharmonic viscosity. "//&
                  "The final viscosity is the largest of all viscosity "//&
                  "formulations in use. 0.0 means that it's not used.", &
-                 units="s", default=0.0)
+                 units="s", default=0.0, scale=US%s_to_T)
     call get_param(param_file, mdl, "SMAGORINSKY_AH", CS%Smagorinsky_Ah, &
                  "If true, use a biharmonic Smagorinsky nonlinear eddy "//&
                  "viscosity.", default=.false.)
@@ -1807,7 +1807,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
-                       G%domain, timelevel=1)
+                       G%domain, timelevel=1, scale=US%T_to_s)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
 
@@ -1881,7 +1881,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
   if (CS%Laplacian) then
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
-    if (CS%bound_Kh .or. CS%bound_Ah) Kh_Limit = 0.3 / (dt*4.0)
+    if (CS%bound_Kh .or. CS%bound_Ah) Kh_Limit = 0.3 / (US%s_to_T*dt*4.0)
 
     ! Calculate and store the background viscosity at h-points
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1920,6 +1920,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
       ! Use the larger of the above and values read from a file
+      !### This expression uses inconsistent staggering
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
 
       ! Use the larger of the above and a function of sin(latitude)
@@ -1950,7 +1951,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
     CS%Ah_bg_xy(:,:) = 0.0
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
-    if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
+    if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (US%s_to_T*dt*64.0)
     if (CS%Smagorinsky_Ah .and. CS%bound_Coriolis) &
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1970,7 +1971,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
          CS%biharm5_const_xx(i,j) = Leith_bi_const * (grid_sp_h3 * grid_sp_h2)
       endif
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
-      if (Ah_time_scale>0.) CS%Ah_bg_xx(i,j) = &
+      if (Ah_time_scale > 0.) CS%Ah_bg_xx(i,j) = &
             MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
@@ -1993,7 +1994,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
-      if (Ah_time_scale>0.) CS%Ah_bg_xy(i,j) = &
+      if (Ah_time_scale > 0.) CS%Ah_bg_xy(i,j) = &
            MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / Ah_time_scale)
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
         CS%Ah_Max_xy(I,J) = Ah_Limit * (grid_sp_q2 * grid_sp_q2)
@@ -2013,7 +2014,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
           max(G%IdxCv(i,J)*G%IareaCv(i,J), G%IdxCv(i,J-1)*G%IareaCv(i,J-1)) ) )
       CS%Kh_Max_xx(i,j) = 0.0
       if (denom > 0.0) &
-        CS%Kh_Max_xx(i,j) = CS%bound_coef * 0.25 * Idt / denom
+        CS%Kh_Max_xx(i,j) = CS%bound_coef * 0.25 * US%T_to_s*Idt / denom
     enddo ; enddo
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
@@ -2023,7 +2024,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
           max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Kh_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
-        CS%Kh_Max_xy(I,J) = CS%bound_coef * 0.25 * Idt / denom
+        CS%Kh_Max_xy(I,J) = CS%bound_coef * 0.25 * US%T_to_s*Idt / denom
     enddo ; enddo
   endif
 
@@ -2066,7 +2067,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
           max(G%IdxCv(i,J)*G%IareaCv(i,J), G%IdxCv(i,J-1)*G%IareaCv(i,J-1)) ) )
       CS%Ah_Max_xx(I,J) = 0.0
       if (denom > 0.0) &
-        CS%Ah_Max_xx(I,J) = CS%bound_coef * 0.5 * Idt / denom
+        CS%Ah_Max_xx(I,J) = CS%bound_coef * 0.5 * US%T_to_s*Idt / denom
     enddo ; enddo
 
     do J=js-1,Jeq ; do I=is-1,Ieq
@@ -2081,7 +2082,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
           max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Ah_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
-        CS%Ah_Max_xy(I,J) = CS%bound_coef * 0.5 * Idt / denom
+        CS%Ah_Max_xy(I,J) = CS%bound_coef * 0.5 * US%T_to_s*Idt / denom
     enddo ; enddo
   endif
 
@@ -2095,24 +2096,24 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
 
   if (CS%biharmonic) then
     CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
-        'Biharmonic Horizontal Viscosity at h Points', 'm4 s-1',        &
+        'Biharmonic Horizontal Viscosity at h Points', 'm4 s-1', conversion=US%s_to_T, &
         cmor_field_name='difmxybo',                                             &
         cmor_long_name='Ocean lateral biharmonic viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
 
     CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
-        'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1')
+        'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1', conversion=US%s_to_T)
   endif
 
   if (CS%Laplacian) then
     CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
-        'Laplacian Horizontal Viscosity at h Points', 'm2 s-1',        &
+        'Laplacian Horizontal Viscosity at h Points', 'm2 s-1', conversion=US%s_to_T, &
         cmor_field_name='difmxylo',                                             &
         cmor_long_name='Ocean lateral Laplacian viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
 
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
-        'Laplacian Horizontal Viscosity at q Points', 'm2 s-1')
+        'Laplacian Horizontal Viscosity at q Points', 'm2 s-1', conversion=US%s_to_T)
 
     if (CS%Leith_Kh) then
       CS%id_vort_xy_q = register_diag_field('ocean_model', 'vort_xy_q', diag%axesBL, Time, &
