@@ -505,7 +505,7 @@ end subroutine register_restarts_dyn_unsplit_RK2
 
 !> Initialize parameters and allocate memory associated with the unsplit RK2 dynamics module.
 subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag, CS, &
-                                      restart_CS, Accel_diag, Cont_diag, MIS, &
+                                      restart_CS, Accel_diag, Cont_diag, MIS, MEKE, &
                                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                                       visc, dirs, ntrunc)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
@@ -532,6 +532,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   type(ocean_internal_state),                intent(inout) :: MIS  !< The "MOM6 Internal State"
                                                      !! structure, used to pass around pointers
                                                      !! to various arrays for diagnostic purposes.
+  type(MEKE_type),                           pointer       :: MEKE !< MEKE data
   type(ocean_OBC_type),                      pointer       :: OBC  !< If open boundary conditions
                                                     !! are used, this points to the ocean_OBC_type
                                                     !! that was set up in MOM_initialization.
@@ -614,7 +615,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
-  call hor_visc_init(Time, G, US, param_file, diag, CS%hor_visc_CSp)
+  call hor_visc_init(Time, G, US, param_file, diag, CS%hor_visc_CSp, MEKE)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
