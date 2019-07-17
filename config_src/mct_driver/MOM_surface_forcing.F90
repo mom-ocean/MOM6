@@ -66,9 +66,6 @@ type, public :: surface_forcing_CS ; private
   logical :: use_temperature    !! If true, temp and saln used as state variables
   real :: wind_stress_multiplier!< A multiplier applied to incoming wind stress (nondim).
 
-  ! smg: remove when have A=B code reconciled
-  logical :: bulkmixedlayer     !< If true, model based on bulk mixed layer code
-
   real :: Rho0                  !< Boussinesq reference density [kg/m^3]
   real :: area_surf = -1.0      !< total ocean surface area [m^2]
   real :: latent_heat_fusion    !< latent heat of fusion [J/kg]
@@ -1092,11 +1089,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "correction for the atmospheric (and sea-ice) pressure "//&
                  "limited by max_p_surf instead of the full atmospheric "//&
                  "pressure.", default=.true.)
-
-! smg: should get_param call should be removed when have A=B code reconciled.
-! this param is used to distinguish how to diagnose surface heat content from water.
-  call get_param(param_file, mdl, "BULKMIXEDLAYER", CS%bulkmixedlayer, &
-                 default=CS%use_temperature,do_not_log=.true.)
 
   call get_param(param_file, mdl, "WIND_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the "//&
