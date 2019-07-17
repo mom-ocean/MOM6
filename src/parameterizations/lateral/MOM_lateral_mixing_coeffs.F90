@@ -761,14 +761,15 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
 
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
 
-  ! update halos
+  !### I believe this halo update to be unnecessary. -RWH
   call pass_var(h, G%Domain)
 
   if ((k > 1) .and. (k < nz)) then
 
   ! Add in stretching term for the QG Leith vsicosity
 !  if (CS%use_QG_Leith) then
-!    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+
+    !### do j=js-1,je+1 ; do I=is-2,Ieq+1
     do j=js-2,Jeq+2 ; do I=is-2,Ieq+1
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
                          ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
@@ -780,7 +781,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
       dslopex_dz(I,j) = 2. * ( CS%slope_x(i,j,k) - CS%slope_x(i,j,k+1) ) * Ih
       h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
-!    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+
+    !### do J=js-2,Jeq+1 ; do i=is-1,ie+1
     do J=js-2,Jeq+1 ; do i=is-2,Ieq+2
       h_at_slope_above = 2. * ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) * h(i,j+1,k) ) / &
                          ( ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) + h(i,j+1,k) ) &
@@ -793,6 +795,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
       h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
 
+    !### do J=js-1,je ; do i=is-1,Ieq+1
     do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
       vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * &
@@ -801,8 +804,10 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
               ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
     enddo ; enddo
 
+    !### do j=js-1,Jeq+1 ; do I=is-1,ie
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
+      !### I think that this should be vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * &
       vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * &
             ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
             + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
@@ -810,51 +815,49 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
     enddo ; enddo
   endif ! k > 1
 
+  !### I believe this halo update to be unnecessary. -RWH
   call pass_vector(vort_xy_dy,vort_xy_dx,G%Domain)
 
-    if (CS%use_QG_Leith_GM) then
+  if (CS%use_QG_Leith_GM) then
+
+    do j=js,je ; do I=is-1,Ieq
+      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
+                                + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
+      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
+                               + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
       if (CS%use_beta_in_QG_Leith) then
-        do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
-          beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
-                        (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
-        enddo ; enddo
-        do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
-          beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
-                        (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
-        enddo ; enddo
+        beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
+        CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)*3) &
+             * CS%Laplac3_const_u(I,j) * inv_PI3
+      else
+        CS%KH_u_QG(I,j,k) = (grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) &
+             * CS%Laplac3_const_u(I,j) * inv_PI3
       endif
+    enddo ; enddo
 
-      do j=js-1,Jeq+1 ; do I=is-2,Ieq
-        grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
-                             + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
-        grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
-                             + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
-        if (CS%use_beta_in_QG_Leith) then
-          CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)*3) &
-               * CS%Laplac3_const_u(I,j) * inv_PI3
-        else
-          CS%KH_u_QG(I,j,k) = (grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) &
-               * CS%Laplac3_const_u(I,j) * inv_PI3
-        endif
-      enddo ; enddo
+    do J=js-1,Jeq ; do i=is,ie
+      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
+                           + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
+      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
+                           + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
+      if (CS%use_beta_in_QG_Leith) then
+        beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) &
+             * CS%Laplac3_const_v(i,J) * inv_PI3
+      else
+        CS%KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) &
+             * CS%Laplac3_const_v(i,J) * inv_PI3
+      endif
+    enddo ; enddo
+    ! post diagnostics
 
-      do J=js-2,Jeq ; do i=is-1,Ieq+1
-        grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
-                             + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
-        grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
-                             + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
-        if (CS%use_beta_in_QG_Leith) then
-          CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) &
-               * CS%Laplac3_const_v(i,J) * inv_PI3
-        else
-          CS%KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) &
-               * CS%Laplac3_const_v(i,J) * inv_PI3
-        endif
-      enddo ; enddo
-      ! post diagnostics
+    if (k==nz) then
       if (CS%id_KH_v_QG > 0)  call post_data(CS%id_KH_v_QG, CS%KH_v_QG, CS%diag)
       if (CS%id_KH_u_QG > 0)  call post_data(CS%id_KH_u_QG, CS%KH_u_QG, CS%diag)
     endif
+  endif
 
 end subroutine calc_QG_Leith_viscosity
 
@@ -870,9 +873,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
   real :: KhTr_passivity_coeff
-  real :: absurdly_small_freq2  ! A miniscule frequency
-             ! squared that is used to avoid division by 0 [s-2].  This
-             ! value is roughly (pi / (the age of the universe) )^2.
+  real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
+             ! default value is roughly (pi / (the age of the universe)).
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   real :: MLE_front_length
   real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity
@@ -901,7 +903,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
   CS%calculate_Eady_growth_rate = .false.
-  absurdly_small_freq2 = 1e-34  !### Note the hard-coded dimensional parameter in [s-2].
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -947,6 +948,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "stored for re-use. This uses more memory but avoids calling "//&
                  "the equation of state more times than should be necessary.", &
                  default=.false.)
+  call get_param(param_file, mdl, "VERY_SMALL_FREQUENCY", absurdly_small_freq, &
+                 "A miniscule frequency that is used to avoid division by 0.  The default "//&
+                 "value is roughly (pi / (the age of the universe)).", &
+                 default=1.0e-17, units="s-1", scale=US%T_to_s)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", use_FGNV_streamfn, &
                  default=.false., do_not_log=.true.)
   CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
@@ -1110,8 +1115,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
-      CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
-                         max(US%s_to_T**2 * G%CoriolisBu(I,J)**2, absurdly_small_freq2)
+      CS%f2_dx2_q(I,J) = US%s_to_T**2 * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
+                         max(G%CoriolisBu(I,J)**2, absurdly_small_freq**2)
       CS%beta_dx2_q(I,J) = oneOrTwo * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (US%s_to_T * sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
@@ -1120,8 +1125,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     enddo ; enddo
 
     do j=js,je ; do I=is-1,Ieq
-      CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
-          max(0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq2)
+      CS%f2_dx2_u(I,j) = US%s_to_T**2 *(G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
+          max(0.5* (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq**2)
       CS%beta_dx2_u(I,j) = oneOrTwo * (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (US%s_to_T * sqrt( &
           0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
                   ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
@@ -1131,8 +1136,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      CS%f2_dx2_v(i,J) = (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * &
-          max(0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq2)
+      CS%f2_dx2_v(i,J) = US%s_to_T**2*(G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * &
+          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq**2)
       CS%beta_dx2_v(i,J) = oneOrTwo * (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (US%s_to_T * sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
           0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -1154,10 +1159,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%beta_dx2_h(isd:ied,jsd:jed)); CS%beta_dx2_h(:,:) = 0.0
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed))  ; CS%f2_dx2_h(:,:) = 0.0
     do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
-          max(0.25 * US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+      CS%f2_dx2_h(i,j) = US%s_to_T**2 * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
+          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
-              absurdly_small_freq2)
+              absurdly_small_freq**2)
       CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (US%s_to_T * sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
