@@ -1123,10 +1123,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
 
     if (find_FrictWork) then
-      !### I suspect that this halo update is not needed.
-      if (CS%biharmonic) call pass_vector(u0, v0, G%Domain)
-
-      !#GME# Group the 4-point sums so they are rotationally invariant.`
       if (CS%Laplacian) then
         if (CS%answers_2018) then
           do j=js,je ; do i=is,ie
@@ -2483,7 +2479,7 @@ end subroutine hor_visc_end
 !! Large et al., 2001, proposed enhancing viscosity in a particular direction and the
 !! approach was generalized in Smith and McWilliams, 2003. We use the second form of their
 !! two coefficient anisotropic viscosity (section 4.3). We also replace their
-!! \f$A^\prime\f$ nd $D$ such that \f$2A^\prime = 2 \kappa_h + D\f$ and
+!! \f$A^\prime\f$ and $D$ such that \f$2A^\prime = 2 \kappa_h + D\f$ and
 !! \f$\kappa_a = D\f$ so that \f$\kappa_h\f$ can be considered the isotropic
 !! viscosity and \f$\kappa_a=D\f$ can be consider the anisotropic viscosity. The
 !! direction of anisotropy is defined by a unit vector \f$\hat{\bf
