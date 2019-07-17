@@ -356,8 +356,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
 !$OMP do
   if (CS%use_GME_thickness_diffuse) then
-    do k=1,nz+1 ; do j=js-1,je ; do I=is,ie
-      CS%KH_v_GME(I,j,k) = KH_v(I,j,k)
+    do k=1,nz+1 ; do J=js-1,je ; do i=is,ie
+      CS%KH_v_GME(i,J,k) = KH_v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
