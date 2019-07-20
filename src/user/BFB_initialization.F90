@@ -38,7 +38,7 @@ contains
 subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
   real, dimension(NKMEM_), intent(out) :: Rlay !< Layer potential density.
   real, dimension(NKMEM_), intent(out) :: g_prime !< The reduced gravity at
-                                                  !! each interface [m2 Z-1 s-2 ~> m s-2].
+                                                  !! each interface [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the

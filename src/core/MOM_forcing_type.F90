@@ -56,7 +56,7 @@ type, public :: forcing
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
-    buoy          => NULL()  !< buoyancy flux [m2 s-3]
+    buoy          => NULL()  !< buoyancy flux [L2 T-3 ~> m2 s-3]
 
   ! radiative heat fluxes into the ocean [W m-2]
   real, pointer, dimension(:,:) :: &
@@ -881,7 +881,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: Salt           !< salinity [ppt]
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy flux [m2 s-3]
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux
                                                                       !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux
@@ -889,22 +889,26 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip calculating
                                                                             !! diagnostics inside extractFluxes1d()
   ! local variables
-  integer                                   :: start, npts, k
-  real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
-  real, dimension( SZI_(G) )                :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension( SZI_(G) )                :: netEvap    ! net FW flux leaving ocean via evaporation
-                                                          ! [H s-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension( SZI_(G) )                :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
-  real, dimension( max(nsw,1), SZI_(G) )    :: penSWbnd   ! penetrating SW radiation by band
-  real, dimension( SZI_(G) )                :: pressure   ! pressurea the surface [Pa]
-  real, dimension( SZI_(G) )                :: dRhodT     ! density partial derivative wrt temp [kg m-3 degC-1]
-  real, dimension( SZI_(G) )                :: dRhodS     ! density partial derivative wrt saln [kg m-3 ppt-1]
-  real, dimension(SZI_(G),SZK_(G)+1)        :: netPen
+  integer                               :: start, npts, k
+  real, parameter                       :: dt = 1.    ! to return a rate from extractFluxes1d
+  real, dimension(SZI_(G))              :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension(SZI_(G))              :: netEvap    ! net FW flux leaving ocean via evaporation
+                                                      ! [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
+  real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
+                                                      ! [degC H ~> degC m or degC kg m-2]
+  real, dimension(SZI_(G))              :: pressure   ! pressurea the surface [Pa]
+  real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [kg m-3 degC-1]
+  real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [kg m-3 ppt-1]
+  real, dimension(SZI_(G),SZK_(G)+1)    :: netPen     ! The net penetrating shortwave radiation at each level
+                                                      ! [degC H ~> degC m or degC kg m-2]
 
   logical :: useRiverHeatContent
   logical :: useCalvingHeatContent
-  real    :: depthBeforeScalingFluxes, GoRho
-  real    :: H_limit_fluxes
+  real    :: depthBeforeScalingFluxes  ! A depth scale [H ~> m or kg m-2]
+  real    :: GoRho ! The gravitational acceleration divided by mean density times some
+                   ! unit conversion factors [L2 m3 H-1 s kg-1 T-3 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
+  real    :: H_limit_fluxes            ! Another depth scale [H ~> m or kg m-2]
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
@@ -912,7 +916,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = (GV%g_Earth*US%m_to_Z) / GV%Rho0
+  GoRho       = (GV%g_Earth*US%m_to_Z * GV%H_to_m*US%T_to_s) / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -932,7 +936,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
-  call sumSWoverBands(G, GV, US, h(:,j,:), optics, j, dt*US%s_to_T, &
+  call sumSWoverBands(G, GV, US, h(:,j,:), optics_nbands(optics), optics, j, dt*US%s_to_T, &
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
@@ -949,10 +953,10 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
-                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) * GV%H_to_m ! m^2/s^3
+                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) ! [L2 T-3 ~> m2 s-3]
   ! We also have a penetrative buoyancy flux associated with penetrative SW
   do k=2, G%ke+1
-    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) * GV%H_to_m ! m^2/s^3
+    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) ! [L2 T-3 ~> m2 s-3]
   enddo
 
 end subroutine calculateBuoyancyFlux1d
@@ -971,7 +975,7 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp   !< temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt   !< salinity [ppt]
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoy flux [m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux
                                                                               !! [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux
@@ -1015,7 +1019,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%ustar)) &
     call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI, haloshift=hshift, scale=US%L_to_m**2*US%s_to_T**3)
   if (associated(fluxes%sw)) &
     call hchksum(fluxes%sw, mesg//" fluxes%sw",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dir)) &
@@ -1253,7 +1257,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   if (.not. use_temperature) then
     handles%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
-          'Buoyancy forcing', 'm2 s-3')
+          'Buoyancy forcing', 'm2 s-3', conversion=US%L_to_m**2*US%s_to_T**3)
     return
   endif
 

@@ -26,9 +26,8 @@ type, public :: verticalGrid_type
   ! Commonly used parameters
   integer :: ke     !< The number of layers/levels in the vertical
   real :: max_depth !< The maximum depth of the ocean [Z ~> m].
-  real :: g_Earth   !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
   real :: mks_g_Earth !< The gravitational acceleration in unscaled MKS units [m s-2].
-  real :: LZT_g_Earth !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
+  real :: g_Earth   !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
                     !! density used to convert depths into mass units [kg m-3].
 
@@ -49,7 +48,7 @@ type, public :: verticalGrid_type
                         !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real, allocatable, dimension(:) :: &
-    g_prime, &          !< The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+    g_prime, &          !< The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
     Rlay                !< The target coordinate value (potential density) in each layer [kg m-3].
   integer :: nkml = 0   !< The number of layers at the top that should be treated
                         !! as parts of a homogeneous region.
@@ -124,8 +123,7 @@ subroutine verticalGridInit( param_file, GV, US )
                  "units of thickness into m.", units="m H-1", default=1.0)
     GV%H_to_m = GV%H_to_m * H_rescale_factor
   endif
-  GV%g_Earth = GV%mks_g_Earth * US%Z_to_m
-  GV%LZT_g_Earth = US%m_to_L**2*US%Z_to_m*US%T_to_s**2 * GV%mks_g_Earth
+  GV%g_Earth = US%m_to_L**2*US%Z_to_m*US%T_to_s**2 * GV%mks_g_Earth
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, mdl, "NK", nk, &
