@@ -106,14 +106,14 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
       "Unrecognized coordinate setup"//trim(config))
   end select
   if (debug) call chksum(GV%Rlay, "MOM_initialize_coord: Rlay ", 1, nz)
-  if (debug) call chksum(US%m_to_Z*GV%g_prime(:), "MOM_initialize_coord: g_prime ", 1, nz)
+  if (debug) call chksum(US%m_to_Z*US%L_to_m**2*US%s_to_T**2*GV%g_prime(:), "MOM_initialize_coord: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV )
 
 ! Copy the maximum depth across from the input argument
   GV%max_depth = max_depth
 
 ! Write out all of the grid data used by this run.
-  if (write_geom) call write_vertgrid_file(GV, PF, output_dir)
+  if (write_geom) call write_vertgrid_file(GV, US, PF, output_dir)
 
   call callTree_leave('MOM_initialize_coord()')
 
@@ -126,7 +126,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
                                                      !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! [m2 Z-1 s-2 ~> m s-2].
+                                                     !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -141,10 +141,10 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
-                 units="m s-2", fail_if_missing=.true., scale=US%Z_to_m)
+                 units="m s-2", fail_if_missing=.true., scale=US%m_s_to_L_T**2*US%Z_to_m)
 
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = g_int ; enddo
@@ -160,7 +160,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
                                                      !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! [m2 Z-1 s-2 ~> m s-2].
+                                                     !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -176,7 +176,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for layer 1.", &
                  units="kg m-3", default=GV%Rho0)
@@ -203,7 +203,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
                                                        !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
-                                                       !! [m2 Z-1 s-2 ~> m s-2].
+                                                       !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
@@ -228,10 +228,10 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
                  "The initial salinities.", units="PSU", default=35.0)
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
-                 units="m s-2", fail_if_missing=.true., scale=US%Z_to_m)
+                 units="m s-2", fail_if_missing=.true., scale=US%m_s_to_L_T**2*US%Z_to_m)
                                       !
 !    These statements set the interface reduced gravities.           !
   g_prime(1) = g_fs
@@ -254,7 +254,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
                                                        !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
-                                                       !! [m2 Z-1 s-2 ~> m s-2].
+                                                       !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
@@ -273,7 +273,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
                  "The file from which the coordinate temperatures and "//&
                  "salinities are read.", fail_if_missing=.true.)
@@ -302,7 +302,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
   real, dimension(:),      intent(out) :: Rlay         !< The layers' target coordinate values
                                                        !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime      !< The reduced gravity across the interfaces
-                                                       !! [m2 Z-1 s-2 ~> m s-2].
+                                                       !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
@@ -354,7 +354,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, &
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
 
   k_light = GV%nk_rho_varies + 1
 
@@ -385,7 +385,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
                                                      !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! [m2 Z-1 s-2 ~> m s-2].
+                                                     !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -401,7 +401,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
@@ -436,7 +436,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
                                                      !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces
-                                                     !! [m2 Z-1 s-2 ~> m s-2].
+                                                     !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -456,7 +456,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
                  units="kg m-3", default=2.0)
   call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
 
   ! This following sets the target layer densities such that a the
   ! surface interface has density Rlay_ref and the bottom
@@ -480,7 +480,7 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
   real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
                                                      !! (potential density) [kg m-3].
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity across the interfaces,
-                                                     !! [m2 Z-1 s-2 ~> m s-2].
+                                                     !! [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
@@ -494,7 +494,7 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
 
   call get_param(param_file, mdl, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=GV%mks_g_Earth, scale=US%Z_to_m)
+                 default=GV%mks_g_Earth, scale=US%m_s_to_L_T**2*US%Z_to_m)
 
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = 0. ; enddo
@@ -507,8 +507,9 @@ end subroutine set_coord_to_none
 
 !> Writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model.
-subroutine write_vertgrid_file(GV, param_file, directory)
+subroutine write_vertgrid_file(GV, US, param_file, directory)
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   character(len=*),      intent(in)    :: directory  !< The directory into which to place the file.
   ! Local variables
@@ -525,7 +526,7 @@ subroutine write_vertgrid_file(GV, param_file, directory)
   call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
   call write_field(unit, fields(1), GV%Rlay)
-  call write_field(unit, fields(2), GV%g_prime)  !### RESCALE THIS?
+  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
 
   call close_file(unit)
 

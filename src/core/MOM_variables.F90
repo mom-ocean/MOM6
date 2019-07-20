@@ -138,8 +138,8 @@ type, public :: ocean_internal_state
     CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [m s-2]
     PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration [m s-2]
     PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration [m s-2]
-    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-2]
-    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-2]
+    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
+    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
     pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
                        !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2]
     u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [m s-2]
@@ -156,8 +156,8 @@ type, public :: accel_diag_ptrs
 
   ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
-    diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [m s-2]
-    diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [m s-2]
+    diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
+    diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
     CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [m s-2]
     CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations [m s-2]
     PFu => NULL(), &       !< Zonal acceleration due to pressure forces [m s-2]

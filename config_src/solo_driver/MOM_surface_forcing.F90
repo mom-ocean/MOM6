@@ -79,7 +79,7 @@ type, public :: surface_forcing_CS ; private
   real    :: len_lat            !< domain length in latitude
 
   real :: Rho0                  !< Boussinesq reference density [kg m-3]
-  real :: G_Earth               !< gravitational acceleration [m s-2]
+  real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const            !< piston velocity for surface restoring [m s-1]
   real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
   real :: Flux_const_S          !< piston velocity for surface salinity restoring [m s-1]
@@ -301,9 +301,9 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
-      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "data_override") then
-      call buoyancy_forcing_from_data_override(sfc_state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_from_data_override(sfc_state, fluxes, day_center, dt, G, US, CS)
     elseif (trim(CS%buoy_config) == "zero") then
       call buoyancy_forcing_zero(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "const") then
@@ -311,15 +311,15 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%buoy_config) == "linear") then
       call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
-      call MESO_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%MESO_forcing_CSp)
+      call MESO_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%MESO_forcing_CSp)
     elseif (trim(CS%buoy_config) == "Neverland") then
-      call Neverland_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%Neverland_forcing_CSp)
+      call Neverland_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%Neverland_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
-      call USER_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%user_forcing_CSp)
+      call USER_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%user_forcing_CSp)
     elseif (trim(CS%buoy_config) == "BFB") then
-      call BFB_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%BFB_forcing_CSp)
+      call BFB_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%BFB_forcing_CSp)
     elseif (trim(CS%buoy_config) == "dumbbell") then
       call dumbbell_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%dumbbell_forcing_CSp)
     elseif (trim(CS%buoy_config) == "NONE") then
@@ -741,7 +741,7 @@ end subroutine wind_forcing_by_data_override
 
 
 !> Specifies zero surface bouyancy fluxes from input files.
-subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
@@ -749,6 +749,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
   real,                  intent(in)    :: dt   !< The amount of time over which
                                                !! the fluxes apply [s]
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control struct returned by
                                                !! a previous surface_forcing_init call
   ! Local variables
@@ -990,7 +991,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth*CS%Flux_const/CS%Rho0)
+                             (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -1019,7 +1020,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 end subroutine buoyancy_forcing_from_files
 
 !> Specifies zero surface bouyancy fluxes from data over-ride.
-subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS)
+subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
                                                   !! describe the surface state of the ocean.
   type(forcing),            intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
@@ -1027,6 +1028,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
   real,                     intent(in)    :: dt   !< The amount of time over which
                                                   !! the fluxes apply [s]
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control struct returned by
                                                   !! a previous surface_forcing_init call
   ! Local variables
@@ -1134,7 +1136,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth*CS%Flux_const/CS%Rho0)
+                             (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -1333,7 +1335,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
      !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-     !                       (CS%G_Earth*CS%Flux_const/CS%Rho0)
+     !                       (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0
      !  endif
@@ -1693,7 +1695,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   endif
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
@@ -1714,15 +1716,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
 !  All parameter settings are now known.
 
   if (trim(CS%wind_config) == "USER" .or. trim(CS%buoy_config) == "USER" ) then
-    call USER_surface_forcing_init(Time, G, param_file, diag, CS%user_forcing_CSp)
+    call USER_surface_forcing_init(Time, G, US, param_file, diag, CS%user_forcing_CSp)
   elseif (trim(CS%buoy_config) == "BFB" ) then
-    call BFB_surface_forcing_init(Time, G, param_file, diag, CS%BFB_forcing_CSp)
+    call BFB_surface_forcing_init(Time, G, US, param_file, diag, CS%BFB_forcing_CSp)
   elseif (trim(CS%buoy_config) == "dumbbell" ) then
-    call dumbbell_surface_forcing_init(Time, G, param_file, diag, CS%dumbbell_forcing_CSp)
+    call dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
-    call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
+    call MESO_surface_forcing_init(Time, G, US, param_file, diag, CS%MESO_forcing_CSp)
   elseif (trim(CS%wind_config) == "Neverland") then
-    call Neverland_surface_forcing_init(Time, G, param_file, diag, CS%Neverland_forcing_CSp)
+    call Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS%Neverland_forcing_CSp)
   elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
           trim(CS%wind_config) == "SCM_ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, param_file, CS%idealized_hurricane_CSp)

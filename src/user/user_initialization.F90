@@ -42,7 +42,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
                                                      !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface [m2 Z-1 s-2 ~> m s-2].
+                                                     !! each interface [L2 Z-1 T-2 ~> m s-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
                                                      !! open file to parse for model
                                                      !! parameter values.
@@ -247,7 +247,7 @@ end subroutine write_user_log
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
-!!  - GV%g_prime - The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+!!  - GV%g_prime - The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
 !!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!  - T - Temperature [degC].
