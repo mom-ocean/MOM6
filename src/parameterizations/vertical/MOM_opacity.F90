@@ -82,6 +82,9 @@ character*(10), parameter :: MOREL_88_STRING   = "MOREL_88"   !< String to speci
 character*(10), parameter :: SINGLE_EXP_STRING = "SINGLE_EXP" !< String to specify the opacity scheme
 character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP" !< String to specify the opacity scheme
 
+real, parameter :: op_diag_len = 1e-10  !< Lengthscale L used to remap opacity
+                                        !! from op to 1/L * tanh(op * L)
+
 contains
 
 !> This sets the opacity of sea water based based on one of several different schemes.
@@ -165,6 +168,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
       endif
     endif
   endif
+
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
       !$OMP parallel do default(shared)
@@ -199,7 +203,10 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
     do n=1,optics%nbands ; if (CS%id_opacity(n) > 0) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp(i,j,k) = optics%opacity_band(n,i,j,k)
+        ! Remap opacity (op) to 1/L * tanh(op * L) where L is one Angstrom.
+        ! This gives a nearly identical value when op << 1/L but allows one to
+        ! store the values when opacity is divergent (i.e. opaque).
+        tmp(i,j,k) = tanh(op_diag_len * optics%opacity_band(n,i,j,k)) / op_diag_len
       enddo ; enddo ; enddo
       call post_data(CS%id_opacity(n), tmp, CS%diag)
     endif ; enddo
@@ -1093,7 +1100,8 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   do n=1,optics%nbands
     write(bandnum,'(i3)') n
     shortname = 'opac_'//trim(adjustl(bandnum))
-    longname = 'Opacity for shortwave radiation in band '//trim(adjustl(bandnum))
+    longname = 'Opacity for shortwave radiation in band '//trim(adjustl(bandnum)) &
+      // ', saved as L^-1 tanh(Opacity * L) for L = 10^-10 m'
     CS%id_opacity(n) = register_diag_field('ocean_model', shortname, diag%axesTL, Time, &
       longname, 'm-1')
   enddo
