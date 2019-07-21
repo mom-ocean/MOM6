@@ -2701,7 +2701,7 @@ subroutine extract_surface_state(CS, sfc_state)
   real :: T_freeze           !< freezing temperature [degC]
   real :: delT(SZI_(CS%G))   !< T-T_freeze [degC]
   logical :: use_temperature !< If true, temp and saln used as state variables.
-  integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
+  integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
   logical :: localError
@@ -2980,18 +2980,22 @@ subroutine extract_surface_state(CS, sfc_state)
         if (localError) then
           numberOfErrors=numberOfErrors+1
           if (numberOfErrors<9) then ! Only report details for the first few errors
+            ig = i + G%HI%idg_offset ! Global i-index
+            jg = j + G%HI%jdg_offset ! Global j-index
             if (use_temperature) then
-              write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),8(a,es11.4,x))') &
-                'Extreme surface sfc_state detected: i=',i,'j=',j, &
-                'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
+              write(msg(1:240),'(2(a,i4,x),4(a,f8.3,x),8(a,es11.4,x))') &
+                'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
+                'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
+                'x=',G%gridLonT(ig), 'y=',G%gridLatT(jg), &
                 'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
             else
-              write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
-                'Extreme surface sfc_state detected: i=',i,'j=',j, &
-                'x=',G%geoLonT(i,j), 'y=',G%geoLatT(i,j), &
+              write(msg(1:240),'(2(a,i4,x),4(a,f8.3,x),6(a,es11.4))') &
+                'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
+                'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
+                'x=',G%gridLonT(i), 'y=',G%gridLatT(j), &
                 'D=',bathy_m,  'SSH=',sfc_state%sea_lev(i,j), &
                 'U-=',sfc_state%u(I-1,j), 'U+=',sfc_state%u(I,j), &
                 'V-=',sfc_state%v(i,J-1), 'V+=',sfc_state%v(i,J)
