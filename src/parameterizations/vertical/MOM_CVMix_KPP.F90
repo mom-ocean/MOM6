@@ -468,10 +468,12 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
       ! CMOR names are placeholders; must be modified by time period
       ! for CMOR compliance. Diag manager will be used for omlmax and
       ! omldamax.
-  CS%id_OBLdepth_original = register_diag_field('ocean_model', 'KPP_OBLdepth_original', diag%axesT1, Time, &
-      'Thickness of the surface Ocean Boundary Layer without smoothing calculated by [CVMix] KPP', 'meter', &
-      cmor_field_name='oml', cmor_long_name='ocean_mixed_layer_thickness_defined_by_mixing_scheme', &
-      cmor_units='m', cmor_standard_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
+  if (CS%n_smooth > 0) then
+    CS%id_OBLdepth_original = register_diag_field('ocean_model', 'KPP_OBLdepth_original', diag%axesT1, Time, &
+        'Thickness of the surface Ocean Boundary Layer without smoothing calculated by [CVMix] KPP', 'meter', &
+        cmor_field_name='oml', cmor_long_name='ocean_mixed_layer_thickness_defined_by_mixing_scheme', &
+        cmor_units='m', cmor_standard_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
+  endif
   CS%id_BulkDrho = register_diag_field('ocean_model', 'KPP_BulkDrho', diag%axesTL, Time, &
       'Bulk difference in density used in Bulk Richardson number, as used by [CVMix] KPP', 'kg/m3')
   CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
