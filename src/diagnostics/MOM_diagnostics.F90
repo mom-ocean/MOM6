@@ -995,12 +995,18 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (associated(CS%KE_adv)) then
+    ! NOTE: All terms in KE_adv are multipled by -1, which can easily produce
+    ! negative zeros and may signal a reproducibility issue over land.
+    ! We resolve this by re-initializing and only evaluating over water points.
+    KE_u(:,:) = 0. ; KE_v(:,:) = 0.
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
+        if (G%mask2dCu(i,j) /= 0.) &
+          KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
+        if (G%mask2dCv(i,j) /= 0.) &
+          KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
