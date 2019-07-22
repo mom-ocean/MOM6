@@ -269,7 +269,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
-  Rho0x400_G = 400.0*(GV%Rho0 / (US%L_to_Z**2 * GV%LZT_g_Earth)) * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -1059,7 +1059,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: Uh2   ! The squared magnitude of the difference between the velocity
                 ! integrated through the mixed layer and the velocity of the
                 ! interior layer layer times the depth of the the mixed layer
-                ! [H2 m2 s-2 ~> m4 s-2 or kg2 m-2 s-2].
+                ! [H2 Z2 T-2 ~> m4 s-2 or kg2 m-2 s-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: hwtot     ! Sum of the thicknesses used to calculate
                     ! the near-bottom velocity magnitude [H ~> m or kg m-2].
@@ -1079,14 +1079,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: u_at_v    ! The zonal velocity at a meridonal velocity point [m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
                     ! on the mixed layer thickness and density difference across
-                    ! the base of the mixed layer [m2 s-2].
+                    ! the base of the mixed layer [L2 T-2 ~> m2 s-2].
   real :: RiBulk    ! The bulk Richardson number below which water is in the
                     ! viscous mixed layer, including reduction for turbulent
                     ! decay. Nondimensional.
   real :: dt_Rho0   ! The time step divided by the conversion from the layer
                     ! thickness to layer mass [s H m2 kg-1 ~> s m3 kg-1 or s].
   real :: g_H_Rho0  !   The gravitational acceleration times the conversion from H to m divided
-                    ! by the mean density [m5 s-2 H-1 kg-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
+                    ! by the mean density [L2 m3 T-2 H-1 kg-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: ustarsq     ! 400 times the square of ustar, times
                       ! Rho0 divided by G_Earth and the conversion
                       ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
@@ -1131,7 +1131,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     Jsq = js-1 ; Isq = is-1
   endif ; endif
 
-  Rho0x400_G = 400.0*(GV%Rho0/(US%L_to_Z**2 * GV%LZT_g_Earth)) * GV%Z_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/(US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
@@ -1141,8 +1141,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   dt_Rho0 = dt/GV%H_to_kg_m2
   h_neglect = GV%H_subroundoff
   h_tiny = 2.0*GV%Angstrom_H + h_neglect
-  ! g_H_Rho0 can be rescaled after all test cases are using non-zero VEL_UNDERFLOW.
-  g_H_Rho0 = (US%s_to_T**2*US%L_to_m**2*GV%LZT_g_Earth*GV%H_to_Z) / GV%Rho0
+  g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / GV%Rho0
 
   if (associated(forces%frac_shelf_u) .neqv. associated(forces%frac_shelf_v)) &
     call MOM_error(FATAL, "set_viscous_ML: one of forces%frac_shelf_u and "//&
@@ -1240,7 +1239,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               I_2hlay = 1.0 / (h(i,j,k) + h(i+1,j,k))
               v_at_u = 0.5 * (h(i,j,k)   * (v(i,J,k) + v(i,J-1,k)) + &
                               h(i+1,j,k) * (v(i+1,J,k) + v(i+1,J-1,k))) * I_2hlay
-              Uh2 = (uhtot(I) - htot(I)*u(I,j,k))**2 + (vhtot(I) - htot(I)*v_at_u)**2
+              Uh2 = US%m_s_to_L_T**2*((uhtot(I) - htot(I)*u(I,j,k))**2 + (vhtot(I) - htot(I)*v_at_u)**2)
 
               if (use_EOS) then
                 T_lay = (h(i,j,k)*tv%T(i,j,k) + h(i+1,j,k)*tv%T(i+1,j,k)) * I_2hlay
@@ -1477,7 +1476,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               I_2hlay = 1.0 / (h(i,j,k) + h(i,j+1,k))
               u_at_v = 0.5 * (h(i,j,k)   * (u(I-1,j,k)   + u(I,j,k)) + &
                               h(i,j+1,k) * (u(I-1,j+1,k) + u(I,j+1,k))) * I_2hlay
-              Uh2 = (uhtot(I) - htot(I)*u_at_v)**2 + (vhtot(I) - htot(I)*v(i,J,k))**2
+              Uh2 = US%m_s_to_L_T**2*((uhtot(I) - htot(I)*u_at_v)**2 + (vhtot(I) - htot(I)*v(i,J,k))**2)
 
               if (use_EOS) then
                 T_lay = (h(i,j,k)*tv%T(i,j,k) + h(i,j+1,k)*tv%T(i,j+1,k)) * I_2hlay

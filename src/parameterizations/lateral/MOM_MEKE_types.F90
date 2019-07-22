@@ -13,13 +13,15 @@ type, public :: MEKE_type
     mom_src => NULL(),& !< MEKE source from lateral friction in the momentum equations [W m-2].
     GME_snk => NULL(),& !< MEKE sink from GME backscatter in the momentum equations [W m-2].
     Kh => NULL(), &     !< The MEKE-derived lateral mixing coefficient [m2 s-1].
-    Kh_diff => NULL(), & !< Uses the non-MEKE-derived thickness diffusion coefficient to diffuse MEKE [m2 s-1].
+    Kh_diff => NULL(), & !< Uses the non-MEKE-derived thickness diffusion coefficient to diffuse
+                        !! MEKE [m2 s-1].
     Rd_dx_h => NULL()   !< The deformation radius compared with the grid spacing [nondim].
                         !! Rd_dx_h is copied from VarMix_CS.
-  real, dimension(:,:), pointer :: Ku => NULL() !< The MEKE-derived lateral viscosity coefficient [m2 s-1].
-                        !! This viscosity can be negative when representing backscatter
-                        !! from unresolved eddies (see Jansen and Held, 2014).
-  real, dimension(:,:), pointer :: Au => NULL() !< The MEKE-derived lateral biharmonic viscosity coefficient [m4 s-1].
+  real, dimension(:,:), pointer :: Ku => NULL() !< The MEKE-derived lateral viscosity coefficient
+                        !! [m2 T-1 ~> m2 s-1]. This viscosity can be negative when representing
+                        !! backscatter from unresolved eddies (see Jansen and Held, 2014).
+  real, dimension(:,:), pointer :: Au => NULL() !< The MEKE-derived lateral biharmonic viscosity
+                        !! coefficient [m4 T-1 ~> m4 s-1].
   ! Parameters
   real :: KhTh_fac = 1.0 !< Multiplier to map Kh(MEKE) to KhTh [nondim]
   real :: KhTr_fac = 1.0 !< Multiplier to map Kh(MEKE) to KhTr [nondim].

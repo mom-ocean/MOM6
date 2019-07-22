@@ -493,7 +493,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
       'Friction velocity, u*, as used by [CVMix] KPP', 'm/s', conversion=US%Z_to_m*US%s_to_T)
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesTi, Time, &
-      'Surface (and penetrating) buoyancy flux, as used by [CVMix] KPP', 'm2/s3')
+      'Surface (and penetrating) buoyancy flux, as used by [CVMix] KPP', 'm2/s3', conversion=US%L_to_m**2*US%s_to_T**3)
   CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
       'Net temperature flux ignoring short-wave, as used by [CVMix] KPP', 'K m/s')
   CS%id_netS = register_diag_field('ocean_model', 'KPP_netSalt', diag%axesT1, Time, &
@@ -593,7 +593,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP
                                                                     !! (out) Vertical diffusivity including KPP
                                                                     !!       [Z2 T-1 ~> m2 s-1]
@@ -616,6 +616,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
   real :: surfFricVel, surfBuoyFlux
   real :: sigma, sigmaRatio
+  real :: buoy_scale ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> nondim]
   real :: dh    ! The local thickness used for calculating interface positions [m]
   real :: hcorr ! A cumulative correction arising from inflation of vanished layers [m]
 
@@ -636,6 +637,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   nonLocalTrans(:,:) = 0.0
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
+
+  buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   !$OMP parallel do default(shared) firstprivate(nonLocalTrans)
   ! loop over horizontal points on processor
@@ -662,7 +665,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
       enddo ! k-loop finishes
 
-      surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
+      surfBuoyFlux = buoy_scale*buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
                                      ! h to Monin-Obukov (default is false, ie. not used)
 
       ! Call CVMix/KPP to obtain OBL diffusivities, viscosities and non-local transports
@@ -672,12 +675,12 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
 
       !BGR/ Add option for use of surface buoyancy flux with total sw flux.
       if (CS%SW_METHOD == SW_METHOD_ALL_SW) then
-         surfBuoyFlux = buoyFlux(i,j,1)
+         surfBuoyFlux = buoy_scale * buoyFlux(i,j,1)
       elseif (CS%SW_METHOD == SW_METHOD_MXL_SW) then
          ! We know the actual buoyancy flux into the OBL
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1)
+         surfBuoyFlux  = buoy_scale * (buoyFlux(i,j,1) - buoyFlux(i,j,int(CS%kOBL(i,j))+1))
       elseif (CS%SW_METHOD == SW_METHOD_LV1_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
+         surfBuoyFlux  = buoy_scale * (buoyFlux(i,j,1) - buoyFlux(i,j,2))
       endif
 
       ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.
@@ -891,7 +894,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [m s-1]
   type(EOS_type),                             pointer       :: EOS   !< Equation of state
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
 
   ! Local variables
@@ -918,6 +921,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit [m]
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
   real :: hTot                 ! Running sum of thickness used in the surface layer average [m]
+  real :: buoy_scale           ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> nondim]
   real :: delH                 ! Thickness of a layer [m]
   real :: surfHtemp, surfTemp  ! Integral and average of temp over the surface layer
   real :: surfHsalt, surfSalt  ! Integral and average of saln over the surface layer
@@ -950,6 +954,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
 
   ! some constants
   GoRho = GV%mks_g_Earth / GV%Rho0
+  buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   ! loop over horizontal points on processor
   !$OMP parallel do default(shared)
@@ -1070,7 +1075,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
         pRef = pRef + GV%H_to_Pa * h(i,j,k)
 
         ! this difference accounts for penetrating SW
-        surfBuoyFlux2(k) = buoyFlux(i,j,1) - buoyFlux(i,j,k+1)
+        surfBuoyFlux2(k) = buoy_scale * (buoyFlux(i,j,1) - buoyFlux(i,j,k+1))
 
       enddo ! k-loop finishes
 
@@ -1140,7 +1145,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
           CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
           do k=1,G%ke
-            WST = (max(0.,-buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
+            WST = (max(0.,-buoy_scale*buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
             LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
                  (1.+0.49*CS%La_SL(i,j)**(-2.)))  / &
                  (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
@@ -1169,7 +1174,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
                   N_iface=CS%N(i,j,:))               ! Buoyancy frequency [s-1]
 
 
-      surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
+      surfBuoyFlux = buoy_scale * buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
                                      ! h to Monin-Obukov (default is false, ie. not used)
 
       call CVMix_kpp_compute_OBL_depth( &
@@ -1246,7 +1251,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
        !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
        !               N_iface=CS%N )                       ! Buoyancy frequency [s-1]
 
-       !   surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
+       !   surfBuoyFlux = buoy_scale*buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
        !                                  ! h to Monin-Obukov (default is false, ie. not used)
 
        !   call CVMix_kpp_compute_OBL_depth( &
