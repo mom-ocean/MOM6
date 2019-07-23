@@ -1978,8 +1978,8 @@ end function MOM_file_exists
 
 !> Open domain-decomposed file(s) with the base file name
 !! 'filename' to read from or write/append to
-function MOM_open_file_DD(fileObj, filename, mode, G, is_restart) result(file_open_success)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
+function MOM_open_file_DD(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   type(ocean_grid_type),      intent(in) :: G !< The ocean's grid structure
@@ -1990,15 +1990,15 @@ function MOM_open_file_DD(fileObj, filename, mode, G, is_restart) result(file_op
    
   select case (trim(mode))
      case("read")
-        file_open_success=fms2_open_file(fileObj, filename, "read", & 
+        file_open_success=fms2_open_file(MOMfileObj, filename, "read", & 
                           G%Domain%mpp_domain, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
-        file_open_success=fms2_open_file(fileObj, filename, "append", & 
+        file_open_success=fms2_open_file(MOMfileObj, filename, "append", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         if (.not.(file_open_success)) then
            ! create and open new file(s) for domain-decomposed write
-           file_open_success=fms2_open_file(fileObj, filename, "write", & 
+           file_open_success=fms2_open_file(MOMfileObj, filename, "write", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case default
