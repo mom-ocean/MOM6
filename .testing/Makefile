@@ -2,7 +2,7 @@
 # e.g. make MEMORY_SHAPE=dynamic_symmetric REPRO=1 OPENMP=1
 
 # Versions to use
-FMS_COMMIT ?= xanadu
+FMS_COMMIT ?= f2e2c86f6c0eb6d389a20509a8a60fa22924e16b
 MKMF_COMMIT ?= master
 
 # Where to clone from
