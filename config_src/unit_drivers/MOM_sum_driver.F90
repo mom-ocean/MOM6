@@ -60,7 +60,7 @@ program MOM_main
   character(len=40)  :: mdl = "MOM_main (MOM_sum_driver)" ! This module's name.
   character(len=200) :: mesg
 
-  !#######################################################################
+  !=======================================================================
 
   call MOM_infra_init() ; call io_infra_init()
 

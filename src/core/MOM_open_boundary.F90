@@ -2917,9 +2917,10 @@ subroutine open_boundary_test_extern_h(G, OBC, h)
 end subroutine open_boundary_test_extern_h
 
 !> Update the OBC values on the segments.
-subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
+subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   type(ocean_grid_type),                     intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !<  Ocean vertical grid structure
+  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [m]
@@ -2980,7 +2981,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
+        segment%Cg(I,j) = US%L_T_to_m_s*sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
         segment%Htot(I,j)=0.0
         do k=1,G%ke
           segment%h(I,j,k) = h(i+ishift,j,k)
@@ -2993,7 +2994,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
+        segment%Cg(i,J) = US%L_T_to_m_s*sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
         segment%Htot(i,J)=0.0
         do k=1,G%ke
           segment%h(i,J,k) = h(i,j+jshift,k)
