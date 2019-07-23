@@ -49,7 +49,7 @@ jobs:
     - stage: check and compile
       env: JOB="Code style compliance"
       script:
-      - ./.testing/trailer.py -e TEOS10 src config_src
+      - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
     - stage: check and compile
       env: JOB="Doxygen"
       script:
