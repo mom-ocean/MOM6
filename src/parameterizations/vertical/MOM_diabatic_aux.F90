@@ -12,13 +12,18 @@ use MOM_EOS,           only : calculate_density, calculate_TFreeze
 use MOM_EOS,           only : calculate_specific_vol_derivs, calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
-use MOM_shortwave_abs, only : absorbRemainingSW, optics_type, sumSWoverBands
+use MOM_io,            only : slasher
+use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, extract_optics_fields
+use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
+use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
+use time_interp_external_mod, only : init_external_field, time_interp_external
+use time_interp_external_mod, only : time_interp_external_init
 
 implicit none ; private
 
@@ -26,7 +31,7 @@ implicit none ; private
 
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
-public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
+public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -55,7 +60,13 @@ type, public :: diabatic_aux_CS ; private
   logical :: use_calving_heat_content !< If true, assumes that ice-ocean boundary
                              !! has provided a calving heat content. Otherwise, calving
                              !! is added with a temperature of the local SST.
+  logical :: var_pen_sw      !<   If true, use one of the CHL_A schemes to determine the
+                             !! e-folding depth of incoming shortwave radiation.
+  integer :: sbc_chl         !< An integer handle used in time interpolation of
+                             !! chlorophyll read from a file.
+  logical ::  chl_from_file  !< If true, chl_a is read from a file.
 
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
   ! Diagnostic handles
@@ -64,6 +75,7 @@ type, public :: diabatic_aux_CS ; private
   integer :: id_penSW_diag     = -1 !< Diagnostic ID of Penetrative shortwave heating (flux convergence)
   integer :: id_penSWflux_diag = -1 !< Diagnostic ID of Penetrative shortwave flux
   integer :: id_nonpenSW_diag  = -1 !< Diagnostic ID of Non-penetrative shortwave heating
+  integer :: id_Chl            = -1 !< Diagnostic ID of chlorophyll-A handles for opacity
 
   ! Optional diagnostic arrays
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
@@ -216,7 +228,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
                                                  !! available thermodynamic fields.
   type(vertvisc_type),     intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                  !! boundary layer properies, and related fields.
-  real,                    intent(in)    :: dt   !<  Time increment [s].
+  real,                    intent(in)    :: dt   !<  Time increment [T ~> s].
 
   ! local variables
   real, dimension(SZI_(G)) :: &
@@ -235,7 +247,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
   real :: b_denom_T    ! The first term in the denominators for the expressions
   real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
   real, dimension(:,:,:), pointer :: T=>NULL(), S=>NULL()
-  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities [Z2 s-1 ~> m2 s-1].
+  real, dimension(:,:,:), pointer :: Kd_T=>NULL(), Kd_S=>NULL() ! Diffusivities [Z2 T-1 ~> m2 s-1].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -381,8 +393,8 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
   integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init
-  real,                    intent(in)    :: dt   !< The thermodyanmic time step [s].
-  integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic
+  real,                    intent(in)    :: dt   !< The thermodynamic time step [s].
+  integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic of
                                                  !! which layer receivees the brine.
 
   ! local variables
@@ -572,7 +584,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   real :: s, Idenom
   logical :: mix_vertically
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   call cpu_clock_begin(id_clock_uv_at_h)
   h_neglect = GV%H_subroundoff
 
@@ -638,6 +650,63 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
 end subroutine find_uv_at_h
 
 
+subroutine set_pen_shortwave(optics, fluxes, G, GV, CS, opacity_CSp, tracer_flow_CSp)
+  type(optics_type),       pointer       :: optics !< An optics structure that has will contain
+                                                   !! information about shortwave fluxes and absorption.
+  type(forcing),           intent(inout) :: fluxes !< points to forcing fields
+                                                   !! unused fields have NULL ptrs
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
+  type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure of the tracer modules.
+
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: chl_3d !< The chlorophyll-A concentractions of each layer [mg m-3]
+  character(len=128) :: mesg
+  integer :: i, j, k, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (.not.associated(optics)) return
+
+  if (CS%var_pen_sw) then
+    if (CS%chl_from_file) then
+      ! Only the 2-d surface chlorophyll can be read in from a file.  The
+      ! same value is assumed for all layers.
+      call time_interp_external(CS%sbc_chl, CS%Time, chl_2d)
+      do j=js,je ; do i=is,ie
+        if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
+          write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
+                    & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
+                     chl_2d(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
+          call MOM_error(FATAL, "MOM_diabatic_aux set_pen_shortwave: "//trim(mesg))
+        endif
+      enddo ; enddo
+
+      if (CS%id_chl > 0) call post_data(CS%id_chl, chl_2d, CS%diag)
+
+      call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_2d=chl_2d)
+    else
+      if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
+        "The tracer flow control structure must be associated when the model sets "//&
+        "the chlorophyll internally in set_pen_shortwave.")
+      call get_chl_from_model(chl_3d, G, tracer_flow_CSp)
+
+      if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
+
+      call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp, chl_3d=chl_3d)
+    endif
+  else
+    call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, opacity_CSp)
+  endif
+
+end subroutine set_pen_shortwave
+
+
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US, diagPtr, &
@@ -667,20 +736,20 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
   real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixedlayer depth [kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
-  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [s-2].
+  real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [T-2 ~> s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
   logical, dimension(SZI_(G)) :: N2_region_set ! If true, all necessary values for calculating N2
                                                ! have been stored already.
-  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [m4 s-2 kg-1].
+  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
   real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
 
   id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
 
-  id_SQ = -1 ; if (PRESENT(id_N2subML)) id_SQ = id_MLDsq
+  id_SQ = -1 ; if (PRESENT(id_MLDsq)) id_SQ = id_MLDsq
 
-  gE_rho0 = US%m_to_Z**2 * GV%g_Earth / GV%Rho0
+  gE_rho0 = US%L_to_Z**2*GV%g_Earth / GV%Rho0
   dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -761,7 +830,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   enddo ! j-loop
 
   if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
-  if (id_N2 > 0)  call post_data(id_N2, subMLN2 , diagPtr)
+  if (id_N2 > 0)  call post_data(id_N2, subMLN2, diagPtr)
   if (id_SQ > 0)  call post_data(id_SQ, MLD2, diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
@@ -769,7 +838,7 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
                                     SkinBuoyFlux )
@@ -780,6 +849,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   real,                    intent(in)    :: dt !< Time-step over which forcing is applied [s]
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
+  integer,                 intent(in)    :: nsw !< The number of frequency bands of penetrating
+                                                !! shortwave radiation
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any
@@ -791,7 +862,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                                                !! heat and freshwater fluxes is applied [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: cTKE !< Turbulent kinetic energy requirement to mix
-                                               !! forcing through each layer [W m-2]
+                                               !! forcing through each layer [kg m-3 Z3 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
                                                !! potential temperature [m3 kg-1 degC-1].
@@ -799,7 +870,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
                                                !! salinity [m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
-                   optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 s-3 ~> m2 s-3].
+                   optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -828,21 +899,31 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
                      ! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     netMassInOut_rate! netmassinout but for dt=1 [H s-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d
-  real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
-  real, dimension(SZI_(G),SZK_(G)+1)                    :: netPen
-  real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd, Pen_SW_bnd_rate
-                                                           !^ _rate is w/ dt=1
-  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
-  real                                                  :: hGrounding(maxGroundings)
+  real, dimension(SZI_(G), SZK_(G)) :: &
+    h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
+    T2d, &           ! A 2-d copy of the layer temperatures [degC]
+    pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
+                     ! a layer [kg m-3 Z3 T-2 ~> J m-2]
+    dSV_dT_2d        ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
+  real, dimension(SZI_(G),SZK_(G)+1) :: netPen
+  real, dimension(max(nsw,1),SZI_(G)) :: &
+    Pen_SW_bnd, &    ! The penetrative shortwave heating integrated over a timestep by band
+                     ! [degC H ~> degC m or degC kg m-2]
+    Pen_SW_bnd_rate  ! The penetrative shortwave heating rate by band
+                     ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(max(nsw,1),SZI_(G),SZK_(G)) :: &
+    opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
+                     ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
+  real, dimension(maxGroundings) :: hGrounding
   real    :: Temp_in, Salin_in
-!  real    :: I_G_Earth
+!  real   :: I_G_Earth ! The inverse of the gravitational acceleration with conversion factors [s2 m-1].
+  real    :: dt_in_T ! The time step converted to T units [T ~> s]
   real    :: g_Hconv2
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
-                      ! [Z m3 s-2 kg-1 ~> m4 s-2 kg-1]
+                      ! [Z3 m T-2 kg-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
-  integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  integer :: i, j, is, ie, js, je, k, nz, n
   integer :: start, npts
   character(len=45) :: mesg
 
@@ -852,19 +933,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
   if (.not.associated(fluxes%sw)) return
 
 #define _OLD_ALG_
-  nsw = optics%nbands
+  dt_in_T = dt * US%s_to_T
   Idt = 1.0/dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
-!  I_G_Earth = 1.0 / GV%g_Earth
-  g_Hconv2 = GV%H_to_Pa * GV%H_to_kg_m2
+!  I_G_Earth = US%Z_to_m / (US%L_T_to_m_s**2 * GV%g_Earth)
+  g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = GV%g_Earth / GV%Rho0
+    GoRho       = US%L_to_Z**2*GV%g_Earth / GV%Rho0
     start       = 1 + G%isc - G%isd
     npts        = 1 + G%iec - G%isc
   endif
@@ -902,10 +983,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
     do k=1,nz ; do i=is,ie
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
-      do n=1,nsw
-        opacityBand(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band(n,i,j,k)
-      enddo
     enddo ; enddo
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
 
     if (calculate_energetics) then
       ! The partial derivatives of specific volume with temperature and
@@ -922,8 +1001,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                  dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
 !        do i=is,ie
-!          dT_to_dPE(i,k) = I_G_Earth * US%Z_to_m * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
-!          dS_to_dPE(i,k) = I_G_Earth * US%Z_to_m * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
+!          dT_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
+!          dS_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dS(i,j,k)
 !        enddo
       enddo
       pen_TKE_2d(:,:) = 0.0
@@ -977,8 +1056,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW,                &
-                  net_Heat_rate=netheat_rate,net_salt_rate=netsalt_rate,                  &
-                  netmassinout_rate=netmassinout_rate,pen_sw_bnd_rate=pen_sw_bnd_rate)
+                  net_Heat_rate=netheat_rate, net_salt_rate=netsalt_rate,                 &
+                  netmassinout_rate=netmassinout_rate, pen_sw_bnd_rate=pen_sw_bnd_rate)
     else
       call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
@@ -1049,7 +1128,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
-            RivermixConst = -0.5*(CS%rivermix_depth*dt)*GV%Z_to_H*GV%H_to_Pa
+            RivermixConst = -0.5*(CS%rivermix_depth*dt)*(US%m_to_Z**3 * US%T_to_s**2) * GV%Z_to_H*GV%H_to_Pa
 
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
                   (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
@@ -1061,7 +1140,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
           if (h2d(i,k) > 0.0) then
             if (calculate_energetics .and. (dThickness > 0.)) then
               ! Calculate the energy required to mix the newly added water over
-              ! the topmost grid cell.  ###CHECK THE SIGNS!!!
+              ! the topmost grid cell.
               cTKE(i,j,k) = cTKE(i,j,k) + 0.5*g_Hconv2*(hOld*dThickness) * &
                  ((T2d(i,k) - Temp_in) * dSV_dT(i,j,k) + (tv%S(i,j,k) - Salin_in) * dSV_dS(i,j,k))
             endif
@@ -1123,14 +1202,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
 
           if (h2d(i,k) > 0.) then
             if (calculate_energetics) then
-              ! Calculate the energy required to mix the newly added water over
-              ! the topmost grid cell, assuming that the fluxes of heat and salt
-              ! and rejected brine are initially applied in vanishingly thin
-              ! layers at the top of the layer before being mixed throughout
-              ! the layer.  Note that dThickness is always <= 0. ###CHECK THE SIGNS!!!
+              ! Calculate the energy required to mix the newly added water over the topmost grid
+              ! cell, assuming that the fluxes of heat and salt and rejected brine are initially
+              ! applied in vanishingly thin layers at the top of the layer before being mixed
+              ! throughout the layer.  Note that dThickness is always <= 0 here, and that
+              ! negative cTKE is a deficit that will need to be filled later.
               cTKE(i,j,k) = cTKE(i,j,k) - (0.5*h2d(i,k)*g_Hconv2) * &
-                 ((dTemp - dthickness*T2d(i,k)) * dSV_dT(i,j,k) + &
-                  (dSalt - dthickness*tv%S(i,j,k)) * dSV_dS(i,j,k))
+                            ((dTemp - dthickness*T2d(i,k)) * dSV_dT(i,j,k) + &
+                             (dSalt - dthickness*tv%S(i,j,k)) * dSV_dS(i,j,k))
             endif
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
             T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
@@ -1189,19 +1268,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
         CS%penSWflux_diag(i,j,k) = 0.0
       enddo ; enddo
       k=nz+1 ; do i=is,ie
-         CS%penSWflux_diag(i,j,k) = 0.0
+        CS%penSWflux_diag(i,j,k) = 0.0
       enddo
     endif
 
     if (calculate_energetics) then
-      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
         cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
-      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd)
     endif
 
@@ -1254,8 +1333,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
       netPen(:,:) = 0.0
       ! Sum over bands and attenuate as a function of depth
       ! netPen is the netSW as a function of depth
-      call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
-           H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
+      call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt_in_T, &
+                          H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
            dRhodT, dRhodS, start, npts, tv%eqn_of_state)
@@ -1265,9 +1344,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, h, tv, &
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
       do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%m_to_Z**2 * ( &
-            dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
-            dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%T_to_s * &
+            (dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
+             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
       enddo
     endif
 
@@ -1300,7 +1379,7 @@ end subroutine applyBoundaryFluxesInOut
 
 !> This subroutine initializes the parameters and control structure of the diabatic_aux module.
 subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgorithm, use_ePBL)
-  type(time_type),         intent(in)    :: Time !< The current model time
+  type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -1318,6 +1397,12 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 #include "version_variable.h"
   character(len=40)  :: mdl  = "MOM_diabatic_aux" ! This module's name.
   character(len=48)  :: thickness_units
+  character(len=200) :: inputdir   ! The directory where NetCDF input files
+  character(len=240) :: chl_filename ! A file from which chl_a concentrations are to be read.
+  character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
+                                 ! when var_pen_sw is defined and reading from file.
+  character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
+  logical :: use_temperature     ! True if thermodynamics are enabled.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -1331,10 +1416,15 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
    endif
 
   CS%diag => diag
+  CS%Time => Time
 
 ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
                    "The following parameters are used for auxiliary diabatic processes.")
+
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
+                 "If true, temperature and salinity are used as state "//&
+                 "variables.", default=.true.)
 
   call get_param(param_file, mdl, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
                  "If true, try to use any frazil heat deficit to cool any "//&
@@ -1414,6 +1504,35 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     if (CS%id_nonpenSW_diag > 0) then
        allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
        CS%nonpenSW_diag(:,:) = 0.0
+    endif
+  endif
+
+  if (use_temperature) then
+    call get_param(param_file, mdl, "VAR_PEN_SW", CS%var_pen_sw, &
+                   "If true, use one of the CHL_A schemes specified by "//&
+                   "OPACITY_SCHEME to determine the e-folding depth of "//&
+                   "incoming short wave radiation.", default=.false.)
+    if (CS%var_pen_sw) then
+
+      call get_param(param_file, mdl, "CHL_FROM_FILE", CS%chl_from_file, &
+                   "If true, chl_a is read from a file.", default=.true.)
+      if (CS%chl_from_file) then
+        call time_interp_external_init()
+
+        call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+        call get_param(param_file, mdl, "CHL_FILE", chl_file, &
+                   "CHL_FILE is the file containing chl_a concentrations in "//&
+                   "the variable CHL_A. It is used when VAR_PEN_SW and "//&
+                   "CHL_FROM_FILE are true.", fail_if_missing=.true.)
+        chl_filename = trim(slasher(inputdir))//trim(chl_file)
+        call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", chl_filename)
+        call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
+                   "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
+        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), domain=G%Domain%mpp_domain)
+      endif
+
+      CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &
+          'Surface chlorophyll A concentration used to find opacity', 'mg m-3')
     endif
   endif
 

@@ -64,12 +64,14 @@ contains
 
 !> This subroutine is used to register tracer fields
 function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),       intent(in) :: HI    !<A horizontal index type structure.
+  type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
-  type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse for model parameter values.
-  type(RGC_tracer_CS),        pointer    :: CS !<A pointer that is set to point to the control structure for this module (in/out).
-  type(tracer_registry_type), pointer    :: tr_Reg !<A pointer to the tracer registry.
-  type(MOM_restart_CS),       pointer    :: restart_CS !<A pointer to the restart control structure.
+  type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse
+                                                 !! for model parameter values.
+  type(RGC_tracer_CS),        pointer    :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module (in/out).
+  type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
+  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
 
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
@@ -147,20 +149,26 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_RGC_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
-! and it sets up the tracer output.
+!! and it sets up the tracer output.
 subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                     layer_CSp, sponge_CSp)
 
-  type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
-  type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
-  logical,                               intent(in) :: restart !< .true. if the fields have already been read from a restart file.
-  type(time_type), target,               intent(in) :: day !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
-  type(diag_ctrl), target,               intent(in) :: diag !< Structure used to regulate diagnostic output.
-  type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies whether, where, and what open boundary conditions are used. This is not being used for now.
-  type(RGC_tracer_CS),                   pointer    :: CS !< The control structure returned by a previous call to RGC_register_tracer.
-  type(sponge_CS),                       pointer    :: layer_CSp    !< A pointer to the control structure
-  type(ALE_sponge_CS),                   pointer    :: sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
+  type(ocean_grid_type),   intent(in) :: G !< Grid structure.
+  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  logical,                 intent(in) :: restart !< .true. if the fields have already
+                                             !! been read from a restart file.
+  type(time_type), target, intent(in) :: day !< Time of the start of the run.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in) :: h !< Layer thickness, in m or kg m-2.
+  type(diag_ctrl), target, intent(in) :: diag !< Structure used to regulate diagnostic output.
+  type(ocean_OBC_type),    pointer    :: OBC !< This open boundary condition type specifies
+                                             !! whether, where, and what open boundary
+                                             !! conditions are used. This is not being used for now.
+  type(RGC_tracer_CS),     pointer    :: CS  !< The control structure returned by a previous
+                                             !!   call to RGC_register_tracer.
+  type(sponge_CS),         pointer    :: layer_CSp  !< A pointer to the control structure
+  type(ALE_sponge_CS),     pointer    :: sponge_CSp !< A pointer to the control structure for the
+                                             !! sponges, if they are in use.  Otherwise this may be unassociated.
 
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
@@ -265,8 +273,8 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine initialize_RGC_tracer
 
 !> This subroutine applies diapycnal diffusion and any other column
-! tracer physics or chemistry to the tracers from this file.
-! This is a simple example of a set of advected passive tracers.
+!! tracer physics or chemistry to the tracers from this file.
+!! This is a simple example of a set of advected passive tracers.
 subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
                               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G !< The ocean's grid structure.
@@ -283,20 +291,15 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
-  type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to any possible forcing fields.  Unused fields have NULL ptrs.
-  real,                                  intent(in) :: dt !< The amount of time covered by this call [s].
-  type(RGC_tracer_CS),                  pointer    :: CS !< The control structure returned by a previous call.
-  real,                             optional,intent(in)  :: evap_CFL_limit !< Limit on the fraction of the water that can be fluxed out of the top layer in a timestep [nondim].
-  real,                             optional,intent(in)  :: minimum_forcing_depth !< The smallest depth over which fluxes can be applied [m].
+  type(forcing),           intent(in) :: fluxes !< A structure containing pointers to any possible
+                                              !! forcing fields.  Unused fields have NULL ptrs.
+  real,                    intent(in) :: dt !< The amount of time covered by this call [s].
+  type(RGC_tracer_CS),     pointer    :: CS !< The control structure returned by a previous call.
+  real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can be
+                                               !! fluxed out of the top layer in a timestep [nondim].
+  real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
+                                               !! can be applied [m].
 
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2.
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 

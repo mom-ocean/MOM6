@@ -300,7 +300,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   do j=js,je
     do i=is,ie
       !  This expression can be changed if desired, but need not be.
-      forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+      forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
          sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
     enddo
@@ -352,7 +352,7 @@ subroutine idealized_hurricane_wind_profile(CS, absf, YY, XX, UOCN, VOCN, Tx, Ty
 
   ! Implementing Holland (1980) parameteric wind profile
 
-  Radius = SQRT(XX**2.+YY**2.)
+  Radius = SQRT(XX**2 + YY**2)
 
   !/ BGR
   ! rkm - r converted to km for Holland prof.
@@ -493,7 +493,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   !/ BR
   ! Calculate x position as a function of time.
   xx = ( t0 - time_type_to_real(day)) * CS%hurr_translation_spd * cos(transdir)
-  r = sqrt(xx**2.+CS%DY_from_center**2.)
+  r = sqrt(xx**2 + CS%DY_from_center**2)
   !/ BR
   ! rkm - r converted to km for Holland prof.
   !       used in km due to error, correct implementation should
@@ -602,7 +602,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   ! Set the surface friction velocity [m s-1]. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = US%m_to_Z * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
        sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo

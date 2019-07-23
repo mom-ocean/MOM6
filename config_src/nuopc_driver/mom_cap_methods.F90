@@ -294,6 +294,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
      !----
      ! salt flux from ice
      !----
+     ice_ocean_boundary%salt_flux(:,:) = 0._ESMF_KIND_R8
      call state_getimport(importState, 'mean_salt_rate',  &
           isc, iec, jsc, jec, ice_ocean_boundary%salt_flux,rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -304,22 +305,24 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
      ! !----
      ! ! snow&ice melt heat flux  (W/m^2)
      ! !----
-     ! call state_getimport(importState, 'seaice_melt_heat',  &
-     !      isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_heat,rc=rc)
-     ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-     !      line=__LINE__, &
-     !      file=__FILE__)) &
-     !      return  ! bail out
+     ice_ocean_boundary%seaice_melt_heat(:,:) = 0._ESMF_KIND_R8
+     call state_getimport(importState, 'net_heat_flx_to_ocn',  &
+           isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_heat,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
-     ! !----
-     ! ! snow&ice melt water flux  (W/m^2)
-     ! !----
-     ! call state_getimport(importState, 'seaice_melt_water',  &
-     !      isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt_water,rc=rc)
-     ! if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-     !      line=__LINE__, &
-     !      file=__FILE__)) &
-     !      return  ! bail out
+      ! !----
+      ! ! snow&ice melt water flux  (W/m^2)
+      ! !----
+      ice_ocean_boundary%seaice_melt(:,:) = 0._ESMF_KIND_R8
+      call state_getimport(importState, 'mean_fresh_water_to_ocean_rate',  &
+           isc, iec, jsc, jec, ice_ocean_boundary%seaice_melt,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
      !----
      ! mass of overlying ice
@@ -373,7 +376,6 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   rc = ESMF_SUCCESS
 
-  ! Use Adcroft's rule of reciprocals; it does the right thing here.
   call ESMF_ClockGet( clock, timeStep=timeStep, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -386,6 +388,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
     file=__FILE__)) &
     return  ! bail out
 
+  ! Use Adcroft's rule of reciprocals; it does the right thing here.
   if (real(dt_int) > 0.0) then
      inv_dt_int = 1.0 / real(dt_int)
   else

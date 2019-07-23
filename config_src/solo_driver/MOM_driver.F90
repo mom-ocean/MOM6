@@ -210,7 +210,7 @@ program MOM_main
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
                             ocean_nthreads, ncores_per_node, use_hyper_thread
 
-  !#######################################################################
+  !=====================================================================
 
   call write_cputime_start_clock(write_CPU_CSp)
 
