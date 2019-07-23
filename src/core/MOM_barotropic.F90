@@ -401,7 +401,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
                                                          !! due to free surface height anomalies
-                                                         !! [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
+                                                         !! [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
                                                          !! column mass anomaly) that was used to calculate the input
                                                          !! pressure gradient accelerations (or its final value if
@@ -927,15 +927,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$OMP parallel do default(shared)
   do j=js,je
     do k=1,nz ; do I=is-1,ie
-      gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
-      gtot_W(i+1,j) = gtot_W(i+1,j) + pbce(i+1,j,k) * wt_u(I,j,k)
+      gtot_E(i,j)   = gtot_E(i,j)   + US%L_T_to_m_s**2*pbce(i,j,k)   * wt_u(I,j,k)
+      gtot_W(i+1,j) = gtot_W(i+1,j) + US%L_T_to_m_s**2*pbce(i+1,j,k) * wt_u(I,j,k)
     enddo ; enddo
   enddo
   !$OMP parallel do default(shared)
   do J=js-1,je
      do k=1,nz ; do i=is,ie
-      gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
-      gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
+      gtot_N(i,j)   = gtot_N(i,j)   + US%L_T_to_m_s**2*pbce(i,j,k)   * wt_v(i,J,k)
+      gtot_S(i,j+1) = gtot_S(i,j+1) + US%L_T_to_m_s**2*pbce(i,j+1,k) * wt_v(i,J,k)
     enddo ; enddo
   enddo
 
@@ -966,7 +966,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Set up fields related to the open boundary conditions.
   if (apply_OBCs) then
-    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, MS, ievf-ie, use_BT_cont, &
+    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, US, MS, ievf-ie, use_BT_cont, &
                        Datu, Datv, BTCL_u, BTCL_v)
   endif
 
@@ -2132,14 +2132,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
-           ((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
-            (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j)
+           ((US%L_T_to_m_s**2*pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
+            (US%L_T_to_m_s**2*pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j)
       if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       accel_layer_v(i,J,k) = v_accel_bt(i,J) - &
-           ((pbce(i,j+1,k) - gtot_S(i,j+1))*e_anom(i,j+1) - &
-            (pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
+           ((US%L_T_to_m_s**2*pbce(i,j+1,k) - gtot_S(i,j+1))*e_anom(i,j+1) - &
+            (US%L_T_to_m_s**2*pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
       if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
     enddo ; enddo
   enddo
@@ -2274,12 +2274,12 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
                                                       !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: pbce  !< The baroclinic pressure
                                                       !! anomaly in each layer due to free surface
-                                                      !! height anomalies [m2 H-1 s-2 ~> m s-2 or m4 kg-1 s-2].
+                                                      !! height anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   type(BT_cont_type), optional, pointer       :: BT_cont  !< A structure with elements that describe
                                                       !! the effective open face areas as a
                                                       !! function of barotropic flow.
   real,               optional, intent(in)    :: gtot_est !< An estimate of the total gravitational
-                                                      !! acceleration [m2 Z-1 s-2 ~> m s-2].
+                                                      !! acceleration [L2 Z-1 T-2 ~> m s-2].
   real,               optional, intent(in)    :: SSH_add  !< An additional contribution to SSH to
                                                       !! provide a margin of error when
                                                       !! calculating the external wave speed [Z ~> m].
@@ -2345,15 +2345,15 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
       gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
     enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_E(i,j) + pbce(i,j,k) * CS%frhatu(I,j,k)
-      gtot_W(i,j) = gtot_W(i,j) + pbce(i,j,k) * CS%frhatu(I-1,j,k)
-      gtot_N(i,j) = gtot_N(i,j) + pbce(i,j,k) * CS%frhatv(i,J,k)
-      gtot_S(i,j) = gtot_S(i,j) + pbce(i,j,k) * CS%frhatv(i,J-1,k)
+      gtot_E(i,j) = gtot_E(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatu(I,j,k)
+      gtot_W(i,j) = gtot_W(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatu(I-1,j,k)
+      gtot_N(i,j) = gtot_N(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatv(i,J,k)
+      gtot_S(i,j) = gtot_S(i,j) + US%L_T_to_m_s**2*pbce(i,j,k) * CS%frhatv(i,J-1,k)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * GV%H_to_Z ; gtot_W(i,j) = gtot_est * GV%H_to_Z
-      gtot_N(i,j) = gtot_est * GV%H_to_Z ; gtot_S(i,j) = gtot_est * GV%H_to_Z
+      gtot_E(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z ; gtot_W(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z
+      gtot_N(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z ; gtot_S(i,j) = US%L_T_to_m_s**2*gtot_est * GV%H_to_Z
     enddo ; enddo
   endif
 
@@ -2557,7 +2557,7 @@ end subroutine apply_velocity_OBCs
 
 !> This subroutine sets up the private structure used to apply the open
 !! boundary conditions, as developed by Mehmet Ilicak.
-subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
+subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
   type(ocean_OBC_type),                  pointer       :: OBC    !< An associated pointer to an OBC type.
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
@@ -2569,6 +2569,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
   type(MOM_domain_type),                 intent(inout) :: BT_Domain !< MOM_domain_type associated with wide arrays
   type(ocean_grid_type),                 intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),                 intent(in)    :: US     !< A dimensional unit scaling type
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                  !! transports.
@@ -2658,7 +2659,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
             BT_OBC%H_u(I,j) = eta(i+1,j)
           endif
         endif
-        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
+        BT_OBC%Cg_u(I,j) = US%L_T_to_m_s*SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -2710,7 +2711,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_co
             BT_OBC%H_v(i,J) = eta(i,j+1)
           endif
         endif
-        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
+        BT_OBC%Cg_v(i,J) = US%L_T_to_m_s*SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
@@ -3729,7 +3730,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G))   ! Zonal open face area [H m ~> m2 or kg m-1].
   real :: Datv(SZI_(G),SZJBS_(G))   ! Meridional open face area [H m ~> m2 or kg m-1].
-  real :: gtot_estimate ! Summed GV%g_prime [m2 Z-1 s-2 ~> m s-2], to give an upper-bound estimate for pbce.
+  real :: gtot_estimate ! Summed GV%g_prime [L2 Z-1 T-2 ~> m s-2], to give an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed [Z ~> m].
   real :: dtbt_input, dtbt_tmp

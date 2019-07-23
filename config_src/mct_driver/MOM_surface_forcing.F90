@@ -2,9 +2,6 @@ module MOM_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!### use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
-!### use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end
-!### use MOM_controlled_forcing, only : ctrl_forcing_CS
 use MOM_coms,             only : reproducing_sum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -144,7 +141,6 @@ type, public :: surface_forcing_CS ;
   integer :: id_srestore = -1     !< id number for time_interp_external.
   integer :: id_trestore = -1     !< id number for time_interp_external.
   type(forcing_diags), public :: handles !< diagnostics handles
-  !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()   !< restart pointer
   type(user_revise_forcing_CS), pointer :: urf_CS => NULL()!< user revise pointer
 end type surface_forcing_CS
@@ -1302,8 +1298,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
-!###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
-!###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)
 
   if (associated(CS%restart_CSp)) then
@@ -1317,8 +1311,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                          G, CS%restart_CSp)
     endif
   endif
-
-!###  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
 
   call user_revise_forcing_init(param_file, CS%urf_CS)
 
@@ -1337,8 +1329,6 @@ subroutine surface_forcing_end(CS, fluxes)
 !                     forcing fields.  Unused fields have NULL ptrs.
 
   if (present(fluxes)) call deallocate_forcing_type(fluxes)
-
-!###  call controlled_forcing_end(CS%ctrl_forcing_CSp)
 
   if (associated(CS)) deallocate(CS)
   CS => NULL()

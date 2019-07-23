@@ -178,10 +178,10 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   Pi = (4.0*atan(1.0))
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth /GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth /GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = GV%g_Earth * GV%Rho0
+  H_to_pres = GV%Z_to_H*GV%H_to_Pa
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)

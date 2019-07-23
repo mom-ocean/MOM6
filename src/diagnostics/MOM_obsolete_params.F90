@@ -163,6 +163,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "SHEARMIX_RATE_EQ")
 
   call obsolete_real(param_file, "VSTAR_SCALE_FACTOR", hint="Use EPBL_VEL_SCALE_FACTOR instead.")
+  call obsolete_logical(param_file, "ORIG_MLD_ITERATION", .false.)
 
   call obsolete_logical(param_file, "CONTINUITY_PPM", .true.)
 

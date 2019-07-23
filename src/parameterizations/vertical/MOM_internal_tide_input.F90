@@ -3,22 +3,22 @@ module MOM_int_tide_input
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ctrl, query_averaging_enabled
-use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
-use MOM_debugging, only : hchksum
-use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : slasher, vardesc, MOM_read_data
-use MOM_thickness_diffuse, only : vert_fill_TS
-use MOM_time_manager, only : time_type, set_time, operator(+), operator(<=)
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,        only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,    only : diag_ctrl, query_averaging_enabled
+use MOM_diag_mediator,    only : safe_alloc_ptr, post_data, register_diag_field
+use MOM_debugging,        only : hchksum
+use MOM_error_handler,    only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
+use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,     only : forcing
+use MOM_grid,             only : ocean_grid_type
+use MOM_io,               only : slasher, vardesc, MOM_read_data
+use MOM_isopycnal_slopes, only : vert_fill_TS
+use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
+use MOM_unit_scaling,     only : unit_scale_type
+use MOM_variables,        only : thermo_var_ptrs, vertvisc_type, p3d
+use MOM_verticalGrid,     only : verticalGrid_type
+use MOM_EOS,              only : calculate_density, calculate_density_derivs
 
 implicit none ; private
 
@@ -112,7 +112,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill, dt*US%s_to_T, T_f, S_f, G, GV)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt*US%s_to_T, T_f, S_f, G, GV, larger_h_denom=.true.)
   endif
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
@@ -185,7 +185,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (US%L_to_Z**2*GV%LZT_g_Earth) / GV%Rho0
+  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie

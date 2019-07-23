@@ -147,7 +147,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  I_gEarth = 1.0 / GV%g_Earth
+  I_gEarth = 1.0 / (US%L_T_to_m_s**2 * GV%g_Earth)
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
@@ -206,12 +206,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = -US%L_T_to_m_s**2 * GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
+      geopot_bot(i,j) = -US%L_T_to_m_s**2 * GV%g_Earth*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -306,7 +306,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
 
   ! Note that ddM/dPb = alpha_star(i,j,1)
   if (present(pbce)) then
-    call Set_pbce_nonBouss(p, tv_tmp, G, GV, CS%GFS_scale, pbce, alpha_star)
+    call Set_pbce_nonBouss(p, tv_tmp, G, GV, US, CS%GFS_scale, pbce, alpha_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -435,7 +435,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
 
   h_neglect = GV%H_subroundoff * GV%H_to_Z
   I_Rho0 = 1.0/CS%Rho0
-  G_Rho0 = GV%g_Earth/GV%Rho0
+  G_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth/GV%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -530,17 +530,17 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        M(i,j,1) = GV%g_prime(1) * e(i,j,1)
+        M(i,j,1) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(1) * e(i,j,1)
         if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
-        M(i,j,k) = M(i,j,k-1) + GV%g_prime(K) * e(i,j,K)
+        M(i,j,k) = M(i,j,k-1) + US%L_to_m**2*US%s_to_T**2*GV%g_prime(K) * e(i,j,K)
       enddo ; enddo
     enddo
   endif ! use_EOS
 
   if (present(pbce)) then
-    call Set_pbce_Bouss(e, tv_tmp, G, GV, CS%Rho0, CS%GFS_scale, pbce, rho_star)
+    call Set_pbce_Bouss(e, tv_tmp, G, GV, US, CS%Rho0, CS%GFS_scale, pbce, rho_star)
   endif
 
 !    Calculate the pressure force. On a Cartesian grid,
@@ -603,11 +603,12 @@ end subroutine PressureForce_Mont_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the free surface height.
-subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
+subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   type(ocean_grid_type),                intent(in)  :: G    !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height [Z ~> m].
   type(thermo_var_ptrs),                intent(in)  :: tv   !< Thermodynamic variables
+  type(unit_scale_type),                intent(in)  :: US   !< A dimensional unit scaling type
   real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density [kg m-3].
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top
                                                             !! interface and the gravitational acceleration of
@@ -628,7 +629,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
   real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [kg m-3 degC-1].
   real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [kg m-3 ppt-1].
   real :: rho_in_situ(SZI_(G)) !In-situ density at the top of a layer [kg m-3].
-  real :: G_Rho0             ! G_Earth / Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1]
+  real :: G_Rho0             ! A scaled version of g_Earth / Rho0 [L2 m3 Z-1 T-2 kg-1 ~> m4 s-2 kg-1]
   real :: Rho0xG             ! g_Earth * Rho0 [kg s-2 m-1 Z-1 ~> kg s-2 m-2]
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
@@ -638,7 +639,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
-  Rho0xG = Rho0*GV%g_Earth
+  Rho0xG = Rho0*US%L_T_to_m_s**2 * GV%g_Earth
   G_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   z_neglect = GV%H_subroundoff*GV%H_to_Z
@@ -649,10 +650,10 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, Rho0, GFS_scale, pbce, rho_star)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
-          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
+          pbce(i,j,1) = GFS_scale * US%m_s_to_L_T**2*rho_star(i,j,1) * GV%H_to_Z
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
-          pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k)-rho_star(i,j,k-1)) * &
+          pbce(i,j,k) = pbce(i,j,k-1) + US%m_s_to_L_T**2*(rho_star(i,j,k)-rho_star(i,j,k-1)) * &
                         ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i))
         enddo ; enddo
       enddo ! end of j loop
@@ -703,24 +704,25 @@ end subroutine Set_pbce_Bouss
 
 !> Determines the partial derivative of the acceleration due
 !! to pressure forces with the column mass.
-subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
+subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
   type(ocean_grid_type),                intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: p !< Interface pressures [Pa].
   type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
+  type(unit_scale_type),                intent(in)  :: US   !< A dimensional unit scaling type
   real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top
                                                           !! interface and the gravitational acceleration of
                                                           !! the planet [nondim]. Usually this ratio is 1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
                                                                 !! to free surface height anomalies
-                                                                !! [m2 H-1 s-2 ~> m4 kg-2 s-2].
+                                                                !! [L2 H-1 T-2 ~> m4 kg-1 s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: alpha_star !< The layer specific volumes
                                                           !! (maybe compressibility compensated) [m3 kg-1].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dpbce, &      !   A barotropic correction to the pbce to enable the use of
-                  ! a reduced gravity form of the equations [m4 s-2 kg-1].
-    C_htot        ! dP_dH divided by the total ocean pressure [m2 kg-1].
+                  ! a reduced gravity form of the equations [L2 H-1 T-2 ~> m4 kg-1 s-2].
+    C_htot        ! dP_dH divided by the total ocean pressure [Z2 s2 m-2 T-2 H-1 ~> m2 kg-1].
   real :: T_int(SZI_(G))     ! Interface temperature [degC].
   real :: S_int(SZI_(G))     ! Interface salinity [ppt].
   real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [kg m-3 degC-1].
@@ -728,7 +730,8 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
   real :: rho_in_situ(SZI_(G)) ! In-situ density at an interface [kg m-3].
   real :: alpha_Lay(SZK_(G)) ! The specific volume of each layer [kg m-3].
   real :: dalpha_int(SZK_(G)+1) ! The change in specific volume across each interface [kg m-3].
-  real :: dP_dH              ! A factor that converts from thickness to pressure [Pa H-1 ~> Pa m2 kg-1].
+  real :: dP_dH              ! A factor that converts from thickness to pressure times other dimensional
+                             ! conversion factors [Z2 s2 Pa m-2 T-2 H-1 ~> Pa m2 kg-1].
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [Pa].
   logical :: use_EOS         ! If true, density is calculated from T & S using
@@ -739,8 +742,8 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, GFS_scale, pbce, alpha_star)
 
   use_EOS = associated(tv%eqn_of_state)
 
-  dP_dH = GV%H_to_Pa
-  dp_neglect = dP_dH * GV%H_subroundoff
+  dP_dH = US%m_s_to_L_T**2*GV%H_to_Pa
+  dp_neglect = GV%H_to_Pa * GV%H_subroundoff
 
   do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo

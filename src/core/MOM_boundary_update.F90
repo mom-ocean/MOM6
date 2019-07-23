@@ -146,7 +146,7 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
   if (CS%use_dyed_channel) &
       call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, Time)
   if (OBC%needs_IO_for_data)  &
-      call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
+      call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
 end subroutine update_OBC_data
 
