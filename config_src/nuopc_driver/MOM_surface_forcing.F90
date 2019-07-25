@@ -222,7 +222,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
   logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
   logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
-  ! local varibles
+  ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     data_restore,  & !< The surface value toward which to restore [g/kg or degC]
     SST_anom,      & !< Instantaneous sea surface temperature anomalies from a target value [deg C]
@@ -693,8 +693,6 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   wind_stagger = CS%wind_stagger
 #endif
 
-  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
-      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
   if (wind_stagger == BGRID_NE) then
     ! This is necessary to fill in the halo points.
     taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
@@ -769,12 +767,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     enddo ; enddo
 
   elseif (wind_stagger == AGRID) then
-     !TODO: which one of these is correct?
-#ifdef CESMCOUPLED
-    call pass_vector(taux_at_h, tauy_at_h, G%Domain,stagger=AGRID)
-#else
     call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, stagger=AGRID, halo=1)
-#endif
 
     do j=js,je ; do I=Isq,Ieq
       forces%taux(I,j) = 0.0
