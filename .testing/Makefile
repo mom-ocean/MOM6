@@ -54,6 +54,9 @@ $(BUILD_PATH)/MOM6: FMS mkmf
 $(EXPERIMENTS_ROOT)/%/ocean.stats: $(EXPERIMENTS_ROOT)
 	mkdir -p $(@D)/RESTART
 	cd $(@D) ; $(MPIRUN) -n 1 $(PWD)/$(BUILD_PATH)/MOM6
+	# Looking for gcov output...
+	ls $(@D)
+	ls $(PWD)/$(BUILD_PATH)
 
 $(REGRESSIONS_ROOT)/regressions/%/ocean.stats.gnu: $(EXPERIMENTS_ROOT)/%/ocean.stats $(REGRESSIONS_ROOT)
 	cp $< $@

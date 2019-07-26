@@ -93,7 +93,7 @@ FFLAGS_DEBUG = -O0 -g -W -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,over
 # Flags to add additional build options
 FFLAGS_OPENMP = -fopenmp
 FFLAGS_VERBOSE =
-FFLAGS_COVERAGE =
+FFLAGS_COVERAGE = --coverage
 
 # Macro for C preprocessor
 CPPFLAGS = $(INCLUDES)
@@ -111,7 +111,7 @@ CFLAGS_DEBUG = -O0 -g
 # Flags to add additional build options
 CFLAGS_OPENMP = -fopenmp
 CFLAGS_VERBOSE =
-CFLAGS_COVERAGE =
+CFLAGS_COVERAGE = --coverage
 
 # Optional Testing compile flags.  Mutually exclusive from DEBUG, REPRO, and OPT
 # *_TEST will match the production if no new option(s) is(are) to be tested.
@@ -122,7 +122,7 @@ CFLAGS_TEST = $(CFLAGS_OPT)
 LDFLAGS :=
 LDFLAGS_OPENMP := -fopenmp
 LDFLAGS_VERBOSE :=
-LDFLAGS_COVERAGE :=
+LDFLAGS_COVERAGE := --coverage
 
 # Start with a blank LIBS
 LIBS =
