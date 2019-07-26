@@ -59,6 +59,9 @@ $(EXPERIMENTS_ROOT)/%/ocean.stats: $(EXPERIMENTS_ROOT)
 	cd $(@D) ; $(MPIRUN) -n 1 $(PWD)/$(BUILD_PATH)/MOM6
 	# Re-downloading is dumb...
 	bash <(curl -s https://codecov.io/bash) -n $(expt)
+	# Clear out the .gcda files
+	# (codecov should delete the .gcov files?)
+	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
 
 $(REGRESSIONS_ROOT)/regressions/%/ocean.stats.gnu: $(EXPERIMENTS_ROOT)/%/ocean.stats $(REGRESSIONS_ROOT)
 	cp $< $@
