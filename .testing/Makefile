@@ -58,9 +58,9 @@ $(EXPERIMENTS_ROOT)/%/ocean.stats: $(EXPERIMENTS_ROOT)
 	mkdir -p $(@D)/RESTART
 	cd $(@D) ; $(MPIRUN) -n 1 $(PWD)/$(BUILD_PATH)/MOM6
 	# Re-downloading is dumb...
-	#bash <(curl -s https://codecov.io/bash) -n $(expt)
+	bash <(curl -s https://codecov.io/bash) -n $(expt)
 	# Removing the name...
-	bash <(curl -s https://codecov.io/bash)
+	#bash <(curl -s https://codecov.io/bash)
 	# Clear out the .gcda files
 	# (codecov should delete the .gcov files?)
 	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;

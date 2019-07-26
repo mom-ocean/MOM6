@@ -97,7 +97,7 @@ jobs:
     - &clean-build
       stage: cleanup
       script:
-      - rm -rf build/*
+      #- rm -rf build/*
       - ls -l
 #   - <<: *clean-build
       env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
