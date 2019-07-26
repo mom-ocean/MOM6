@@ -34,9 +34,6 @@ before_script:
   - ls -l
   - ls build
 
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
-
 # This avoids caching files we do not need between stages
 before_cache:
   - rm -f build/*.o build/*.mod

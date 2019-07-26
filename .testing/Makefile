@@ -36,6 +36,8 @@ EXPERIMENTS_ROOT = experiments
 # Regression results
 REGRESSIONS_ROOT = answers
 
+expt=$(subst $(EXPERIMENTS_ROOT)/ocean_only/,,$(subst /ocean.stats,,$@))
+
 .PRECIOUS: %/ocean.stats
 
 run: $(foreach e,$(EXPERIMENTS),$(EXPERIMENTS_ROOT)/ocean_only/$(e)/ocean.stats)
@@ -52,11 +54,11 @@ $(BUILD_PATH)/MOM6: FMS mkmf
 	&& make -j NETCDF=3 $(@F)
 
 $(EXPERIMENTS_ROOT)/%/ocean.stats: $(EXPERIMENTS_ROOT)
+	@echo $(expt)
 	mkdir -p $(@D)/RESTART
 	cd $(@D) ; $(MPIRUN) -n 1 $(PWD)/$(BUILD_PATH)/MOM6
-	# Looking for gcov output...
-	ls $(@D)
-	ls $(PWD)/$(BUILD_PATH)
+	# Re-downloading is dumb...
+	bash <(curl -s https://codecov.io/bash) -n $(expt)
 
 $(REGRESSIONS_ROOT)/regressions/%/ocean.stats.gnu: $(EXPERIMENTS_ROOT)/%/ocean.stats $(REGRESSIONS_ROOT)
 	cp $< $@
