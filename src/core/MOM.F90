@@ -2014,7 +2014,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       endif
       call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, dG%HI, GV, &
                            tr_desc=vd_T, registry_diags=.true., flux_nameroot='T', &
-                           flux_units='W m-2', flux_longname='Heat', &
+                           flux_units='W', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
                            convergence_scale=conv2watt, CMOR_tendprefix="opottemp", diag_form=2)
       call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, dG%HI, GV, &
