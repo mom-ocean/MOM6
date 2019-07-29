@@ -303,6 +303,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, dimension(:), allocatable  :: lat_inp, last_row
   real :: max_lat, min_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
+  real :: add_offset, scale_factor
   logical :: add_np
   character(len=8)  :: laynum
   type(horiz_interp_type) :: Interp
@@ -375,6 +376,13 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
   if (rcode /= 0) call MOM_error(FATAL,"error finding missing value for "//&
        trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
+
+  rcode = NF90_GET_ATT(ncid, varid, "add_offset", add_offset)
+  if (rcode /= 0) add_offset = 0.0
+
+  rcode = NF90_GET_ATT(ncid, varid, "scale_factor", scale_factor)
+  if (rcode /= 0) scale_factor = 1.0
+
 
   if (allocated(lon_in)) deallocate(lon_in)
   if (allocated(lat_in)) deallocate(lat_in)
@@ -499,7 +507,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       do i=1,id
          if (abs(tr_inp(i,j)-missing_value) > abs(roundoff*missing_value)) then
            mask_in(i,j) = 1.0
-           tr_inp(i,j) = tr_inp(i,j) * conversion
+           tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * conversion
          else
            tr_inp(i,j) = missing_value
          endif
