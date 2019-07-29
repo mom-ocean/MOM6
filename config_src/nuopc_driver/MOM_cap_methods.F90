@@ -1,25 +1,25 @@
 !> Contains import/export methods for both NEMS and CMEPS.
-module mom_cap_methods
+module MOM_cap_methods
 
-use ESMF,                only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
-use ESMF,                only: ESMF_TimeInterval, ESMF_TimeIntervalGet
-use ESMF,                only: ESMF_State, ESMF_StateGet
-use ESMF,                only: ESMF_Field, ESMF_FieldGet, ESMF_FieldCreate
-use ESMF,                only: ESMF_GridComp, ESMF_Mesh, ESMF_Grid, ESMF_GridCreate
-use ESMF,                only: ESMF_DistGrid, ESMF_DistGridCreate
-use ESMF,                only: ESMF_KIND_R8, ESMF_SUCCESS, ESMF_LogFoundError
-use ESMF,                only: ESMF_LOGERR_PASSTHRU, ESMF_LOGMSG_INFO, ESMF_LOGWRITE
-use ESMF,                only: ESMF_LogSetError, ESMF_RC_MEM_ALLOCATE
-use ESMF,                only: ESMF_StateItem_Flag, ESMF_STATEITEM_NOTFOUND
-use ESMF,                only: ESMF_GEOMTYPE_FLAG, ESMF_GEOMTYPE_GRID, ESMF_GEOMTYPE_MESH
-use ESMF,                only: ESMF_RC_VAL_OUTOFRANGE, ESMF_INDEX_DELOCAL, ESMF_MESHLOC_ELEMENT
-use ESMF,                only: ESMF_TYPEKIND_R8
-use ESMF,                only: operator(/=), operator(==)
-use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
-use MOM_surface_forcing, only: ice_ocean_boundary_type
-use MOM_grid,            only: ocean_grid_type
-use MOM_domains,         only: pass_var
-use mpp_domains_mod,     only: mpp_get_compute_domain
+use ESMF,                      only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
+use ESMF,                      only: ESMF_TimeInterval, ESMF_TimeIntervalGet
+use ESMF,                      only: ESMF_State, ESMF_StateGet
+use ESMF,                      only: ESMF_Field, ESMF_FieldGet, ESMF_FieldCreate
+use ESMF,                      only: ESMF_GridComp, ESMF_Mesh, ESMF_Grid, ESMF_GridCreate
+use ESMF,                      only: ESMF_DistGrid, ESMF_DistGridCreate
+use ESMF,                      only: ESMF_KIND_R8, ESMF_SUCCESS, ESMF_LogFoundError
+use ESMF,                      only: ESMF_LOGERR_PASSTHRU, ESMF_LOGMSG_INFO, ESMF_LOGWRITE
+use ESMF,                      only: ESMF_LogSetError, ESMF_RC_MEM_ALLOCATE
+use ESMF,                      only: ESMF_StateItem_Flag, ESMF_STATEITEM_NOTFOUND
+use ESMF,                      only: ESMF_GEOMTYPE_FLAG, ESMF_GEOMTYPE_GRID, ESMF_GEOMTYPE_MESH
+use ESMF,                      only: ESMF_RC_VAL_OUTOFRANGE, ESMF_INDEX_DELOCAL, ESMF_MESHLOC_ELEMENT
+use ESMF,                      only: ESMF_TYPEKIND_R8
+use ESMF,                      only: operator(/=), operator(==)
+use MOM_NUOPC_ocean_model,     only: ocean_public_type, ocean_state_type
+use MOM_NUOPC_surface_forcing, only: ice_ocean_boundary_type
+use MOM_grid,                  only: ocean_grid_type
+use MOM_domains,               only: pass_var
+use mpp_domains_mod,           only: mpp_get_compute_domain
 
 ! By default make data private
 implicit none; private
@@ -646,7 +646,7 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
   ! local variables
   type(ESMF_Field) :: lfield
   integer :: lrc
-  character(len=*),parameter :: subname='(mom_cap:State_GetFldPtr)'
+  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -673,7 +673,7 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   ! local variables
   type(ESMF_Field) :: lfield
   integer :: lrc
-  character(len=*),parameter :: subname='(mom_cap:State_GetFldPtr)'
+  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
 
   call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -712,7 +712,7 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, r
   integer                       :: lbnd1,lbnd2
   real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
   real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
-  character(len=*)  , parameter :: subname='(mom_cap_methods:state_getimport)'
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport)'
   ! ----------------------------------------------
 
   rc = ESMF_SUCCESS
@@ -793,7 +793,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
   integer                       :: lbnd1,lbnd2
   real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
   real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
-  character(len=*)  , parameter :: subname='(mom_cap_methods:state_setexport)'
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_setexport)'
   ! ----------------------------------------------
 
   rc = ESMF_SUCCESS
@@ -850,4 +850,4 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 
 end subroutine State_SetExport
 
-end module mom_cap_methods
+end module MOM_cap_methods
