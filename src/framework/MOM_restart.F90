@@ -1082,8 +1082,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                                       'long_name',axis_data_CS%axis(i)%longname)
               call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                       'units',axis_data_CS%axis(i)%units)
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'cartesian_axis',axis_data_CS%axis(i)%cartesian_axis)
+
               if (len_trim(axis_data_CS%axis(i)%positive)>1) then
                   call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                        'positive',trim(axis_data_CS%axis(i)%positive))

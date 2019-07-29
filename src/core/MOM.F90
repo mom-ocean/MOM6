@@ -2478,6 +2478,8 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
   real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
   type(vardesc) :: vd
+  real, dimension(:,:,:), target :: target_tmp3d ! temporary target to pass data to register_restart_field 
+  real, dimension(:,:), target :: target_tmp2d ! temporary target to pass data to register_restart_field 
 
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
@@ -2495,8 +2497,13 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
-    call MOM_write_IC(dirs%output_directory, CS%IC_file, "eta", z_interface, .true., G, GV, & 
-                      Time, z_grid='i', longname="Interface heights", units="meter")
+    ! TODO, replace CS%v with temporary target
+    call register_restart_field(CS%v, "eta", .true., restart_CSp_tmp, &
+                              z_grid='i', longname="Interface heights", units="meter")
+    !call MOM_write_IC(dirs%output_directory, CS%IC_file, "eta", z_interface, .true., G, GV, & 
+    !                  Time, z_grid='i', longname="Interface heights", units="meter")
+    call MOM_write_IC(dirs%output_directory, CS%IC_file, restart_CSp_tmp, G, GV, &
+                      Time)
     
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
