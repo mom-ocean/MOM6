@@ -1,5 +1,5 @@
 !> Top-level module for the MOM6 ocean model in coupled mode.
-module MOM_ocean_model
+module MOM_MCT_ocean_model
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -35,10 +35,10 @@ use MOM_io,                  only : close_file, file_exists, read_data, write_ve
 use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart,             only : MOM_restart_CS, save_restart
 use MOM_string_functions,    only : uppercase
-use MOM_surface_forcing,     only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing,     only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
-use MOM_surface_forcing,     only : ice_ocean_boundary_type, surface_forcing_CS
-use MOM_surface_forcing,     only : forcing_save_restart
+use MOM_MCT_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
+use MOM_MCT_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
+use MOM_MCT_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
+use MOM_MCT_surface_forcing, only : forcing_save_restart
 use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
@@ -263,7 +263,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: use_temperature
 
-  call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
+  call callTree_enter("ocean_model_init(), MOM_MCT_ocean_model.F90")
   if (associated(OS)) then
     call MOM_error(WARNING, "ocean_model_init called with an associated "// &
                     "ocean_state_type structure. Model is already initialized.")
@@ -477,7 +477,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   integer :: secs, days
   integer :: is, ie, js, je
 
-  call callTree_enter("update_ocean_model(), MOM_ocean_model.F90")
+  call callTree_enter("update_ocean_model(), MOM_MCT_ocean_model.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   dt_coupling = 86400.0*real(days) + real(secs)
 
@@ -1187,4 +1187,4 @@ subroutine get_ocean_grid(OS, Gridp)
   return
 end subroutine get_ocean_grid
 
-end module MOM_ocean_model
+end module MOM_MCT_ocean_model

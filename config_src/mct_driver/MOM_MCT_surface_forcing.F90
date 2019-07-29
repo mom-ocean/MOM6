@@ -1,4 +1,4 @@
-module MOM_surface_forcing
+module MOM_MCT_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -1006,7 +1006,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "MOM_surface_forcing"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_MCT_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
   character(len=48)  :: flnam
   character(len=240) :: basin_file
@@ -1378,4 +1378,4 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
 
 end subroutine ice_ocn_bnd_type_chksum
 
-end module MOM_surface_forcing
+end module MOM_MCT_surface_forcing
