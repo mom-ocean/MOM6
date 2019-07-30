@@ -36,4 +36,6 @@ jobs:
         - echo 'Configuring...' && echo -en 'travis_fold:start:script.1\\r'
         - make
         - echo -en 'travis_fold:end:script.1\\r'
+        - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
         - make test
+        - echo -en 'travis_fold:end:script.2\\r'
