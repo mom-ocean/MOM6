@@ -14,8 +14,8 @@ FMS := $(DEPS)/fms
 
 # Function to get list of files
 # TODO: .h and .c files
-FMS_FILES = $(sort $(shell find $(FMS)/src -name '*.F90'))
-MOM_FILES = $(sort $(shell find src config_src/solo_driver -name '*.F90'))
+#FMS_FILES = $(sort $(shell find $(FMS)/src -name '*.F90'))
+#MOM_FILES = $(sort $(shell find src config_src/solo_driver -name '*.F90'))
 
 # Build settings
 MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
@@ -44,7 +44,7 @@ build/Makefile: build/path_names
 		-c $(MKMF_CPP) \
 		$(notdir $<)
 
-build/path_names: src $(MOM_FILES)
+build/path_names: src $(MOM_FILES) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../src \
@@ -63,8 +63,7 @@ $(FMS)/build/Makefile: $(FMS)/build/path_names
 		-c $(MKMF_CPP) \
 		$(notdir $<)
 
-$(FMS)/build/path_names: $(FMS)/src $(FMS_FILES)
-%/path_names: $(LIST_PATHS)
+$(FMS)/build/path_names: $(FMS)/src $(FMS_FILES) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l ../src
 
