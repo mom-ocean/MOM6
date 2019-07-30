@@ -260,10 +260,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                                                                    !! [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                      intent(inout) :: uhtr         !< accumulatated zonal volume/mass transport
-                                                                   !! since last tracer advection [H m2 ~> m3 or kg]
+                                                                   !! since last tracer advection [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                      intent(inout) :: vhtr         !< accumulatated merid volume/mass transport
-                                                                   !! since last tracer advection [H m2 ~> m3 or kg]
+                                                                   !! since last tracer advection [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av       !< free surface height or column mass time
                                                                    !! averaged over time step [H ~> m or kg m-2]
   type(MOM_dyn_split_RK2_CS),        pointer       :: CS           !< module control structure
@@ -843,10 +843,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(I,j,k) = uhtr(I,j,k) + uh(I,j,k)*dt
+      uhtr(I,j,k) = uhtr(I,j,k) + US%m_to_L**2*uh(I,j,k)*dt
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*dt
+      vhtr(i,J,k) = vhtr(i,J,k) + US%m_to_L**2*vh(i,J,k)*dt
     enddo ; enddo
   enddo
 

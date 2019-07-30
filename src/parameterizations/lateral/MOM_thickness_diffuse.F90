@@ -102,9 +102,9 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !! [m2 H ~> m3 or kg]
+                                                                     !! [L2 H ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !! [m2 H ~> m3 or kg]
+                                                                     !! [L2 H ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamics structure
   real,                                      intent(in)    :: dt     !< Time increment [s]
   type(MEKE_type),                           pointer       :: MEKE   !< MEKE control structure
@@ -476,11 +476,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
-      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
+      uhtr(I,j,k) = uhtr(I,j,k) + US%m_to_L**2*uhD(I,j,k)*dt
       if (associated(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
+      vhtr(i,J,k) = vhtr(i,J,k) + US%m_to_L**2*vhD(i,J,k)*dt
       if (associated(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
     enddo ; enddo
     do j=js,je ; do i=is,ie
@@ -499,7 +499,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     call uvchksum("thickness_diffuse [uv]hD", uhD, vhD, &
                   G%HI, haloshift=0, scale=GV%H_to_m)
     call uvchksum("thickness_diffuse [uv]htr", uhtr, vhtr, &
-                  G%HI, haloshift=0, scale=GV%H_to_m)
+                  G%HI, haloshift=0, scale=US%L_to_m**2*GV%H_to_m)
     call hchksum(h, "thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
   endif
 

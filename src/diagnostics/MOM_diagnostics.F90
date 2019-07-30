@@ -1335,14 +1335,15 @@ end subroutine post_surface_thermo_diags
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, &
+subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dyn, &
                                       diag, dt_trans, Reg)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhtr !< Accumulated zonal thickness fluxes
-                                                 !! used to advect tracers [H m2 ~> m3 or kg]
+                                                 !! used to advect tracers [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhtr !< Accumulated meridional thickness fluxes
-                                                 !! used to advect tracers [H m2 ~> m3 or kg]
+                                                 !! used to advect tracers [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h   !< The updated layer thicknesses [H ~> m or kg m-2]
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
@@ -1360,12 +1361,12 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, &
                           ! [H s-1 ~> m s-1 or kg m-2 s-1].
   real :: Idt             ! The inverse of the time interval [s-1]
   real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes
-                          ! [kg m-2 H-1 s-1 ~> kg m-3 s-1 or s-1].
+                          ! [kg L-2 H-1 s-1 ~> kg m-3 s-1 or s-1].
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   Idt = 1. / dt_trans
-  H_to_kg_m2_dt = GV%H_to_kg_m2 * Idt
+  H_to_kg_m2_dt = GV%H_to_kg_m2 * US%L_to_m**2 * Idt
 
   call diag_save_grids(diag)
   call diag_copy_storage_to_diag(diag, diag_pre_dyn)
@@ -1792,10 +1793,11 @@ subroutine register_surface_diags(Time, G, IDs, diag, tv)
 end subroutine register_surface_diags
 
 !> Register certain diagnostics related to transports
-subroutine register_transport_diags(Time, G, GV, IDs, diag)
+subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
   type(time_type),          intent(in)    :: Time  !< current model time
   type(ocean_grid_type),    intent(in)    :: G     !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV    !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(transport_diag_IDs), intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),          intent(inout) :: diag  !< regulates diagnostic output
 
@@ -1812,10 +1814,10 @@ subroutine register_transport_diags(Time, G, GV, IDs, diag)
   ! Diagnostics related to tracer and mass transport
   IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
       'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
-      y_cell_method='sum', v_extensive=.true., conversion=H_convert)
+      y_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
       'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
-      x_cell_method='sum', v_extensive=.true., conversion=H_convert)
+      x_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_umo = register_diag_field('ocean_model', 'umo', &
       diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
       standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)

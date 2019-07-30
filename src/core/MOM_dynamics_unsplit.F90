@@ -207,9 +207,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh !< The meridional volume or mass
                                                    !! transport [H m2 s-1 ~> m3 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or mass
-                                                   !! transport since the last tracer advection [H m2 ~> m3 or kg].
+                                                   !! transport since the last tracer advection [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume or mass
-                                                   !! transport since the last tracer advection [H m2 ~> m3 or kg].
+                                                   !! transport since the last tracer advection [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_av !< The time-mean free surface height or
                                                    !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
@@ -289,10 +289,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       v(i,J,k) = v(i,J,k) + dt * US%s_to_T*CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*US%m_to_L**2*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*US%m_to_L**2*vh(i,j,k)
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -441,10 +441,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*US%m_to_L**2*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*US%m_to_L**2*vh(i,j,k)
     enddo ; enddo
   enddo
 

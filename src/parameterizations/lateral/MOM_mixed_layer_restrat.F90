@@ -94,9 +94,9 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !! [H m2 ~> m3 or kg]
+                                                                     !! [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !! [H m2 ~> m3 or kg]
+                                                                     !! [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment [s]
@@ -124,9 +124,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !!   [H m2 ~> m3 or kg]
+                                                                     !!   [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !!   [H m2 ~> m3 or kg]
+                                                                     !!   [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment [s]
@@ -421,7 +421,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       enddo
       do k=1,nz
         uhml(I,j,k) = a(k)*uDml(I) + b(k)*uDml_slow(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
+        uhtr(I,j,k) = uhtr(I,j,k) + US%m_to_L**2*uhml(I,j,k)*dt
       enddo
     endif
 
@@ -497,7 +497,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       enddo
       do k=1,nz
         vhml(i,J,k) = a(k)*vDml(i) + b(k)*vDml_slow(i)
-        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
+        vhtr(i,J,k) = vhtr(i,J,k) + US%m_to_L**2*vhml(i,J,k)*dt
       enddo
     endif
 
@@ -553,9 +553,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !!   [H m2 ~> m3 or kg]
+                                                                     !!   [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !!   [H m2 ~> m3 or kg]
+                                                                     !!   [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment [s]
@@ -687,7 +687,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
       enddo
       do k=1,nkml
         uhml(I,j,k) = a(k)*uDml(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
+        uhtr(I,j,k) = uhtr(I,j,k) + US%m_to_L**2*uhml(I,j,k)*dt
       enddo
     endif
 
@@ -733,7 +733,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
       enddo
       do k=1,nkml
         vhml(i,J,k) = a(k)*vDml(i)
-        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
+        vhtr(i,J,k) = vhtr(i,J,k) + US%m_to_L**2*vhml(i,J,k)*dt
       enddo
     endif
 

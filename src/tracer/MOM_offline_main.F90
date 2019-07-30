@@ -33,6 +33,7 @@ use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut
 use MOM_tracer_flow_control,  only : tracer_flow_control_CS, call_tracer_column_fns, call_tracer_stocks
 use MOM_tracer_registry,      only : tracer_registry_type, MOM_tracer_chksum, MOM_tracer_chkinv
+use MOM_unit_scaling,         only : unit_scale_type
 use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
 
@@ -67,6 +68,8 @@ type, public :: offline_transport_CS ; private
           !< Pointer to a structure containing metrics and related information
   type(verticalGrid_type),       pointer :: GV              => NULL()
           !< Pointer to structure containing information about the vertical grid
+  type(unit_scale_type),         pointer :: US              => NULL()
+          !< structure containing various unit conversion factors
   type(optics_type),             pointer :: optics          => NULL()
           !< Pointer to the optical properties type
   type(diabatic_aux_CS),         pointer :: diabatic_aux_CSp => NULL()
@@ -330,7 +333,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       call MOM_tracer_chkinv(debug_msg, G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
     endif
 
-    call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, &
+    call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, CS%US, &
         CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
         uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
 
@@ -501,7 +504,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           call distribute_residual_uh_upwards(G, GV, h_vol, uhtr)
         endif
 
-        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, CS%US, &
             CS%tracer_adv_CSp, CS%tracer_Reg, h_prev_opt = h_pre, max_iter_in=1, &
             h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
 
@@ -546,7 +549,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           call distribute_residual_uh_barotropic(G, GV, h_vol, uhtr)
         endif
 
-        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, CS%US, &
             CS%tracer_adv_CSp, CS%tracer_Reg, h_prev_opt = h_pre, max_iter_in=1, &
             h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
 
@@ -916,7 +919,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
         h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
       enddo ; enddo ; enddo
-      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, CS%US, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
       ! Done with horizontal so now h_pre should be h_new
@@ -933,7 +936,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
         h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
       enddo ; enddo ; enddo
-      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, CS%US, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
       ! Done with horizontal so now h_pre should be h_new
@@ -1268,13 +1271,14 @@ end subroutine insert_offline_main
 
 !> Initializes the control structure for offline transport and reads in some of the
 ! run time parameters from MOM_input
-subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
+subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
 
   type(param_file_type),           intent(in) :: param_file !< A structure to parse for run-time parameters
   type(offline_transport_CS),      pointer    :: CS !< Offline control structure
   type(diabatic_CS),               intent(in) :: diabatic_CSp !< The diabatic control structure
   type(ocean_grid_type),   target, intent(in) :: G  !< ocean grid structure
   type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   target, intent(in) :: US !< A dimensional unit scaling type
 
   character(len=40)  :: mdl = "offline_transport"
   character(len=20)  :: redistribute_method
@@ -1295,6 +1299,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   endif
   allocate(CS)
   call log_version(param_file, mdl,version, "This module allows for tracers to be run offline")
+
+  ! Determining the internal unit scaling factors for this run.
+  CS%US => US
 
   ! Parse MOM_input for offline control
   call get_param(param_file, mdl, "OFFLINEDIR", CS%offlinedir, &

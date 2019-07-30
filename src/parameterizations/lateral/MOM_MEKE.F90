@@ -109,8 +109,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [s].
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Zonal mass flux [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Meridional mass flux [H m2 s-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -132,18 +132,19 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     MEKE_uflux, &   ! The zonal diffusive flux of MEKE [kg m2 s-3].
     Kh_u, &         ! The zonal diffusivity that is actually used [m2 s-1].
-    baroHu, &       ! Depth integrated zonal mass flux [H m2 s-1 ~> m3 s-1 or kg s-1].
+    baroHu, &       ! Depth integrated accumulated zonal mass flux [H m2 ~> m3 or kg].
     drag_vel_u      ! A (vertical) viscosity associated with bottom drag at
                     ! u-points [m s-1].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     MEKE_vflux, &   ! The meridional diffusive flux of MEKE [kg m2 s-3].
     Kh_v, &         ! The meridional diffusivity that is actually used [m2 s-1].
-    baroHv, &       ! Depth integrated meridional mass flux [H m2 s-1 ~> m3 s-1 or kg s-1].
+    baroHv, &       ! Depth integrated accumulated meridional mass flux [H m2 ~> m3 or kg].
     drag_vel_v      ! A (vertical) viscosity associated with bottom drag at
                     ! v-points [m s-1].
   real :: Kh_here, Inv_Kh_max, K4_here
   real :: cdrag2
-  real :: advFac
+  real :: advFac    ! The product of the advection scaling factor and some unit conversion
+                    ! factors divided by the timestep [m H-1 s-1 ~> s-1 or m3 kg-1 s-1]
   real :: mass_neglect ! A negligible mass [kg m-2].
   real :: ldamping  ! The MEKE damping rate [s-1].
   real :: Rho0      ! A density used to convert mass to distance [kg m-3].
@@ -199,7 +200,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       do k=1,nz
         do j=js,je ; do I=is-1,ie
-          baroHu(I,j) = hu(I,j,k)
+          baroHu(I,j) = US%L_to_m**2*hu(I,j,k)
         enddo ; enddo
       enddo
       do J=js-1,je ; do i=is,ie
@@ -207,7 +208,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       do k=1,nz
         do J=js-1,je ; do i=is,ie
-          baroHv(i,J) = hv(i,J,k)
+          baroHv(i,J) = US%L_to_m**2*hv(i,J,k)
         enddo ; enddo
       enddo
     endif
