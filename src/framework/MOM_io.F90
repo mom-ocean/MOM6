@@ -50,7 +50,7 @@ use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_attribute_exists => variable_att_exists, &
                                 fms2_variable_exists => variable_exists, &
                                 fms2_dimension_exists => dimension_exists, &
-                                fms2_file_exists => file_exists, &
+                                file_exists, &
                                 FmsNetcdfDomainFile_t, unlimited
 
 use netcdf
@@ -79,7 +79,7 @@ public :: MOM_close_file
 public :: MOM_register_axis
 public :: MOM_register_variable_attribute
 public :: MOM_write_data
-public :: MOM_write_IC
+!public :: MOM_write_IC
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -123,11 +123,6 @@ type, public :: axis_data_type
   type(p1d), pointer       :: data(:) => NULL()  !< pointer to the axis data
 end type axis_data_type
 
-!> Indicate whether a file exists, perhaps with domain decomposition
-interface file_exists
-  module procedure MOM_file_exists
-end interface
-
 !> Open a netCDF file 
 interface MOM_open_file
   module procedure MOM_open_file_DD
@@ -155,14 +150,6 @@ interface MOM_write_data
   module procedure MOM_write_data_1d
   module procedure MOM_write_data_0d
 end interface
-
-!> Write initial conditions to a netCDF file
-!interface MOM_write_IC
-!  module procedure MOM_write_IC_4d
-!  module procedure MOM_write_IC_3d
-!  module procedure MOM_write_IC_2d
-!  module procedure MOM_write_IC_1d
-!end interface
 
 interface MOM_register_variable_attribute
   module procedure register_variable_attribute_string
@@ -638,14 +625,14 @@ end subroutine MOM_write_data_0d
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
 subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
-                                  dim_names, dim_length, num_axes, G, dG, GV)
+                                  dim_names, dim_lengths, num_dims, G, dG, GV)
 
   character(len=*), intent(in) :: hor_grid !< horizontal grid
   character(len=*), intent(in) :: z_grid !< vertical grid
   character(len=*), intent(in) :: t_grid_in !< time grid
   character(len=*), dimension(:), intent(out) :: dim_names !< array of dimension names
-  integer, dimension(:), intent(out) :: dim_length !< array of dimension sizes
-  integer, intent(out) ::  num_axes !< number of axes to register in the restart file
+  integer, dimension(:), intent(out) :: dim_lengths !< array of dimension sizes
+  integer, intent(out) ::  num_dims !< number of axes to register in the restart file
   type(ocean_grid_type),   optional,   intent(in)  :: G !< The ocean's grid structure
   type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
                                                       !! is required if the new file uses any
@@ -701,43 +688,43 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   
   ! add longitude name to dimension name array
   if (use_lonh) then
-     num_axes = num_axes+1 
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim('lonh')) = 'lonh'
-     dim_length(num_axes) = size(gridLonT(isg:ieg))
+     num_dims = num_dims+1 
+     dim_names(num_dims) = ''
+     dim_names(num_dims)(1:len_trim('lonh')) = 'lonh'
+     dim_lengths(num_dims) = size(gridLonT(isg:ieg))
   elseif (use_lonq) then
-     num_axes = num_axes+1
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim('lonq')) ='lonq'
-     dim_length(num_axes) = size(gridLonB(IsgB:IegB)) 
+     num_dims = num_dims+1
+     dim_names(num_dims) = ''
+     dim_names(num_dims)(1:len_trim('lonq')) ='lonq'
+     dim_lengths(num_dims) = size(gridLonB(IsgB:IegB)) 
   endif
  
   ! add latitude name to dimension name array
   if (use_lath) then
-     num_axes = num_axes+1 
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim('lath')) = 'lath'
-     dim_length(num_axes) = size(gridLatT(jsg:jeg))
+     num_dims = num_dims+1 
+     dim_names(num_dims) = ''
+     dim_names(num_dims)(1:len_trim('lath')) = 'lath'
+     dim_lengths(num_dims) = size(gridLatT(jsg:jeg))
   elseif (use_latq) then
-     num_axes = num_axes+1 
-     dim_names(num_axes) = ''
-     dim_names(num_axes)(1:len_trim('latq')) = 'latq'
-     dim_length(num_axes) = size(gridLatB(JsgB:JegB))
+     num_dims = num_dims+1 
+     dim_names(num_dims) = ''
+     dim_names(num_dims)(1:len_trim('latq')) = 'latq'
+     dim_lengths(num_dims) = size(gridLatB(JsgB:JegB))
   endif
 
   ! vertical grid
  
   select case (trim(z_grid))
      case ('L')
-        num_axes = num_axes+1
-        dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('Layer')) = 'Layer'
-        dim_length(num_axes) = size(GV%sLayer(1:GV%ke))  
+        num_dims = num_dims+1
+        dim_names(num_dims) = ''
+        dim_names(num_dims)(1:len_trim('Layer')) = 'Layer'
+        dim_lengths(num_dims) = size(GV%sLayer(1:GV%ke))  
      case ('i')
-        num_axes = num_axes+1
-        dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('Interface')) = 'Interface'
-        dim_length(num_axes) = size(GV%sInterface(1:GV%ke+1))
+        num_dims = num_dims+1
+        dim_names(num_dims) = ''
+        dim_names(num_dims)(1:len_trim('Interface')) = 'Interface'
+        dim_lengths(num_dims) = size(GV%sInterface(1:GV%ke+1))
      case ('1') ! Do nothing.
      case default
         call MOM_error(FATAL, "MOM_io: get_dimension_var_features: "//&
@@ -748,19 +735,19 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   t_grid = adjustl(t_grid_in)
   select case (t_grid(1:1))
      case ('s', 'a', 'm')
-        num_axes = num_axes+1
-        dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('Time')) = 'Time'
-        dim_length(num_axes) = unlimited
+        num_dims = num_dims+1
+        dim_names(num_dims) = ''
+        dim_names(num_dims)(1:len_trim('Time')) = 'Time'
+        dim_lengths(num_dims) = unlimited
      case ('p')
         if (len_trim(t_grid(2:8)) <= 0) then
             call MOM_error(FATAL,"MOM_io:get_var_dimension_features: "//&
                            "No periodic axis length was specified in "//trim(t_grid))
         endif
-        num_axes = num_axes+1
-        dim_names(num_axes) = ''
-        dim_names(num_axes)(1:len_trim('Period')) = 'Period'
-        dim_length(num_axes) = unlimited
+        num_dims = num_dims+1
+        dim_names(num_dims) = ''
+        dim_names(num_dims)(1:len_trim('Period')) = 'Period'
+        dim_lengths(num_dims) = unlimited
      case ('1') ! Do nothing.
      case default
            call MOM_error(WARNING, "MOM_io: get_var_dimension_features: "//&
@@ -1367,465 +1354,6 @@ function ensembler(name, ens_no_in) result(en_nm)
   enddo ; enddo
 
 end function ensembler
-
-
-!> Write a 3d initial condition field to a netCDF file
-subroutine MOM_write_IC_3d(directory, filename,variable_name, field_data, variable_required, &
-                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
-  character(len=*), intent(in) :: directory !< location of the IC file
-  character(len=*), intent(in) :: filename !< name of the IC file
-  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
-  real, dimension(:,:,:),   intent(in) :: field_data     !< Field to write
-  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
-                                                      !! successfully read from the IC file.
-  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
-  type(time_type),          intent(in) :: time        !< model time                        
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
-  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
-  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  character(len=*), optional, intent(in) :: longname  !< variable long name
-  character(len=*), optional, intent(in) :: units     !< variable units
- 
-  ! local
-  type(vardesc) :: vd
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite
-  type(axis_data_type) :: axis_data_CS
-  integer :: substring_index = 0
-  integer :: name_length = 0
-  integer :: num_axes = 0, total_axes
-  integer :: var_periods
-  integer :: i, is, ie, k
-  integer, dimension(4) :: dim_lengths
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  logical :: variable_exists =.false.
-  character(len=200) :: base_file_name = ''
-  character(len=200) :: dim_names(4)
-  character(len=20) :: time_units = ''
-  character(len=20) :: t_grid_read, t_grid_str
-  real :: ic_time
-  real, dimension(:), allocatable :: time_vals
-  real, dimension(:), allocatable :: data_temp
-
-  ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(filename))
-  if (substring_index <= 0) then
-      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
-  else
-      name_length = len(trim(directory)//trim(filename))
-      base_file_name(1:name_length) = trim(directory)//trim(filename)
-  endif
-
-  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
-                z_grid=z_grid, t_grid=t_grid)
-  num_axes=0
-  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
-                              dim_names, dim_lengths, num_axes, G=G, GV=GV)
-  if (num_axes <= 0) then
-     call MOM_error(FATAL,"MOM_io::write_IC_data_3d: num_axes is an invalid value.")
-  endif
-
-  ! get the time units
-  ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time*86400.0)
-  ! get an array of time values
-   if (.not.(allocated(time_vals))) then
-     t_grid_str = ''
-     t_grid_str = adjustl(vd%t_grid)
-     select case (t_grid_str(1:1))
-           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
-              allocate(time_vals(1))
-              time_vals(1) = ic_time
-           case ('p')
-              if (len_trim(t_grid(2:8)) > 0) then
-                 var_periods = -1
-                 t_grid_read = ''
-                 t_grid_read = adjustl(t_grid(2:8))
-                 read(t_grid_read,*) var_periods
-                 if (var_periods < 1) then 
-                     call MOM_error(FATAL, "MOM_io::write_IC_data_3d: "//&
-                                   "Period value must be positive.")
-                 endif
-                 ! Define a periodic axis array
-                 allocate(time_vals(var_periods))
-                 do k=1,var_periods
-                    time_vals(k) = real(k)
-                 enddo
-              endif
-     end select
-  endif
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
-  
-  if (.not. (file_open_success)) then
-     call MOM_error(FATAL,"MOM_io::write_IC_data_3d: Failed to open file "//trim(base_file_name))
-  endif
-  
-  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
-   
-  ! register the variable axes to the file if they do not exist
-  total_axes=0
-  do i=1,num_axes
-     axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
-     if (.not.(axis_exists)) then
-        total_axes=total_axes+1
-        call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                              time_val=time_vals, time_units=time_units)
-        call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
-     endif
-  enddo
-
-  ! write the axes data and attributes to the file if they do not exist
-  
-  do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
-     if (.not.(variable_exists)) then 
-        if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
-                                   "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))  
-           if (axis_data_CS%axis(i)%is_domain_decomposed) then
-              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
-           else
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-           endif
-
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'long_name',axis_data_CS%axis(i)%longname)
-
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'units',trim(axis_data_CS%axis(i)%units))
-        endif
-     endif
-  enddo
-
-  ! register and write the IC variable and attributes to the IC file
-  call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes)) 
-  call MOM_write_data(fileObjWrite, variable_name, field_data)
-  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
-  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
-        
-  call MOM_close_file(fileObjWrite)
-
-  if(allocated(time_vals)) deallocate(time_vals)
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
-
-end subroutine MOM_write_IC_3d
-
-!> Write a 2d initial condition field to a netCDF file
-subroutine MOM_write_IC_2d(directory, filename,variable_name, field_data, variable_required, &
-                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
-  character(len=*), intent(in) :: directory !< location of the IC file
-  character(len=*), intent(in) :: filename !< name of the IC file
-  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
-  real, dimension(:,:), intent(in) :: field_data     !< Field to write
-  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
-                                                      !! successfully read from the IC file.
-  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
-  type(time_type),          intent(in) :: time        !< model time                        
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
-  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
-  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  character(len=*), optional, intent(in) :: longname  !< variable long name
-  character(len=*), optional, intent(in) :: units     !< variable units
- 
-  ! local
-  type(vardesc) :: vd
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite
-  type(axis_data_type) :: axis_data_CS
-  integer :: substring_index = 0
-  integer :: name_length = 0
-  integer :: num_axes, total_axes
-  integer :: var_periods
-  integer :: i, is, ie, k
-  integer, dimension(4) :: dim_lengths
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  logical :: variable_exists = .false.
-  character(len=200) :: base_file_name = ''
-  character(len=200) :: dim_names(3)
-  character(len=20) :: time_units = ''
-  character(len=20) :: t_grid_read, t_grid_str
-  real :: ic_time
-  real, dimension(:), allocatable :: time_vals
-  real, dimension(:), allocatable :: data_temp
-
-  ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(filename))
-  if (substring_index <= 0) then
-      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
-  else
-      name_length = len(trim(directory)//trim(filename))
-      base_file_name(1:name_length) = trim(directory)//trim(filename)
-  endif
-
-  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
-                z_grid=z_grid, t_grid=t_grid)
-
-  num_axes=0
-  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
-                              dim_names, dim_lengths, num_axes, G=G, GV=GV)
-  if (num_axes <= 0) then
-     call MOM_error(FATAL,"MOM_io::write_IC_data_2d: num_axes is an invalid value.")
-  endif
-  ! get the time units
-  ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time*86400.0)
-  ! get an array of time values
-   if (.not.(allocated(time_vals))) then
-     t_grid_str = ''
-     t_grid_str = adjustl(vd%t_grid)
-     select case (t_grid_str(1:1))
-           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
-              allocate(time_vals(1))
-              time_vals(1) = ic_time
-           case ('p')
-              if (len_trim(t_grid(2:8)) > 0) then
-                 var_periods = -1
-                 t_grid_read = ''
-                 t_grid_read = adjustl(t_grid(2:8))
-                 read(t_grid_read,*) var_periods
-                 if (var_periods < 1) then 
-                     call MOM_error(FATAL, "MOM_io::write_IC_data_2d: "//&
-                                   "Period value must be positive.")
-                 endif
-                 ! Define a periodic axis array
-                 allocate(time_vals(var_periods))
-                 do k=1,var_periods
-                    time_vals(k) = real(k)
-                 enddo
-              endif
-     end select
-  endif
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
-  
-  if (.not. (file_open_success)) then
-     call MOM_error(FATAL,"MOM_io::write_IC_data_2d: Failed to open file "//trim(base_file_name))
-  endif
-  
-  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
-
- ! register the variable axes to the file if they do not exist
-  total_axes=0
-  do i=1,num_axes
-     axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
-     if (.not.(axis_exists)) then
-        total_axes=total_axes+1
-        call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                               time_val=time_vals, time_units=time_units)
-        call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
-     endif
-  enddo
-
-  ! write the axes data and attributes to the file if they do not exist
-  
-  do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
-     if (.not.(variable_exists)) then 
-        if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
-                                   "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/) ) 
-           if (axis_data_CS%axis(i)%is_domain_decomposed) then
-              call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
-           else
-              call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-           endif
-
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'long_name',axis_data_CS%axis(i)%longname)
-
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'units',trim(axis_data_CS%axis(i)%units))
-        endif
-     endif
-  enddo
-
-  ! register and write the IC variable and attributes to the IC file
-  call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes)) 
-  call MOM_write_data(fileObjWrite, variable_name, field_data)
-  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
-  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
-        
-  call MOM_close_file(fileObjWrite)
-
-  if(allocated(time_vals)) deallocate(time_vals)
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
-
-end subroutine MOM_write_IC_2d
-
-!> Write a 1d initial condition field to a netCDF file
-subroutine MOM_write_IC_1d(directory, filename,variable_name, field_data, variable_required, &
-                       G, GV, time, hor_grid, z_grid, t_grid, longname, units)
-  character(len=*), intent(in) :: directory !< location of the IC file
-  character(len=*), intent(in) :: filename !< name of the IC file
-  character(len=*),         intent(in) :: variable_name      !< name of variable to writie to the IC file
-  real, dimension(:), intent(in) :: field_data     !< Field to write
-  logical,                  intent(in) :: variable_required !< If true, the run will abort if this field is not
-                                                      !! successfully read from the IC file.
-  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
-  type(time_type),          intent(in) :: time        !< model time                        
-  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
-  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
-  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
-  character(len=*), optional, intent(in) :: longname  !< variable long name
-  character(len=*), optional, intent(in) :: units     !< variable units
- 
-  ! local
-  type(vardesc) :: vd
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite
-  type(axis_data_type) :: axis_data_CS
-  integer :: substring_index = 0
-  integer :: name_length = 0
-  integer :: num_axes = 0, total_axes
-  integer :: var_periods
-  integer :: i, is, ie, k
-  integer, dimension(2) :: dim_lengths
-  logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  logical :: variable_exists =.false.
-  character(len=200) :: base_file_name = ''
-  character(len=200) :: dim_names(2)
-  character(len=10) :: time_units = ''
-  character(len=20) :: t_grid_read, t_grid_str
-  real :: ic_time
-  real, dimension(:), allocatable :: time_vals
-  real, dimension(:), allocatable :: data_temp
-
-  ! append '.nc' to the restart file name if it is missing
-  substring_index = index('.nc', trim(filename))
-  if (substring_index <= 0) then
-      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
-  else
-      name_length = len(trim(directory)//trim(filename))
-      base_file_name(1:name_length) = trim(directory)//trim(filename)
-  endif
-
-  vd = var_desc(variable_name, units=units, longname=longname, hor_grid=hor_grid, &
-                z_grid=z_grid, t_grid=t_grid)
-
-  call get_var_dimension_features(vd%hor_grid, vd%z_grid, vd%t_grid, &
-                              dim_names, dim_lengths, num_axes, G=G, GV=GV)
-  if (num_axes <= 0) then
-     call MOM_error(FATAL,"MOM_io::write_IC_data_1d: num_axes is an invalid value.")
-  endif
-
-  ! get the time units
-  ic_time = time_type_to_real(time) / 86400.0
-  time_units = get_time_units(ic_time*86400.0)
-  ! get an array of time values
-  if (.not.(allocated(time_vals))) then
-     t_grid_str = ''
-     t_grid_str = adjustl(vd%t_grid)
-     select case (t_grid_str(1:1))
-           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
-              allocate(time_vals(1))
-              time_vals(1) = ic_time
-           case ('p')
-              if (len_trim(t_grid(2:8)) > 0) then
-                 var_periods = -1
-                 t_grid_read = ''
-                 t_grid_read = adjustl(t_grid(2:8))
-                 read(t_grid_read,*) var_periods
-                 if (var_periods < 1) then 
-                     call MOM_error(FATAL, "MOM_io::write_IC_data_1d: "//&
-                                   "Period value must be positive.")
-                 endif
-                 ! Define a periodic axis array
-                 allocate(time_vals(var_periods))
-                 do k=1,var_periods
-                    time_vals(k) = real(k)
-                 enddo
-              endif
-     end select
-  endif
-
-  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
-  
-  if (.not. (file_open_success)) then
-     call MOM_error(FATAL,"MOM_io::write_IC_data_1d: Failed to open file "//trim(base_file_name))
-  endif
-  
-  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
-
-  ! register the variable axes to the file if they do not exist
-  total_axes=0
-  do i=1,num_axes
-     axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
-     if (.not.(axis_exists)) then
-        total_axes=total_axes+1
-        call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                               time_val=time_vals, time_units=time_units)
-        call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
-     endif
-  enddo
-
-  ! write the axes data and attributes to the file if they do not exist
-  
-  do i=1,total_axes
-     variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
-     if (.not.(variable_exists)) then 
-        if (associated(axis_data_CS%data(i)%p)) then
-           call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), & 
-                                   "double", &
-                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/) )  
-  
-           call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'long_name',axis_data_CS%axis(i)%longname)
-
-           call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'units',trim(axis_data_CS%axis(i)%units))
-        endif
-     endif
-  enddo
-
-  ! register and write the IC variable and attributes to the IC file
-   
-  call fms2_register_field(fileObjWrite, variable_name, "double", &
-                           dimensions=dim_names(1:num_axes)) 
-  call MOM_write_data(fileObjWrite, variable_name, field_data)
-  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'units', units)
-  call MOM_register_variable_attribute(fileObjWrite, variable_name, 'long_name', longname) 
-        
-  call MOM_close_file(fileObjWrite)
-
-  if(allocated(time_vals)) deallocate(time_vals)
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
-
-end subroutine MOM_write_IC_1d
-
-!> Returns true if the named file exists.
-function MOM_file_exists(filename)
-  character(len=*),       intent(in) :: filename   !< The name of the file being inquired about
-
-! This function uses the fms_io function file_exist to determine whether
-! a named file (or its decomposed variant) exists.
-  logical :: MOM_file_exists
-  MOM_file_exists = fms2_file_exists(filename)
-end function MOM_file_exists
 
 !> Open domain-decomposed file(s) with the base file name
 !! 'filename' to read from or write/append to
