@@ -1221,10 +1221,36 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
   time_units = get_time_units(ic_time*86400.0)
-  if (.not.(allocated(time_vals))) then
-     t_grid_str = ''
-     t_grid_str = adjustl(vd%t_grid)
-     select case (t_grid_str(1:1))
+ 
+
+  ! open the netCDF file
+  ! check if file already exists and can be appended
+   file_open_success = fms2_open_file(fileObjWrite, base_file_name, "append", & 
+                                  G%Domain%mpp_domain, is_restart = .false.)
+   if (.not.(file_open_success)) then
+   ! create and open new file(s) for domain-decomposed write
+      file_open_success = fms2_open_file(fileObjWrite, base_file_name, "write", & 
+                                   G%Domain%mpp_domain, is_restart = .false.)
+   endif
+  
+  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+
+  ! loop through the variables in the control structure, 
+  total_axes=0 
+  
+  do m=1,CS%novars
+     
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                        z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
+
+     if (.not.(allocated(time_vals))) then
+        t_grid_str = ''
+        t_grid_str = adjustl(vd%t_grid)
+        select case (t_grid_str(1:1))
            case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
               allocate(time_vals(1))
               time_vals(1) = ic_time
@@ -1244,40 +1270,14 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
                     time_vals(k) = real(k)
                  enddo
               endif
-     end select
-  endif
-
-  ! open the netCDF file
-  ! check if file already exists and can be appended
-   file_open_success = fms2_open_file(fileObjWrite, base_file_name, "append", & 
-                                  G%Domain%mpp_domain, is_restart = .false.)
-   if (.not.(file_open_success)) then
-   ! create and open new file(s) for domain-decomposed write
-       file_open_success = fms2_open_file(fileObjWrite, base_file_name, "write", & 
-                                   G%Domain%mpp_domain, is_restart = .false.)
-   endif
-  
-  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
-
-  ! loop through the variables in the control structure, 
-  total_axes=0 
-  
-  do m=1,CS%novars
-     units=''
-     longname=''
-     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                        z_grid=z_grid, t_grid=t_grid, longname=longname, &
-                        units=units, caller="MOM_restart:write_initial_conditions")
+         end select
+     endif
 
      ! get the dimension names and lengths for variable 'm'                                
      ! note: 4d variables are lon x lat x vertical level x time
      num_dims=0 
      call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                          dim_names, dim_lengths, num_dims,G=G,GV=GV)
+                                     dim_names, dim_lengths, num_dims,G=G,GV=GV)
      if (num_dims <= 0) then
          call MOM_error(FATAL,"MOM_restart:write_initial_conditions: num_dims is an invalid value.")
      endif
@@ -1293,6 +1293,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
             call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
         endif
      enddo
+  enddo
      
      ! register and write the coordinate variables (axes) to the file
      do i=1,total_axes
@@ -1321,8 +1322,21 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
            endif
         endif
      enddo
+  
+  ! register and write the field variables to the initial conditions file
+  do m=1,CS%novars
+     units=''
+     longname=''
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                        z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                        units=units, caller="save_restart")
+   
+     num_dims = 0
 
-     ! register and write the variables to the initial conditions file
+     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                     dim_names, dim_lengths, num_dims, G=G, GV=GV)
+
+   
      if (associated(CS%var_ptr3d(m)%p)) then
         call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
                               dimensions=dim_names(1:num_dims))
