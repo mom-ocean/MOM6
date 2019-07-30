@@ -87,9 +87,9 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(inout) :: h   !< Final layer thickness [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out)   :: uh  !< Zonal volume flux, u*h*dy [H m2 s-1 ~> m3 s-1 or kg s-1].
+                           intent(out)   :: uh  !< Zonal volume flux, u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out)   :: vh  !< Meridional volume flux, v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
+                           intent(out)   :: vh  !< Meridional volume flux, v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment [s].
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -171,7 +171,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
+      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt* US%L_to_m**2*G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   Uncomment this line to prevent underflow.
   !   if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -187,7 +187,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
+      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * US%L_to_m**2*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
       if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -204,7 +204,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
+      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * US%L_to_m**2*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
@@ -217,7 +217,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
+      h(i,j,k) = h(i,j,k) - US%s_to_T*dt* US%L_to_m**2*G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
       ! This line prevents underflow.
       if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -238,7 +238,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                            intent(in)    :: h_in !< Layer thickness used to calculate fluxes [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: uh   !< Volume flux through zonal faces = u*h*dy
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt   !< Time increment [s].
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS), pointer       :: CS   !< This module's control structure.
@@ -348,6 +348,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
         do I=ish-1,ieh
           if (OBC%segment(OBC%segnum_u(I,j))%specified) &
             uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+           ! uh(I,j,k) = US%m_to_L**2*US%T_to_s*OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
         enddo
       endif
     enddo
@@ -536,6 +537,12 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_u, OBC)
     endif
   endif ; endif
+
+  !### Work this into the code above.
+  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+    uh(I,j,k) = US%m_to_L**2*US%T_to_s*uh(I,j,k)
+  enddo ; enddo ; enddo
+
 
 end subroutine zonal_mass_flux
 
@@ -1355,6 +1362,11 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_v, OBC)
     endif
   endif ; endif
+
+  !### Work this into the code above.
+  do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
+    vh(i,J,k) = US%m_to_L**2*US%T_to_s*vh(i,J,k)
+  enddo ; enddo ; enddo
 
 end subroutine meridional_mass_flux
 

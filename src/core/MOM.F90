@@ -156,11 +156,11 @@ type, public :: MOM_control_struct ; private
     S               !< salinity [ppt]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     u,  &           !< zonal velocity component [m s-1]
-    uh, &           !< uh = u * h * dy at u grid points [H m2 s-1 ~> m3 s-1 or kg s-1]
+    uh, &           !< uh = u * h * dy at u grid points [H L2 T-1 ~> m3 s-1 or kg s-1]
     uhtr            !< accumulated zonal thickness fluxes to advect tracers [H L2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     v,  &           !< meridional velocity [m s-1]
-    vh, &           !< vh = v * h * dx at v grid points [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vh, &           !< vh = v * h * dx at v grid points [H L2 T-1 ~> m3 s-1 or kg s-1]
     vhtr            !< accumulated meridional thickness fluxes to advect tracers [H L2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ssh_rint
                     !< A running time integral of the sea surface height [s m].
@@ -492,7 +492,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   call cpu_clock_begin(id_clock_other)
 
   if (CS%debug) then
-    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV)
+    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US)
   endif
 
   showCallTree = callTree_showQuery()
@@ -598,7 +598,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (CS%debug) then
     if (cycle_start) &
-      call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
+      call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US)
     if (cycle_start) call check_redundant("Before steps ", u, v, G)
     if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, US, haloshift=0)
     if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
@@ -1209,7 +1209,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call preAle_tracer_diagnostics(CS%tracer_Reg, G, GV)
 
       if (CS%debug) then
-        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
+        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
         call hchksum(tv%T,"Pre-ALE T", G%HI, haloshift=1)
         call hchksum(tv%S,"Pre-ALE S", G%HI, haloshift=1)
         call check_redundant("Pre-ALE ", u, v, G)
@@ -1236,7 +1236,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
     if (CS%debug .and. CS%use_ALE_algorithm) then
-      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
+      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
       call hchksum(tv%T, "Post-ALE T", G%HI, haloshift=1)
       call hchksum(tv%S, "Post-ALE S", G%HI, haloshift=1)
       call check_redundant("Post-ALE ", u, v, G)

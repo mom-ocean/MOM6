@@ -39,7 +39,7 @@ contains
 ! =============================================================================
 
 !> Write out chksums for the model's basic state variables, including transports.
-subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmetric)
+subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, symmetric)
   character(len=*),                          &
                            intent(in) :: mesg !< A message that appears on the chksum lines.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
@@ -52,10 +52,11 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmet
                            intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: uh   !< Volume flux through zonal faces = u*h*dy
-                                              !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in) :: vh   !< Volume flux through meridional faces = v*h*dx
-                                              !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                    !! computationoal domain.
@@ -72,7 +73,7 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmet
   call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym)
   call hchksum(h, mesg//" h", G%HI, haloshift=hs, scale=GV%H_to_m)
   call uvchksum(mesg//" [uv]h", uh, vh, G%HI, haloshift=hs, &
-                symmetric=sym, scale=GV%H_to_m)
+                symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================

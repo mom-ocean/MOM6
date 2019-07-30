@@ -254,10 +254,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                                                                    !! time step [Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                              target, intent(inout) :: uh           !< zonal volume/mass transport
-                                                                   !! [H m2 s-1 ~> m3 s-1 or kg s-1]
+                                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                              target, intent(inout) :: vh           !< merid volume/mass transport
-                                                                   !! [H m2 s-1 ~> m3 s-1 or kg s-1]
+                                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                                      intent(inout) :: uhtr         !< accumulatated zonal volume/mass transport
                                                                    !! since last tracer advection [H L2 ~> m3 or kg]
@@ -290,7 +290,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: uh_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: vh_in
     ! uh_in and vh_in are the zonal or meridional mass transports that would be
-    ! obtained using the initial velocities [H m2 s-1 ~> m3 s-1 or kg s-1].
+    ! obtained using the initial velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
 
   real, dimension(SZIB_(G),SZJ_(G)) :: uhbt_out
   real, dimension(SZI_(G),SZJB_(G)) :: vhbt_out
@@ -355,7 +355,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
 
   if (CS%debug) then
-    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, symmetric=sym)
+    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
     call check_redundant("Start predictor u ", u, v, G)
     call check_redundant("Start predictor uh ", uh, vh, G)
   endif
@@ -568,11 +568,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym)
     call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, scale=GV%H_to_m)
     call uvchksum("Predictor 1 [uv]h", uh, vh, G%HI,haloshift=2, &
-                  symmetric=sym, scale=GV%H_to_m)
-!   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
+                  symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+!   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
-    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, haloshift=2, &
+    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, US, haloshift=2, &
                           symmetric=sym)
     call check_redundant("Predictor 1 up", up, vp, G)
     call check_redundant("Predictor 1 uh", uh, vh, G)
@@ -678,10 +678,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, symmetric=sym)
+    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, US, symmetric=sym)
     call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
     call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_m)
-  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV)
+  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
   endif
@@ -772,8 +772,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0, symmetric=sym)
     call hchksum(h, "Corrector 1 h", G%HI, haloshift=2, scale=GV%H_to_m)
     call uvchksum("Corrector 1 [uv]h", uh, vh, G%HI, haloshift=2, &
-                  symmetric=sym, scale=GV%H_to_m)
-  ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
+                  symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+  ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
                           symmetric=sym)
@@ -843,10 +843,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(I,j,k) = uhtr(I,j,k) + US%m_to_L**2*uh(I,j,k)*dt
+      uhtr(I,j,k) = uhtr(I,j,k) + uh(I,j,k)*US%s_to_T*dt
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,J,k) = vhtr(i,J,k) + US%m_to_L**2*vh(i,J,k)*dt
+      vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*US%s_to_T*dt
     enddo ; enddo
   enddo
 
@@ -869,10 +869,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, symmetric=sym)
+    call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
     call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1, symmetric=sym)
     call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, scale=GV%H_to_m)
- !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
+ !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
   endif
 
   if (showCallTree) call callTree_leave("step_MOM_dyn_split_RK2()")
@@ -889,9 +889,9 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
   type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), &
-                         target, intent(inout) :: uh !< zonal volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
+                         target, intent(inout) :: uh !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
-                         target, intent(inout) :: vh !< merid volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
+                         target, intent(inout) :: vh !< merid volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
   type(vardesc)      :: vd
   character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
@@ -973,9 +973,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                     intent(inout) :: v          !< merid velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            target, intent(inout) :: uh !< zonal volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
+                            target, intent(inout) :: uh    !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            target, intent(inout) :: vh !< merid volume/mass transport [H m2 s-1 ~> m3 s-1 or kg s-1]
+                            target, intent(inout) :: vh    !< merid volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: eta        !< free surface height or column mass [H ~> m or kg m-2]
   type(time_type),          target, intent(in)    :: Time       !< current model time
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
@@ -1172,8 +1172,11 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       H_rescale = GV%m_to_H / GV%m_to_H_restart
       do k=1,nz ; do j=js,je ; do i=is,ie ; CS%h_av(i,j,k) = H_rescale * CS%h_av(i,j,k) ; enddo ; enddo ; enddo
     endif
-    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
-      uH_rescale = GV%m_to_H / GV%m_to_H_restart
+    if ( (GV%m_to_H_restart * US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+         ((GV%m_to_H * US%m_to_L**2 * US%s_to_T_restart) /= &
+          (GV%m_to_H_restart * US%m_to_L_restart**2 * US%s_to_T)) ) then
+      uH_rescale = (GV%m_to_H * US%m_to_L**2 * US%s_to_T_restart) / &
+                   (GV%m_to_H_restart * US%m_to_L_restart**2 * US%s_to_T)
       do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB ; uh(I,j,k) = uH_rescale * uh(I,j,k) ; enddo ; enddo ; enddo
       do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie ; vh(i,J,k) = uH_rescale * vh(i,J,k) ; enddo ; enddo ; enddo
     endif
@@ -1190,10 +1193,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'm s-2')

@@ -203,9 +203,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(:,:),    pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the surface
                                                    !! pressure at the end of this dynamic step [Pa].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
-                                                   !! [H m2 s-1 ~> m3 or kg s-1].
+                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh !< The meridional volume or mass
-                                                   !! transport [H m2 s-1 ~> m3 or kg s-1].
+                                                   !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or mass
                                                    !! transport since the last tracer advection [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume or mass
@@ -249,7 +249,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! all of the fields except h.  h is stepped separately.
 
   if (CS%debug) then
-    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV)
+    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV, US)
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
@@ -289,10 +289,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       v(i,J,k) = v(i,J,k) + dt * US%s_to_T*CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*US%m_to_L**2*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*US%s_to_T*dt*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*US%m_to_L**2*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*US%s_to_T*dt*vh(i,j,k)
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -334,7 +334,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV)
+    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US)
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -402,7 +402,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV)
+    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV, US)
     call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -441,10 +441,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*US%m_to_L**2*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*US%s_to_T*dt*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*US%m_to_L**2*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*US%s_to_T*dt*vh(i,j,k)
     enddo ; enddo
   enddo
 
@@ -487,7 +487,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV)
+    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV, US)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -670,10 +670,10 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &

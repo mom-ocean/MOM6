@@ -115,9 +115,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< Meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh !< Zonal transport u*h*dy
-                                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1]
+                                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh !< Meridional transport v*h*dx
-                                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1]
+                                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu !< Zonal acceleration due to Coriolis
                                                                   !! and momentum advection [m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
@@ -148,17 +148,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
                 ! times the effective areas [H m2 ~> m3 or kg].
     KEx, &      ! The zonal gradient of Kinetic energy per unit mass [m s-2],
                 ! KEx = d/dx KE.
-    uh_center   ! Transport based on arithmetic mean h at u-points [H m2 s-1 ~> m3 s-1 or kg s-1]
+    uh_center   ! Transport based on arithmetic mean h at u-points [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
     hArea_v, &  ! The cell area weighted thickness interpolated to v points
                 ! times the effective areas [H m2 ~> m3 or kg].
     KEy, &      ! The meridonal gradient of Kinetic energy per unit mass [m s-2],
                 ! KEy = d/dy KE.
-    vh_center   ! Transport based on arithmetic mean h at v-points [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vh_center   ! Transport based on arithmetic mean h at v-points [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     uh_min, uh_max, &   ! The smallest and largest estimates of the volume
     vh_min, vh_max, &   ! fluxes through the faces (i.e. u*h*dy & v*h*dx)
-                        ! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                        ! [H L2 T-1 ~> m3 s-1 or kg s-1].
     ep_u, ep_v  ! Additional pseudo-Coriolis terms in the Arakawa and Lamb
                 ! discretization [H-1 s-1 ~> m-1 s-1 or m2 kg-1 s-1].
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -189,8 +189,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   real :: temp1, temp2           ! Temporary variables [m2 s-2].
   real, parameter :: eps_vel=1.0e-10 ! A tiny, positive velocity [m s-1].
 
-  real :: uhc, vhc               ! Centered estimates of uh and vh [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real :: uhm, vhm               ! The input estimates of uh and vh [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real :: uhc, vhc               ! Centered estimates of uh and vh [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: uhm, vhm               ! The input estimates of uh and vh [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: c1, c2, c3, slope      ! Nondimensional parameters for the Coriolis limiter scheme.
 
   real :: Fe_m2         ! Nondimensional temporary variables asssociated with
@@ -206,8 +206,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   real :: Heff1, Heff2  ! Temporary effective H at U or V points [H ~> m or kg m-2].
   real :: Heff3, Heff4  ! Temporary effective H at U or V points [H ~> m or kg m-2].
   real :: h_tiny        ! A very small thickness [H ~> m or kg m-2].
-  real :: UHeff, VHeff  ! More temporary variables [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real :: QUHeff,QVHeff ! More temporary variables [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real :: UHeff, VHeff  ! More temporary variables [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: QUHeff,QVHeff ! More temporary variables [H L2 T-1 s-1 ~> m3 s-2 or kg s-2].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
 ! To work, the following fields must be set outside of the usual
@@ -273,10 +273,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     enddo ; enddo
     if (CS%Coriolis_En_Dis) then
       do j=Jsq,Jeq+1 ; do I=is-1,ie
-        uh_center(I,j) = 0.5 * (G%dy_Cu(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
+        uh_center(I,j) = 0.5 * (US%m_to_L*G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo
       do J=js-1,je ; do i=Isq,Ieq+1
-        vh_center(i,J) = 0.5 * (G%dx_Cv(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
+        vh_center(i,J) = 0.5 * (US%m_to_L*G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
     endif
 
@@ -319,9 +319,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         if (CS%Coriolis_En_Dis) then
           do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
             if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-              vh_center(i,J) = G%dx_Cv(i,J) * v(i,J,k) * h(i,j,k)
+              vh_center(i,J) = US%m_to_L*G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k) * h(i,j,k)
             else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-              vh_center(i,J) = G%dx_Cv(i,J) * v(i,J,k) * h(i,j+1,k)
+              vh_center(i,J) = US%m_to_L*G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k) * h(i,j+1,k)
             endif
           enddo
         endif
@@ -358,9 +358,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         if (CS%Coriolis_En_Dis) then
           do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
             if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-              uh_center(I,j) = G%dy_Cu(I,j) * u(I,j,k) * h(i,j,k)
+              uh_center(I,j) = US%m_to_L*G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k) * h(i,j,k)
             else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-              uh_center(I,j) = G%dy_Cu(I,j) * u(I,j,k) * h(i+1,j,k)
+              uh_center(I,j) = US%m_to_L*G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k) * h(i+1,j,k)
             endif
           enddo
         endif
@@ -590,19 +590,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           else
             temp2 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
           endif
-          CAu(I,j,k) = 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
+          CAu(I,j,k) = US%L_T_to_m_s*0.25 * US%L_to_m*G%IdxCu(I,j) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do j=js,je ; do I=Isq,Ieq
-          CAu(I,j,k) = 0.25 * &
+          CAu(I,j,k) = 0.25 * US%L_T_to_m_s * &
             (q(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
+             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * US%L_to_m*G%IdxCu(I,j)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
+        CAu(I,j,k) = 0.125 * US%L_T_to_m_s * (US%L_to_m*G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
                      ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -610,48 +610,48 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
       do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = ((a(I,j) * vh(i+1,J,k) + &
+        CAu(I,j,k) = US%L_T_to_m_s*((a(I,j) * vh(i+1,J,k) + &
                        c(I,j) * vh(i,J-1,k))  &
                     + (b(I,j) * vh(i,J,k) +   &
-                       d(I,j) * vh(i+1,J-1,k))) * G%IdxCu(I,j)
+                       d(I,j) * vh(i+1,J-1,k))) * US%L_to_m*G%IdxCu(I,j)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_v that should be returned by the
       !       continuity solver. AJA
       do j=js,je ; do I=Isq,Ieq
-        Heff1 = abs(vh(i,J,k)*G%IdxCv(i,J))/(eps_vel+abs(v(i,J,k)))
-        Heff1 = max(Heff1,min(h(i,j,k),h(i,j+1,k)))
-        Heff1 = min(Heff1,max(h(i,j,k),h(i,j+1,k)))
-        Heff2 = abs(vh(i,J-1,k)*G%IdxCv(i,J-1))/(eps_vel+abs(v(i,J-1,k)))
-        Heff2 = max(Heff2,min(h(i,j-1,k),h(i,j,k)))
-        Heff2 = min(Heff2,max(h(i,j-1,k),h(i,j,k)))
-        Heff3 = abs(vh(i+1,J,k)*G%IdxCv(i+1,J))/(eps_vel+abs(v(i+1,J,k)))
-        Heff3 = max(Heff3,min(h(i+1,j,k),h(i+1,j+1,k)))
-        Heff3 = min(Heff3,max(h(i+1,j,k),h(i+1,j+1,k)))
-        Heff4 = abs(vh(i+1,J-1,k)*G%IdxCv(i+1,J-1))/(eps_vel+abs(v(i+1,J-1,k)))
-        Heff4 = max(Heff4,min(h(i+1,j-1,k),h(i+1,j,k)))
-        Heff4 = min(Heff4,max(h(i+1,j-1,k),h(i+1,j,k)))
+        Heff1 = abs(vh(i,J,k) * US%L_to_m*G%IdxCv(i,J)) / (US%m_s_to_L_T*(eps_vel+abs(v(i,J,k))))
+        Heff1 = max(Heff1, min(h(i,j,k),h(i,j+1,k)))
+        Heff1 = min(Heff1, max(h(i,j,k),h(i,j+1,k)))
+        Heff2 = abs(vh(i,J-1,k) * US%L_to_m*G%IdxCv(i,J-1)) / (US%m_s_to_L_T*(eps_vel+abs(v(i,J-1,k))))
+        Heff2 = max(Heff2, min(h(i,j-1,k),h(i,j,k)))
+        Heff2 = min(Heff2, max(h(i,j-1,k),h(i,j,k)))
+        Heff3 = abs(vh(i+1,J,k) * US%L_to_m*G%IdxCv(i+1,J)) / (US%m_s_to_L_T*(eps_vel+abs(v(i+1,J,k))))
+        Heff3 = max(Heff3, min(h(i+1,j,k),h(i+1,j+1,k)))
+        Heff3 = min(Heff3, max(h(i+1,j,k),h(i+1,j+1,k)))
+        Heff4 = abs(vh(i+1,J-1,k) * US%L_to_m*G%IdxCv(i+1,J-1)) / (US%m_s_to_L_T*(eps_vel+abs(v(i+1,J-1,k))))
+        Heff4 = max(Heff4, min(h(i+1,j-1,k),h(i+1,j,k)))
+        Heff4 = min(Heff4, max(h(i+1,j-1,k),h(i+1,j,k)))
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
-          CAu(I,j,k) = 0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
+          CAu(I,j,k) = US%L_T_to_m_s*0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
                        ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                         (vh(i  ,J-1,k)+vh(i+1,J  ,k)) ) /    &
-                       (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(I,j)
+                       (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * US%L_to_m*G%IdxCu(I,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           VHeff = ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                    (vh(i  ,J-1,k)+vh(i+1,J  ,k)) )
           QVHeff = 0.5*( (abs_vort(I,J)+abs_vort(I,J-1))*VHeff &
                         -(abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff) )
-          CAu(I,j,k) = QVHeff / &
-                     (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(I,j)
+          CAu(I,j,k) = US%L_T_to_m_s*QVHeff / &
+                     (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * US%L_to_m*G%IdxCu(I,j)
         endif
       enddo ; enddo
     endif
     ! Add in the additonal terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do j=js,je ; do I=Isq,Ieq
-      CAu(I,j,k) = CAu(I,j,k) + &
-            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IdxCu(I,j)
+      CAu(I,j,k) = CAu(I,j,k) + US%L_T_to_m_s * &
+            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * US%L_to_m*G%IdxCu(I,j)
     enddo ; enddo ; endif
 
 
@@ -699,19 +699,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           else
             temp2 = q(I,J) * (uh_min(i,j)+uh_min(i,j+1))
           endif
-          CAv(i,J,k) = - 0.25 * G%IdyCv(i,J) * (temp1 + temp2)
+          CAv(i,J,k) = -0.25 * US%L_T_to_m_s*US%L_to_m*G%IdyCv(i,J) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do J=Jsq,Jeq ; do i=is,ie
-          CAv(i,J,k) = - 0.25* &
+          CAv(i,J,k) = - 0.25* US%L_T_to_m_s*&
               (q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
+               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * US%L_to_m*G%IdyCv(i,J)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
+        CAv(i,J,k) = -0.125 * US%L_T_to_m_s*(US%L_to_m*G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
                      ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -719,48 +719,48 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
       do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = - ((a(I-1,j)   * uh(I-1,j,k) + &
+        CAv(i,J,k) = - US%L_T_to_m_s*((a(I-1,j)   * uh(I-1,j,k) + &
                          c(I,j+1)   * uh(I,j+1,k))  &
                       + (b(I,j)     * uh(I,j,k) +   &
-                         d(I-1,j+1) * uh(I-1,j+1,k))) * G%IdyCv(i,J)
+                         d(I-1,j+1) * uh(I-1,j+1,k))) * US%L_to_m*G%IdyCv(i,J)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_u that should be returned by the
       !       continuity solver. AJA
       do J=Jsq,Jeq ; do i=is,ie
-        Heff1 = abs(uh(I,j,k)*G%IdyCu(I,j))/(eps_vel+abs(u(I,j,k)))
-        Heff1 = max(Heff1,min(h(i,j,k),h(i+1,j,k)))
-        Heff1 = min(Heff1,max(h(i,j,k),h(i+1,j,k)))
-        Heff2 = abs(uh(I-1,j,k)*G%IdyCu(I-1,j))/(eps_vel+abs(u(I-1,j,k)))
-        Heff2 = max(Heff2,min(h(i-1,j,k),h(i,j,k)))
-        Heff2 = min(Heff2,max(h(i-1,j,k),h(i,j,k)))
-        Heff3 = abs(uh(I,j+1,k)*G%IdyCu(I,j+1))/(eps_vel+abs(u(I,j+1,k)))
-        Heff3 = max(Heff3,min(h(i,j+1,k),h(i+1,j+1,k)))
-        Heff3 = min(Heff3,max(h(i,j+1,k),h(i+1,j+1,k)))
-        Heff4 = abs(uh(I-1,j+1,k)*G%IdyCu(I-1,j+1))/(eps_vel+abs(u(I-1,j+1,k)))
-        Heff4 = max(Heff4,min(h(i-1,j+1,k),h(i,j+1,k)))
-        Heff4 = min(Heff4,max(h(i-1,j+1,k),h(i,j+1,k)))
+        Heff1 = abs(uh(I,j,k) * US%L_to_m*G%IdyCu(I,j)) / (US%m_s_to_L_T*(eps_vel+abs(u(I,j,k))))
+        Heff1 = max(Heff1, min(h(i,j,k),h(i+1,j,k)))
+        Heff1 = min(Heff1, max(h(i,j,k),h(i+1,j,k)))
+        Heff2 = abs(uh(I-1,j,k) * US%L_to_m*G%IdyCu(I-1,j)) / (US%m_s_to_L_T*(eps_vel+abs(u(I-1,j,k))))
+        Heff2 = max(Heff2, min(h(i-1,j,k),h(i,j,k)))
+        Heff2 = min(Heff2, max(h(i-1,j,k),h(i,j,k)))
+        Heff3 = abs(uh(I,j+1,k) * US%L_to_m*G%IdyCu(I,j+1)) / (US%m_s_to_L_T*(eps_vel+abs(u(I,j+1,k))))
+        Heff3 = max(Heff3, min(h(i,j+1,k),h(i+1,j+1,k)))
+        Heff3 = min(Heff3, max(h(i,j+1,k),h(i+1,j+1,k)))
+        Heff4 = abs(uh(I-1,j+1,k) * US%L_to_m*G%IdyCu(I-1,j+1)) / (US%m_s_to_L_T*(eps_vel+abs(u(I-1,j+1,k))))
+        Heff4 = max(Heff4, min(h(i-1,j+1,k),h(i,j+1,k)))
+        Heff4 = min(Heff4, max(h(i-1,j+1,k),h(i,j+1,k)))
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
-          CAv(i,J,k) = - 0.5*(abs_vort(I,J)+abs_vort(I-1,J)) * &
+          CAv(i,J,k) = - 0.5*US%L_T_to_m_s*(abs_vort(I,J)+abs_vort(I-1,J)) * &
                          ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                           (uh(I-1,j  ,k)+uh(I  ,j+1,k)) ) /    &
-                      (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
+                      (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * US%L_to_m*G%IdyCv(i,J)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           UHeff = ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                    (uh(I-1,j  ,k)+uh(I  ,j+1,k)) )
           QUHeff = 0.5*( (abs_vort(I,J)+abs_vort(I-1,J))*UHeff &
                         -(abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff) )
-          CAv(i,J,k) = - QUHeff / &
-                       (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
+          CAv(i,J,k) = - US%L_T_to_m_s*QUHeff / &
+                       (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * US%L_to_m*G%IdyCv(i,J)
         endif
       enddo ; enddo
     endif
     ! Add in the additonal terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do J=Jsq,Jeq ; do i=is,ie
-      CAv(i,J,k) = CAv(i,J,k) + &
-            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * G%IdyCv(i,J)
+      CAv(i,J,k) = CAv(i,J,k) + US%L_T_to_m_s * &
+            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * US%L_to_m*G%IdyCv(i,J)
     enddo ; enddo ; endif
 
     if (CS%bound_Coriolis) then
@@ -788,7 +788,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
+               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * US%L_to_m*G%IdyCv(i,J)
           enddo ; enddo
         endif
 
@@ -796,13 +796,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
-               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
+               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * US%L_to_m*G%IdxCu(I,j)
           enddo ; enddo
         endif
       else
         if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
+            AD%rv_x_u(i,J,k) = -US%L_to_m*G%IdyCv(i,J) * C1_12 * &
               ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * uh(I,j,k) + &
                (q2(I-1,J) + q2(I,J+1) + q2(I,J)) * uh(I,j+1,k) + &
@@ -812,7 +812,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 
         if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
-            AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
+            AD%rv_x_v(I,j,k) = US%L_to_m*G%IdxCu(I,j) * C1_12 * &
               ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * vh(i,J,k) + &
                (q2(I-1,J-1) + q2(I,J) + q2(I,J-1)) * vh(i,J-1,k) + &

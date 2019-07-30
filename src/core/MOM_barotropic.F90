@@ -446,10 +446,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(:,:),                optional, pointer :: tauy_bot     !< The meridional bottom frictional stress
                                                          !! from ocean to the seafloor [Pa].
   real, dimension(:,:,:),              optional, pointer :: uh0     !< The zonal layer transports at reference
-                                                                    !! velocities [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+                                                                    !! velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(:,:,:),              optional, pointer :: u_uh0   !< The velocities used to calculate uh0 [m s-1]
   real, dimension(:,:,:),              optional, pointer :: vh0     !< The zonal layer transports at reference
-                                                                    !! velocities [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+                                                                    !! velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(:,:,:),              optional, pointer :: v_vh0   !< The velocities used to calculate vh0 [m s-1]
 
   ! Local variables
@@ -1026,23 +1026,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%visc_rem_u_uh0) then
       !$OMP parallel do default(shared)
       do j=js,je ; do k=1,nz ; do I=is-1,ie
-        uhbt(I,j) = uhbt(I,j) + US%T_to_s*US%m_to_L**2*uh0(I,j,k)
+        uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
         ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * US%m_s_to_L_T*u_uh0(I,j,k)
       enddo ; enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do k=1,nz ; do i=is,ie
-        vhbt(i,J) = vhbt(i,J) + US%T_to_s*US%m_to_L**2*vh0(i,J,k)
+        vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
         vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * US%m_s_to_L_T*v_vh0(i,J,k)
       enddo ; enddo ; enddo
     else
       !$OMP parallel do default(shared)
       do j=js,je ; do k=1,nz ; do I=is-1,ie
-        uhbt(I,j) = uhbt(I,j) + US%T_to_s*US%m_to_L**2*uh0(I,j,k)
+        uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
         ubt(I,j) = ubt(I,j) + CS%frhatu(I,j,k) * US%m_s_to_L_T*u_uh0(I,j,k)
       enddo ; enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do k=1,nz ; do i=is,ie
-        vhbt(i,J) = vhbt(i,J) + US%T_to_s*US%m_to_L**2*vh0(i,J,k)
+        vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
         vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * US%m_s_to_L_T*v_vh0(i,J,k)
       enddo ; enddo ; enddo
     endif

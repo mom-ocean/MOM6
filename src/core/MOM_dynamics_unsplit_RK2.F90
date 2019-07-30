@@ -213,9 +213,9 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! the surface pressure at the end of
                                                               !! this dynamic step [Pa].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
-                                                              !! [H m2 s-1 ~> m3 or kg s-1].
+                                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh  !< The meridional volume or mass
-                                                              !! transport [H m2 s-1 ~> m3 or kg s-1].
+                                                              !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or
                                                               !! mass transport since the last
                                                               !! tracer advection [H L2 ~> m3 or kg].
@@ -260,7 +260,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! all of the fields except h.  h is stepped separately.
 
   if (CS%debug) then
-    call MOM_state_chksum("Start Predictor ", u_in, v_in, h_in, uh, vh, G, GV)
+    call MOM_state_chksum("Start Predictor ", u_in, v_in, h_in, uh, vh, G, GV, US)
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
@@ -363,7 +363,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   enddo ; enddo ; enddo
 
   if (CS%debug) &
-    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV)
+    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US)
 
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)  (function of up[n-1/2], h[n-1/2])
   call cpu_clock_begin(id_clock_Cor)
@@ -418,15 +418,15 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! Accumulate mass flux for tracer transport
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(I,j,k) = uhtr(I,j,k) + dt*US%m_to_L**2*uh(I,j,k)
+      uhtr(I,j,k) = uhtr(I,j,k) + US%s_to_T*dt*uh(I,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,J,k) = vhtr(i,J,k) + dt*US%m_to_L**2*vh(i,J,k)
+      vhtr(i,J,k) = vhtr(i,J,k) + US%s_to_T*dt*vh(i,J,k)
     enddo ; enddo
   enddo
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector", u_in, v_in, h_in, uh, vh, G, GV)
+    call MOM_state_chksum("Corrector", u_in, v_in, h_in, uh, vh, G, GV, US)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -629,10 +629,10 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &

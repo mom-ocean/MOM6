@@ -195,10 +195,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: uh   !< Transport through zonal faces = u*h*dy,
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: vh   !< Transport through meridional faces = v*h*dx,
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< structure with pointers to
@@ -506,13 +506,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%uh_Rlay(I,j,k) = 0.0
         enddo ; enddo
         do k=nkmb+1,nz ; do I=Isq,Ieq
-          CS%uh_Rlay(I,j,k) = uh(I,j,k)
+          CS%uh_Rlay(I,j,k) = US%L_to_m**2*US%s_to_T*uh(I,j,k)
         enddo ; enddo
         k_list = nz/2
         do k=1,nkmb ; do I=Isq,Ieq
           call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
-          CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
-          CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
+          CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + US%L_to_m**2*US%s_to_T*uh(I,j,k)*wt
+          CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + US%L_to_m**2*US%s_to_T*uh(I,j,k)*wt_p
         enddo ; enddo
       enddo
 
@@ -528,12 +528,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%vh_Rlay(i,J,k) = 0.0
         enddo ; enddo
         do k=nkmb+1,nz ; do i=is,ie
-          CS%vh_Rlay(i,J,k) = vh(i,J,k)
+          CS%vh_Rlay(i,J,k) = US%L_to_m**2*US%s_to_T*vh(i,J,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
           call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
-          CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + vh(i,J,k)*wt
-          CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + vh(i,J,k)*wt_p
+          CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + US%L_to_m**2*US%s_to_T*vh(i,J,k)*wt
+          CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + US%L_to_m**2*US%s_to_T*vh(i,J,k)*wt_p
         enddo ; enddo
       enddo
 
@@ -889,10 +889,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: uh   !< Transport through zonal faces=u*h*dy,
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: vh   !< Transport through merid faces=v*h*dx,
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(accel_diag_ptrs),   intent(in)    :: ADp  !< Structure pointing to accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< Structure pointing to terms in continuity equations.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -936,10 +936,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
+        KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
+        KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k)*CS%dh_dt(i,j,k)
@@ -957,10 +957,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%PE_to_KE)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%PFu(I,j,k)
+        KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%PFu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%PFv(i,J,k)
+        KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%PFv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -975,14 +975,14 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_CorAdv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%CAu(I,j,k)
+        KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%CAu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%CAv(i,J,k)
+        KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
-            (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
+            US%L_to_m**2*US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1002,15 +1002,15 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         if (G%mask2dCu(i,j) /= 0.) &
-          KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
+          KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         if (G%mask2dCv(i,j) /= 0.) &
-          KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
+          KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
-            (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
+            US%L_to_m**2*US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1025,10 +1025,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_visc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_visc(I,j,k)
+        KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_visc(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_visc(i,J,k)
+        KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_visc(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1043,10 +1043,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_horvisc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*US%s_to_T*ADp%diffu(I,j,k)
+        KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*US%s_to_T*ADp%diffu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*US%s_to_T*ADp%diffv(i,J,k)
+        KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*US%s_to_T*ADp%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1061,10 +1061,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_dia)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
+        KE_u(I,j) = US%L_to_m**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
+        KE_v(i,J) = US%L_to_m**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k) * &
