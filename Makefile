@@ -81,7 +81,8 @@ DOUBLE_GYRE_URL=https://github.com/marshallward/double_gyre_test
 
 test: experiments/double_gyre
 	cd $< && mkdir -p RESTART && mpirun -n 1 ../../MOM6
-	bash <(curl -s https://codecov.io/bash) -n $(notdir $<)
+	curl -s https://codecov.io/bash > codecov.sh
+	bash codecov.bash -n $(notdir $<)
 
 experiments/double_gyre:
 	git clone $(DOUBLE_GYRE_URL) $@
