@@ -1288,8 +1288,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       if (k==1) then
         do j=js,je ; do i=is,ie
           MEKE%mom_src(i,j) = 0.
-          MEKE%GME_snk(i,j) = 0.
         enddo ; enddo
+        if (associated(MEKE%GME_snk)) then
+          do j=js,je ; do i=is,ie
+            MEKE%GME_snk(i,j) = 0.
+          enddo ; enddo
+        endif
       endif
       if (MEKE%backscatter_Ro_c /= 0.) then
         do j=js,je ; do i=is,ie
