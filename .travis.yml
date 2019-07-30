@@ -17,7 +17,7 @@ addons:
 stages:
   - check and compile
   - tests
-  - cleanup
+  #- cleanup
 
 cache:
   directories:
@@ -28,7 +28,8 @@ cache:
 # so that they can remain hidden from users.
 install:
   - echo "Install step"
-  - cp .testing/{configure,Makefile} .
+    #- cp .testing/{configure,Makefile} .
+  - cp .testing/configure .
 
 before_script:
   - ls -l
@@ -56,20 +57,24 @@ jobs:
       - cd docs && doxygen Doxyfile_nortd
       - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
       - test ! -s  doxy_errors
-    - &compile-code
-      stage: check and compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+    - stage: check and compile
+      env: JOB="Compile"
       script:
-      - make $MAKEARGS compile
-      - touch build/comp_${MAKEARGS//\ /_}
-    - <<: *compile-code
-      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-    - <<: *compile-code
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
-    - <<: *compile-code
-      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
-#   - <<: *compile-code
-#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
+        - make
+#    - &compile-code
+#      stage: check and compile
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+#      script:
+#      - make $MAKEARGS compile
+#      - touch build/comp_${MAKEARGS//\ /_}
+#    - <<: *compile-code
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
+#    - <<: *compile-code
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
+#    - <<: *compile-code
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
+##   - <<: *compile-code
+##     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
 
     # Run tests ################################################################
     # The default "test" job is automatically invoked for each of the matrix environments
@@ -77,35 +82,39 @@ jobs:
 #   - stage: tests
 #     script:
 #     - echo "Placeholder for generic text using blank environment"
-    - &compile
-      stage: tests
+    - stage: tests
       env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
       script:
-      - ./configure && make -j && make test
-    - <<: *compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-    - <<: *compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
-    - <<: *compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
-#   - <<: *compile
-#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
+        - make test
+#    - &compile
+#      stage: tests
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+#      script:
+#      - ./configure && make -j && make test
+#    - <<: *compile
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
+#    - <<: *compile
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
+#    - <<: *compile
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
+##   - <<: *compile
+##     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
 
-    # Clean up #################################################################
-    # We only want the cache directory to exist between stages so we manually
-    # clean out the cache, i.e. build/
-    - &clean-build
-      stage: cleanup
-      script:
-      #- rm -rf build/*
-      - ls -l
-#   - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-    - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-    - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
-    - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
-#   - <<: *clean-build
-#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
+#    # Clean up #################################################################
+#    # We only want the cache directory to exist between stages so we manually
+#    # clean out the cache, i.e. build/
+#    - &clean-build
+#      stage: cleanup
+#      script:
+#      #- rm -rf build/*
+#      - ls -l
+##   - <<: *clean-build
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+#    - <<: *clean-build
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
+#    - <<: *clean-build
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
+#    - <<: *clean-build
+#      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
+##   - <<: *clean-build
+##     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
