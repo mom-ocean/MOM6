@@ -35,10 +35,14 @@ use MOM_forcing_type,         only : forcing, mech_forcing
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
-use MOM_io,                   only : slasher, file_exists, MOM_read_data
+use MOM_io,                   only : slasher, file_exists
 use MOM_io,                   only : MOM_open_file, MOM_close_file
-use MOM_io,                   only : MOM_write_IC
+use MOM_io,                   only : MOM_get_axis_data, get_time_units
+use MOM_io,                   only : get_var_dimension_features, get_horizontal_grid_position
+use MOM_io,                   only : MOM_read_data, MOM_write_data
+use MOM_io,                   only : MOM_register_axis, MOM_register_variable_attribute
 use MOM_io,                   only : FmsNetcdfDomainFile_t
+use MOM_io,                   only : axis_data_type
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -2486,6 +2490,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
 
   ! Pointers for convenience
   G => CS%G ; GV => CS%GV ; US => CS%US
+  
 
   !### Move to initialize_MOM?
   call fix_restart_scaling(GV)
@@ -2495,15 +2500,18 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
+    
+    ! register eta to the temporary control structure for the IC data
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
-    ! TODO, replace CS%v with temporary target
-    call register_restart_field(CS%v, "eta", .true., restart_CSp_tmp, &
+   
+    target_tmp3d = z_interface
+    call register_restart_field(target_tmp3d, "eta", .true., restart_CSp_tmp, &
                               z_grid='i', longname="Interface heights", units="meter")
+
     !call MOM_write_IC(dirs%output_directory, CS%IC_file, "eta", z_interface, .true., G, GV, & 
     !                  Time, z_grid='i', longname="Interface heights", units="meter")
-    call MOM_write_IC(dirs%output_directory, CS%IC_file, restart_CSp_tmp, G, GV, &
-                      Time)
+    call write_initial_conditions(dirs%output_directory, CS%IC_file, restart_CSp_tmp, G, GV,Time)
     
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
@@ -2546,6 +2554,207 @@ subroutine register_diags(Time, G, GV, IDs, diag)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
       Time, 'Instantaneous Sea Surface Height', 'm')
 end subroutine register_diags
+
+!> write initial condition fields to a netCDF file
+subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
+  character(len=*),         intent(in) :: directory !< full path of the directory containing the file
+  character(len=*),         intent(in) :: filename  !< name of the file
+  type(MOM_restart_CS),     pointer    :: CS        !< The control structure returned by a previous
+                                                    !! call to restart_init.
+  type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in) :: GV        !< ocean vertical grid structure
+  type(time_type),          intent(in) :: time      !< model time                        
+  
+  ! local
+  type(vardesc) :: vd ! structure for variable metadata
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to MOM_open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
+  integer :: substring_index
+  integer :: name_length
+  integer :: num_dims ! counter for variable dimensions
+  integer :: total_axes
+  integer :: i, is, ie, k, m
+  integer :: var_periods
+  integer :: horgrid_position = 1
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success = .false.
+  logical :: axis_exists = .false.
+  logical :: variable_exists =.false.
+  character(len=200) :: base_file_name
+  character(len=200) :: dim_names(4)
+  character(len=20) :: time_units
+  character(len=20) :: t_grid_read, t_grid_str
+  character(len=64) :: units
+  character(len=256) :: longname
+  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
+  real :: ic_time
+  real, dimension(:), allocatable :: time_vals
+  real, dimension(:), allocatable :: data_temp
+
+  ! append '.nc' to the restart file name if it is missing
+  ! @TODO: require users to specify full file path including the file name appendix
+  ! in calls to MOM_open_file
+  substring_index = index('.nc', trim(filename))
+  if (substring_index <= 0) then
+      base_file_name = append_substring(trim(directory)//trim(filename),'.nc')
+  else
+      name_length = len(trim(directory)//trim(filename))
+      base_file_name(1:name_length) = trim(directory)//trim(filename)
+  endif
+  
+  ! get the time units
+  ic_time = time_type_to_real(time) / 86400.0
+  time_units = get_time_units(ic_time*86400.0)
+  if (.not.(allocated(time_vals))) then
+     t_grid_str = ''
+     t_grid_str = adjustl(vd%t_grid)
+     select case (t_grid_str(1:1))
+           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
+              allocate(time_vals(1))
+              time_vals(1) = ic_time
+           case ('p')
+              if (len_trim(t_grid(2:8)) > 0) then
+                 var_periods = -1
+                 t_grid_read = ''
+                 t_grid_read = adjustl(t_grid(2:8))
+                 read(t_grid_read,*) var_periods
+                 if (var_periods < 1) then 
+                     call MOM_error(FATAL, "MOM_io::write_IC_data_4d: "//&
+                                   "Period value must be positive.")
+                 endif
+                 ! Define a periodic axis array
+                 allocate(time_vals(var_periods))
+                 do k=1,var_periods
+                    time_vals(k) = real(k)
+                 enddo
+              endif
+     end select
+  endif
+
+  ! open the netCDF file
+  file_open_success = MOM_open_file(fileObjWrite, base_file_name, "write", G, .false.)
+  
+  if (.not. (file_open_success)) then
+     call MOM_error(FATAL,"MOM_io::write_IC_data: Failed to open file "//trim(base_file_name))
+  endif
+ 
+  ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+
+  ! loop through the variables in the control structure, 
+  total_axes=0 ! counter for all coordinate axes in file
+  
+  do m=1,CS%novars
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                       z_grid=z_grid, t_grid=t_grid, caller="MOM_io:MOM_write_IC")
+   
+     ! get the dimension names and lengths for variable 'm'                                
+     ! note: 4d variables are lon x lat x vertical level x time
+     num_dims=0 
+     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                      axis_names, axis_lengths, num_dims,G=G,GV=GV)
+     if (num_dims <= 0) then
+         call MOM_error(FATAL,"MOM_io:MOM_write_IC: num_axes is an invalid value.")
+     endif
+ 
+    ! register the variable dimensions to the file if the corresponding global axes are not registered
+
+     do i=1,num_dims
+        axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
+        if (.not.(axis_exists)) then
+            total_axes=total_axes+1
+            call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+                                   time_val=time_vals, time_units=time_units)
+            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
+        endif
+     enddo
+     
+     ! register and write the coordinate variables (axes) to the file
+     do i=1,total_axes
+        variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
+        if (.not.(variable_exists)) then 
+           if (associated(axis_data_CS%data(i)%p)) then
+               call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                                        "double", &
+                                        dimensions=(/trim(axis_data_CS%axis(i)%name)/))  
+                if (axis_data_CS%axis(i)%is_domain_decomposed) then
+                    call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+                    call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
+                else
+                    call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+                endif
+
+                call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                     'long_name',axis_data_CS%axis(i)%longname)
+
+                call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                                     'units',trim(axis_data_CS%axis(i)%units))
+
+            endif
+        endif
+     enddo
+
+     units=''
+     longname=''
+     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                        z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                        units=units, caller="MOM_io:MOM_write_IC")
+     horgrid_position = get_horizontal_grid_position(hor_grid)  
+        
+     num_axes = 0
+
+     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                     axis_names, axis_lengths, num_axes, G=G, GV=GV)
+     ! register and write the variables to the initial conditions file
+     if (associated(CS%var_ptr3d(m)%p)) then
+        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_axes))
+
+        call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr3d(m)%p)
+ 
+     elseif (associated(CS%var_ptr2d(m)%p)) then
+
+        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_axes))
+
+        call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr2d(m)%p)
+ 
+     elseif (associated(CS%var_ptr4d(m)%p)) then
+        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_axes))
+        call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr4d(m)%p)
+ 
+     elseif (associated(CS%var_ptr1d(m)%p)) then
+     ! need to explicitly define axis_names array for 1-D variable
+        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", & 
+               dimensions=(/axis_names(1:num_axes)/))
+        call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr1d(m)%p)
+ 
+     elseif (associated(CS%var_ptr0d(m)%p)) then
+     ! need to explicitly define axis_names array for scalar variable
+        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+               dimensions=(/axis_names(1:num_axes)/))
+        call MOM_write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr0d(m)%p)     
+     endif
+
+     ! register the variable attributes
+     call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
+     call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+      
+  enddo
+
+  ! close the IC file and deallocate the allocatable arrays
+  call MOM_close_file(fileObjWrite)
+
+  if(allocated(time_vals)) deallocate(time_vals)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
+
+end subroutine write_initial_conditions
+
 
 !> Set up CPU clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
