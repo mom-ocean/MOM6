@@ -114,7 +114,7 @@ type, public :: barotropic_CS ; private
           !< The barotropic solvers estimate of the zonal velocity that will be the initial
           !! condition for the next call to btstep [L T-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: ubtav
-          !< The barotropic zonal velocity averaged over the baroclinic time step [m s-1].
+          !< The barotropic zonal velocity averaged over the baroclinic time step [L T-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: IDatv
           !< Inverse of the basin depth at v grid points [Z-1 ~> m-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: lin_drag_v
@@ -127,7 +127,7 @@ type, public :: barotropic_CS ; private
           !< The barotropic solvers estimate of the zonal velocity that will be the initial
           !! condition for the next call to btstep [L T-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vbtav
-          !< The barotropic meridional velocity averaged over the  baroclinic time step [m s-1].
+          !< The barotropic meridional velocity averaged over the  baroclinic time step [L T-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_cor
           !< The difference between the free surface height from the barotropic calculation and the sum
           !! of the layer thicknesses. This difference is imposed as a forcing term in the barotropic
@@ -209,7 +209,7 @@ type, public :: barotropic_CS ; private
   logical :: dynamic_psurf   !< If true, add a dynamic pressure due to a viscous
                              !! ice shelf, for instance.
   real    :: Dmin_dyn_psurf  !< The minimum depth to use in limiting the size
-                             !! of the dynamic surface pressure for stability [m].
+                             !! of the dynamic surface pressure for stability [Z ~> m].
   real    :: ice_strength_length  !< The length scale at which the damping rate
                              !! due to the ice strength should be the same as if
                              !! a Laplacian were applied [L ~> m].
@@ -1382,7 +1382,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (CS%dynamic_psurf) then
     ice_is_rigid = (associated(forces%rigidity_ice_u) .and. &
                     associated(forces%rigidity_ice_v))
-    H_min_dyn = GV%m_to_H * CS%Dmin_dyn_psurf
+    H_min_dyn = GV%Z_to_H * CS%Dmin_dyn_psurf
     if (ice_is_rigid .and. use_BT_cont) &
       call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, US, MS, 0, .true.)
     if (ice_is_rigid) then
@@ -2086,7 +2086,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
 
   do j=js,je ; do I=is-1,ie
-    CS%ubtav(I,j) = US%L_T_to_m_s*ubt_sum(I,j) * I_sum_wt_trans
+    CS%ubtav(I,j) = ubt_sum(I,j) * I_sum_wt_trans
     uhbtav(I,j) = US%s_to_T*US%L_to_m**2*uhbt_sum(I,j) * I_sum_wt_trans
  ! The following line would do approximately nothing, as I_sum_wt_accel ~= 1.
  !###   u_accel_bt(I,j) = u_accel_bt(I,j) * I_sum_wt_accel
@@ -2094,7 +2094,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo ; enddo
 
   do J=js-1,je ; do i=is,ie
-    CS%vbtav(i,J) = US%L_T_to_m_s*vbt_sum(i,J) * I_sum_wt_trans
+    CS%vbtav(i,J) = vbt_sum(i,J) * I_sum_wt_trans
     vhbtav(i,J) = US%s_to_T*US%L_to_m**2*vhbt_sum(i,J) * I_sum_wt_trans
  ! The following line would do approximately nothing, as I_sum_wt_accel ~= 1.
  !###   v_accel_bt(i,J) = v_accel_bt(i,J)  * I_sum_wt_accel
@@ -3871,8 +3871,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     call get_param(param_file, mdl, "DEPTH_MIN_DYN_PSURF", CS%Dmin_dyn_psurf, &
                   "The minimum depth to use in limiting the size of the "//&
                   "dynamic surface pressure for stability, if "//&
-                  "DYNAMIC_SURFACE_PRESSURE is true..", units="m", &
-                  default=1.0e-6)
+                  "DYNAMIC_SURFACE_PRESSURE is true..", &
+                  units="m", default=1.0e-6, scale=US%m_to_Z)
     call get_param(param_file, mdl, "CONST_DYN_PSURF", CS%const_dyn_psurf, &
                  "The constant that scales the dynamic surface pressure, "//&
                  "if DYNAMIC_SURFACE_PRESSURE is true.  Stable values "//&
@@ -4210,9 +4210,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%id_vbt_st = register_diag_field('ocean_model', 'vbt_st', diag%axesCv1, Time, &
       'Barotropic start meridional velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_ubtav = register_diag_field('ocean_model', 'ubtav', diag%axesCu1, Time, &
-      'Barotropic time-average zonal velocity', 'm s-1') !(, conversion=US%L_T_to_m_s)
+      'Barotropic time-average zonal velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_vbtav = register_diag_field('ocean_model', 'vbtav', diag%axesCv1, Time, &
-      'Barotropic time-average meridional velocity', 'm s-1') !(, conversion=US%L_T_to_m_s)
+      'Barotropic time-average meridional velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_eta_cor = register_diag_field('ocean_model', 'eta_cor', diag%axesT1, Time, &
       'Corrective mass flux', 'm s-1')
   CS%id_visc_rem_u = register_diag_field('ocean_model', 'visc_rem_u', diag%axesCuL, Time, &
@@ -4291,17 +4291,21 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     call btcalc(h, G, GV, CS, may_use_default=.true.)
     CS%ubtav(:,:) = 0.0 ; CS%vbtav(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
-      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * u(I,j,k)
+      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * US%m_s_to_L_T*u(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=js-1,je ; do i=is,ie
-      CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * v(i,J,k)
+      CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * US%m_s_to_L_T*v(i,J,k)
     enddo ; enddo ; enddo
+  elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
+          (US%m_to_L*US%s_to_T_restart) /= (US%m_to_L_restart*US%s_to_T)) then
+    do j=js,je ; do I=is-1,ie ; CS%ubtav(I,j) = vel_rescale * CS%ubtav(I,j) ; enddo ; enddo
+    do J=js-1,je ; do i=is,ie ; CS%vbtav(i,J) = vel_rescale * CS%vbtav(I,j) ; enddo ; enddo
   endif
 
   if (.NOT.query_initialized(CS%ubt_IC,"ubt_IC",restart_CS) .or. &
       .NOT.query_initialized(CS%vbt_IC,"vbt_IC",restart_CS)) then
-    do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = US%m_s_to_L_T*CS%ubtav(I,j) ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = US%m_s_to_L_T*CS%vbtav(i,J) ; enddo ; enddo
+    do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = CS%ubtav(I,j) ; enddo ; enddo
+    do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = CS%vbtav(i,J) ; enddo ; enddo
   elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
           (US%m_to_L*US%s_to_T_restart) /= (US%m_to_L_restart*US%s_to_T)) then
     vel_rescale = (US%m_to_L*US%s_to_T_restart) / (US%m_to_L_restart*US%s_to_T)
@@ -4348,8 +4352,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   if (.NOT.query_initialized(CS%uhbt_IC,"uhbt_IC",restart_CS) .or. &
       .NOT.query_initialized(CS%vhbt_IC,"vhbt_IC",restart_CS)) then
-    do j=js,je ; do I=is-1,ie ; CS%uhbt_IC(I,j) = US%m_s_to_L_T*CS%ubtav(I,j) * Datu(I,j) ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; CS%vhbt_IC(i,J) = US%m_s_to_L_T*CS%vbtav(i,J) * Datv(i,J) ; enddo ; enddo
+    do j=js,je ; do I=is-1,ie ; CS%uhbt_IC(I,j) = CS%ubtav(I,j) * Datu(I,j) ; enddo ; enddo
+    do J=js-1,je ; do i=is,ie ; CS%vhbt_IC(i,J) = CS%vbtav(i,J) * Datv(i,J) ; enddo ; enddo
   elseif ((US%s_to_T_restart * US%m_to_L_restart * GV%m_to_H_restart /= 0.0) .and. &
           ((US%s_to_T_restart * US%m_to_L**2 * GV%m_to_H) /= &
            (US%s_to_T * US%m_to_L_restart**2 * GV%m_to_H_restart))) then
@@ -4377,22 +4381,23 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 end subroutine barotropic_init
 
 !> Copies ubtav and vbtav from private type into arrays
-subroutine barotropic_get_tav(CS, ubtav, vbtav, G)
+subroutine barotropic_get_tav(CS, ubtav, vbtav, G, US)
   type(barotropic_CS),               pointer       :: CS    !< Control structure for this module
   type(ocean_grid_type),             intent(in)    :: G     !< Grid structure
   real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: ubtav !< Zonal barotropic velocity averaged
                                                             !! over a baroclinic timestep [m s-1]
   real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: vbtav !< Meridional barotropic velocity averaged
                                                             !! over a baroclinic timestep [m s-1]
+  type(unit_scale_type),             intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
 
   do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
-    ubtav(I,j) = CS%ubtav(I,j)
+    ubtav(I,j) = US%L_T_to_m_s*CS%ubtav(I,j)
   enddo ; enddo
 
   do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
-    vbtav(i,J) = CS%vbtav(i,J)
+    vbtav(i,J) = US%L_T_to_m_s*CS%vbtav(i,J)
   enddo ; enddo
 
 end subroutine barotropic_get_tav
