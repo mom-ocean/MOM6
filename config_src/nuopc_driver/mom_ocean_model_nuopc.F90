@@ -1,5 +1,5 @@
 !> Top-level module for the MOM6 ocean model in coupled mode.
-module MOM_NUOPC_ocean_model
+module MOM_ocean_model_nuopc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -58,10 +58,10 @@ use mpp_mod,                 only : mpp_chksum
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,      only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface,      only: MOM_wave_interface_init_lite, Update_Surface_Waves
-use MOM_NUOPC_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_NUOPC_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
-use MOM_NUOPC_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
-use MOM_NUOPC_surface_forcing, only : forcing_save_restart
+use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxes
+use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
+use MOM_surface_forcing_nuopc, only : forcing_save_restart
 
 #include <MOM_memory.h>
 
@@ -475,7 +475,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   integer :: secs, days
   integer :: is, ie, js, je
 
-  call callTree_enter("update_ocean_model(), MOM_NUOPC_ocean_model.F90")
+  call callTree_enter("update_ocean_model(), MOM_ocean_model_nuopc.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   dt_coupling = 86400.0*real(days) + real(secs)
 
@@ -1174,4 +1174,4 @@ subroutine get_ocean_grid(OS, Gridp)
   return
 end subroutine get_ocean_grid
 
-end module MOM_NUOPC_ocean_model
+end module MOM_ocean_model_nuopc

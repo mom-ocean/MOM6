@@ -37,9 +37,9 @@
 !!
 !! The MOM cap package includes the cap code itself (MOM_cap.F90, MOM_cap_methods.F90
 !! and MOM_cap_time.F90), a set of time utilities (time_utils.F90) for converting between ESMF and FMS
-!! time type and two modules MOM_NUOPC_ocean_model.F90 and MOM_NUOPC_surface_forcing.F90. MOM_NUOPC_surface_forcing.F90
+!! time type and two modules MOM_ocean_model_nuopc.F90 and MOM_surface_forcing_nuopc.F90. MOM_surface_forcing_nuopc.F90
 !! converts the input ESMF data (import data) to a MOM-specific data type (surface_forcing_CS).
-!! MOM_NUOPC_ocean_model.F90 contains routines for initialization, update and finalization of the ocean model state.
+!! MOM_ocean_model_nuopc.F90 contains routines for initialization, update and finalization of the ocean model state.
 !!
 !! @subsection CapSubroutines Cap Subroutines
 !!
@@ -340,11 +340,11 @@ use MOM_file_parser,          only: get_param, log_version, param_file_type, clo
 use MOM_get_input,            only: Get_MOM_Input, directories
 use MOM_domains,              only: pass_var
 use MOM_error_handler,        only: is_root_pe
-use MOM_NUOPC_ocean_model,    only: ice_ocean_boundary_type
+use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
-use MOM_NUOPC_ocean_model,    only: ocean_model_restart, ocean_public_type, ocean_state_type
-use MOM_NUOPC_ocean_model,    only: ocean_model_init_sfc
-use MOM_NUOPC_ocean_model,    only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
+use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
+use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
+use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
 #ifdef CESMCOUPLED
