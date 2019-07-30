@@ -13,16 +13,6 @@ addons:
     - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev openmpi-bin libopenmpi-dev gfortran
     - doxygen graphviz flex bison cmake
 
-# Stages occur sequentially. Within each stage jobs run concurrently.
-stages:
-  - check and compile
-  - tests
-  #- cleanup
-
-cache:
-  directories:
-    - build
-
 # Compilation and testing is controlled by the "configure" and "Makefile" in
 # .testing/ but they operate from the root directory. We copy them into place
 # so that they can remain hidden from users.
@@ -35,86 +25,17 @@ before_script:
   - ls -l
   - ls build
 
-# This avoids caching files we do not need between stages
-before_cache:
-  - rm -f build/*.o build/*.mod
-
 jobs:
   include:
-
-    # Checks and compilation ###################################################
-#   - stage: check and compile
-#     script:
-#     - echo "Blank environment - this is where we would compile if we wanted to reuse executables in multiple tests"
-#     #- touch build/comp_nothing
-    - stage: check and compile
-      env: JOB="Code style compliance"
+    - env: JOB="Code style compliance"
       script:
-      - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
-    - stage: check and compile
-      env: JOB="Doxygen"
+        - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
+    - env: JOB="Doxygen"
       script:
-      - cd docs && doxygen Doxyfile_nortd
-      - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
-      - test ! -s  doxy_errors
-    - stage: check and compile
-      env: JOB="Compile"
+        - cd docs && doxygen Doxyfile_nortd
+        - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
+        - test ! -s  doxy_errors
+    - env: JOB="Compile and run"
       script:
         - make
-#    - &compile-code
-#      stage: check and compile
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-#      script:
-#      - make $MAKEARGS compile
-#      - touch build/comp_${MAKEARGS//\ /_}
-#    - <<: *compile-code
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-#    - <<: *compile-code
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
-#    - <<: *compile-code
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
-##   - <<: *compile-code
-##     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
-
-    # Run tests ################################################################
-    # The default "test" job is automatically invoked for each of the matrix environments
-    # The "test" jobs executes "./configure && make && make test"
-#   - stage: tests
-#     script:
-#     - echo "Placeholder for generic text using blank environment"
-    - stage: tests
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-      script:
         - make test
-#    - &compile
-#      stage: tests
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-#      script:
-#      - ./configure && make -j && make test
-#    - <<: *compile
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-#    - <<: *compile
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
-#    - <<: *compile
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
-##   - <<: *compile
-##     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
-
-#    # Clean up #################################################################
-#    # We only want the cache directory to exist between stages so we manually
-#    # clean out the cache, i.e. build/
-#    - &clean-build
-#      stage: cleanup
-#      script:
-#      #- rm -rf build/*
-#      - ls -l
-##   - <<: *clean-build
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-#    - <<: *clean-build
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-#    - <<: *clean-build
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1 COVERAGE=1"
-#    - <<: *clean-build
-#      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1 COVERAGE=1"
-##   - <<: *clean-build
-##     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
