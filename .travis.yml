@@ -33,5 +33,7 @@ jobs:
         - test ! -s  doxy_errors
     - env: JOB="Compile and run"
       script:
+        - echo 'Configuring...' && echo -en 'travis_fold:start:script.1\\r'
         - make
+        - echo -en 'travis_fold:end:script.1\\r'
         - make test
