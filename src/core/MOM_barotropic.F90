@@ -3302,15 +3302,15 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   enddo ; enddo
 !$OMP do
   do j=js,je; do I=is-1,ie
-    uBT_EE(I,j) = US%m_s_to_L_T*BT_cont%uBT_EE(I,j) ; uBT_WW(I,j) = US%m_s_to_L_T*BT_cont%uBT_WW(I,j)
-    FA_u_EE(I,j) = US%m_to_L*BT_cont%FA_u_EE(I,j) ; FA_u_E0(I,j) = US%m_to_L*BT_cont%FA_u_E0(I,j)
-    FA_u_W0(I,j) = US%m_to_L*BT_cont%FA_u_W0(I,j) ; FA_u_WW(I,j) = US%m_to_L*BT_cont%FA_u_WW(I,j)
+    uBT_EE(I,j) = BT_cont%uBT_EE(I,j) ; uBT_WW(I,j) = BT_cont%uBT_WW(I,j)
+    FA_u_EE(I,j) = BT_cont%FA_u_EE(I,j) ; FA_u_E0(I,j) = BT_cont%FA_u_E0(I,j)
+    FA_u_W0(I,j) = BT_cont%FA_u_W0(I,j) ; FA_u_WW(I,j) = BT_cont%FA_u_WW(I,j)
   enddo ; enddo
 !$OMP do
   do J=js-1,je; do i=is,ie
-    vBT_NN(i,J) = US%m_s_to_L_T*BT_cont%vBT_NN(i,J) ; vBT_SS(i,J) = US%m_s_to_L_T*BT_cont%vBT_SS(i,J)
-    FA_v_NN(i,J) = US%m_to_L*BT_cont%FA_v_NN(i,J) ; FA_v_N0(i,J) = US%m_to_L*BT_cont%FA_v_N0(i,J)
-    FA_v_S0(i,J) = US%m_to_L*BT_cont%FA_v_S0(i,J) ; FA_v_SS(i,J) = US%m_to_L*BT_cont%FA_v_SS(i,J)
+    vBT_NN(i,J) = BT_cont%vBT_NN(i,J) ; vBT_SS(i,J) = BT_cont%vBT_SS(i,J)
+    FA_v_NN(i,J) = BT_cont%FA_v_NN(i,J) ; FA_v_N0(i,J) = BT_cont%FA_v_N0(i,J)
+    FA_v_S0(i,J) = BT_cont%FA_v_S0(i,J) ; FA_v_SS(i,J) = BT_cont%FA_v_SS(i,J)
   enddo ; enddo
 !$OMP end parallel
 
@@ -4254,29 +4254,29 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   if (use_BT_cont_type) then
     CS%id_BTC_FA_u_EE = register_diag_field('ocean_model', 'BTC_FA_u_EE', diag%axesCu1, Time, &
-        'BTCont type far east face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type far east face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_u_E0 = register_diag_field('ocean_model', 'BTC_FA_u_E0', diag%axesCu1, Time, &
-        'BTCont type near east face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type near east face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_u_WW = register_diag_field('ocean_model', 'BTC_FA_u_WW', diag%axesCu1, Time, &
-        'BTCont type far west face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type far west face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_u_W0 = register_diag_field('ocean_model', 'BTC_FA_u_W0', diag%axesCu1, Time, &
-        'BTCont type near west face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type near west face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_ubt_EE = register_diag_field('ocean_model', 'BTC_ubt_EE', diag%axesCu1, Time, &
         'BTCont type far east velocity', 'm s-1')
     CS%id_BTC_ubt_WW = register_diag_field('ocean_model', 'BTC_ubt_WW', diag%axesCu1, Time, &
         'BTCont type far west velocity', 'm s-1')
     CS%id_BTC_FA_v_NN = register_diag_field('ocean_model', 'BTC_FA_v_NN', diag%axesCv1, Time, &
-        'BTCont type far north face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type far north face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_v_N0 = register_diag_field('ocean_model', 'BTC_FA_v_N0', diag%axesCv1, Time, &
-        'BTCont type near north face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type near north face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_v_SS = register_diag_field('ocean_model', 'BTC_FA_v_SS', diag%axesCv1, Time, &
-        'BTCont type far south face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type far south face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_v_S0 = register_diag_field('ocean_model', 'BTC_FA_v_S0', diag%axesCv1, Time, &
-        'BTCont type near south face area', 'm2') !(, conversion=US%L_to_m*GV%H_to_m)
+        'BTCont type near south face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_vbt_NN = register_diag_field('ocean_model', 'BTC_vbt_NN', diag%axesCv1, Time, &
-        'BTCont type far north velocity', 'm s-1')
+        'BTCont type far north velocity', 'm s-1', conversion=US%L_T_to_m_s)
     CS%id_BTC_vbt_SS = register_diag_field('ocean_model', 'BTC_vbt_SS', diag%axesCv1, Time, &
-        'BTCont type far south velocity', 'm s-1')
+        'BTCont type far south velocity', 'm s-1', conversion=US%L_T_to_m_s)
   endif
   CS%id_uhbt0 = register_diag_field('ocean_model', 'uhbt0', diag%axesCu1, Time, &
       'Barotropic zonal transport difference', 'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
