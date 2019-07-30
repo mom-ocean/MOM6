@@ -80,7 +80,7 @@ $(LIST_PATHS) $(MKMF):
 DOUBLE_GYRE_URL=https://github.com/marshallward/double_gyre_test
 
 test: experiments/double_gyre
-	cd experiments/double_gyre; mpirun -n1 ../../MOM6
+	cd experiments/double_gyre; mpirun -n 1 ../../MOM6
 
 experiments/double_gyre:
 	git clone $(DOUBLE_GYRE_URL) $@
