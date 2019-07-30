@@ -1190,45 +1190,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     endif
   endif
 
-  ! add "slow" varying vertical viscosity (e.g., from background, tidal etc)
-  if (associated(visc%Kv_slow) .and. (visc%add_Kv_slow)) then
-    ! GMM/ A factor of 2 is also needed here, see comment above from BGR.
-    if (work_on_u) then
-      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0 * (visc%Kv_slow(i,j,k) + visc%Kv_slow(i+1,j,k))
-      endif ; enddo ; enddo
-      if (do_OBCs) then
-        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
-          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i+1,j,k) ; enddo
-          endif
-        endif ; enddo
-      endif
-      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
-      endif ; enddo ; enddo
-    else
-      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = Kv_add(i,K) + 1.0*(visc%Kv_slow(i,j,k) + visc%Kv_slow(i,j+1,k))
-      endif ; enddo ; enddo
-      !### I am pretty sure that this is double counting here! - RWH
-      if (do_OBCs) then
-        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
-          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j,k) ; enddo
-          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = Kv_add(i,K) + 2. * visc%Kv_slow(i,j+1,k) ; enddo
-          endif
-        endif ; enddo
-      endif
-      do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        a_cpl(i,K) = a_cpl(i,K) + Kv_add(i,K)
-      endif ; enddo ; enddo
-    endif
-  endif
-
   do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
     !    botfn determines when a point is within the influence of the bottom
     !  boundary layer, going from 1 at the bottom to 0 in the interior.
