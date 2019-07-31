@@ -1031,6 +1031,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                        time_vals(k) = real(k)
                     enddo
                  endif
+              case default
+                 call MOM_error(FATAL,"MOM_restart: save_restart: "//&
+                                "t_grid_str is empty or incorrectly defined.")
            end select
         endif
         
@@ -1221,7 +1224,6 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   ! get the time units
   ic_time = time_type_to_real(time) / 86400.0
   time_units = get_time_units(ic_time*86400.0)
- 
 
   ! open the netCDF file
   ! check if file already exists and can be appended
@@ -1243,13 +1245,15 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   total_axes=0 
   
   do m=1,CS%novars
-     
+     t_grid=''
+     z_grid=''
+     hor_grid=''   
      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                         z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
 
      if (.not.(allocated(time_vals))) then
         t_grid_str = ''
-        t_grid_str = adjustl(vd%t_grid)
+        t_grid_str = adjustl(t_grid)
         select case (t_grid_str(1:1))
            case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
               allocate(time_vals(1))
@@ -1270,7 +1274,10 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
                     time_vals(k) = real(k)
                  enddo
               endif
-         end select
+           case default
+               call MOM_error(FATAL,"MOM_restart:write_initial_conditions: "//&
+                              "t_grid_str is empty or incorrectly defined.")
+        end select
      endif
 
      ! get the dimension names and lengths for variable 'm'                                
