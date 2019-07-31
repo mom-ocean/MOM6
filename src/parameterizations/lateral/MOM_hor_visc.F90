@@ -418,7 +418,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 !    call pass_var(boundary_mask, G%Domain, complete=.true.)
 
     ! Get barotropic velocities and their gradients
-    call barotropic_get_tav(BT, ubtav, vbtav, G)
+    call barotropic_get_tav(BT, ubtav, vbtav, G, US)
     call pass_vector(ubtav, vbtav, G%Domain)
 
     !#GME# The following loop range should be:  do j=js-1,je+1 ; do i=is-1,ie+1
