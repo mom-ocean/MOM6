@@ -1,13 +1,13 @@
 module ocn_cap_methods
 
-  use ESMF,                only: ESMF_clock, ESMF_time, ESMF_ClockGet, ESMF_TimeGet
-  use MOM_ocean_model,     only: ocean_public_type, ocean_state_type
-  use MOM_surface_forcing, only: ice_ocean_boundary_type
-  use MOM_grid,            only: ocean_grid_type
-  use MOM_domains,         only: pass_var
-  use MOM_error_handler,   only: is_root_pe
-  use mpp_domains_mod,     only: mpp_get_compute_domain
-  use ocn_cpl_indices,     only: cpl_indices_type
+  use ESMF,                    only: ESMF_clock, ESMF_time, ESMF_ClockGet, ESMF_TimeGet
+  use MOM_ocean_model_mct,     only: ocean_public_type, ocean_state_type
+  use MOM_surface_forcing_mct, only: ice_ocean_boundary_type
+  use MOM_grid,                only: ocean_grid_type
+  use MOM_domains,             only: pass_var
+  use MOM_error_handler,       only: is_root_pe
+  use mpp_domains_mod,         only: mpp_get_compute_domain
+  use ocn_cpl_indices,         only: cpl_indices_type
 
   implicit none
   private

@@ -1,5 +1,5 @@
 !> Top-level module for the MOM6 ocean model in coupled mode.
-module MOM_ocean_model
+module MOM_ocean_model_nuopc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -35,10 +35,6 @@ use MOM_io,                  only : close_file, file_exists, read_data, write_ve
 use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart,             only : MOM_restart_CS, save_restart
 use MOM_string_functions,    only : uppercase
-use MOM_surface_forcing,     only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing,     only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
-use MOM_surface_forcing,     only : ice_ocean_boundary_type, surface_forcing_CS
-use MOM_surface_forcing,     only : forcing_save_restart
 use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
@@ -62,9 +58,10 @@ use mpp_mod,                 only : mpp_chksum
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,      only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface,      only: MOM_wave_interface_init_lite, Update_Surface_Waves
-
-! MCT specfic routines
-use MOM_domains,             only : MOM_infra_end
+use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxes
+use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
+use MOM_surface_forcing_nuopc, only : forcing_save_restart
 
 #include <MOM_memory.h>
 
@@ -72,7 +69,7 @@ use MOM_domains,             only : MOM_infra_end
 use MOM_generic_tracer, only : MOM_generic_tracer_fluxes_accumulate
 #endif
 
-implicit none ; public
+implicit none ; private
 
 public ocean_model_init, ocean_model_end, update_ocean_model
 public ocean_model_save_restart, Ocean_stock_pe
@@ -98,8 +95,8 @@ type, public ::  ocean_public_type
   type(domain2d) :: Domain    !< The domain for the surface fields.
   logical :: is_ocean_pe      !< .true. on processors that run the ocean model.
   character(len=32) :: instance_name = '' !< A name that can be used to identify
-                              !! this instance of an ocean model, for example
-                              !! in ensembles when writing messages.
+                                 !! this instance of an ocean model, for example
+                                 !! in ensembles when writing messages.
   integer, pointer, dimension(:) :: pelist => NULL()   !< The list of ocean PEs.
   logical, pointer, dimension(:,:) :: maskmap =>NULL() !< A pointer to an array
                     !! indicating which logical processors are actually used for
@@ -117,17 +114,17 @@ type, public ::  ocean_public_type
                     !! a global max across ocean and non-ocean processors can be
                     !! used to determine its value.
   real, pointer, dimension(:,:)  :: &
-    t_surf => NULL(), &  !< SST on t-cell (degrees Kelvin)
-    s_surf => NULL(), &  !< SSS on t-cell (psu)
-    u_surf => NULL(), &  !< i-velocity at the locations indicated by stagger, m/s.
-    v_surf => NULL(), &  !< j-velocity at the locations indicated by stagger, m/s.
+    t_surf => NULL(), & !< SST on t-cell (degrees Kelvin)
+    s_surf => NULL(), & !< SSS on t-cell (psu)
+    u_surf => NULL(), & !< i-velocity at the locations indicated by stagger, m/s.
+    v_surf => NULL(), & !< j-velocity at the locations indicated by stagger, m/s.
     sea_lev => NULL(), & !< Sea level in m after correction for surface pressure,
-                         !! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
-    frazil =>NULL(), &   !< Accumulated heating (in Joules/m^2) from frazil
-                         !! formation in the ocean.
+                        !! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
+    frazil =>NULL(), &  !< Accumulated heating (in Joules/m^2) from frazil
+                        !! formation in the ocean.
     melt_potential => NULL(), & !< Instantaneous heat used to melt sea ice (in J/m^2)
-    area => NULL(), &    !< cell area of the ocean surface, in m2.
-    OBLD => NULL()       !< Ocean boundary layer depth, in m.
+    area => NULL(), &   !< cell area of the ocean surface, in m2.
+    OBLD => NULL()      !< Ocean boundary layer depth, in m.
   type(coupler_2d_bc_type) :: fields    !< A structure that may contain named
                                         !! arrays of tracer-related surface fields.
   integer                  :: avg_kount !< A count of contributions to running
@@ -137,10 +134,11 @@ type, public ::  ocean_public_type
                                         !! for I/O using this surface data.
 end type ocean_public_type
 
+
 !> The ocean_state_type contains all information about the state of the ocean,
 !! with a format that is private so it can be readily changed without disrupting
 !! other coupled components.
-type, public :: ocean_state_type ;
+type, public :: ocean_state_type ; private
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
   type(time_type) :: Time     !< The ocean model's time and master clock.
@@ -266,7 +264,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
     call MOM_error(WARNING, "ocean_model_init called with an associated "// &
-                    "ocean_state_type structure. Model is already initialized.")
+                   "ocean_state_type structure. Model is already initialized.")
     return
   endif
   allocate(OS)
@@ -355,7 +353,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
-  call get_param(param_file, mdl, "HFREEZE", HFrz, &
+    call get_param(param_file, mdl, "HFREEZE", HFrz, &
                  "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
                  "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
                  "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
@@ -379,7 +377,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
                               OS%diag, OS%forces, OS%fluxes)
   endif
-
   if (OS%icebergs_alter_ocean)  then
     call marine_ice_init(OS%Time, OS%grid, param_file, OS%diag, OS%marine_ice_CSp)
     if (.not. OS%use_ice_shelf) &
@@ -412,6 +409,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+
   endif
 
   call close_param_file(param_file)
@@ -477,7 +475,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   integer :: secs, days
   integer :: is, ie, js, je
 
-  call callTree_enter("update_ocean_model(), MOM_ocean_model.F90")
+  call callTree_enter("update_ocean_model(), MOM_ocean_model_nuopc.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   dt_coupling = 86400.0*real(days) + real(secs)
 
@@ -485,7 +483,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_error(WARNING, "update_ocean_model: internal clock does not "//&
                             "agree with time_start_update argument.")
   endif
-
   if (.not.associated(OS)) then
     call MOM_error(FATAL, "update_ocean_model called with an unassociated "// &
                     "ocean_state_type structure. ocean_model_init must be "//  &
@@ -505,16 +502,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   ! Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
+
   weight = 1.0
 
   call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time, &
                              OS%grid, OS%US, OS%forcing_CSp)
 
   if (OS%fluxes%fluxes_used) then
-
-    ! GMM, is enable_averaging needed now?
-    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag)
-
     if (do_thermo) &
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state, &
@@ -537,21 +531,17 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     endif
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
-    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
+    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid, skip_pres=.true.)
 
 #ifdef _USE_GENERIC_TRACER
     call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
-
     ! Indicate that there are new unused fluxes.
     OS%fluxes%fluxes_used = .false.
     OS%fluxes%dt_buoy_accum = dt_coupling
-
   else
-
     OS%flux_tmp%C_p = OS%fluxes%C_p
-
     if (do_thermo) &
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
@@ -572,7 +562,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, dt_coupling, OS%grid, weight)
-
     ! Some of the fields that exist in both the forcing and mech_forcing types
     ! (e.g., ustar) are time-averages must be copied back to the forces type.
     call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
@@ -581,7 +570,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
-
   call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
@@ -596,18 +584,17 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  if(OS%offline_tracer_mode) then
+  if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
-
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
                   Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
                   reset_therm=Ocn_fluxes_used)
+ !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
   elseif (OS%single_step_call) then
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
-
   else
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)
@@ -736,25 +723,24 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
            call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
         endif
      endif
-  end if
+  endif
 
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
 
 !> ocean_model_end terminates the model run, saving the ocean state in a restart
 !! and deallocating any data associated with the ocean.
-subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
+subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time, write_restart)
   type(ocean_public_type), intent(inout) :: Ocean_sfc   !< An ocean_public_type structure that is
                                                         !! to be deallocated upon termination.
   type(ocean_state_type),  pointer       :: Ocean_state !< A pointer to the structure containing
                                                         !! the internal ocean state to be deallocated
                                                         !! upon termination.
   type(time_type),         intent(in)    :: Time        !< The model time, used for writing restarts.
+  logical,                 intent(in)    :: write_restart !< true => write restart file
 
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag, end_diag_manager=.true.)
-  ! print time stats
-  call MOM_infra_end
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
@@ -811,6 +797,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
                                               !! ocean and surface-ice fields that will participate
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes.
+
   integer :: xsz, ysz, layout(2)
   ! ice-ocean-boundary fields are always allocated using absolute indicies
   ! and have no halos.
@@ -818,22 +805,22 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  if(PRESENT(maskmap)) then
-    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
+  if (PRESENT(maskmap)) then
+     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
   else
-    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
+     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
   endif
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
-  allocate (Ocean_sfc%t_surf (isc:iec,jsc:jec), &
-            Ocean_sfc%s_surf (isc:iec,jsc:jec), &
-            Ocean_sfc%u_surf (isc:iec,jsc:jec), &
-            Ocean_sfc%v_surf (isc:iec,jsc:jec), &
-            Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
-            Ocean_sfc%area   (isc:iec,jsc:jec), &
-            Ocean_sfc%OBLD   (isc:iec,jsc:jec), &
-            Ocean_sfc%melt_potential(isc:iec,jsc:jec), &
-            Ocean_sfc%frazil (isc:iec,jsc:jec))
+  allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%s_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%u_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%v_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
+             Ocean_sfc%area   (isc:iec,jsc:jec), &
+             Ocean_sfc%OBLD   (isc:iec,jsc:jec), &
+             Ocean_sfc%melt_potential(isc:iec,jsc:jec), &
+             Ocean_sfc%frazil (isc:iec,jsc:jec))
 
   Ocean_sfc%t_surf  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
   Ocean_sfc%s_surf  = 0.0  ! time averaged sss (psu) passed to atmosphere/ice models
@@ -869,7 +856,6 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
   real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface, in Pa.
   real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
                                                !! ocean depth in m, usually 1/(rho_0*g), in m Pa-1.
-
   ! Local variables
   real :: IgR0
   character(len=48)  :: val_str
@@ -877,7 +863,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
   integer :: i, j, i0, j0, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  call pass_vector(sfc_state%u,sfc_state%v,G%Domain)
+  call pass_vector(sfc_state%u, sfc_state%v, G%Domain)
 
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
                               jsc_bnd, jec_bnd)
@@ -1062,7 +1048,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
 end subroutine Ocean_stock_pe
 
 !> This subroutine extracts a named 2-D field from the ocean surface or public type
-subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
+subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
   use MOM_constants, only : CELSIUS_KELVIN_OFFSET
   type(ocean_state_type),     pointer    :: OS    !< A pointer to the structure containing the
                                                   !! internal ocean state (intent in).
@@ -1090,46 +1076,47 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
 
   select case(name)
   case('area')
-    array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
   case('mask')
-    array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
 !     do j=g_jsc,g_jec ; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
 !     enddo ; enddo
   case('t_surf')
-    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_pme')
-    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_runoff')
-    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('t_calving')
-    array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
+     array2D(isc:,jsc:) = Ocean%t_surf(isc:,jsc:)-CELSIUS_KELVIN_OFFSET
   case('btfHeat')
-    array2D(isc:,jsc:) = 0
+     array2D(isc:,jsc:) = 0
   case('tlat')
-    array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatT(g_isc:g_iec,g_jsc:g_jec)
   case('tlon')
-    array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonT(g_isc:g_iec,g_jsc:g_jec)
   case('ulat')
-    array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatCu(g_isc:g_iec,g_jsc:g_jec)
   case('ulon')
-    array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonCu(g_isc:g_iec,g_jsc:g_jec)
   case('vlat')
-    array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatCv(g_isc:g_iec,g_jsc:g_jec)
   case('vlon')
-    array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonCv(g_isc:g_iec,g_jsc:g_jec)
   case('geoLatBu')
-    array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLatBu(g_isc:g_iec,g_jsc:g_jec)
   case('geoLonBu')
-    array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%grid%geoLonBu(g_isc:g_iec,g_jsc:g_jec)
   case('cos_rot')
-    array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
+     array2D(isc:,jsc:) = OS%grid%cos_rot(g_isc:g_iec,g_jsc:g_jec) ! =1
   case('sin_rot')
-    array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
+     array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
   case default
-    call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
+     call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
   end select
+
 end subroutine ocean_model_data2D_get
 
 !> This subroutine extracts a named scalar field from the ocean surface or public type
@@ -1187,4 +1174,4 @@ subroutine get_ocean_grid(OS, Gridp)
   return
 end subroutine get_ocean_grid
 
-end module MOM_ocean_model
+end module MOM_ocean_model_nuopc

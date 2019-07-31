@@ -44,10 +44,10 @@ use MOM_domains,          only: AGRID, BGRID_NE, CGRID_NE, pass_vector
 use mpp_domains_mod,      only: mpp_get_compute_domain
 
 ! Previously inlined - now in separate modules
-use MOM_ocean_model,      only: ocean_public_type, ocean_state_type
-use MOM_ocean_model,      only: ocean_model_init , update_ocean_model, ocean_model_end
-use MOM_ocean_model,      only: convert_state_to_ocean_type
-use MOM_surface_forcing,  only: surface_forcing_CS, forcing_save_restart, ice_ocean_boundary_type
+use MOM_ocean_model_mct,     only: ocean_public_type, ocean_state_type
+use MOM_ocean_model_mct,     only: ocean_model_init , update_ocean_model, ocean_model_end
+use MOM_ocean_model_mct,     only: convert_state_to_ocean_type
+use MOM_surface_forcing_mct, only: surface_forcing_CS, forcing_save_restart, ice_ocean_boundary_type
 use ocn_cap_methods,      only: ocn_import, ocn_export
 
 ! FMS modules
