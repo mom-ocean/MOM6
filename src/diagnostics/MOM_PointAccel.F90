@@ -188,7 +188,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                       ((um(I,j,k)-CS%u_prev(I,j,k))); enddo
     endif
     write(file,'(/,"CAu:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%CAu(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAu(I,j,k)); enddo
     write(file,'(/,"PFu:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%PFu(I,j,k)); enddo
     write(file,'(/,"diffu: ",$)')
@@ -197,12 +197,12 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (associated(ADp%gradKEu)) then
       write(file,'(/,"KEu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*ADp%gradKEu(I,j,k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%gradKEu(I,j,k)); enddo
     endif
     if (associated(ADp%rv_x_v)) then
       write(file,'(/,"Coru:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-          dt*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k)); enddo
+          dt*US%L_T2_to_m_s2*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k)); enddo
     endif
     if (associated(ADp%du_dt_visc)) then
       write(file,'(/,"ubv:   ",$)')
@@ -350,7 +350,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
       write(file,'(/,"CAu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*ADp%CAu(I,j,k)*Inorm(k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%CAu(I,j,k)*Inorm(k)); enddo
 
       write(file,'(/,"PFu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
@@ -363,12 +363,12 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       if (associated(ADp%gradKEu)) then
         write(file,'(/,"KEu:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                        (dt*ADp%gradKEu(I,j,k)*Inorm(k)); enddo
+                                        (dt*US%L_T2_to_m_s2*ADp%gradKEu(I,j,k)*Inorm(k)); enddo
       endif
       if (associated(ADp%rv_x_v)) then
         write(file,'(/,"Coru:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            dt*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k))*Inorm(k); enddo
+            dt*US%L_T2_to_m_s2*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k))*Inorm(k); enddo
       endif
       if (associated(ADp%du_dt_visc)) then
         write(file,'(/,"duv:   ",$)')
@@ -520,7 +520,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     endif
 
     write(file,'(/,"CAv:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%CAv(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)); enddo
 
     write(file,'(/,"PFv:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%PFv(i,J,k)); enddo
@@ -531,12 +531,12 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (associated(ADp%gradKEv)) then
       write(file,'(/,"KEv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*ADp%gradKEv(i,J,k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%gradKEv(i,J,k)); enddo
     endif
     if (associated(ADp%rv_x_u)) then
       write(file,'(/,"Corv:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                 dt*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k)); enddo
+                                 dt*US%L_T2_to_m_s2*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k)); enddo
     endif
     if (associated(ADp%dv_dt_visc)) then
       write(file,'(/,"vbv:   ",$)')
@@ -682,7 +682,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                       ((vm(i,J,k)-CS%v_prev(i,J,k))*Inorm(k)); enddo
       write(file,'(/,"CAv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*ADp%CAv(i,J,k)*Inorm(k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)*Inorm(k)); enddo
       write(file,'(/,"PFv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                       (dt*ADp%PFv(i,J,k)*Inorm(k)); enddo
@@ -693,12 +693,12 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       if (associated(ADp%gradKEu)) then
         write(file,'(/,"KEv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*ADp%gradKEv(i,J,k)*Inorm(k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%gradKEv(i,J,k)*Inorm(k)); enddo
       endif
       if (associated(ADp%rv_x_u)) then
         write(file,'(/,"Corv:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            dt*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k))*Inorm(k); enddo
+            dt*US%L_T2_to_m_s2*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k))*Inorm(k); enddo
       endif
       if (associated(ADp%dv_dt_visc)) then
         write(file,'(/,"dvv:   ",$)')

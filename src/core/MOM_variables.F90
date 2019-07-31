@@ -158,8 +158,8 @@ type, public :: accel_diag_ptrs
   real, pointer, dimension(:,:,:) :: &
     diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
     diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
-    CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [m s-2]
-    CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations [m s-2]
+    CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
+    CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
     PFu => NULL(), &       !< Zonal acceleration due to pressure forces [m s-2]
     PFv => NULL(), &       !< Meridional acceleration due to pressure forces [m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [m s-2]
@@ -174,10 +174,10 @@ type, public :: accel_diag_ptrs
                            !! not due to any explicit accelerations [m s-1].
 
   ! These accelerations are sub-terms included in the accelerations above.
-  real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [m s-2]
-  real, pointer :: gradKEv(:,:,:) => NULL()  !< gradKEv = - d/dy(u2) [m s-2]
-  real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u [m s-2]
-  real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v [m s-2]
+  real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [L T-2 ~> m s-2]
+  real, pointer :: gradKEv(:,:,:) => NULL()  !< gradKEv = - d/dy(u2) [L T-2 ~> m s-2]
+  real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u [L T-2 ~> m s-2]
+  real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v [L T-2 ~> m s-2]
 
 end type accel_diag_ptrs
 

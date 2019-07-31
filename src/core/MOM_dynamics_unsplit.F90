@@ -107,12 +107,12 @@ implicit none ; private
 !> MOM_dynamics_unsplit module control structure
 type, public :: MOM_dyn_unsplit_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    !< CAu = f*v - u.grad(u) [m s-2].
+    CAu, &    !< CAu = f*v - u.grad(u) [L T-2 ~> m s-2].
     PFu, &    !< PFu = -dM/dx [m s-2].
     diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> mm s-2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    !< CAv = -f*u - u.grad(v) [m s-2].
+    CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2].
     PFv, &    !< PFv = -dM/dy [m s-2].
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
 
@@ -324,11 +324,11 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_pred * &
-                               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+                               (CS%PFu(I,j,k) + US%L_T2_to_m_s2*CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_pred * &
-                               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+                               (CS%PFv(i,J,k) + US%L_T2_to_m_s2*CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -391,11 +391,11 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * &
-            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+            (CS%PFu(I,j,k) + US%L_T2_to_m_s2*CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * &
-            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+            (CS%PFv(i,J,k) + US%L_T2_to_m_s2*CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -468,11 +468,11 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   endif
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
-            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+            (CS%PFu(I,j,k) + US%L_T2_to_m_s2*CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
-            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+            (CS%PFv(i,J,k) + US%L_T2_to_m_s2*CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! u <- u + dt d/dz visc d/dz u
@@ -648,7 +648,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
   call continuity_init(Time, G, GV, param_file, diag, CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
@@ -672,9 +672,9 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
       conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
-      'Zonal Coriolis and Advective Acceleration', 'meter second-2')
+      'Zonal Coriolis and Advective Acceleration', 'meter second-2, conversion=US%L_T2_to_m_s2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
-      'Meridional Coriolis and Advective Acceleration', 'meter second-2')
+      'Meridional Coriolis and Advective Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration', 'meter second-2')
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &

@@ -975,10 +975,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_CorAdv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%CAu(I,j,k)
+        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*US%m_to_L*G%dxCu(I,j)*ADp%CAu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%CAv(i,J,k)
+        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * US%L_to_m**2*G%IareaT(i,j) * &
@@ -1002,11 +1002,11 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         if (G%mask2dCu(i,j) /= 0.) &
-          KE_u(I,j) = US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
+          KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*US%m_to_L*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         if (G%mask2dCv(i,j) /= 0.) &
-          KE_v(i,J) = US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
+          KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * US%L_to_m**2*G%IareaT(i,j) * &
