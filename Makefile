@@ -48,7 +48,7 @@ build/Makefile: build/path_names
 		-t $(MKMF_TEMPLATE) \
 		-o '-I ../$(FMS)/build' \
 		-p ../MOM6 \
-		-l '-lfms ../$(FMS)/lib/libfms.a' \
+		-l '../$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		$(notdir $<)
 
