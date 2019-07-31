@@ -74,8 +74,7 @@ contains
 !> Time steps the layer thicknesses, using a monotonically limit, directionally split PPM scheme,
 !! based on Lin (1994).
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
-                          visc_rem_u, visc_rem_v, u_cor, v_cor, &
-                          uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
+                          visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure.
   type(continuity_PPM_CS), pointer       :: CS  !< Module's control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -121,22 +120,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(out)   :: v_cor
                              !< The meridional velocities that give vhbt as the depth-integrated transport [m s-1].
-  real, dimension(SZIB_(G),SZJ_(G)),  &
-                 optional, intent(in)    :: uhbt_aux
-                             !< A second set of summed volume fluxes through zonal faces
-                             !! [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G)),  &
-                 optional, intent(in)    :: vhbt_aux
-                             !< A second set of summed volume fluxes through meridional faces
-                             !! [H m2 s-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                 optional, intent(out)   :: u_cor_aux
-                             !< The zonal velocities that give uhbt_aux as the depth-integrated
-                             !! transports [m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                 optional, intent(out)   :: v_cor_aux
-                             !< The meridional velocities that give vhbt_aux as the depth-integrated
-                             !! transports [m s-1].
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe
                              !!  the effective open face areas as a function of barotropic flow.
 
@@ -165,8 +148,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
   !    First, advect zonally.
     LB%ish = G%isc ; LB%ieh = G%iec
     LB%jsh = G%jsc-stencil ; LB%jeh = G%jec+stencil
-    call zonal_mass_flux(u, hin, uh, dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, &
-                         u_cor, uhbt_aux, u_cor_aux, BT_cont)
+    call zonal_mass_flux(u, hin, uh, dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, u_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -181,8 +163,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
 
     !    Now advect meridionally, using the updated thicknesses to determine
     !  the fluxes.
-    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, &
-                              v_cor, vhbt_aux, v_cor_aux, BT_cont)
+    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, v_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -198,8 +179,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     LB%ish = G%isc-stencil ; LB%ieh = G%iec+stencil
     LB%jsh = G%jsc ; LB%jeh = G%jec
 
-    call meridional_mass_flux(v, hin, vh, dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, &
-                              v_cor, vhbt_aux, v_cor_aux, BT_cont)
+    call meridional_mass_flux(v, hin, vh, dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, v_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -211,8 +191,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
   !    Now advect zonally, using the updated thicknesses to determine
   !  the fluxes.
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
-    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, &
-                         u_cor, uhbt_aux, u_cor_aux, BT_cont)
+    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, u_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -229,7 +208,7 @@ end subroutine continuity_PPM
 
 !> Calculates the mass or volume fluxes through the zonal faces, and other related quantities.
 subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
-                           visc_rem_u, u_cor, uhbt_aux, u_cor_aux, BT_cont)
+                           visc_rem_u, u_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -254,17 +233,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(in)    :: uhbt_aux
-                     !< A second set of summed volume fluxes through zonal faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: u_cor
                      !< The zonal velocitiess (u with a barotropic correction)
                      !! that give uhbt as the depth-integrated transport, m s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                 optional, intent(out)   :: u_cor_aux
-                     !< The zonal velocities (u with a barotropic correction)
-                     !! that give uhbt_aux as the depth-integrated transports [m s-1].
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
 
@@ -290,11 +262,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
   real :: du_lim  ! The velocity change that give a relative CFL of 1 [m s-1].
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west [m].
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
-  logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
+  logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, local_open_BC, is_simple
   type(OBC_segment_type), pointer :: segment => NULL()
 
-  do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
   local_open_BC = .false.
@@ -328,8 +299,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
 
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,u,h_in,h_L,h_R,use_visc_rem,visc_rem_u,  &
-!$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,do_aux,set_BT_cont,    &
-!$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont, local_Flather_OBC) &
+!$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,set_BT_cont,    &
+!$OMP                                  CFL_dt,I_dt,u_cor,BT_cont, local_Flather_OBC) &
 !$OMP                          private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
 !$OMP                                  is_simple,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W,any_simple_OBC ) &
 !$OMP      firstprivate(visc_rem)
@@ -357,7 +328,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
       visc_rem_max(I) = 1.0
     enddo ; endif
 
-    if (present(uhbt) .or. do_aux .or. set_BT_cont) then
+    if (present(uhbt) .or. set_BT_cont) then
       !   Set limits on du that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
       do I=ish-1,ieh
@@ -437,7 +408,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
       ! Up to this point, everything is shared between uhbt and uhbt_aux.
 
       any_simple_OBC = .false.
-      if (present(uhbt) .or. do_aux .or. set_BT_cont) then
+      if (present(uhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%segment(OBC%segnum_u(I,j))%specified
@@ -463,20 +434,6 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
 
       endif
 
-      if (do_aux) then
-        call zonal_flux_adjust(u, h_in, h_L, h_R, uhbt_aux(:,j), uh_tot_0, &
-                               duhdu_tot_0, du, du_max_CFL, du_min_CFL, dt, G, &
-                               CS, visc_rem, j, ish, ieh, do_I, .false., OBC=OBC)
-
-        do k=1,nz
-          do I=ish-1,ieh ; u_cor_aux(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
-          if (local_specified_BC) then ; do I=ish-1,ieh
-            if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-              u_cor_aux(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
-          enddo ; endif
-        enddo
-      endif ! do_aux
-
       if (set_BT_cont) then
         call set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0,&
                                du_max_CFL, du_min_CFL, dt, G, US, CS, visc_rem, &
@@ -500,7 +457,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
         endif
       endif ! set_BT_cont
 
-    endif ! present(uhbt) or do_aux or set_BT_cont
+    endif ! present(uhbt) or set_BT_cont
 
     !### Work this into the code above.
     do k=1,nz ; do I=ish-1,ieh
@@ -1060,7 +1017,7 @@ end subroutine set_zonal_BT_cont
 
 !> Calculates the mass or volume fluxes through the meridional faces, and other related quantities.
 subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
-                                visc_rem_v, v_cor, vhbt_aux, v_cor_aux, BT_cont)
+                                visc_rem_v, v_cor, BT_cont)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< Meridional velocity [m s-1].
@@ -1082,16 +1039,10 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                                    !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt  !< The summed volume flux through
                                    !< meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt_aux !< A second set of summed volume fluxes
-                                   !! through meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                      optional, intent(out) :: v_cor
                                    !< The meridional velocitiess (v with a barotropic correction)
                                    !! that give vhbt as the depth-integrated transport [m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                   optional, intent(out)   :: v_cor_aux
-                                   !< The meridional velocities (v with a barotropic correction)
-                                   !! that give vhbt_aux as the depth-integrated transports [m s-1].
   type(BT_cont_type),              optional, pointer       :: BT_cont !< A structure with elements that describe
                                    !! the effective open face areas as a function of barotropic flow.
   ! Local variables
@@ -1118,11 +1069,10 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
   real :: dv_lim  ! The velocity change that give a relative CFL of 1 [m s-1].
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south [m].
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
-  logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
+  logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, is_simple, local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
 
-  do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
   local_open_BC = .false.
@@ -1156,9 +1106,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
 
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,v,h_in,h_L,h_R,vh,use_visc_rem, &
-!$OMP                                  visc_rem_v,dt,G,GV,CS,local_specified_BC,OBC,vhbt,do_aux, &
-!$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,vhbt_aux,          &
-!$OMP                                  v_cor_aux,BT_cont, local_Flather_OBC )           &
+!$OMP                                  visc_rem_v,dt,G,GV,CS,local_specified_BC,OBC,vhbt, &
+!$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,BT_cont, local_Flather_OBC ) &
 !$OMP                          private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
 !$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
 !$OMP                                  is_simple,FAvi,dy_S,any_simple_OBC ) &
@@ -1185,7 +1134,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
       visc_rem_max(i) = 1.0
     enddo ; endif
 
-    if (present(vhbt) .or. do_aux .or. set_BT_cont) then
+    if (present(vhbt) .or. set_BT_cont) then
       !   Set limits on dv that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
       do i=ish,ieh
@@ -1262,7 +1211,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
       ! Up to this point, everything is shared between vhbt and vhbt_aux.
 
       any_simple_OBC = .false.
-      if (present(vhbt) .or. do_aux .or. set_BT_cont) then
+      if (present(vhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%segment(OBC%segnum_v(i,J))%specified
@@ -1286,20 +1235,6 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
           enddo ; endif
         enddo ; endif ! v-corrected
       endif
-
-      if (do_aux) then
-        call meridional_flux_adjust(v, h_in, h_L, h_R, vhbt_aux(:,J), vh_tot_0, &
-                               dvhdv_tot_0, dv, dv_max_CFL, dv_min_CFL, dt, G, &
-                               CS, visc_rem, j, ish, ieh, do_I, .false., OBC=OBC)
-
-        do k=1,nz
-          do i=ish,ieh ; v_cor_aux(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
-          if (local_specified_BC) then ; do i=ish,ieh
-            if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-              v_cor_aux(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
-          enddo ; endif
-        enddo
-      endif ! do_aux
 
       if (set_BT_cont) then
         call set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0,&
@@ -1325,7 +1260,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
         endif
       endif ! set_BT_cont
 
-    endif ! present(vhbt) or do_aux or set_BT_cont
+    endif ! present(vhbt) or set_BT_cont
 
     !### Work this into the code above.
     do k=1,nz ; do i=ish,ieh
@@ -2303,6 +2238,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
                  "than about 10^-15*MAXIMUM_DEPTH.", units="m", scale=GV%m_to_H, &
                  default=0.5*G%ke*GV%Angstrom_m, unscaled=tol_eta_m)
 
+  !### ETA_TOLERANCE_AUX can be obsoleted.
   call get_param(param_file, mdl, "ETA_TOLERANCE_AUX", CS%tol_eta_aux, &
                  "The tolerance for free-surface height discrepancies "//&
                  "between the barotropic solution and the sum of the "//&

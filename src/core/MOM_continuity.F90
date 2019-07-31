@@ -41,7 +41,6 @@ contains
 !! based on Lin (1994).
 subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
-!                      uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -85,18 +84,6 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(out)   :: v_cor !< The meridional velocities that
           !! give vhbt as the depth-integrated transport [m s-1].
-!  real, dimension(SZIB_(G),SZJ_(G)), &
-!                 optional, intent(in)    :: uhbt_aux !< A second summed zonal
-!          !! volume flux [H m2 s-1 ~> m3 s-1 or kg s-1].
-!  real, dimension(SZI_(G),SZJB_(G)), &
-!                 optional, intent(in)    :: vhbt_aux !< A second summed meridional
-!          !! volume flux [H m2 s-1 ~> m3 s-1 or kg s-1].
-!  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-!                 optional, intent(inout) :: u_cor_aux !< The zonal velocities
-!          !! that give uhbt_aux as the depth-integrated transport [m s-1].
-!  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-!                 optional, intent(inout) :: v_cor_aux !< The meridional velocities
-!          !! that give vhbt_aux as the depth-integrated transport [m s-1].
   type(BT_cont_type), &
                  optional, pointer       :: BT_cont !< A structure with elements
           !! that describe the effective open face areas as a function of barotropic flow.
@@ -107,21 +94,10 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
   if (present(u_cor) .neqv. present(v_cor)) call MOM_error(FATAL, &
       "MOM_continuity: Either both u_cor and v_cor or neither"// &
        " one must be present in call to continuity.")
-!  if (present(uhbt_aux) .neqv. present(vhbt_aux)) call MOM_error(FATAL, &
-!      "MOM_continuity: Either both uhbt_aux and uhbt_aux or neither"// &
-!       " one must be present in call to continuity.")
-!  if (present(u_cor_aux) .neqv. present(v_cor_aux)) call MOM_error(FATAL, &
-!      "MOM_continuity: Either both u_cor_aux and v_cor_aux or neither"// &
-!       " one must be present in call to continuity.")
-!  if (present(u_cor_aux) .neqv. present(uhbt_aux)) call MOM_error(FATAL, &
-!      "MOM_continuity: u_cor_aux can only be calculated if uhbt_aux is"// &
-!      " provided, and uhbt_aux has no other purpose.  Include both arguments"//&
-!      " or neither.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
     call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, uhbt, vhbt, OBC, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont=BT_cont)
-! Eliminate 4 unused optional arguments:  ( uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   else
     call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
   endif
