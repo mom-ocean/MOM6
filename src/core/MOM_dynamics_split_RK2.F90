@@ -285,7 +285,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bc_accel
     ! u_bc_accel and v_bc_accel are the summed baroclinic accelerations of each
-    ! layer calculated by the non-barotropic part of the model [m s-2].
+    ! layer calculated by the non-barotropic part of the model [L T-2 ~> m s-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: uh_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: vh_in
@@ -449,10 +449,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u_bc_accel(I,j,k) = (CS%Cau(I,j,k) + CS%PFu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)
+      u_bc_accel(I,j,k) = US%m_s_to_L_T*US%T_to_s*((CS%Cau(I,j,k) + CS%PFu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)
+      v_bc_accel(i,J,k) = US%m_s_to_L_T*US%T_to_s*((CS%Cav(i,J,k) + CS%PFv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k))
     enddo ; enddo
   enddo
   if (associated(CS%OBC)) then
@@ -474,10 +474,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * u_bc_accel(I,j,k))
+      up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * US%L_T_to_m_s*US%s_to_T*u_bc_accel(I,j,k))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * v_bc_accel(i,J,k))
+      vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * US%L_T_to_m_s*US%s_to_T*v_bc_accel(i,J,k))
     enddo ; enddo
   enddo
 
@@ -553,12 +553,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do J=Jsq,Jeq ; do i=is,ie
-      vp(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt_pred * &
-                      (v_bc_accel(i,J,k) + US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)))
+      vp(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + US%s_to_T*dt_pred * US%L_T_to_m_s* &
+                      (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      up(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt_pred  * &
-                      (u_bc_accel(I,j,k) + US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)))
+      up(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + US%s_to_T*dt_pred  * US%L_T_to_m_s* &
+                      (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -707,10 +707,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u_bc_accel(I,j,k) = (CS%Cau(I,j,k) + CS%PFu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)
+      u_bc_accel(I,j,k) = US%m_s_to_L_T*US%T_to_s*((CS%Cau(I,j,k) + CS%PFu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)
+      v_bc_accel(i,J,k) = US%m_s_to_L_T*US%T_to_s*((CS%Cav(i,J,k) + CS%PFv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k))
     enddo ; enddo
   enddo
   if (associated(CS%OBC)) then
@@ -757,12 +757,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt * &
-                      (u_bc_accel(I,j,k) + US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)))
+      u(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + US%s_to_T*dt * US%L_T_to_m_s*  &
+                      (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt * &
-                      (v_bc_accel(i,J,k) + US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)))
+      v(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + US%s_to_T*dt * US%L_T_to_m_s*  &
+                      (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)

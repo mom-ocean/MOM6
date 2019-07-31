@@ -396,7 +396,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real,                                      intent(in)  :: dt      !< The time increment to integrate over.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations [m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
-                                                                       !! [m s-2].
+                                                                       !! [L T-2 ~> m s-2].
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
                                                          !! due to free surface height anomalies
@@ -1008,11 +1008,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! non-symmetric computational domain.
   !$OMP parallel do default(shared)
   do j=js,je ; do k=1,nz ; do I=Isq,Ieq
-    BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * US%m_to_L*US%T_to_s**2*bc_accel_u(I,j,k)
+    BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * bc_accel_u(I,j,k)
   enddo ; enddo ; enddo
   !$OMP parallel do default(shared)
   do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * US%m_to_L*US%T_to_s**2*bc_accel_v(i,J,k)
+    BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
   enddo ; enddo ; enddo
 
   ! Determine the difference between the sum of the layer fluxes and the
@@ -1467,7 +1467,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     endif
     call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, 0, .true., .true.)
     call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
-    call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, G%HI, haloshift=0)
+    call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, G%HI, haloshift=0, scale=US%L_T2_to_m_s2)
     call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, scale=US%m_to_Z)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=1)
   endif
