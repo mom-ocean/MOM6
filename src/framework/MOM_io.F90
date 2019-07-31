@@ -107,7 +107,7 @@ type axis_atts
   character(len=64)  :: name                    !< Names of the axis
   character(len=48)  :: units                   !< Physical dimensions of the axis
   character(len=240) :: longname                !< Long name of the axis
-  character(len=8)   :: cartesian_axis          !< Name of the cartesian axis: X,Y,Z,T
+  character(len=8)   :: axis                    !< Name of the cartesian axis: X,Y,Z,T
   character(len=8)   :: positive                !< Positive-definite direction: 
                                                 !! up, down, east, west, north, south
   integer            :: horgrid_position        !< Horizontal grid position
@@ -810,7 +810,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
-        axis_data_CS%axis(axis_number)%cartesian_axis  = 'Y'
+        axis_data_CS%axis(axis_number)%axis  = 'Y'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('lonh')
         axis_data_CS%data(axis_number)%p=>gridLonT(isg:ieg)
@@ -818,14 +818,14 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
         axis_data_CS%axis(axis_number)%longname = 'Longitude'
         axis_data_CS%axis(axis_number)%units = x_axis_units
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'X'
+        axis_data_CS%axis(axis_number)%axis = 'X'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('latq')
         axis_data_CS%data(axis_number)%p=>gridLatB(JsgB:JegB)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'Y'
+        axis_data_CS%axis(axis_number)%axis = 'Y'
         axis_data_CS%axis(axis_number)%horgrid_position = CORNER
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('lonq')
@@ -833,7 +833,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%data(axis_number)%p=>gridLonB(IsgB:IegB)
         axis_data_CS%axis(axis_number)%longname  = 'Longitude'
         axis_data_CS%axis(axis_number)%units = x_axis_units
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'X'
+        axis_data_CS%axis(axis_number)%axis = 'X'
         axis_data_CS%axis(axis_number)%horgrid_position = CORNER
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('Layer')
@@ -841,7 +841,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Layer pseudo-depth, -z*'
         axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'Z'
+        axis_data_CS%axis(axis_number)%axis = 'Z'
         axis_data_CS%axis(axis_number)%positive  = 'up'
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER ! dummy value for the domain-decomposed write
      case('Interface')
@@ -849,7 +849,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Interface pseudo-depth, -z*'
         axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'Z'
+        axis_data_CS%axis(axis_number)%axis = 'Z'
         axis_data_CS%axis(axis_number)%positive = 'up'
         axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Time')
@@ -868,7 +868,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         else
            axis_data_CS%axis(axis_number)%units  = 'days'
         endif
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'T'
+        axis_data_CS%axis(axis_number)%axis = 'T'
         axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Period')
         if (.not.(present(time_val))) then
@@ -880,7 +880,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Periods for cyclical variables'
         axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
-        axis_data_CS%axis(axis_number)%cartesian_axis = 'T'
+        axis_data_CS%axis(axis_number)%axis = 'T'
      case default
         call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
                        " is an unrecognized axis")
