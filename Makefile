@@ -37,11 +37,18 @@ MOM6: build/Makefile $(FMS)/lib/libfms.a
 
 build/Makefile: build/path_names
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
+	#cd $(@D) && $(MKMF) \
+	#	-t $(MKMF_TEMPLATE) \
+	#	-o '-I ../$(FMS)/build' \
+	#	-p ../MOM6 \
+	#	-l '-L ../$(FMS)/lib -lfms' \
+	#	-c $(MKMF_CPP) \
+	#	$(notdir $<)
 	cd $(@D) && $(MKMF) \
 		-t $(MKMF_TEMPLATE) \
 		-o '-I ../$(FMS)/build' \
 		-p ../MOM6 \
-		-l '-static -L ../$(FMS)/lib -lfms' \
+		-l '-lfms ../$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		$(notdir $<)
 
