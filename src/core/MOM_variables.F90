@@ -136,8 +136,8 @@ type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
     CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration [m s-2]
     CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [m s-2]
-    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration [m s-2]
-    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration [m s-2]
+    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration [L T-2 ~> m s-2]
+    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration [L T-2 ~> m s-2]
     diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
     diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
     pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
@@ -160,8 +160,8 @@ type, public :: accel_diag_ptrs
     diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
     CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
     CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
-    PFu => NULL(), &       !< Zonal acceleration due to pressure forces [m s-2]
-    PFv => NULL(), &       !< Meridional acceleration due to pressure forces [m s-2]
+    PFu => NULL(), &       !< Zonal acceleration due to pressure forces [L T-2 ~> m s-2]
+    PFv => NULL(), &       !< Meridional acceleration due to pressure forces [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [m s-2]

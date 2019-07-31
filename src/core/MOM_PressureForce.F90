@@ -52,9 +52,9 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                            intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: PFu  !< Zonal pressure force acceleration [m s-2]
+                           intent(out) :: PFu  !< Zonal pressure force acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: PFv  !< Meridional pressure force acceleration [m s-2]
+                           intent(out) :: PFv  !< Meridional pressure force acceleration [L T-2 ~> m s-2]
   type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:), &
@@ -66,6 +66,11 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out) :: eta  !< The bottom mass used to calculate PFu and PFv,
                                                !! [H ~> m or kg m-2], with any tidal contributions.
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
     if (GV%Boussinesq) then
@@ -92,6 +97,14 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                                        p_atm, pbce, eta)
     endif
   endif
+
+    !### Move this into the various routines above.
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      PFu(I,j,k) = US%m_to_L*US%T_to_s**2 * PFu(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      PFv(i,J,k) = US%m_to_L*US%T_to_s**2 * PFv(i,J,k)
+    enddo ; enddo ; enddo
 
 end subroutine Pressureforce
 

@@ -110,7 +110,7 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2].
-    PFv, &    !< PFv = -dM/dy [m s-2].
+    PFv, &    !< PFv = -dM/dy [L T-2 ~> m s-2].
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean to the seafloor (Pa)
@@ -322,11 +322,11 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt_pred * &
-                   ((CS%PFu(I,j,k) + US%L_T2_to_m_s2*CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
+                   (US%L_T2_to_m_s2*(CS%PFu(I,j,k) + CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt_pred * &
-                   ((CS%PFv(i,J,k) + US%L_T2_to_m_s2*CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
+                   (US%L_T2_to_m_s2*(CS%PFv(i,J,k) + CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -378,15 +378,15 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! u*[n+1] = u[n] + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * (1.+CS%begw) * &
-            ((CS%PFu(I,j,k) + US%L_T2_to_m_s2*CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
+            (US%L_T2_to_m_s2*(CS%PFu(I,j,k) + CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
     u_in(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * &
-            ((CS%PFu(I,j,k) + US%L_T2_to_m_s2*CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
+            (US%L_T2_to_m_s2*(CS%PFu(I,j,k) + CS%CAu(I,j,k)) + US%s_to_T*CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * (1.+CS%begw) * &
-            ((CS%PFv(i,J,k) + US%L_T2_to_m_s2*CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
+            (US%L_T2_to_m_s2*(CS%PFv(i,J,k) + CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
     v_in(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * &
-            ((CS%PFv(i,J,k) + US%L_T2_to_m_s2*CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
+            (US%L_T2_to_m_s2*(CS%PFv(i,J,k) + CS%CAv(i,J,k)) + US%s_to_T*CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! up[n] <- up* + dt d/dz visc d/dz up
@@ -635,9 +635,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration', 'meter second-2')
+      'Zonal Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration', 'meter second-2')
+      'Meridional Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)

@@ -173,10 +173,10 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
                                                !! and momentum advection terms [L T-2 ~> m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: PFu  !< Zonal acceleration due to pressure gradients
-                                               !! (equal to -dM/dx) [m s-2].
+                                               !! (equal to -dM/dx) [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: PFv  !< Meridional acceleration due to pressure gradients
-                                               !! (equal to -dM/dy) [m s-2].
+                                               !! (equal to -dM/dy) [L T-2 ~> m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: diffu !< Zonal acceleration due to convergence of the
                                                 !! along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
@@ -207,7 +207,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
-  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym)
+  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
   call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, scale=US%s_to_T)
   if (present(pbce)) &
     call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H*US%L_T_to_m_s**2)

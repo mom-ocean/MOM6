@@ -75,7 +75,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2]
-    PFv, &    !< PFv = -dM/dy [m s-2]
+    PFv, &    !< PFv = -dM/dy [L T-2 ~> m s-2]
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: visc_rem_u
@@ -449,12 +449,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u_bc_accel(I,j,k) = US%m_s_to_L_T*US%T_to_s*((US%L_T2_to_m_s2*CS%CAu(I,j,k) + CS%PFu(I,j,k)) + &
-                                                   US%s_to_T*CS%diffu(I,j,k))
+      u_bc_accel(I,j,k) = (CS%CAu(I,j,k) + CS%PFu(I,j,k)) + US%m_s_to_L_T*CS%diffu(I,j,k)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v_bc_accel(i,J,k) = US%m_s_to_L_T*US%T_to_s*((US%L_T2_to_m_s2*CS%CAv(i,J,k) + CS%PFv(i,J,k)) + &
-                                                   US%s_to_T*CS%diffv(i,J,k))
+      v_bc_accel(i,J,k) = (CS%CAv(i,J,k) + CS%PFv(i,J,k)) + US%m_s_to_L_T*CS%diffv(i,J,k)
     enddo ; enddo
   enddo
   if (associated(CS%OBC)) then
@@ -709,12 +707,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u_bc_accel(I,j,k) = US%m_s_to_L_T*US%T_to_s*((US%L_T2_to_m_s2*CS%Cau(I,j,k) + CS%PFu(I,j,k)) + &
-                                                   US%s_to_T*CS%diffu(I,j,k))
+      u_bc_accel(I,j,k) = (CS%Cau(I,j,k) + CS%PFu(I,j,k)) + US%m_s_to_L_T*CS%diffu(I,j,k)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v_bc_accel(i,J,k) = US%m_s_to_L_T*US%T_to_s*((US%L_T2_to_m_s2*CS%Cav(i,J,k) + CS%PFv(i,J,k)) + &
-                                                   US%s_to_T*CS%diffv(i,J,k))
+      v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + US%m_s_to_L_T*CS%diffv(i,J,k)
     enddo ; enddo
   enddo
   if (associated(CS%OBC)) then
@@ -1205,9 +1201,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration', 'm s-2')
+      'Zonal Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration', 'm s-2')
+      'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'm s-1')

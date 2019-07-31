@@ -190,7 +190,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     write(file,'(/,"CAu:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAu(I,j,k)); enddo
     write(file,'(/,"PFu:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%PFu(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%PFu(I,j,k)); enddo
     write(file,'(/,"diffu: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%s_to_T*ADp%diffu(I,j,k)); enddo
 
@@ -354,7 +354,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
       write(file,'(/,"PFu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*ADp%PFu(I,j,k)*Inorm(k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%PFu(I,j,k)*Inorm(k)); enddo
 
       write(file,'(/,"diffu: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
@@ -523,7 +523,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)); enddo
 
     write(file,'(/,"PFv:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*ADp%PFv(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%PFv(i,J,k)); enddo
 
     write(file,'(/,"diffv: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%s_to_T*ADp%diffv(i,J,k)); enddo
@@ -685,7 +685,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                       (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)*Inorm(k)); enddo
       write(file,'(/,"PFv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*ADp%PFv(i,J,k)*Inorm(k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%PFv(i,J,k)*Inorm(k)); enddo
       write(file,'(/,"diffv: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                       (dt*US%s_to_T*ADp%diffv(i,J,k)*Inorm(k)); enddo
