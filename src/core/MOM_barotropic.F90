@@ -331,13 +331,13 @@ end type local_BT_cont_u_type
 !> A desciption of the functional dependence of transport at a v-point
 type, private :: local_BT_cont_v_type
   real :: FA_v_NN !< The effective open face area for meridional barotropic transport
-                  !! drawing from locations far to the north [H m ~> m2 or kg m-1].
+                  !! drawing from locations far to the north [H L ~> m2 or kg m-1].
   real :: FA_v_N0 !< The effective open face area for meridional barotropic transport
-                  !! drawing from nearby to the north [H m ~> m2 or kg m-1].
+                  !! drawing from nearby to the north [H L ~> m2 or kg m-1].
   real :: FA_v_S0 !< The effective open face area for meridional barotropic transport
-                  !! drawing from nearby to the south [H m ~> m2 or kg m-1].
+                  !! drawing from nearby to the south [H L ~> m2 or kg m-1].
   real :: FA_v_SS !< The effective open face area for meridional barotropic transport
-                  !! drawing from locations far to the south [H m ~> m2 or kg m-1].
+                  !! drawing from locations far to the south [H L ~> m2 or kg m-1].
   real :: vBT_SS  !< vBT_SS is the barotropic velocity [L T-1 ~> m s-1], beyond which the marginal
                   !! open face area is FA_v_SS. vBT_SS must be non-negative.
   real :: vBT_NN  !< vBT_NN is the barotropic velocity [L T-1 ~> m s-1], beyond which the marginal
@@ -384,8 +384,7 @@ contains
 subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
                   eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
                   eta_out, uhbtav, vhbtav, G, GV, US, CS, &
-                  visc_rem_u, visc_rem_v, etaav, OBC, &
-                  BT_cont, eta_PF_start, &
+                  visc_rem_u, visc_rem_v, etaav, OBC, BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
@@ -419,10 +418,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: uhbtav        !< the barotropic zonal volume or mass
                                                          !! fluxes averaged through the barotropic steps
-                                                         !! [H m2 s-1 ~> m3 or kg s-1].
+                                                         !! [H L2 T-1 ~> m3 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vhbtav        !< the barotropic meridional volume or mass
                                                          !! fluxes averaged through the barotropic steps
-                                                         !! [H m2 s-1 ~> m3 or kg s-1].
+                                                         !! [H L2 T-1 ~> m3 or kg s-1].
   type(barotropic_CS),                       pointer     :: CS            !< The control structure returned by a
                                                          !! previous call to barotropic_init.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
@@ -2087,7 +2086,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   do j=js,je ; do I=is-1,ie
     CS%ubtav(I,j) = ubt_sum(I,j) * I_sum_wt_trans
-    uhbtav(I,j) = US%s_to_T*US%L_to_m**2*uhbt_sum(I,j) * I_sum_wt_trans
+    uhbtav(I,j) = uhbt_sum(I,j) * I_sum_wt_trans
  ! The following line would do approximately nothing, as I_sum_wt_accel ~= 1.
  !###   u_accel_bt(I,j) = u_accel_bt(I,j) * I_sum_wt_accel
     ubt_wtd(I,j) = ubt_wtd(I,j) * I_sum_wt_vel
@@ -2095,7 +2094,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   do J=js-1,je ; do i=is,ie
     CS%vbtav(i,J) = vbt_sum(i,J) * I_sum_wt_trans
-    vhbtav(i,J) = US%s_to_T*US%L_to_m**2*vhbt_sum(i,J) * I_sum_wt_trans
+    vhbtav(i,J) = vhbt_sum(i,J) * I_sum_wt_trans
  ! The following line would do approximately nothing, as I_sum_wt_accel ~= 1.
  !###   v_accel_bt(i,J) = v_accel_bt(i,J)  * I_sum_wt_accel
     vbt_wtd(i,J) = vbt_wtd(i,J) * I_sum_wt_vel

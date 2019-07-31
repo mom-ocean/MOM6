@@ -114,10 +114,10 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta_PF !< instantaneous SSH used in calculating PFu and
                                                                   !! PFv [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)        :: uhbt   !< average x-volume or mass flux determined by the
-                                                                  !! barotropic solver [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                                  !! barotropic solver [H L2 T-1 ~> m3 s-1 or kg s-1].
                                                                   !! uhbt is roughly equal to the vertical sum of uh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)        :: vhbt   !< average y-volume or mass flux determined by the
-                                                                  !! barotropic solver [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                                  !! barotropic solver [H L2 T-1 ~> m3 s-1 or kg s-1].
                                                                   !! vhbt is roughly equal to vertical sum of vh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce   !< pbce times eta gives the baroclinic pressure
                                                                   !! anomaly in each layer due to free surface height
@@ -518,9 +518,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_accel_bt = layer accelerations due to barotropic solver
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
     call cpu_clock_begin(id_clock_continuity)
-    call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, US, &
-                    CS%continuity_CSp, OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, &
-                    visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
+    call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC, &
+                    visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
       call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
@@ -811,9 +810,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! h  = h + dt * div . uh
   ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, h, uh, vh, dt, G, GV, US, &
-                  CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
-                  CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
+  call continuity(u, v, h, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
+                  CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
   call cpu_clock_end(id_clock_continuity)
   call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids

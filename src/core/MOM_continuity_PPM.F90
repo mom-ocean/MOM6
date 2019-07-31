@@ -95,10 +95,10 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt !< The summed volume flux through meridional faces
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type),  &
                  optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -253,7 +253,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                      !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
-                                                 !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                 !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt_aux
                      !< A second set of summed volume fluxes through zonal faces [H m2 s-1 ~> m3 s-1 or kg s-1].
@@ -449,7 +449,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
       endif
 
       if (present(uhbt)) then
-        call zonal_flux_adjust(u, h_in, h_L, h_R, uhbt(:,j), uh_tot_0, &
+        call zonal_flux_adjust(u, h_in, h_L, h_R, US%s_to_T*US%L_to_m**2*uhbt(:,j), uh_tot_0, &
                                duhdu_tot_0, du, du_max_CFL, du_min_CFL, dt, G, &
                                CS, visc_rem, j, ish, ieh, do_I, .true., uh, OBC=OBC)
 
@@ -501,7 +501,14 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
       endif ! set_BT_cont
 
     endif ! present(uhbt) or do_aux or set_BT_cont
+
+    !### Work this into the code above.
+    do k=1,nz ; do I=ish-1,ieh
+      uh(I,j,k) = US%m_to_L**2*US%T_to_s*uh(I,j,k)
+    enddo ; enddo
+
   enddo ! j-loop
+
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
@@ -537,12 +544,6 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_u, OBC)
     endif
   endif ; endif
-
-  !### Work this into the code above.
-  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
-    uh(I,j,k) = US%m_to_L**2*US%T_to_s*uh(I,j,k)
-  enddo ; enddo ; enddo
-
 
 end subroutine zonal_mass_flux
 
@@ -1080,7 +1081,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                                    !! that a layer experiences after viscosity is applied.  Nondimensional between
                                    !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt  !< The summed volume flux through
-                                   !< meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                   !< meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt_aux !< A second set of summed volume fluxes
                                    !! through meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -1273,7 +1274,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
       endif
 
       if (present(vhbt)) then
-        call meridional_flux_adjust(v, h_in, h_L, h_R, vhbt(:,J), vh_tot_0, &
+        call meridional_flux_adjust(v, h_in, h_L, h_R, US%s_to_T*US%L_to_m**2*vhbt(:,J), vh_tot_0, &
                                dvhdv_tot_0, dv, dv_max_CFL, dv_min_CFL, dt, G, &
                                CS, visc_rem, j, ish, ieh, do_I, .true., vh, OBC=OBC)
 
@@ -1325,6 +1326,12 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
       endif ! set_BT_cont
 
     endif ! present(vhbt) or do_aux or set_BT_cont
+
+    !### Work this into the code above.
+    do k=1,nz ; do i=ish,ieh
+      vh(i,J,k) = US%m_to_L**2*US%T_to_s*vh(i,J,k)
+    enddo ; enddo
+
   enddo ! j-loop
 
   if (local_open_BC .and. set_BT_cont) then
@@ -1362,11 +1369,6 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_v, OBC)
     endif
   endif ; endif
-
-  !### Work this into the code above.
-  do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
-    vh(i,J,k) = US%m_to_L**2*US%T_to_s*vh(i,J,k)
-  enddo ; enddo ; enddo
 
 end subroutine meridional_mass_flux
 
