@@ -41,7 +41,7 @@ build/Makefile: build/path_names
 		-t $(MKMF_TEMPLATE) \
 		-o '-I ../$(FMS)/build' \
 		-p ../MOM6 \
-		-l '-L ../$(FMS)/lib -lfms' \
+		-l '-static -L ../$(FMS)/lib -lfms' \
 		-c $(MKMF_CPP) \
 		$(notdir $<)
 
@@ -82,8 +82,6 @@ DOUBLE_GYRE_URL=https://github.com/marshallward/double_gyre_test
 
 test: experiments/double_gyre
 	cd $< && mkdir -p RESTART && mpirun -n 1 ../../MOM6
-	#curl -s https://codecov.io/bash > codecov.sh
-	#bash codecov.bash -n $(notdir $<)
 	bash <(curl -s https://codecov.io/bash) -n $(notdir $<)
 
 experiments/double_gyre:
