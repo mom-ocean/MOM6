@@ -53,8 +53,8 @@ type, public :: PointAccel_CS ; private
     v_prev => NULL(), &     !< Previous v-velocity [m s-1].
     T => NULL(), &          !< Temperature [degC].
     S => NULL(), &          !< Salinity [ppt].
-    u_accel_bt => NULL(), & !< Barotropic u-acclerations [m s-2]
-    v_accel_bt => NULL()    !< Barotropic v-acclerations [m s-2]
+    u_accel_bt => NULL(), & !< Barotropic u-acclerations [L T-2 ~> m s-2]
+    v_accel_bt => NULL()    !< Barotropic v-acclerations [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: pbce => NULL() !< pbce times eta gives the baroclinic
                             !! pressure anomaly in each layer due to free surface height anomalies
                             !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2].
@@ -230,7 +230,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (associated(CS%u_accel_bt)) then
       write(file,'("dubt:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*CS%u_accel_bt(I,j,k)) ; enddo
+                                      (dt*US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)) ; enddo
       write(file,'(/)')
     endif
 
@@ -383,7 +383,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       if (associated(CS%u_accel_bt)) then
         write(file,'(/,"dubt:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                        (dt*CS%u_accel_bt(I,j,k)*Inorm(k)) ; enddo
+                                        (dt*US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)*Inorm(k)) ; enddo
       endif
     endif
 
@@ -565,7 +565,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (associated(CS%v_accel_bt)) then
       write(file,'("dvbt:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*CS%v_accel_bt(i,J,k)) ; enddo
+                                      (dt*US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)) ; enddo
       write(file,'(/)')
     endif
 
@@ -713,7 +713,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       if (associated(CS%v_accel_bt)) then
         write(file,'(/,"dvbt:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                        (dt*CS%v_accel_bt(i,J,k)*Inorm(k)) ; enddo
+                                        (dt*US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)*Inorm(k)) ; enddo
       endif
     endif
 

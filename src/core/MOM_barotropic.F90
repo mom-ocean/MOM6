@@ -411,9 +411,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! calculate the Coriolis terms in bc_accel_u [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor      !< Ditto for meridonal bc_accel_v.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: accel_layer_u !< The zonal acceleration of each layer due
-                                                         !! to the barotropic calculation [m s-2].
+                                                         !! to the barotropic calculation [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
-                                                         !! due to the barotropic calculation [m s-2].
+                                                         !! due to the barotropic calculation [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: eta_out       !< The final barotropic free surface
                                                          !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: uhbtav        !< the barotropic zonal volume or mass
@@ -481,7 +481,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! not explicitly included in the barotropic equation [L T-2 ~> m s-2].
     u_accel_bt, & ! The difference between the zonal acceleration from the
                   ! barotropic calculation and BT_force_u [L T-2 ~> m s-2].
-    uhbt, &       ! The zonal barotropic thickness fluxes [H m2 s-1 ~> m3 s-1 or kg s-1].
+    uhbt, &       ! The zonal barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
     uhbt0, &      ! The difference between the sum of the layer zonal thickness
                   ! fluxes and the barotropic thickness flux using the same
                   ! velocity [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -514,7 +514,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! not explicitly included in the barotropic equation [L T-2 ~> m s-2].
     v_accel_bt, & ! The difference between the meridional acceleration from the
                   ! barotropic calculation and BT_force_v [L T-2 ~> m s-2].
-    vhbt, &       ! The meridional barotropic thickness fluxes [H m2 s-1 ~> m3 s-1 or kg s-1].
+    vhbt, &       ! The meridional barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
     vhbt0, &      ! The difference between the sum of the layer meridional
                   ! thickness fluxes and the barotropic thickness flux using
                   ! the same velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -619,7 +619,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: u_max_cor, v_max_cor ! The maximum corrective velocities [L T-1 ~> m s-1].
   real :: Htot        ! The total thickness [H ~> m or kg m-2].
   real :: eta_cor_max ! The maximum fluid that can be added as a correction to eta [H ~> m or kg m-2].
-  real :: accel_underflow ! An acceleration that is so small it should be zeroed out.
+  real :: accel_underflow ! An acceleration that is so small it should be zeroed out [L T-2 ~> m s-2].
 
   real, allocatable, dimension(:) :: wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2
   real :: sum_wt_vel, sum_wt_eta, sum_wt_accel, sum_wt_trans
@@ -649,7 +649,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   MS%isdw = CS%isdw ; MS%iedw = CS%iedw ; MS%jsdw = CS%jsdw ; MS%jedw = CS%jedw
   dt_in_T = US%s_to_T*dt
   Idt = 1.0 / dt_in_T
-  accel_underflow = US%L_T_to_m_s*CS%vel_underflow * US%s_to_T*Idt
+  accel_underflow = CS%vel_underflow * Idt
 
   use_BT_cont = .false.
   if (present(BT_cont)) use_BT_cont = (associated(BT_cont))
@@ -2116,13 +2116,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
-      accel_layer_u(I,j,k) = US%L_T2_to_m_s2 * (u_accel_bt(I,j) - &
+      accel_layer_u(I,j,k) = (u_accel_bt(I,j) - &
            ((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
             (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j) )
       if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      accel_layer_v(i,J,k) = US%L_T2_to_m_s2 * (v_accel_bt(i,J) - &
+      accel_layer_v(i,J,k) = (v_accel_bt(i,J) - &
            ((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1) - &
             (pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j)) * CS%IdyCv(i,J) )
       if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
@@ -2135,13 +2135,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
       if (OBC%segnum_u(I,j) /= OBC_NONE) then
         u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt_in_T
-        do k=1,nz ; accel_layer_u(I,j,k) = US%L_T2_to_m_s2*u_accel_bt(I,j) ; enddo
+        do k=1,nz ; accel_layer_u(I,j,k) = u_accel_bt(I,j) ; enddo
       endif
     enddo ; enddo ; endif
     if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
       if (OBC%segnum_v(i,J) /= OBC_NONE) then
         v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_first(i,J)) / dt_in_T
-        do k=1,nz ; accel_layer_v(i,J,k) = US%L_T2_to_m_s2*v_accel_bt(i,J) ; enddo
+        do k=1,nz ; accel_layer_v(i,J,k) = v_accel_bt(i,J) ; enddo
       endif
     enddo ; enddo ; endif
   endif
@@ -2379,12 +2379,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! the argument arrays.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt     !< the zonal barotropic velocity [m s-1].
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: uhbt    !< the zonal barotropic transport
-                                                                  !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt_trans !< the zonal barotropic velocity used in
                                                                   !! transport [L T-1 ~> m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt     !< the meridional barotropic velocity [m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vhbt    !< the meridional barotropic transport
-                                                                  !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt_trans !< the meridional BT velocity used in
                                                                   !! transports [m s-1].
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta     !< The barotropic free surface height anomaly or
@@ -2564,9 +2564,9 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                  !! transports.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu   !< A fixed estimate of the face areas at u points
-                                                                 !! [L m ~> m2 or kg m-1].
+                                                                 !! [H L ~> m2 or kg m-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv   !< A fixed estimate of the face areas at v points
-                                                                 !! [L m ~> m2 or kg m-1].
+                                                                 !! [H L ~> m2 or kg m-1].
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                  !! for a dynamic estimate of the face areas at
                                                                  !! u-points.
@@ -3394,12 +3394,12 @@ subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
                           intent(in)  :: ubt  !< The linearization zonal barotropic velocity [m s-1].
   real, dimension(SZIBW_(MS),SZJW_(MS)), &
                           intent(in)  :: uhbt !< The linearization zonal barotropic transport
-                                              !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), &
                           intent(in)  :: vbt  !< The linearization meridional barotropic velocity [m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), &
                           intent(in)  :: vhbt !< The linearization meridional barotropic transport
-                                              !! [H m2 s-1 ~> m3 s-1 or kg s-1].
+                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), &
                           intent(out) :: BTCL_u !< A structure with the u information from BT_cont.
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), &

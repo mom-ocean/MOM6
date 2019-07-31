@@ -131,8 +131,8 @@ type, public :: ocean_internal_state
     v => NULL(), & !< Pointer to the meridional velocity [m s-1]
     h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), & !<  Pointer to zonal transports [H m2 s-1 ~> m3 s-1 or kg s-1]
-    vh => NULL()    !<  Pointer to meridional transports [H m2 s-1 ~> m3 s-1 or kg s-1]
+    uh => NULL(), & !<  Pointer to zonal transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+    vh => NULL()    !<  Pointer to meridional transports [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: &
     CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration [m s-2]
     CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [m s-2]
@@ -141,9 +141,9 @@ type, public :: ocean_internal_state
     diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
     diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
     pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
-                       !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2]
-    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [m s-2]
-    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [m s-2]
+                       !! [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2]
+    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: &
     u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep [m s-1]
     v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep [m s-1]

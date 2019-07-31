@@ -554,11 +554,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   do k=1,nz
     do J=Jsq,Jeq ; do i=is,ie
       vp(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt_pred * &
-                      (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
+                      (v_bc_accel(i,J,k) + US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)))
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
       up(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt_pred  * &
-                      (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
+                      (u_bc_accel(I,j,k) + US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)))
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -758,11 +758,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
       u(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt * &
-                      (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
+                      (u_bc_accel(I,j,k) + US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
       v(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt * &
-                      (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
+                      (v_bc_accel(i,J,k) + US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)))
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -1211,9 +1211,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       'Barotropic-step Averaged Meridional Velocity', 'm s-1')
 
   CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', diag%axesCuL, Time, &
-    'Barotropic Anomaly Zonal Acceleration', 'm s-1')
+    'Barotropic Anomaly Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
-    'Barotropic Anomaly Meridional Acceleration', 'm s-1')
+    'Barotropic Anomaly Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)

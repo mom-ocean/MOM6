@@ -187,13 +187,13 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
                                                !! due to free surface height anomalies
-                                               !! [m2 s-2 H-1 ~> m s-2 or m4 s-2 kg-1].
+                                               !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                   optional, intent(in) :: u_accel_bt !< The zonal acceleration from terms in the
-                                                     !! barotropic solver [m s-2].
+                                                     !! barotropic solver [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                   optional, intent(in) :: v_accel_bt !< The meridional acceleration from terms in
-                                                     !! the barotropic solver [m s-2].
+                                                     !! the barotropic solver [L T-2 ~> m s-2].
   logical,        optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                     !! computationoal domain.
 
@@ -212,7 +212,8 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
   if (present(pbce)) &
     call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H*US%L_T_to_m_s**2)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
-    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym)
+    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym, &
+                  scale=US%L_T2_to_m_s2)
 end subroutine MOM_accel_chksum
 
 ! =============================================================================
