@@ -37,8 +37,7 @@ if return_code != 0: sys.exit(return_code)
 # ones.
 extensions = [
     'sphinx.ext.mathjax',
-    'sphinxcontrib.autodoc_doxygen',
-    'sphinxfortran.fortran_domain',
+    'breathe',
 ]
 
 autosummary_generate = ['api/modules.rst', 'api/pages.rst']

@@ -1,0 +1,9 @@
+name: mom6-docs
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.6
+  - doxygen
+  - breathe

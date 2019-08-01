@@ -1,11 +1,17 @@
-# don't build extra formats (like HTML zip)
-formats:
-  - none
+# .readthedocs.yml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
 
-# path to pip requirements file to bring in
-# doxygen extensions
-requirements_file: docs/requirements.txt
+# Required
+version: 2
 
-python:
-  # make sure we're using Python 3
-  version: 3.5
+# Build documentation in the docs/ directory with Sphinx
+sphinx:
+  configuration: docs/conf.py
+
+# Optionally build your docs in additional formats such as PDF and ePub
+formats: none
+
+conda:
+  environment: docs/environment.yml
+
