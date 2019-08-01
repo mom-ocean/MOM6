@@ -18,6 +18,7 @@ where notation is described in :ref:`equations-notation`. :math:`\boldsymbol{\un
 
 
 .. :ref:`vector_invariant`
+
 The total derivative is
 
 .. math::

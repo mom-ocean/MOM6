@@ -4,7 +4,6 @@
 Modules
 =======
 
-.. autodoxysummary::
-   :toctree: generated/modules
-   :generate:
-   :kind: mod
+.. doxygenindex::
+   :path: xml
+
