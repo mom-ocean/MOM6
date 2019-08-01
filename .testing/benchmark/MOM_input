@@ -574,3 +574,5 @@ ENERGYSAVEDAYS = 0.25           !   [days] default = 3600.0
                                 ! energies of the run and other globally summed diagnostics.
 DIAG_AS_CHKSUM = True
 DEBUG = True
+SPLIT_BOTTOM_STRESS = True
+BEGW = 0.1
