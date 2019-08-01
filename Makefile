@@ -37,13 +37,6 @@ MOM6: build/Makefile $(FMS)/lib/libfms.a
 
 build/Makefile: build/path_names
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
-	#cd $(@D) && $(MKMF) \
-	#	-t $(MKMF_TEMPLATE) \
-	#	-o '-I ../$(FMS)/build' \
-	#	-p ../MOM6 \
-	#	-l '-L ../$(FMS)/lib -lfms' \
-	#	-c $(MKMF_CPP) \
-	#	$(notdir $<)
 	cd $(@D) && $(MKMF) \
 		-t $(MKMF_TEMPLATE) \
 		-o '-I ../$(FMS)/build' \
@@ -84,15 +77,12 @@ $(LIST_PATHS) $(MKMF):
 	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
 #----
-# TODO: Move to separate file?
-DOUBLE_GYRE_URL=https://github.com/marshallward/double_gyre_test
 
-test: experiments/double_gyre
-	cd $< && mkdir -p RESTART && mpirun -n 1 ../../MOM6
-	bash <(curl -s https://codecov.io/bash) -n $(notdir $<)
-
-experiments/double_gyre:
-	git clone $(DOUBLE_GYRE_URL) $@
+test:
+	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
+	mkdir -p .testing/benchmark/RESTART
+	cd .testing/benchmark && srun -n 1 ../../MOM6
+	bash <(curl -s https://codecov.io/bash) -n benchmark
 
 #----
 
