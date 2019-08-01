@@ -88,6 +88,15 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
                  optional, pointer       :: BT_cont !< A structure with elements
           !! that describe the effective open face areas as a function of barotropic flow.
 
+  ! Local variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_tmp ! Rescaled version of u [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_tmp ! Rescaled version of V [L T-1 ~> m s-1]
+  integer :: is, ie, js, je, nz, stencil
+  integer :: i, j, k
+
+  logical :: x_first
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
       "MOM_continuity: Either both visc_rem_u and visc_rem_v or neither"// &
        " one must be present in call to continuity.")
@@ -96,8 +105,22 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
        " one must be present in call to continuity.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, uhbt, vhbt, OBC, &
+    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u_tmp(I,j,k) = US%m_s_to_L_T * u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v_tmp(i,J,k) = US%m_s_to_L_T * v(i,J,k)
+    enddo ; enddo ; enddo
+
+    call continuity_PPM(u_tmp, v_tmp, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, uhbt, vhbt, OBC, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont=BT_cont)
+
+    if (present(u_cor)) then ; do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u_cor(I,j,k) = US%L_T_to_m_s * u_cor(I,j,k)
+    enddo ; enddo ; enddo ; endif
+    if (present(v_cor)) then ; do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v_cor(i,J,k) = US%L_T_to_m_s * v_cor(i,J,k)
+    enddo ; enddo ; enddo ; endif
   else
     call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
   endif
@@ -105,10 +128,11 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
 end subroutine continuity
 
 !> Initializes continuity_cs
-subroutine continuity_init(Time, G, GV, param_file, diag, CS)
+subroutine continuity_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time       !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G          !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(continuity_CS),     pointer       :: CS         !< Control structure for mom_continuity.
@@ -144,7 +168,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   end select
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM_init(Time, G, GV, param_file, diag, CS%PPM_CSp)
+    call continuity_PPM_init(Time, G, GV, US, param_file, diag, CS%PPM_CSp)
   endif
 
 end subroutine continuity_init
