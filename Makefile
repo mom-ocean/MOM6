@@ -1,5 +1,6 @@
 DEPS = deps
 SHELL = bash
+MPIRUN = mpirun		# srun in Slurm, aprun in Cray-land, etc.
 
 # GFDL build toolchain
 MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
@@ -81,7 +82,7 @@ $(LIST_PATHS) $(MKMF):
 test:
 	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
 	mkdir -p .testing/benchmark/RESTART
-	cd .testing/benchmark && srun -n 1 ../../MOM6
+	cd .testing/benchmark && $(MPIRUN) -n 1 ../../MOM6
 	bash <(curl -s https://codecov.io/bash) -n benchmark
 
 #----
