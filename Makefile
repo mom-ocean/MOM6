@@ -1,6 +1,6 @@
 DEPS = deps
 SHELL = bash
-MPIRUN = mpirun		# srun in Slurm, aprun in Cray-land, etc.
+MPIRUN ?= mpirun # srun in Slurm, aprun in Cray-land, etc.
 
 # GFDL build toolchain
 MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git

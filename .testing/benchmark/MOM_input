@@ -572,3 +572,4 @@ RESTINT = 365.0                 !   [days] default = 0.0
 ENERGYSAVEDAYS = 0.25           !   [days] default = 3600.0
                                 ! The interval in units of TIMEUNIT between saves of the
                                 ! energies of the run and other globally summed diagnostics.
+DIAG_AS_CHKSUM = True
