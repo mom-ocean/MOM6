@@ -78,11 +78,20 @@ $(LIST_PATHS) $(MKMF):
 	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
 #----
+# TODO: integrate these into a common rule (target output file?)
 
-test:
+test: benchmark unit_tests
+
+benchmark:
 	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
 	mkdir -p .testing/benchmark/RESTART
 	cd .testing/benchmark && $(MPIRUN) -n 1 ../../MOM6
+	bash <(curl -s https://codecov.io/bash) -n benchmark
+
+unit_tests:
+	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
+	mkdir -p .testing/$@/RESTART
+	cd .testing/$@ && $(MPIRUN) -n 1 ../../MOM6
 	bash <(curl -s https://codecov.io/bash) -n benchmark
 
 #----
