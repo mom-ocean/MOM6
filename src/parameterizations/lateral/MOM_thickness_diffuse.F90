@@ -10,6 +10,7 @@ use MOM_diag_mediator,         only : diag_update_remap_grids
 use MOM_domains,               only : pass_var, CORNER, pass_vector
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_EOS,                   only : calculate_density, calculate_density_derivs, EOS_domain
+use MOM_EOS,                   only : calculate_density_second_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_interface_heights,     only : find_eta
@@ -19,7 +20,6 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_variables,             only : thermo_var_ptrs, cont_diag_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -77,6 +77,9 @@ type, public :: thickness_diffuse_CS ; private
                                  !! than the streamfunction for the GM source term.
   logical :: use_GM_work_bug     !< If true, use the incorrect sign for the
                                  !! top-level work tendency on the top layer.
+  logical :: use_Stanley         !< If true, use a correction to the horizontal density gradient
+                                 !! when computing the Ferrari et al., 2010 streamfunction.
+
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
@@ -668,6 +671,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: G_rho0        ! g/Rho0 [L2 R-1 Z-1 T-2 ~> m4 kg-1 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors [T-2 L2 Z-2 ~> s-2]
+  real :: dbeta_dS, dbeta_dT, dalpha_dT, dalpha_dS, dbeta_dP, dalpha_dP ! derivatives for EOS.
+  real :: dT2           ! length scale times temp. derivative, squared.
+  real :: dTdy2, dTdx2  ! pot. temp. derivatives, squared.
+
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: diag_sfn_y, diag_sfn_unlim_y ! Diagnostics
   logical :: present_int_slope_u, present_int_slope_v
@@ -848,6 +855,20 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               ! This is the gradient of density along geopotentials.
               drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
                       drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+              ! Correction to the horizontal density gradient due to the nonlinear EOS
+              if (CS%use_Stanley) then
+                ! Calculate dT/dx and dT/dy at u-points
+                dTdy2 = 0.0625*(G%IdyCv(i,J)*(T(i,j+1,k-1)-T(i,j,k-1))+ &
+                           G%IdyCv(i,J-1)*(T(i,j,k-1)-T(i,j-1,k-1))+ &
+                           G%IdyCv(i+1,J)*(T(i+1,j+1,k-1)-T(i+1,j,k-1))+ &
+                           G%IdyCv(i+1,J-1)*(T(i+1,j,k-1)-T(i+1,j-1,k-1)))**2
+                dT2 = (T(i+1,j,k-1)-T(i,j,k-1))**2 + (G%dyCu(I,j)**2)*dTdy2
+
+                call calculate_density_second_derivs(T_u(I), S_u(I), pres_u(I),dbeta_dS, &
+                                          dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, tv%eqn_of_state)
+
+                drdx = drdx + (dT2*dalpha_dT)
+              endif
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
@@ -1028,7 +1049,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       endif
 
       calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
-                  (find_work .or. .not. present_slope_y)
+                  (find_work .or. .not. present_slope_y .or. CS%use_FGNV_streamfn)
 
       if (calc_derivatives) then
         do i=is,ie
@@ -1099,6 +1120,21 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               ! This is the gradient of density along geopotentials.
               drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
                       drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+
+              ! Correction to the horizontal density gradient due to the nonlinear EOS
+              if (CS%use_Stanley) then
+                ! Calculate dT/dx and dT/dy at v-points
+                dTdx2 = 0.0625*(G%IdxCv(i,J)*(T(i+1,j,k-1)-T(i,j,k-1))+ &
+                           G%IdxCv(i,J-1)*(T(i,j,k-1)-T(i-1,j,k-1))+ &
+                           G%IdxCv(i+1,J)*(T(i+1,j+1,k-1)-T(i,j+1,k-1))+ &
+                           G%IdxCv(i+1,J-1)*(T(i,j+1,k-1)-T(i-1,j+1,k-1)))**2
+                dT2 = (T(i,j+1,k-1)-T(i,j,k-1))**2 + (G%dxCv(I,j)**2)*dTdx2
+
+                call calculate_density_second_derivs(T_v(I), S_v(I), pres_v(I),dbeta_dS, &
+                                          dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, tv%eqn_of_state)
+
+                drdy = drdy + (dT2*dalpha_dT)
+              endif
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
@@ -1887,6 +1923,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "streamfunction formulation, expressed as a fraction of planetary "//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
+  call get_param(param_file, mdl, "USE_STANLEY", CS%use_Stanley, &
+                 "If true, use a correction to the horizontal density gradient \n"//    &
+                 "when computing the Ferrari et al., 2010 streamfunction.",  &
+                 default=.false.)
   call get_param(param_file, mdl, "OMEGA", omega, &
                  "The rotation rate of the earth.", &
                  default=7.2921e-5, units="s-1", scale=US%T_to_s, do_not_log=.not.CS%use_FGNV_streamfn)
