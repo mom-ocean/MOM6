@@ -30,6 +30,7 @@ MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
 
 #-------------------
 
+.PHONY: all
 all: MOM6
 
 # TODO: Split into libmom6 and executable?
@@ -78,22 +79,13 @@ $(LIST_PATHS) $(MKMF):
 	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
 #----
-# TODO: integrate these into a common rule (target output file?)
+TESTS = benchmark unit_tests circle_obcs
 
-test: benchmark unit_tests
+.PHONY: test $(TESTS)
+test: $(TESTS)
 
-benchmark:
+$(TESTS):
 	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
 	mkdir -p .testing/$@/RESTART
 	cd .testing/$@ && $(MPIRUN) -n 1 ../../MOM6
 	bash <(curl -s https://codecov.io/bash) -n $@
-
-unit_tests:
-	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
-	mkdir -p .testing/$@/RESTART
-	cd .testing/$@ && $(MPIRUN) -n 1 ../../MOM6
-	bash <(curl -s https://codecov.io/bash) -n $@
-
-#----
-
-.PHONY: all test
