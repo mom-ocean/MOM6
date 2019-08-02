@@ -1392,7 +1392,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       !   This estimate of the maximum stable time step is pretty accurate for
       ! gravity waves, but it is a conservative estimate since it ignores the
       ! stabilizing effect of the bottom drag.
-      Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
+      Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (G%IareaT(i,j) * &
             ((gtot_E(i,j) * (Datu(I,j)*US%L_to_m*G%IdxCu(I,j)) + &
               gtot_W(i,j) * (Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j))) + &
              (gtot_N(i,j) * (Datv(i,J)*US%L_to_m*G%IdyCv(i,J)) + &
@@ -1400,7 +1400,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
       H_eff_dx2 = max(H_min_dyn * ((US%L_to_m*G%IdxT(i,j))**2 + (US%L_to_m*G%IdyT(i,j))**2), &
-                      US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
+                      G%IareaT(i,j) * &
                         ((Datu(I,j)*US%L_to_m*G%IdxCu(I,j) + Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j)) + &
                          (Datv(i,J)*US%L_to_m*G%IdyCv(i,J) + Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1)) ) )
       dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
@@ -1544,19 +1544,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (CS%clip_velocity) then
       do j=jsv,jev ; do I=isv-1,iev
-        if ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i+1,j) < -CS%CFL_trunc) then
+        if ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           ! Add some error reporting later.
           ubt(I,j) = (-0.95*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i+1,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
-        elseif ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) > CS%CFL_trunc) then
+        elseif ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
           ubt(I,j) = (0.95*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
         endif
       enddo ; enddo
       do J=jsv-1,jev ; do i=isv,iev
-        if ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j+1) < -CS%CFL_trunc) then
+        if ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           ! Add some error reporting later.
           vbt(i,J) = (-0.9*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i,j+1) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
-        elseif ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) > CS%CFL_trunc) then
+        elseif ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
           vbt(i,J) = (0.9*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
         endif
@@ -2350,7 +2350,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   do j=js,je ; do i=is,ie
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
-    Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
+    Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
       ((gtot_E(i,j)*Datu(I,j)*US%L_to_m*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j)) + &
        (gtot_N(i,j)*Datv(i,J)*US%L_to_m*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1))) + &
       ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
@@ -4078,7 +4078,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   ALLOC_(CS%dy_Cu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_Cu(:,:) = 0.0
   ALLOC_(CS%dx_Cv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%dx_Cv(:,:) = 0.0
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    CS%IareaT(i,j) = US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j)
+    CS%IareaT(i,j) = G%IareaT(i,j)
     CS%bathyT(i,j) = G%bathyT(i,j)
   enddo ; enddo
 
@@ -4344,7 +4344,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     ! ### Consider replacing maxvel with G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
     ! ### and G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
     do j=js,je ; do i=is,ie
-      CS%eta_cor_bound(i,j) = GV%m_to_H * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * 0.1 * CS%maxvel * &
+      CS%eta_cor_bound(i,j) = GV%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
     enddo ; enddo
   endif

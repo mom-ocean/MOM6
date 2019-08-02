@@ -1427,7 +1427,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       call hchksum(sh_xx_3d, "shear_xx", G%HI, haloshift=0)
     endif
     if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=0, scale=US%s_to_T)
-    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, scale=US%s_to_T)  
+    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, scale=US%s_to_T)
   endif
 
   if (CS%id_FrictWorkIntz > 0) then

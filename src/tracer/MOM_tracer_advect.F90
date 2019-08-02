@@ -643,7 +643,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       if (associated(Tr(m)%advection_xy)) then
         do i=is,ie ; if (do_i(i)) then
           Tr(m)%advection_xy(i,j,k) = Tr(m)%advection_xy(i,j,k) - (flux_x(I,m) - flux_x(I-1,m)) * &
-                                          Idt * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j)
+                                          Idt * G%IareaT(i,j)
         endif ; enddo
       endif
 
@@ -985,7 +985,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       if (associated(Tr(m)%advection_xy)) then
         do i=is,ie ; if (do_i(i)) then
           Tr(m)%advection_xy(i,j,k) = Tr(m)%advection_xy(i,j,k) - (flux_y(i,m,J) - flux_y(i,m,J-1))* Idt * &
-                                          US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j)
+                                          G%IareaT(i,j)
         endif ; enddo
       endif
 
