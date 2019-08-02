@@ -124,9 +124,9 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
                  default="none")
   select case ( trim(config) )
     case ("none")
-    case ("list") ; call reset_face_lengths_list(G, PF)
-    case ("file") ; call reset_face_lengths_file(G, PF)
-    case ("global_1deg") ; call reset_face_lengths_named(G, PF, trim(config))
+    case ("list") ; call reset_face_lengths_list(G, PF, US)
+    case ("file") ; call reset_face_lengths_file(G, PF, US)
+    case ("global_1deg") ; call reset_face_lengths_named(G, PF, trim(config), US)
     case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
       "Unrecognized channel configuration "//trim(config))
   end select

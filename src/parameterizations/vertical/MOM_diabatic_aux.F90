@@ -551,9 +551,10 @@ end subroutine triDiagTS
 
 !>   This subroutine calculates u_h and v_h (velocities at thickness
 !! points), optionally using the entrainment amounts passed in as arguments.
-subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
+subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
   type(ocean_grid_type),     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),   intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),     intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                              intent(in)  :: u    !< The zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -599,7 +600,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
     do i=is,ie
       s = G%areaCu(I-1,j)+G%areaCu(I,j)
       if (s>0.0) then
-        Idenom = sqrt(0.5*G%IareaT(i,j)/s)
+        Idenom = sqrt(0.5*US%m_to_L**2*G%IareaT(i,j)/s)
         a_w(i) = G%areaCu(I-1,j)*Idenom
         a_e(i) = G%areaCu(I,j)*Idenom
       else
@@ -608,7 +609,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
 
       s = G%areaCv(i,J-1)+G%areaCv(i,J)
       if (s>0.0) then
-        Idenom = sqrt(0.5*G%IareaT(i,j)/s)
+        Idenom = sqrt(0.5*US%m_to_L**2*G%IareaT(i,j)/s)
         a_s(i) = G%areaCv(i,J-1)*Idenom
         a_n(i) = G%areaCv(i,J)*Idenom
       else

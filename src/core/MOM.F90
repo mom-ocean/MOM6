@@ -1085,7 +1085,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
 
   call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
                      CS%tracer_adv_CSp, CS%tracer_Reg)
-  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, &
+  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, US, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
@@ -1399,7 +1399,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, US, CS%VarMix)
           endif
-          call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, &
+          call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1424,7 +1424,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, US, CS%VarMix)
           endif
-          call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, &
+          call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1459,7 +1459,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. skip_diffusion) then
-      call tracer_hordiff(h_end, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, &
+      call tracer_hordiff(h_end, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
     endif
 
@@ -2135,7 +2135,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   !   The next line would be needed if G%Domain had not already been init'd above:
   !     call clone_MOM_domain(dG%Domain, G%Domain)
   call MOM_grid_init(G, param_file, HI, bathymetry_at_vel=bathy_at_vel)
-  call copy_dyngrid_to_MOM_grid(dG, G)
+  call copy_dyngrid_to_MOM_grid(dG, G, US)
   call destroy_dyn_horgrid(dG)
 
   ! Set a few remaining fields that are specific to the ocean grid type.
@@ -2165,8 +2165,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call clone_MOM_domain(G%Domain, CS%G%Domain)
     call MOM_grid_init(CS%G, param_file)
 
-    call copy_MOM_grid_to_dyngrid(G, dg)
-    call copy_dyngrid_to_MOM_grid(dg, CS%G)
+    call copy_MOM_grid_to_dyngrid(G, dg, US)
+    call copy_dyngrid_to_MOM_grid(dg, CS%G, US)
 
     call destroy_dyn_horgrid(dG)
     call MOM_grid_end(G) ; deallocate(G)

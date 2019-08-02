@@ -8,6 +8,7 @@ use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_domains, only : get_global_shape, get_domain_extent_dsamp2
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
@@ -81,7 +82,7 @@ type, public :: ocean_grid_type
     dyT, &       !< dyT is delta y at h points [m].
     IdyT, &      !< IdyT is 1/dyT [m-1].
     areaT, &     !< The area of an h-cell [m2].
-    IareaT, &    !< 1/areaT [m-2].
+    IareaT, &    !< 1/areaT [L-2 ~> m-2].
     sin_rot, &   !< The sine of the angular rotation between the local model grid's northward
                  !! and the true northward directions.
     cos_rot      !< The cosine of the angular rotation between the local model grid's northward
@@ -96,7 +97,7 @@ type, public :: ocean_grid_type
     dyCu, &      !< dyCu is delta y at u points [m].
     IdyCu, &     !< 1/dyCu [m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [m].
-    IareaCu, &   !< The masked inverse areas of u-grid cells [m2].
+    IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
     areaCu       !< The areas of the u-grid cells [m2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
@@ -108,7 +109,7 @@ type, public :: ocean_grid_type
     dyCv, &      !< dyCv is delta y at v points [m].
     IdyCv, &     !< 1/dyCv [m-1].
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [m].
-    IareaCv, &   !< The masked inverse areas of v-grid cells [m2].
+    IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
     areaCv       !< The areas of the v-grid cells [m2].
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
@@ -120,7 +121,7 @@ type, public :: ocean_grid_type
     dyBu, &      !< dyBu is delta y at q points [m].
     IdyBu, &     !< 1/dyBu [m-1].
     areaBu, &    !< areaBu is the area of a q-cell [m2]
-    IareaBu      !< IareaBu = 1/areaBu [m-2].
+    IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: &
     gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes.
@@ -155,9 +156,9 @@ type, public :: ocean_grid_type
     df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
   real :: g_Earth !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
 
-  ! These variables are global sums that are useful for 1-d diagnostics
+  ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
   real :: areaT_global  !< Global sum of h-cell area [m2]
-  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m2].
+  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m-2].
 
   ! These variables are for block structures.
   integer :: nblocks  !< The number of sub-PE blocks on this PE
@@ -402,8 +403,9 @@ subroutine rescale_grid_bathymetry(G, m_in_new_units)
 end subroutine rescale_grid_bathymetry
 
 !> set_derived_metrics calculates metric terms that are derived from other metrics.
-subroutine set_derived_metrics(G)
-  type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
+subroutine set_derived_metrics(G, US)
+  type(ocean_grid_type), intent(inout) :: G  !< The horizontal grid structure
+  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
   integer :: i, j, isd, ied, jsd, jed
@@ -417,7 +419,7 @@ subroutine set_derived_metrics(G)
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
     G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
     G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
-    G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(US%m_to_L**2*G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -442,7 +444,7 @@ subroutine set_derived_metrics(G)
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
     if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
+    G%IareaBu(I,J) =  Adcroft_reciprocal(US%m_to_L**2*G%areaBu(I,J))
   enddo ; enddo
 end subroutine set_derived_metrics
 

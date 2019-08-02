@@ -623,6 +623,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real    :: dx_2 = -1.0, dy_2 = -1.0
   real    :: pi_180
   integer :: option = -1
@@ -636,6 +637,8 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
     case default ; call MOM_error(FATAL, "reset_face_lengths_named: "//&
       "Unrecognized channel configuration name "//trim(name))
   end select
+
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   if (option==1) then ! 1-degree settings.
     do j=jsd,jed ; do I=IsdB,IedB  ! Change any u-face lengths within this loop.
@@ -715,7 +718,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
     endif
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (m_to_L**2*G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -729,7 +732,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
     endif
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (m_to_L**2*G%areaCv(i,J))
   enddo ; enddo
 
 end subroutine reset_face_lengths_named
@@ -747,12 +750,14 @@ subroutine reset_face_lengths_file(G, param_file, US)
   character(len=40)  :: mdl = "reset_face_lengths_file" ! This subroutine's name.
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   call get_param(param_file, mdl, "CHANNEL_WIDTH_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -780,7 +785,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
     endif
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (m_to_L**2*G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -794,7 +799,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
     endif
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (m_to_L**2*G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave(trim(mdl)//'()')
@@ -818,6 +823,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
     u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
   real, pointer, dimension(:) :: &
     u_width => NULL(), v_width => NULL()
+  real    :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.
@@ -833,6 +839,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   call get_param(param_file, mdl, "CHANNEL_LIST_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -992,7 +999,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
 
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (m_to_L**2*G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -1021,7 +1028,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
 
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (m_to_L**2*G%areaCv(i,J))
   enddo ; enddo
 
   if (num_lines > 0) then

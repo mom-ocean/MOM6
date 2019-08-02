@@ -1262,7 +1262,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
       else ; TKE_to_layer = 0.0 ; endif
 
       ! TKE_Ray has been initialized to 0 above.
-      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * G%IareaT(i,j) * &
+      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * US%m_to_L**2*G%IareaT(i,j) * &
             US%m_to_Z**2 * US%T_to_s**2 * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
@@ -1444,7 +1444,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
             US%m_to_Z**2 * US%T_to_s**2 * &
-            0.5*CS%BBL_effic * G%IareaT(i,j) * &
+            0.5*CS%BBL_effic * US%m_to_L**2*G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1759,7 +1759,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
     endif ; enddo
 
     do i=is,ie
-      visc%ustar_BBL(i,j) = sqrt(0.5*G%IareaT(i,j) * &
+      visc%ustar_BBL(i,j) = sqrt(0.5*US%m_to_L**2*G%IareaT(i,j) * &
                 ((G%areaCu(I-1,j)*(ustar(I-1)*ustar(I-1)) + &
                   G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
                  (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
@@ -1768,7 +1768,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
                  (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
                     G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
                    (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
-                    G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))) )*G%IareaT(i,j))
+                    G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))) )*US%m_to_L**2*G%IareaT(i,j))
     enddo
   enddo
 !$OMP end parallel

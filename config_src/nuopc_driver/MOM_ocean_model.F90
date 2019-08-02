@@ -520,7 +520,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       if (do_thermo) &
         call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+        call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
@@ -551,7 +551,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       if (do_thermo) &
         call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+        call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &

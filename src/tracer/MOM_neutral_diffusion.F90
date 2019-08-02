@@ -22,6 +22,7 @@ use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, build_reconstructions_1d
 use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use polynomial_functions,      only : evaluation_polynomial, first_derivative_polynomial
 use PPM_functions,             only : PPM_reconstruction, PPM_boundary_extrapolation
@@ -407,7 +408,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
 end subroutine neutral_diffusion_calc_coeffs
 
 !> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update.
-subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
+subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
@@ -416,6 +417,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
   real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts
                                                                      !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),                pointer       :: Reg    !< Tracer registry
+  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
@@ -495,12 +497,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
         enddo
         do k = 1, GV%ke
           tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
-                          ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
+                          ( US%m_to_L**2*G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
         enddo
 
         if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
           do k = 1, GV%ke
-            tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
+            tendency(i,j,k) = dTracer(k) * US%m_to_L**2*G%IareaT(i,j) * Idt
           enddo
         endif
 

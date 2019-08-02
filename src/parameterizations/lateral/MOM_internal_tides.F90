@@ -1052,7 +1052,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
 
     ! Apply propagation in x-direction (reflection included)
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_x(En(:,:,:), speed_x, Cgx_av(:), dCgx(:), dt, G, CS%nAngle, CS, LB)
+    call propagate_x(En(:,:,:), speed_x, Cgx_av(:), dCgx(:), dt, G, US, CS%nAngle, CS, LB)
 
     ! Check for energy conservation on computational domain (for debugging)
     !call sum_En(G,CS,En(:,:,:),'post-propagate_x')
@@ -1063,7 +1063,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
     ! Apply propagation in y-direction (reflection included)
     ! LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie ! Use if no teleport
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_y(En(:,:,:), speed_y, Cgy_av(:), dCgy(:), dt, G, CS%nAngle, CS, LB)
+    call propagate_y(En(:,:,:), speed_y, Cgy_av(:), dCgy(:), dt, G, US, CS%nAngle, CS, LB)
 
     ! Check for energy conservation on computational domain (for debugging)
     !call sum_En(G,CS,En(:,:,:),'post-propagate_y')
@@ -1335,7 +1335,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
 end subroutine propagate_corner_spread
 
 !> Propagates the internal wave energy in the logical x-direction.
-subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
+subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
   integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1349,6 +1349,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   real, dimension(Nangle), intent(in)    :: dCgx !< The difference in x-projections between the
                                                !! edges of each angular band.
   real,                    intent(in)    :: dt !< Time increment [s].
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
                                                !! to continuity_PPM_init.
   type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
@@ -1381,7 +1382,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
         cg_p(I) = speed_x(I,j) * (Cgx_av(a))
       enddo
       call zonal_flux_En(cg_p, En(:,j,a), EnL(:,j), EnR(:,j), flux1, &
-                         dt, G, j, ish, ieh, CS%vol_CFL)
+                         dt, G, US, j, ish, ieh, CS%vol_CFL)
       do I=ish-1,ieh ; flux_x(I,j) = flux1(I); enddo
     enddo
 
@@ -1392,7 +1393,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
 
     ! test with old (take out later)
     !do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-    !  En(i,j,a) = En(i,j,a) - dt* G%IareaT(i,j) * (flux_x(I,j) - flux_x(I-1,j))
+    !  En(i,j,a) = En(i,j,a) - dt* US%m_to_L**2*G%IareaT(i,j) * (flux_x(I,j) - flux_x(I-1,j))
     !enddo ; enddo
 
   enddo ! a-loop
@@ -1408,17 +1409,17 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
+    !  if ((En(i,j,a) + US%m_to_L**2*G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
     !    call MOM_error(FATAL, "propagate_x: OutFlux>Available")
     !  endif
     !enddo
-    En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
+    En(i,j,:) = En(i,j,:) + US%m_to_L**2*G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
   enddo ; enddo
 
 end subroutine propagate_x
 
 !> Propagates the internal wave energy in the logical y-direction.
-subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
+subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
   integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1432,6 +1433,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   real, dimension(Nangle), intent(in)    :: dCgy !< The difference in y-projections between the
                                                !! edges of each angular band.
   real,                    intent(in)    :: dt !< Time increment [s].
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
                                                !! to continuity_PPM_init.
   type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
@@ -1465,14 +1467,14 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
         cg_p(i) = speed_y(i,J) * (Cgy_av(a))
       enddo
       call merid_flux_En(cg_p, En(:,:,a), EnL(:,:), EnR(:,:), flux1, &
-                         dt, G, J, ish, ieh, CS%vol_CFL)
+                         dt, G, US, J, ish, ieh, CS%vol_CFL)
       do i=ish,ieh ; flux_y(i,J) = flux1(i); enddo
     enddo
 
     do j=jsh,jeh ; do i=ish,ieh
       Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
-      !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+      !if ((En(i,j,a) + US%m_to_L**2*G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
       !  call MOM_error(WARNING, "propagate_y: OutFlux>Available prior to reflection", .true.)
       !  write(mesg,*) "flux_y_south=",flux_y(i,J-1),"flux_y_north=",flux_y(i,J),"En=",En(i,j,a), &
       !           "cn_south=", speed_y(i,J-1) * (Cgy_av(a)), "cn_north=", speed_y(i,J) * (Cgy_av(a))
@@ -1482,7 +1484,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
 
     ! test with old (take out later)
     !do j=jsh,jeh ; do i=ish,ieh
-    ! En(i,j,a) = En(i,j,a) - dt* G%IareaT(i,j) * (flux_y(i,J) - flux_y(i,J-1))
+    ! En(i,j,a) = En(i,j,a) - dt* US%m_to_L**2*G%IareaT(i,j) * (flux_y(i,J) - flux_y(i,J-1))
     !enddo ; enddo
 
   enddo ! a-loop
@@ -1498,17 +1500,17 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
     !do a=1,CS%nAngle
-    !  if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !  if ((En(i,j,a) + US%m_to_L**2*G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
     !    call MOM_error(FATAL, "propagate_y: OutFlux>Available", .true.)
     !  endif
     !enddo
-    En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
+    En(i,j,:) = En(i,j,:) + US%m_to_L**2*G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
   enddo ; enddo
 
 end subroutine propagate_y
 
 !> Evaluates the zonal mass or volume fluxes in a layer.
-subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
+subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, US, j, ish, ieh, vol_CFL)
   type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
   real, dimension(SZIB_(G)), intent(in)    :: u  !< The zonal velocity [m s-1].
   real, dimension(SZI_(G)),  intent(in)    :: h  !< Energy density used to calculate the fluxes
@@ -1519,6 +1521,7 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
                                                  !! [J m-2].
   real, dimension(SZIB_(G)), intent(inout) :: uh !< The zonal energy transport [J s-1].
   real,                      intent(in)    :: dt !< Time increment [s].
+  type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   integer,                   intent(in)    :: j  !< The j-index to work on.
   integer,                   intent(in)    :: ish !< The start i-index range to work on.
   integer,                   intent(in)    :: ieh !< The end i-index range to work on.
@@ -1533,13 +1536,13 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
   do I=ish-1,ieh
     ! Set new values of uh and duhdu.
     if (u(I) > 0.0) then
-      if (vol_CFL) then ; CFL = (u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
+      if (vol_CFL) then ; CFL = (u(I) * dt) * (G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i,j))
       else ; CFL = u(I) * dt * G%IdxT(i,j) ; endif
       curv_3 = (hL(i) + hR(i)) - 2.0*h(i)
       uh(I) = G%dy_Cu(I,j) * u(I) * &
           (hR(i) + CFL * (0.5*(hL(i) - hR(i)) + curv_3*(CFL - 1.5)))
     elseif (u(I) < 0.0) then
-      if (vol_CFL) then ; CFL = (-u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
+      if (vol_CFL) then ; CFL = (-u(I) * dt) * (G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i+1,j))
       else ; CFL = -u(I) * dt * G%IdxT(i+1,j) ; endif
       curv_3 = (hL(i+1) + hR(i+1)) - 2.0*h(i+1)
       uh(I) = G%dy_Cu(I,j) * u(I) * &
@@ -1551,7 +1554,7 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
 end subroutine zonal_flux_En
 
 !> Evaluates the meridional mass or volume fluxes in a layer.
-subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
+subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, US, J, ish, ieh, vol_CFL)
   type(ocean_grid_type),            intent(in)    :: G  !< The ocean's grid structure.
   real, dimension(SZI_(G)),         intent(in)    :: v  !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: h  !< Energy density used to calculate the
@@ -1562,6 +1565,7 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
                                                         !! reconstruction [J m-2].
   real, dimension(SZI_(G)),         intent(inout) :: vh !< The meridional energy transport [J s-1].
   real,                             intent(in)    :: dt !< Time increment [s].
+  type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
   integer,                          intent(in)    :: J  !< The j-index to work on.
   integer,                          intent(in)    :: ish !< The start i-index range to work on.
   integer,                          intent(in)    :: ieh !< The end i-index range to work on.
@@ -1576,13 +1580,13 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
 
   do i=ish,ieh
     if (v(i) > 0.0) then
-      if (vol_CFL) then ; CFL = (v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
+      if (vol_CFL) then ; CFL = (v(i) * dt) * (G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j))
       else ; CFL = v(i) * dt * G%IdyT(i,j) ; endif
       curv_3 = hL(i,j) + hR(i,j) - 2.0*h(i,j)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( hR(i,j) + CFL * &
           (0.5*(hL(i,j) - hR(i,j)) + curv_3*(CFL - 1.5)) )
     elseif (v(i) < 0.0) then
-      if (vol_CFL) then ; CFL = (-v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
+      if (vol_CFL) then ; CFL = (-v(i) * dt) * (G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j+1))
       else ; CFL = -v(i) * dt * G%IdyT(i,j+1) ; endif
       curv_3 = hL(i,j+1) + hR(i,j+1) - 2.0*h(i,j+1)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( hL(i,j+1) + CFL * &

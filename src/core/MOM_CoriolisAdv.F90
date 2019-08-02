@@ -407,10 +407,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%mask2dBu(I,J)) * US%T_to_s*(dvdx(I,J) - dudy(I,J)) * &
-                             G%IareaBu(I,J)
+                             US%m_to_L**2*G%IareaBu(I,J)
       else
         relative_vorticity = G%mask2dBu(I,J) * US%T_to_s*(dvdx(I,J) - dudy(I,J)) * &
-                             G%IareaBu(I,J)
+                             US%m_to_L**2*G%IareaBu(I,J)
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
@@ -867,7 +867,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
                    +G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) &
                  +( G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))   &
                    +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
-                )*0.25*G%IareaT(i,j)
+                )*0.25*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensinal Gudonov
@@ -887,7 +887,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
-      KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
+      KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
   endif
 

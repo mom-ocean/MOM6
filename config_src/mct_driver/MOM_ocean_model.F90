@@ -497,7 +497,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
-      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+      call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
@@ -521,7 +521,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
-      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+      call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option

@@ -154,7 +154,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * US%L_to_m**2*G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
+      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   Uncomment this line to prevent underflow.
   !   if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -169,7 +169,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * US%L_to_m**2*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
+      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
       if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -185,7 +185,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * US%L_to_m**2*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
+      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
@@ -197,7 +197,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * US%L_to_m**2*G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
+      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
       ! This line prevents underflow.
       if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -539,14 +539,14 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt_in_T, G, US,
   do I=ish-1,ieh ; if (do_I(I)) then
     ! Set new values of uh and duhdu.
     if (u(I) > 0.0) then
-      if (vol_CFL) then ; CFL = (u(I) * dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*G%IareaT(i,j))
+      if (vol_CFL) then ; CFL = (u(I) * dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j))
       else ; CFL = u(I) * dt_in_T * US%L_to_m*G%IdxT(i,j) ; endif
       curv_3 = h_L(i) + h_R(i) - 2.0*h(i)
       uh(I) = US%m_to_L*G%dy_Cu(I,j) * u(I) * &
           (h_R(i) + CFL * (0.5*(h_L(i) - h_R(i)) + curv_3*(CFL - 1.5)))
       h_marg = h_R(i) + CFL * ((h_L(i) - h_R(i)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I) < 0.0) then
-      if (vol_CFL) then ; CFL = (-u(I) * dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*G%IareaT(i+1,j))
+      if (vol_CFL) then ; CFL = (-u(I) * dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i+1,j))
       else ; CFL = -u(I) * dt_in_T * US%L_to_m*G%IdxT(i+1,j) ; endif
       curv_3 = h_L(i+1) + h_R(i+1) - 2.0*h(i+1)
       uh(I) = US%m_to_L*G%dy_Cu(I,j) * u(I) * &
@@ -614,13 +614,13 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt_in_T, G, US, LB, vol_CFL
   !$OMP parallel do default(shared) private(CFL,curv_3,h_marg,h_avg)
   do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
     if (u(I,j,k) > 0.0) then
-      if (vol_CFL) then ; CFL = (u(I,j,k) * dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*G%IareaT(i,j))
+      if (vol_CFL) then ; CFL = (u(I,j,k) * dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j))
       else ; CFL = u(I,j,k) * dt_in_T * US%L_to_m*G%IdxT(i,j) ; endif
       curv_3 = h_L(i,j,k) + h_R(i,j,k) - 2.0*h(i,j,k)
       h_avg = h_R(i,j,k) + CFL * (0.5*(h_L(i,j,k) - h_R(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_R(i,j,k) + CFL * ((h_L(i,j,k) - h_R(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I,j,k) < 0.0) then
-      if (vol_CFL) then ; CFL = (-u(I,j,k)*dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*G%IareaT(i+1,j))
+      if (vol_CFL) then ; CFL = (-u(I,j,k)*dt_in_T) * (US%m_to_L*G%dy_Cu(I,j) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i+1,j))
       else ; CFL = -u(I,j,k) * dt_in_T * US%L_to_m*G%IdxT(i+1,j) ; endif
       curv_3 = h_L(i+1,j,k) + h_R(i+1,j,k) - 2.0*h(i+1,j,k)
       h_avg = h_L(i+1,j,k) + CFL * (0.5*(h_R(i+1,j,k)-h_L(i+1,j,k)) + curv_3*(CFL - 1.5))
@@ -779,7 +779,7 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
     enddo
     domore = .false.
     do I=ish-1,ieh ; if (do_I(I)) then
-      if ((dt_in_T * min(US%L_to_m**2*G%IareaT(i,j),US%L_to_m**2*G%IareaT(i+1,j))*abs(uh_err(I)) > tol_eta) .or. &
+      if ((dt_in_T * min(US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j),US%L_to_m**2*US%m_to_L**2*G%IareaT(i+1,j))*abs(uh_err(I)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(uh_err(I)) > tol_vel * duhdu_tot(I)) .or. &
                                  (abs(uh_err(I)) > uh_err_best(I))) )) then
         !   Use Newton's method, provided it stays bounded.  Otherwise bisect
@@ -1337,7 +1337,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt_in_T, G, US,
 
   do i=ish,ieh ; if (do_I(i)) then
     if (v(i) > 0.0) then
-      if (vol_CFL) then ; CFL = (v(i) * dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*G%IareaT(i,j))
+      if (vol_CFL) then ; CFL = (v(i) * dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j))
       else ; CFL = v(i) * dt_in_T * US%L_to_m*G%IdyT(i,j) ; endif
       curv_3 = h_L(i,j) + h_R(i,j) - 2.0*h(i,j)
       vh(i) = US%m_to_L*G%dx_Cv(i,J) * v(i) * ( h_R(i,j) + CFL * &
@@ -1345,7 +1345,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt_in_T, G, US,
       h_marg = h_R(i,j) + CFL * ((h_L(i,j) - h_R(i,j)) + &
                                   3.0*curv_3*(CFL - 1.0))
     elseif (v(i) < 0.0) then
-      if (vol_CFL) then ; CFL = (-v(i) * dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*G%IareaT(i,j+1))
+      if (vol_CFL) then ; CFL = (-v(i) * dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j+1))
       else ; CFL = -v(i) * dt_in_T * US%L_to_m*G%IdyT(i,j+1) ; endif
       curv_3 = h_L(i,j+1) + h_R(i,j+1) - 2.0*h(i,j+1)
       vh(i) = US%m_to_L*G%dx_Cv(i,J) * v(i) * ( h_L(i,j+1) + CFL * &
@@ -1414,14 +1414,14 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt_in_T, G, US, LB, vol_CFL
   !$OMP parallel do default(shared) private(CFL,curv_3,h_marg,h_avg)
   do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
     if (v(i,J,k) > 0.0) then
-      if (vol_CFL) then ; CFL = (v(i,J,k) * dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*G%IareaT(i,j))
+      if (vol_CFL) then ; CFL = (v(i,J,k) * dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j))
       else ; CFL = v(i,J,k) * dt_in_T * US%L_to_m*G%IdyT(i,j) ; endif
       curv_3 = h_L(i,j,k) + h_R(i,j,k) - 2.0*h(i,j,k)
       h_avg = h_R(i,j,k) + CFL * (0.5*(h_L(i,j,k) - h_R(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_R(i,j,k) + CFL * ((h_L(i,j,k) - h_R(i,j,k)) + &
                                 3.0*curv_3*(CFL - 1.0))
     elseif (v(i,J,k) < 0.0) then
-      if (vol_CFL) then ; CFL = (-v(i,J,k)*dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*G%IareaT(i,j+1))
+      if (vol_CFL) then ; CFL = (-v(i,J,k)*dt_in_T) * (US%m_to_L*G%dx_Cv(i,J) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j+1))
       else ; CFL = -v(i,J,k) * dt_in_T * US%L_to_m*G%IdyT(i,j+1) ; endif
       curv_3 = h_L(i,j+1,k) + h_R(i,j+1,k) - 2.0*h(i,j+1,k)
       h_avg = h_L(i,j+1,k) + CFL * (0.5*(h_R(i,j+1,k)-h_L(i,j+1,k)) + curv_3*(CFL - 1.5))
@@ -1579,7 +1579,7 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
     enddo
     domore = .false.
     do i=ish,ieh ; if (do_I(i)) then
-      if ((dt_in_T * min(US%L_to_m**2*G%IareaT(i,j),US%L_to_m**2*G%IareaT(i,j+1))*abs(vh_err(i)) > tol_eta) .or. &
+      if ((dt_in_T * min(US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j),US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j+1))*abs(vh_err(i)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(vh_err(i)) > tol_vel * dvhdv_tot(i)) .or. &
                                  (abs(vh_err(i)) > vh_err_best(i))) )) then
         !   Use Newton's method, provided it stays bounded.  Otherwise bisect

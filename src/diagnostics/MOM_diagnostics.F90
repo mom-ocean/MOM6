@@ -947,7 +947,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%dKE_dt(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%dKE_dt(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
@@ -965,7 +965,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%PE_to_KE(i,j,k) = GV%H_to_m * 0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%PE_to_KE(i,j,k) = GV%H_to_m * 0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -981,13 +981,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * US%L_to_m**2*G%IareaT(i,j) * &
+        KE_h(i,j) = -CS%KE(i,j,k) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_CorAdv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%KE_CorAdv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
@@ -1009,13 +1009,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
           KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * US%L_to_m**2*G%IareaT(i,j) * &
+        KE_h(i,j) = -CS%KE(i,j,k) * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_adv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%KE_adv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
@@ -1033,7 +1033,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_visc(i,j,k) = GV%H_to_m * (0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%KE_visc(i,j,k) = GV%H_to_m * (0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
@@ -1051,7 +1051,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_horvisc(i,j,k) = GV%H_to_m * 0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%KE_horvisc(i,j,k) = GV%H_to_m * 0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -1073,7 +1073,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_dia(i,j,k) = KE_h(i,j) + GV%H_to_m * 0.5 * US%L_to_m**2*G%IareaT(i,j) * &
+        CS%KE_dia(i,j,k) = KE_h(i,j) + GV%H_to_m * 0.5 * US%L_to_m**2*US%m_to_L**2*G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo

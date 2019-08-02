@@ -237,7 +237,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        drag_rate_visc(i,j) = (0.25*G%IareaT(i,j) * &
+        drag_rate_visc(i,j) = (0.25*US%m_to_L**2*G%IareaT(i,j) * &
                 ((G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
                   G%areaCu(I,j)*drag_vel_u(I,j)) + &
                  (G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
@@ -381,9 +381,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do i=is-1,ie+1
-        del2MEKE(i,j) = G%IareaT(i,j) * &
+        del2MEKE(i,j) = US%m_to_L**2*G%IareaT(i,j) * &
             ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
-      ! del2MEKE(i,j) = (G%IareaT(i,j)*I_mass(i,j)) * &
+      ! del2MEKE(i,j) = (US%m_to_L**2*G%IareaT(i,j)*I_mass(i,j)) * &
       !     ((MEKE_uflux(I,j) - MEKE_uflux(I-1,j)) + (MEKE_vflux(i,J) - MEKE_vflux(i,J-1)))
       enddo ; enddo
 
@@ -393,7 +393,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         K4_here = CS%MEKE_K4
         ! Limit Kh to avoid CFL violations.
         Inv_Kh_max = 64.0*sdt * (((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
-                     max(G%IareaT(i,j),G%IareaT(i+1,j))))**2
+                     max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i+1,j))))**2
         if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
         MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
@@ -404,7 +404,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do J=js-1,je ; do i=is,ie
         K4_here = CS%MEKE_K4
         Inv_Kh_max = 64.0*sdt * (((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
-                     max(G%IareaT(i,j),G%IareaT(i,j+1))))**2
+                     max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i,j+1))))**2
         if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
         MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
@@ -414,7 +414,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       ! Store tendency arising from the bi-harmonic in del4MEKE
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        del4MEKE(i,j) = (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
+        del4MEKE(i,j) = (sdt*(US%m_to_L**2*G%IareaT(i,j)*I_mass(i,j))) * &
             ((MEKE_uflux(I-1,j) - MEKE_uflux(I,j)) + &
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
       enddo ; enddo
@@ -432,7 +432,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (associated(MEKE%Kh_diff)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i+1,j))
         Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
-                     max(G%IareaT(i,j),G%IareaT(i+1,j)))
+                     max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i+1,j)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
@@ -447,7 +447,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (associated(MEKE%Kh_diff)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i,j+1))
         Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
-                     max(G%IareaT(i,j),G%IareaT(i,j+1)))
+                     max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
@@ -476,7 +476,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       endif
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        MEKE%MEKE(i,j) = MEKE%MEKE(i,j) + (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
+        MEKE%MEKE(i,j) = MEKE%MEKE(i,j) + (sdt*(US%m_to_L**2*G%IareaT(i,j)*I_mass(i,j))) * &
             ((MEKE_uflux(I-1,j) - MEKE_uflux(I,j)) + &
              (MEKE_vflux(i,J-1) - MEKE_vflux(i,J)))
       enddo ; enddo

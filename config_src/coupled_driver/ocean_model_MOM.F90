@@ -505,7 +505,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
     call convert_IOB_to_forces(Ice_ocean_boundary, OS%forces, index_bnds, OS%Time_dyn, OS%grid, OS%US, &
                                OS%forcing_CSp, dt_forcing=dt_coupling, reset_avg=OS%fluxes%fluxes_used)
     if (OS%use_ice_shelf) &
-      call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+      call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     if (OS%icebergs_alter_ocean) &
       call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
                           OS%sfc_state, dt_coupling, OS%marine_ice_CSp)

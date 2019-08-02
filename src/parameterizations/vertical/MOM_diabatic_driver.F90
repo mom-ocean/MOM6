@@ -595,13 +595,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eatr, ebtr)
+      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, US, eatr, ebtr)
       if (CS%debug) then
         call hchksum(eatr, "after find_uv_at_h eatr",G%HI, scale=GV%H_to_m)
         call hchksum(ebtr, "after find_uv_at_h ebtr",G%HI, scale=GV%H_to_m)
       endif
     else
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
     if (showCallTree) call callTree_waypoint("done with find_uv_at_h (diabatic)")
   endif
@@ -842,7 +842,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
     endif
 
-    call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
+    call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
@@ -1380,13 +1380,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if (CS%use_geothermal) then
-      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eatr, ebtr)
+      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, US, eatr, ebtr)
       if (CS%debug) then
         call hchksum(eatr, "after find_uv_at_h eatr",G%HI, scale=GV%H_to_m)
         call hchksum(ebtr, "after find_uv_at_h ebtr",G%HI, scale=GV%H_to_m)
       endif
     else
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
     if (showCallTree) call callTree_waypoint("done with find_uv_at_h (diabatic)")
   endif
@@ -1572,7 +1572,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
     endif
 
-    call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
+    call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
@@ -2077,7 +2077,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 !        Monin-Obukhov depth or minimum mixed layer depth.
 !    (4) Uses any remaining TKE to drive mixed layer entrainment.
 !    (5) Possibly splits buffer layer into two isopycnal layers (when using isopycnal coordinate)
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
 
       call cpu_clock_begin(id_clock_mixedlayer)
       if (CS%ML_mix_first < 1.0) then
@@ -2117,13 +2117,13 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
-      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
+      call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, US, eaml, ebml)
       if (CS%debug) then
         call hchksum(eaml, "after find_uv_at_h eaml",G%HI, scale=GV%H_to_m)
         call hchksum(ebml, "after find_uv_at_h ebml",G%HI, scale=GV%H_to_m)
       endif
     else
-      call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
+      call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     endif
     if (showCallTree) call callTree_waypoint("done with find_uv_at_h (diabatic)")
   endif
@@ -2469,7 +2469,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     !    (4) Uses any remaining TKE to drive mixed layer entrainment.
     !    (5) Possibly splits the buffer layer into two isopycnal layers.
 
-      call find_uv_at_h(u, v, hold, u_h, v_h, G, GV, ea, eb)
+      call find_uv_at_h(u, v, hold, u_h, v_h, G, GV, US, ea, eb)
       if (CS%debug) call MOM_state_chksum("find_uv_at_h1 ", u, v, h, G, GV, haloshift=0)
 
       dt_mix = min(dt_in_T, dt_in_T*(1.0 - CS%ML_mix_first))

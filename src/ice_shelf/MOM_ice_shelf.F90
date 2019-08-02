@@ -652,7 +652,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
 
   if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
 
-  call add_shelf_flux(G, CS, state, fluxes)
+  call add_shelf_flux(G, US, CS, state, fluxes)
 
   ! now the thermodynamic data is passed on... time to update the ice dynamic quantities
 
@@ -686,7 +686,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS, forces)
   call disable_averaging(CS%diag)
 
   if (present(forces)) then
-    call add_shelf_forces(G, CS, forces, do_shelf_area=(CS%active_shelf_dynamics .or. &
+    call add_shelf_forces(G, US, CS, forces, do_shelf_area=(CS%active_shelf_dynamics .or. &
                                                         CS%override_shelf_movement))
   endif
 
@@ -750,8 +750,9 @@ end subroutine change_thickness_using_melt
 
 !> This subroutine adds the mechanical forcing fields and perhaps shelf areas, based on
 !! the ice state in ice_shelf_CS.
-subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
+subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
@@ -793,7 +794,7 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
 
   !### Consider working over a smaller array range.
   do j=jsd,jed ; do i=isd,ied
-    press_ice = (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
+    press_ice = (ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)) * (CS%g_Earth * ISS%mass_shelf(i,j))
     if (associated(forces%p_surf)) then
       if (.not.forces%accumulate_p_surf) forces%p_surf(i,j) = 0.0
       forces%p_surf(i,j) = forces%p_surf(i,j) + press_ice
@@ -830,8 +831,9 @@ subroutine add_shelf_forces(G, CS, forces, do_shelf_area)
 end subroutine add_shelf_forces
 
 !> This subroutine adds the ice shelf pressure to the fluxes type.
-subroutine add_shelf_pressure(G, CS, fluxes)
+subroutine add_shelf_pressure(G, US, CS, fluxes)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    intent(in)    :: CS   !< This module's control structure.
   type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be updated.
 
@@ -844,7 +846,7 @@ subroutine add_shelf_pressure(G, CS, fluxes)
     call MOM_error(FATAL,"add_shelf_pressure: Incompatible ocean and ice shelf grids.")
 
   do j=js,je ; do i=is,ie
-    press_ice = (CS%ISS%area_shelf_h(i,j) * G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
+    press_ice = (CS%ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)) * (CS%g_Earth * CS%ISS%mass_shelf(i,j))
     if (associated(fluxes%p_surf)) then
       if (.not.fluxes%accumulate_p_surf) fluxes%p_surf(i,j) = 0.0
       fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + press_ice
@@ -858,8 +860,9 @@ subroutine add_shelf_pressure(G, CS, fluxes)
 end subroutine add_shelf_pressure
 
 !> Updates surface fluxes that are influenced by sub-ice-shelf melting
-subroutine add_shelf_flux(G, CS, state, fluxes)
+subroutine add_shelf_flux(G, US, CS, state, fluxes)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
   type(surface),         intent(inout) :: state!< Surface ocean state
   type(forcing),         intent(inout) :: fluxes  !< A structure of surface fluxes that may be used/updated.
@@ -903,7 +906,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   ISS => CS%ISS
 
-  call add_shelf_pressure(G, CS, fluxes)
+  call add_shelf_pressure(G, US, CS, fluxes)
 
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
@@ -942,7 +945,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   if (CS%active_shelf_dynamics .or. CS%override_shelf_movement) then
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) * G%IareaT(i,j)
+        fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) * US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
   endif
 
@@ -1396,7 +1399,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   ! Set up the Coriolis parameter, G%f, usually analytically.
   call MOM_initialize_rotation(dG%CoriolisBu, dG, param_file, US)
   ! This copies grid elements, including bathyT and CoriolisBu from dG to CS%grid.
-  call copy_dyngrid_to_MOM_grid(dG, CS%grid)
+  call copy_dyngrid_to_MOM_grid(dG, CS%grid, US)
 
   call destroy_dyn_horgrid(dG)
 
@@ -1519,9 +1522,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   endif
 
   if (present(forces)) &
-    call add_shelf_forces(G, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
+    call add_shelf_forces(G, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
 
-  if (present(fluxes)) call add_shelf_pressure(G, CS, fluxes)
+  if (present(fluxes)) call add_shelf_pressure(G, US, CS, fluxes)
 
   if (CS%active_shelf_dynamics .and. .not.CS%isthermo) then
     ISS%water_flux(:,:) = 0.0

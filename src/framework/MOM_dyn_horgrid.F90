@@ -7,6 +7,7 @@ module MOM_dyn_horgrid
 use MOM_hor_index, only : hor_index_type
 use MOM_domains, only : MOM_domain_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
+use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
@@ -74,7 +75,7 @@ type, public :: dyn_horgrid_type
     IdxT, &      !< 1/dxT [m-1].
     dyT, &       !< dyT is delta y at h points [m].
     IdyT, &      !< IdyT is 1/dyT [m-1].
-    areaT, &     !< The area of an h-cell [m2].
+    areaT, &     !< The area of an h-cell [L-2 ~> m-2].
     IareaT       !< 1/areaT [m-2].
   real, allocatable, dimension(:,:) :: sin_rot
                  !< The sine of the angular rotation between the local model grid's northward
@@ -92,7 +93,7 @@ type, public :: dyn_horgrid_type
     dyCu, &      !< dyCu is delta y at u points [m].
     IdyCu, &     !< 1/dyCu [m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [m].
-    IareaCu, &   !< The masked inverse areas of u-grid cells [m2].
+    IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
     areaCu       !< The areas of the u-grid cells [m2].
 
   real, allocatable, dimension(:,:) :: &
@@ -104,7 +105,7 @@ type, public :: dyn_horgrid_type
     dyCv, &      !< dyCv is delta y at v points [m].
     IdyCv, &     !< 1/dyCv [m-1].
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [m].
-    IareaCv, &   !< The masked inverse areas of v-grid cells [m2].
+    IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
     areaCv       !< The areas of the v-grid cells [m2].
 
   real, allocatable, dimension(:,:) :: &
@@ -115,7 +116,7 @@ type, public :: dyn_horgrid_type
     IdxBu, &     !< 1/dxBu [m-1].
     dyBu, &      !< dyBu is delta y at q points [m].
     IdyBu, &     !< 1/dyBu [m-1].
-    areaBu, &    !< areaBu is the area of a q-cell [m2]
+    areaBu, &    !< areaBu is the area of a q-cell [L-2 ~> m-2]
     IareaBu      !< IareaBu = 1/areaBu [m-2].
 
   real, pointer, dimension(:) :: gridLatT => NULL()
@@ -153,7 +154,7 @@ type, public :: dyn_horgrid_type
     df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
     df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
 
-  ! These variables are global sums that are useful for 1-d diagnostics
+  ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
   real :: areaT_global  !< Global sum of h-cell area [m2]
   real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m-2]
 
@@ -312,12 +313,15 @@ subroutine rescale_dyn_horgrid_bathymetry(G, m_in_new_units)
 end subroutine rescale_dyn_horgrid_bathymetry
 
 !> set_derived_dyn_horgrid calculates metric terms that are derived from other metrics.
-subroutine set_derived_dyn_horgrid(G)
+subroutine set_derived_dyn_horgrid(G, US)
   type(dyn_horgrid_type), intent(inout) :: G !< The dynamic horizontal grid type
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -327,7 +331,7 @@ subroutine set_derived_dyn_horgrid(G)
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
     G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
     G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
-    G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(m_to_L**2*G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -352,7 +356,7 @@ subroutine set_derived_dyn_horgrid(G)
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
     if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
+    G%IareaBu(I,J) =  Adcroft_reciprocal(m_to_L**2*G%areaBu(I,J))
   enddo ; enddo
 
 end subroutine set_derived_dyn_horgrid

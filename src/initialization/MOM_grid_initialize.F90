@@ -87,10 +87,10 @@ subroutine set_grid_metrics(G, param_file, US)
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
   select case (trim(config))
-    case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file)
-    case ("cartesian"); call set_grid_metrics_cartesian(G, param_file)
-    case ("spherical"); call set_grid_metrics_spherical(G, param_file)
-    case ("mercator");  call set_grid_metrics_mercator(G, param_file)
+    case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file, US)
+    case ("cartesian"); call set_grid_metrics_cartesian(G, param_file, US)
+    case ("spherical"); call set_grid_metrics_spherical(G, param_file, US)
+    case ("mercator");  call set_grid_metrics_mercator(G, param_file, US)
     case ("file"); call MOM_error(FATAL, "MOM_grid_init: set_grid_metrics "//&
            'GRID_CONFIG "file" is no longer a supported option.  Use a '//&
            'mosaic file ("mosaic") or one of the analytic forms instead.')
@@ -100,10 +100,10 @@ subroutine set_grid_metrics(G, param_file, US)
 
   ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
-  call set_derived_dyn_horgrid(G)
+  call set_derived_dyn_horgrid(G, US)
   call callTree_leave("set_derived_metrics()")
 
-  if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
+  if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics', G, US)
 
   call callTree_leave("set_grid_metrics()")
 end subroutine set_grid_metrics
@@ -112,11 +112,14 @@ end subroutine set_grid_metrics
 
 !> grid_metrics_chksum performs a set of checksums on metrics on the grid for
 !! debugging.
-subroutine grid_metrics_chksum(parent, G)
-  character(len=*),      intent(in) :: parent  !< A string identifying the caller
+subroutine grid_metrics_chksum(parent, G, US)
+  character(len=*),       intent(in) :: parent !< A string identifying the caller
   type(dyn_horgrid_type), intent(in) :: G      !< The dynamic horizontal grid type
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: halo
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
@@ -146,8 +149,8 @@ subroutine grid_metrics_chksum(parent, G)
   call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo)
   call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo)
 
-  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo)
-  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo)
+  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo, scale=m_to_L**2)
+  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo, scale=m_to_L**2)
 
   call hchksum(G%geoLonT,trim(parent)//': geoLonT',G%HI, haloshift=halo)
   call hchksum(G%geoLatT,trim(parent)//': geoLatT',G%HI, haloshift=halo)
@@ -166,9 +169,10 @@ end subroutine grid_metrics_chksum
 ! ------------------------------------------------------------------------------
 
 !> Sets the grid metrics from a mosaic file.
-subroutine set_grid_metrics_from_mosaic(G, param_file)
+subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   ! Local variables
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH1, tempH2, tempH3, tempH4
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ1, tempQ2, tempQ3, tempQ4
@@ -186,6 +190,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV
   real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ
   real, dimension(:,:), allocatable :: tmpGlbl
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   integer :: err=0, ni, nj, global_indices(4)
@@ -198,6 +203,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
   call get_param(param_file, mdl, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
                  fail_if_missing=.true.)
@@ -415,17 +421,20 @@ end subroutine set_grid_metrics_from_mosaic
 !! inverses and the cell areas centered on h, q, u, and v points are
 !! calculated, as are the geographic locations of each of these 4
 !! sets of points.
-subroutine set_grid_metrics_cartesian(G, param_file)
+subroutine set_grid_metrics_cartesian(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   ! Local variables
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, I1off, J1off
   integer :: niglobal, njglobal
   real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
   real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
-  real :: dx_everywhere, dy_everywhere ! Grid spacings in m.
-  real :: I_dx, I_dy                   ! Inverse grid spacings in m.
+  real :: dx_everywhere, dy_everywhere ! Grid spacings [m].
+  real :: I_dx, I_dy                   ! Inverse grid spacings [m-1].
   real :: PI
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   character(len=80) :: units_temp
   character(len=48) :: mdl  = "MOM_grid_init set_grid_metrics_cartesian"
 
@@ -436,6 +445,8 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
 
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
   PI = 4.0*atan(1.0)
 
   call get_param(param_file, mdl, "AXIS_UNITS", units_temp, &
@@ -512,14 +523,14 @@ subroutine set_grid_metrics_cartesian(G, param_file)
 
     G%dxBu(I,J) = dx_everywhere ; G%IdxBu(I,J) = I_dx
     G%dyBu(I,J) = dy_everywhere ; G%IdyBu(I,J) = I_dy
-    G%areaBu(I,J) = dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = I_dx * I_dy
+    G%areaBu(I,J) = dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
     G%dxT(i,j) = dx_everywhere ; G%IdxT(i,j) = I_dx
     G%dyT(i,j) = dy_everywhere ; G%IdyT(i,j) = I_dy
-    G%areaT(i,j) = dx_everywhere * dy_everywhere ; G%IareaT(i,j) = I_dx * I_dy
+    G%areaT(i,j) = dx_everywhere * dy_everywhere ; G%IareaT(i,j) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -548,9 +559,10 @@ end subroutine set_grid_metrics_cartesian
 !! inverses and the cell areas centered on h, q, u, and v points are
 !! calculated, as are the geographic locations of each of these 4
 !! sets of points.
-subroutine set_grid_metrics_spherical(G, param_file)
+subroutine set_grid_metrics_spherical(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   ! Local variables
   real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
   integer :: i, j, isd, ied, jsd, jed
@@ -559,6 +571,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
   real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
   real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
   real :: dLon,dLat,latitude,longitude,dL_di
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   character(len=48)  :: mdl  = "MOM_grid_init set_grid_metrics_spherical"
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -568,6 +581,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
   i_offset = G%idg_offset ; j_offset = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -684,9 +698,10 @@ end subroutine set_grid_metrics_spherical
 !! inverses and the cell areas centered on h, q, u, and v points are
 !! calculated, as are the geographic locations of each of these 4
 !! sets of points.
-subroutine set_grid_metrics_mercator(G, param_file)
+subroutine set_grid_metrics_mercator(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
   ! Local variables
   integer :: i, j, isd, ied, jsd, jed
   integer :: I_off, J_off
@@ -706,6 +721,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   real :: fnRef           ! fnRef is the value of Int_dj_dy or
                           ! Int_dj_dy at a latitude or longitude that is
   real :: jRef, iRef      ! being set to be at grid index jRef or iRef.
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: itt1, itt2
   logical :: debug = .FALSE., simple_area = .true.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
@@ -724,6 +740,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
 
   call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
 
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
   !   Calculate the values of the metric terms that might be used
   ! and save them in arrays.
   PI = 4.0*atan(1.0) ; PI_2 = 0.5*PI
@@ -857,7 +874,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
     G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
 
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) = 1.0 / (G%areaBu(I,J))
+    G%IareaBu(I,J) = 1.0 / (m_to_L**2*G%areaBu(I,J))
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -867,7 +884,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
     G%dyT(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
 
     G%areaT(i,j) = G%dxT(i,j)*G%dyT(i,j)
-    G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
+    G%IareaT(i,j) = 1.0 / (m_to_L**2*G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -903,7 +920,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
       call pass_var(G%areaT,G%Domain)
     endif
     do j=jsd,jed ; do i=isd,ied
-      G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
+      G%IareaT(i,j) = 1.0 / (m_to_L**2*G%areaT(i,j))
     enddo ; enddo
   endif
 
@@ -1227,6 +1244,7 @@ subroutine initialize_masks(G, PF, US)
   type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   real :: m_to_Z_scale ! A unit conversion factor from m to Z.
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real :: Dmin       ! The depth for masking in the same units as G%bathyT [Z ~> m].
   real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT [Z ~> m].
   real :: mask_depth ! The depth shallower than which to mask a point as land [Z ~> m].
@@ -1235,6 +1253,8 @@ subroutine initialize_masks(G, PF, US)
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
   m_to_Z_scale = 1.0 ; if (present(US)) m_to_Z_scale = US%m_to_Z
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "If MASKING_DEPTH is unspecified, then anything shallower than "//&
                  "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
@@ -1291,13 +1311,13 @@ subroutine initialize_masks(G, PF, US)
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
-    G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
+    G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(m_to_L**2*G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
-    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
+    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(m_to_L**2*G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave("initialize_masks()")

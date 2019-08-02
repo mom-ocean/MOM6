@@ -3,6 +3,7 @@ module MOM_hor_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_checksums,             only : hchksum, Bchksum
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_domains,               only : pass_var, CORNER, pass_vector
@@ -29,6 +30,7 @@ public horizontal_viscosity, hor_visc_init, hor_visc_end
 type, public :: hor_visc_CS ; private
   logical :: Laplacian       !< Use a Laplacian horizontal viscosity if true.
   logical :: biharmonic      !< Use a biharmonic horizontal viscosity if true.
+  logical :: debug           !< If true, write verbose checksums for debugging purposes.
   logical :: no_slip         !< If true, no slip boundary conditions are used.
                              !! Otherwise free slip boundary conditions are assumed.
                              !! The implementation of the free slip boundary
@@ -282,6 +284,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &      ! biharmonic viscosity at corner points [m4 T-1 ~> m4 s-1]
     Kh_q, &      ! Laplacian viscosity at corner points [m2 s-1]
+    sh_xy_3d, &  ! horizontal shearing strain (du/dy + dv/dx) including metric terms [s-1]
     vort_xy_q, & ! vertical vorticity at corner points [s-1]
     GME_coeff_q  !< GME coeff. at q-points [m2 T-1 ~> m2 s-1]
 
@@ -293,6 +296,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [m4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [m2 T-1 ~> m2 s-1]
+    sh_xx_3d, &      ! horizontal tension (du/dx - dv/dy) including metric terms [s-1]
     diss_rate, &     ! MKE dissipated by parameterized shear production [m2 s-3]
     max_diss_rate, & ! maximum possible energy dissipated by lateral friction [m2 s-3]
     target_diss_rate_GME, & ! the maximum theoretical dissipation plus the amount spuriously dissipated
@@ -364,6 +368,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   Ah_h(:,:,:) = 0.0
   Kh_h(:,:,:) = 0.0
+
+  if (CS%debug) then
+    sh_xx_3d(:,:,:) = 0.0 ; sh_xy_3d(:,:,:) = 0.0
+    Kh_q(:,:,:) = 0.0 ; Ah_q(:,:,:) = 0.0
+  endif
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
@@ -746,7 +755,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
                         G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j) / &
+                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*US%m_to_L**2*G%IareaT(i,j) / &
                         (h(i,j,k) + GV%H_subroundoff)
         enddo ; enddo
 
@@ -898,8 +907,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           endif
         endif
 
-        if ((CS%id_Kh_h>0) .or. find_FrictWork) Kh_h(i,j,k) = Kh
+        if ((CS%id_Kh_h>0) .or. find_FrictWork .or. CS%debug) Kh_h(i,j,k) = Kh
         if (CS%id_div_xx_h>0) div_xx_h(i,j,k) = div_xx(i,j)
+        if (CS%debug) sh_xx_3d(i,j,k) = sh_xx(i,j)
 
         str_xx(i,j) = -Kh * sh_xx(i,j)
       else   ! not Laplacian
@@ -940,7 +950,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
         endif
 
-        if ((CS%id_Ah_h>0) .or. find_FrictWork) Ah_h(i,j,k) = Ah
+        if ((CS%id_Ah_h>0) .or. find_FrictWork .or. CS%debug) Ah_h(i,j,k) = Ah
 
         str_xx(i,j) = str_xx(i,j) + Ah * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0(I,j) - G%IdyCu(I-1,j)*u0(I-1,j)) - &
@@ -1064,8 +1074,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           endif
         endif
 
-        if (CS%id_Kh_q>0) Kh_q(I,J,k) = Kh
+        if (CS%id_Kh_q>0 .or. CS%debug) Kh_q(I,J,k) = Kh
         if (CS%id_vort_xy_q>0) vort_xy_q(I,J,k) = vort_xy(I,J)
+        if (CS%debug) sh_xy_3d(I,J,k) = sh_xy(I,J)
 
         str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
@@ -1109,7 +1120,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xy(I,J))
         endif
 
-        if (CS%id_Ah_q>0) Ah_q(I,J,k) = Ah
+        if (CS%id_Ah_q>0 .or. CS%debug) Ah_q(I,J,k) = Ah
 
         str_xy(I,J) = str_xy(I,J) + Ah * ( dvdx(I,J) + dudy(I,J) )
 
@@ -1266,7 +1277,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                      CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
                                      CS%DX2q(I,J) *str_xy(I,J))) * &
-                     G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
+                     US%m_to_L**2*G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
 
     enddo ; enddo
     if (apply_OBC) then
@@ -1288,7 +1299,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
-                     G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
+                     US%m_to_L**2*G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
     enddo ; enddo
     if (apply_OBC) then
       ! This is not the right boundary condition. If all the masking of tendencies are done
@@ -1407,6 +1418,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
   if (CS%id_GME_coeff_h > 0)  call post_data(CS%id_GME_coeff_h, GME_coeff_h, CS%diag)
   if (CS%id_GME_coeff_q > 0)  call post_data(CS%id_GME_coeff_q, GME_coeff_q, CS%diag)
+
+  if (CS%debug) then
+    if (CS%Laplacian) then
+      call hchksum(Kh_h, "Kh_h", G%HI, haloshift=0, scale=US%s_to_T)
+      call Bchksum(Kh_q, "Kh_q", G%HI, haloshift=0, scale=US%s_to_T)
+      call Bchksum(sh_xy_3d, "shear_xy", G%HI, haloshift=0)
+      call hchksum(sh_xx_3d, "shear_xx", G%HI, haloshift=0)
+    endif
+    if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=0, scale=US%s_to_T)
+    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, scale=US%s_to_T)  
+  endif
 
   if (CS%id_FrictWorkIntz > 0) then
     do j=js,je
@@ -1527,6 +1549,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
+
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)
@@ -2012,9 +2036,9 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       denom = max( &
          (CS%DY2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) * &
-          max(G%IdyCu(I,j)*G%IareaCu(I,j), G%IdyCu(I-1,j)*G%IareaCu(I-1,j)) ), &
+          max(G%IdyCu(I,j)*US%m_to_L**2*G%IareaCu(I,j), G%IdyCu(I-1,j)*US%m_to_L**2*G%IareaCu(I-1,j)) ), &
          (CS%DX2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) * &
-          max(G%IdxCv(i,J)*G%IareaCv(i,J), G%IdxCv(i,J-1)*G%IareaCv(i,J-1)) ) )
+          max(G%IdxCv(i,J)*US%m_to_L**2*G%IareaCv(i,J), G%IdxCv(i,J-1)*US%m_to_L**2*G%IareaCv(i,J-1)) ) )
       CS%Kh_Max_xx(i,j) = 0.0
       if (denom > 0.0) &
         CS%Kh_Max_xx(i,j) = CS%bound_coef * 0.25 * Idt / denom
@@ -2022,13 +2046,17 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
          (CS%DX2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) * &
-          max(G%IdxCu(I,j)*G%IareaCu(I,j), G%IdxCu(I,j+1)*G%IareaCu(I,j+1)) ), &
+          max(G%IdxCu(I,j)*US%m_to_L**2*G%IareaCu(I,j), G%IdxCu(I,j+1)*US%m_to_L**2*G%IareaCu(I,j+1)) ), &
          (CS%DY2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J)) * &
-          max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
+          max(G%IdyCv(i,J)*US%m_to_L**2*G%IareaCv(i,J), G%IdyCv(i+1,J)*US%m_to_L**2*G%IareaCv(i+1,J)) ) )
       CS%Kh_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
         CS%Kh_Max_xy(I,J) = CS%bound_coef * 0.25 * Idt / denom
     enddo ; enddo
+    if (CS%debug) then
+      call hchksum(CS%Kh_Max_xx, "Kh_Max_xx", G%HI, haloshift=0, scale=US%s_to_T)
+      call Bchksum(CS%Kh_Max_xx, "Kh_Max_xy", G%HI, haloshift=0, scale=US%s_to_T)
+    endif
   endif
 
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
@@ -2063,11 +2091,11 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
          (CS%DY2h(i,j) * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0u(I,j) + G%IdyCu(I-1,j)*u0u(I-1,j))  + &
            CS%DX_dyT(i,j)*(G%IdxCv(i,J)*v0u(i,J) + G%IdxCv(i,J-1)*v0u(i,J-1))) * &
-          max(G%IdyCu(I,j)*G%IareaCu(I,j), G%IdyCu(I-1,j)*G%IareaCu(I-1,j)) ),   &
+          max(G%IdyCu(I,j)*US%m_to_L**2*G%IareaCu(I,j), G%IdyCu(I-1,j)*US%m_to_L**2*G%IareaCu(I-1,j)) ),   &
          (CS%DX2h(i,j) * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0v(I,j) + G%IdyCu(I-1,j)*u0v(I-1,j))  + &
            CS%DX_dyT(i,j)*(G%IdxCv(i,J)*v0v(i,J) + G%IdxCv(i,J-1)*v0v(i,J-1))) * &
-          max(G%IdxCv(i,J)*G%IareaCv(i,J), G%IdxCv(i,J-1)*G%IareaCv(i,J-1)) ) )
+          max(G%IdxCv(i,J)*US%m_to_L**2*G%IareaCv(i,J), G%IdxCv(i,J-1)*US%m_to_L**2*G%IareaCv(i,J-1)) ) )
       CS%Ah_Max_xx(I,J) = 0.0
       if (denom > 0.0) &
         CS%Ah_Max_xx(I,J) = CS%bound_coef * 0.5 * Idt / denom
@@ -2078,15 +2106,19 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
          (CS%DX2q(I,J) * &
           (CS%DX_dyBu(I,J)*(u0u(I,j+1)*G%IdxCu(I,j+1) + u0u(I,j)*G%IdxCu(I,j))  + &
            CS%DY_dxBu(I,J)*(v0u(i+1,J)*G%IdyCv(i+1,J) + v0u(i,J)*G%IdyCv(i,J))) * &
-          max(G%IdxCu(I,j)*G%IareaCu(I,j), G%IdxCu(I,j+1)*G%IareaCu(I,j+1)) ),    &
+          max(G%IdxCu(I,j)*US%m_to_L**2*G%IareaCu(I,j), G%IdxCu(I,j+1)*US%m_to_L**2*G%IareaCu(I,j+1)) ),    &
          (CS%DY2q(I,J) * &
           (CS%DX_dyBu(I,J)*(u0v(I,j+1)*G%IdxCu(I,j+1) + u0v(I,j)*G%IdxCu(I,j))  + &
            CS%DY_dxBu(I,J)*(v0v(i+1,J)*G%IdyCv(i+1,J) + v0v(i,J)*G%IdyCv(i,J))) * &
-          max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
+          max(G%IdyCv(i,J)*US%m_to_L**2*G%IareaCv(i,J), G%IdyCv(i+1,J)*US%m_to_L**2*G%IareaCv(i+1,J)) ) )
       CS%Ah_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
         CS%Ah_Max_xy(I,J) = CS%bound_coef * 0.5 * Idt / denom
     enddo ; enddo
+    if (CS%debug) then
+      call hchksum(CS%Ah_Max_xx, "Ah_Max_xx", G%HI, haloshift=0, scale=US%s_to_T)
+      call Bchksum(CS%Ah_Max_xx, "Ah_Max_xy", G%HI, haloshift=0, scale=US%s_to_T)
+    endif
   endif
 
   ! Register fields for output from this module.

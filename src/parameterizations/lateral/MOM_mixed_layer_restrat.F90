@@ -507,7 +507,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 
 !$OMP do
   do j=js,je ; do k=1,nz ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*US%m_to_L**2*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel
@@ -743,7 +743,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
 !$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*US%m_to_L**2*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel
