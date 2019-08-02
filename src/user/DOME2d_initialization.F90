@@ -471,7 +471,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
       z = -G%bathyT(i,j)
       do k = nz,1,-1
         z = z + 0.5 * GV%H_to_Z * h(i,j,k) ! Position of the center of layer k
-        S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
+        S(i,j,k) = 34.0 - 1.0 * (z / (G%max_depth))
         if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) &
           S(i,j,k) = S_ref + S_range
         z = z + 0.5 *  GV%H_to_Z * h(i,j,k) ! Position of the interface k

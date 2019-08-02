@@ -1385,12 +1385,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
     psi2 = my_psi(I,j-1)
-    u(I,j,k) = (psi1-psi2)/G%dy_Cu(I,j)! *(circular_max_u*G%len_lon/(2.0*dpi))
+    u(I,j,k) = (psi1-psi2) / (G%dy_Cu(I,j)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     psi1 = my_psi(i,J)
     psi2 = my_psi(i-1,J)
-    v(i,J,k) = (psi2-psi1)/G%dx_Cv(i,J)! *(circular_max_u*G%len_lon/(2.0*dpi))
+    v(i,J,k) = (psi2-psi1) / (G%dx_Cv(i,J)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
   contains
@@ -1402,12 +1402,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
     ! Local variables
     real :: x, y, r
 
-    x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon)/G%len_lon-1.0  ! -1<x<1
-    y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat)/G%len_lat-1.0 ! -1<y<1
-    r = sqrt( x**2 + y**2 ) ! Circulat stream fn nis fn of radius only
-    r = min(1.0,r) ! Flatten stream function in corners of box
+    x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon) / G%len_lon - 1.0  ! -1<x<1
+    y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat) / G%len_lat - 1.0 ! -1<y<1
+    r = sqrt( x**2 + y**2 ) ! Circular stream function is a function of radius only
+    r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u*G%len_lon*1e3/dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u*G%len_lon*1e3 / dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular
@@ -1885,7 +1885,7 @@ subroutine compute_global_grid_integrals(G)
     tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
   G%areaT_global = reproducing_sum(tmpForSumming)
-  G%IareaT_global = 1. / G%areaT_global
+  G%IareaT_global = 1. / (G%areaT_global)
 end subroutine compute_global_grid_integrals
 
 !> This subroutine sets the 4 bottom depths at velocity points to be the
@@ -2156,7 +2156,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     ! Compute fractional ice shelf coverage of h
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+        frac_shelf_h(i,j) = area_shelf_h(i,j) / (G%areaT(i,j))
     enddo ; enddo
     ! Pass to the pointer for use as an argument to regridding_main
     shelf_area => frac_shelf_h

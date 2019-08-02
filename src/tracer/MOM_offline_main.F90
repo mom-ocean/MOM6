@@ -322,7 +322,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   do iter=1,CS%num_off_iter
 
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_vol(i,j,k) = h_new(i,j,k)*G%areaT(i,j)
+      h_vol(i,j,k) = h_new(i,j,k) * G%areaT(i,j)
       h_pre(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
 
@@ -342,7 +342,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
     ! Update the new layer thicknesses after one round of advection has happened
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+      h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
     enddo ; enddo ; enddo
 
     if (MODULO(iter,CS%off_ale_mod)==0) then
@@ -517,7 +517,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
           h_vol(i,j,k) = h_new(i,j,k)
-          h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+          h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
@@ -562,7 +562,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
           h_vol(i,j,k) = h_new(i,j,k)
-          h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+          h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 

@@ -230,7 +230,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
     PmE_adj,       & ! The adjustment to PminusE that will cause the salinity
                      ! to be restored toward its target value [kg m-1 s-1]
     net_FW,        & ! The area integrated net freshwater flux into the ocean [kg s-1]
-    net_FW2,       & ! The area integrated net freshwater flux into the ocean [kg s-1]
+    net_FW2,       & ! The net freshwater flux into the ocean [kg m-2 s-1]
     work_sum,      & ! A 2-d array that is used as the work space for global sums [m2] or [kg s-1]
     open_ocn_mask    ! a binary field indicating where ice is present based on frazil criteria [nondim]
 
@@ -522,13 +522,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       if (associated(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
-      net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
+      net_FW2(i,j) = net_FW(i,j) / (G%areaT(i,j))
     enddo ; enddo
 
     if (CS%adjust_net_fresh_water_by_scaling) then
       call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)/G%areaT(i,j)) * G%mask2dT(i,j)
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)/(G%areaT(i,j))) * G%mask2dT(i,j)
       enddo ; enddo
     else
       fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf

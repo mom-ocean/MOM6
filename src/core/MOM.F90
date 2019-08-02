@@ -2208,7 +2208,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       ! compute fractional ice shelf coverage of h
       do j=jsd,jed ; do i=isd,ied
         if (G%areaT(i,j) > 0.0) &
-          frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+          frac_shelf_h(i,j) = area_shelf_h(i,j) / (G%areaT(i,j))
       enddo ; enddo
       ! pass to the pointer
       shelf_area => frac_shelf_h

@@ -857,7 +857,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
     G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
 
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) = 1.0 / G%areaBu(I,J)
+    G%IareaBu(I,J) = 1.0 / (G%areaBu(I,J))
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -867,7 +867,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
     G%dyT(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
 
     G%areaT(i,j) = G%dxT(i,j)*G%dyT(i,j)
-    G%IareaT(i,j) = 1.0 / G%areaT(i,j)
+    G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -903,7 +903,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
       call pass_var(G%areaT,G%Domain)
     endif
     do j=jsd,jed ; do i=isd,ied
-      G%IareaT(i,j) = 1.0 / G%areaT(i,j)
+      G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
     enddo ; enddo
   endif
 

@@ -66,7 +66,7 @@ type, public :: hor_visc_CS ; private
                              !! scales quadratically with the velocity shears.
   logical :: use_Kh_bg_2d    !< Read 2d background viscosity from a file.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
-                             !! viscosity [m2 T-1 ~> m2 s-1]. The default is 0.0
+                             !! viscosity [m2 T-1 ~> m2 s-1]. The default is 0.0.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
@@ -102,7 +102,7 @@ type, public :: hor_visc_CS ; private
                       !! velocity differences reach a value of order 1/2 MAXVEL.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
                       !< The amount by which stresses through h points are reduced
-                      !! due to partial barriers. Nondimensional.
+                      !! due to partial barriers [nondim].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [m2 T-1 ~> m2 s-1].
     Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [m4 T-1 ~> m4 s-1].
@@ -746,7 +746,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
                         G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
+                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j) / &
                         (h(i,j,k) + GV%H_subroundoff)
         enddo ; enddo
 
@@ -1263,9 +1263,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
     do j=js,je ; do I=Isq,Ieq
       diffu(I,j,k) = ((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
-                                    CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
+                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
-                                    CS%DX2q(I,J) *str_xy(I,J))) * &
+                                     CS%DX2q(I,J) *str_xy(I,J))) * &
                      G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
 
     enddo ; enddo
@@ -1853,32 +1853,32 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     CS%reduction_xx(i,j) = 1.0
     if ((G%dy_Cu(I,j) > 0.0) .and. (G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
         (G%dy_Cu(I,j) < G%dyCu(I,j) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = G%dy_Cu(I,j) / G%dyCu(I,j)
+      CS%reduction_xx(i,j) = G%dy_Cu(I,j) / (G%dyCu(I,j))
     if ((G%dy_Cu(I-1,j) > 0.0) .and. (G%dy_Cu(I-1,j) < G%dyCu(I-1,j)) .and. &
         (G%dy_Cu(I-1,j) < G%dyCu(I-1,j) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = G%dy_Cu(I-1,j) / G%dyCu(I-1,j)
+      CS%reduction_xx(i,j) = G%dy_Cu(I-1,j) / (G%dyCu(I-1,j))
     if ((G%dx_Cv(i,J) > 0.0) .and. (G%dx_Cv(i,J) < G%dxCv(i,J)) .and. &
         (G%dx_Cv(i,J) < G%dxCv(i,J) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = G%dx_Cv(i,J) / G%dxCv(i,J)
+      CS%reduction_xx(i,j) = G%dx_Cv(i,J) / (G%dxCv(i,J))
     if ((G%dx_Cv(i,J-1) > 0.0) .and. (G%dx_Cv(i,J-1) < G%dxCv(i,J-1)) .and. &
         (G%dx_Cv(i,J-1) < G%dxCv(i,J-1) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = G%dx_Cv(i,J-1) / G%dxCv(i,J-1)
+      CS%reduction_xx(i,j) = G%dx_Cv(i,J-1) / (G%dxCv(i,J-1))
   enddo ; enddo
 
   do J=js-1,Jeq ; do I=is-1,Ieq
     CS%reduction_xy(I,J) = 1.0
     if ((G%dy_Cu(I,j) > 0.0) .and. (G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
         (G%dy_Cu(I,j) < G%dyCu(I,j) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = G%dy_Cu(I,j) / G%dyCu(I,j)
+      CS%reduction_xy(I,J) = G%dy_Cu(I,j) / (G%dyCu(I,j))
     if ((G%dy_Cu(I,j+1) > 0.0) .and. (G%dy_Cu(I,j+1) < G%dyCu(I,j+1)) .and. &
         (G%dy_Cu(I,j+1) < G%dyCu(I,j+1) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = G%dy_Cu(I,j+1) / G%dyCu(I,j+1)
+      CS%reduction_xy(I,J) = G%dy_Cu(I,j+1) / (G%dyCu(I,j+1))
     if ((G%dx_Cv(i,J) > 0.0) .and. (G%dx_Cv(i,J) < G%dxCv(i,J)) .and. &
         (G%dx_Cv(i,J) < G%dxCv(i,J) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = G%dx_Cv(i,J) / G%dxCv(i,J)
+      CS%reduction_xy(I,J) = G%dx_Cv(i,J) / (G%dxCv(i,J))
     if ((G%dx_Cv(i+1,J) > 0.0) .and. (G%dx_Cv(i+1,J) < G%dxCv(i+1,J)) .and. &
         (G%dx_Cv(i+1,J) < G%dxCv(i+1,J) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = G%dx_Cv(i+1,J) / G%dxCv(i+1,J)
+      CS%reduction_xy(I,J) = G%dx_Cv(i+1,J) / (G%dxCv(i+1,J))
   enddo ; enddo
 
   if (CS%Laplacian) then

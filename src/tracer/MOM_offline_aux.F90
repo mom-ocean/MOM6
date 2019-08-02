@@ -73,7 +73,7 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
         max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
-      h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+      h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
 
     enddo ; enddo
   enddo

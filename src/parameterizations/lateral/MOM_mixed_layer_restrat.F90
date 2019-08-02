@@ -360,7 +360,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
-          ( sqrt( 0.5 * ( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 ) ) * I_l_f ) &
+          ( sqrt( 0.5 * ( (G%dxCu(I,j))**2 + (G%dyCu(I,j))**2 ) ) * I_l_f ) &
           * min( 1., 0.5*( VarMix%Rd_dx_h(i,j) + VarMix%Rd_dx_h(i+1,j) ) )
 
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
@@ -436,7 +436,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     absf = 0.5*US%s_to_T*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
-          ( sqrt( 0.5 * ( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 ) ) * I_l_f ) &
+          ( sqrt( 0.5 * ( (G%dxCv(i,J))**2 + (G%dyCv(i,J))**2 ) ) * I_l_f ) &
           * min( 1., 0.5*( VarMix%Rd_dx_h(i,j) + VarMix%Rd_dx_h(i,j+1) ) )
 
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
@@ -663,7 +663,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
 
     timescale = timescale * CS%ml_restrat_coef
-!      timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
+!      timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + (G%dyCv(i,j))**2/L_def**2))
 
     uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
         G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * GV%Z_to_H)
@@ -710,7 +710,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
 
     timescale = timescale * CS%ml_restrat_coef
-!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
+!        timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + (G%dyCv(i,j))**2/L_def**2))
 
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * GV%Z_to_H)
