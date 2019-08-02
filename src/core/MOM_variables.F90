@@ -265,28 +265,28 @@ end type vertvisc_type
 !! and how they will vary as the barotropic velocity is changed.
 type, public :: BT_cont_type
   real, allocatable :: FA_u_EE(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from locations far to the east [H m ~> m2 or kg m-1].
+                                    !! drawing from locations far to the east [H L ~> m2 or kg m-1].
   real, allocatable :: FA_u_E0(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from nearby to the east [H m ~> m2 or kg m-1].
+                                    !! drawing from nearby to the east [H L ~> m2 or kg m-1].
   real, allocatable :: FA_u_W0(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from nearby to the west [H m ~> m2 or kg m-1].
+                                    !! drawing from nearby to the west [H L ~> m2 or kg m-1].
   real, allocatable :: FA_u_WW(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from locations far to the west [H m ~> m2 or kg m-1].
-  real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity [m s-1], beyond which the marginal
+                                    !! drawing from locations far to the west [H L ~> m2 or kg m-1].
+  real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity [L T-1 ~> m s-1], beyond which the marginal
                                     !! open face area is FA_u_WW.  uBT_WW must be non-negative.
-  real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity [m s-1], beyond which the marginal
+  real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity [L T-1 ~> m s-1], beyond which the marginal
                                     !! open face area is FA_u_EE. uBT_EE must be non-positive.
   real, allocatable :: FA_v_NN(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from locations far to the north [H m ~> m2 or kg m-1].
+                                    !! drawing from locations far to the north [H L ~> m2 or kg m-1].
   real, allocatable :: FA_v_N0(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from nearby to the north [H m ~> m2 or kg m-1].
+                                    !! drawing from nearby to the north [H L ~> m2 or kg m-1].
   real, allocatable :: FA_v_S0(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from nearby to the south [H m ~> m2 or kg m-1].
+                                    !! drawing from nearby to the south [H L ~> m2 or kg m-1].
   real, allocatable :: FA_v_SS(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from locations far to the south [H m ~> m2 or kg m-1].
-  real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, [m s-1], beyond which the marginal
+                                    !! drawing from locations far to the south [H L ~> m2 or kg m-1].
+  real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, [L T-1 ~> m s-1], beyond which the marginal
                                     !! open face area is FA_v_SS. vBT_SS must be non-negative.
-  real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, [m s-1], beyond which the marginal
+  real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, [L T-1 ~> m s-1], beyond which the marginal
                                     !! open face area is FA_v_NN.  vBT_NN must be non-positive.
   real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces [H ~> m or kg m-2].
   real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces [H ~> m or kg m-2].
