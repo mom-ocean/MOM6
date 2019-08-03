@@ -160,6 +160,9 @@ type, public :: ocean_grid_type
   real :: areaT_global  !< Global sum of h-cell area [m2]
   real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m-2].
 
+  type(unit_scale_type), pointer :: US => NULL() !< A dimensional unit scaling type
+
+
   ! These variables are for block structures.
   integer :: nblocks  !< The number of sub-PE blocks on this PE
   type(hor_index_type), pointer :: Block(:) => NULL() !< Index ranges for each block
@@ -177,9 +180,10 @@ end type ocean_grid_type
 contains
 
 !> MOM_grid_init initializes the ocean grid array sizes and grid memory.
-subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
+subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_vel)
   type(ocean_grid_type), intent(inout) :: G          !< The horizontal grid type
   type(param_file_type), intent(in)    :: param_file !< Parameter file handle
+  type(unit_scale_type), optional, pointer :: US !< A dimensional unit scaling type
   type(hor_index_type), &
                   optional, intent(in) :: HI !< A hor_index_type for array extents
   logical,        optional, intent(in) :: global_indexing !< If true use global index
@@ -214,6 +218,8 @@ subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
   call get_param(param_file, mod_nm, "NJBLOCK", njblock, "The number of blocks "// &
                  "in the y-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
+
+  if (present(US)) then ; if (associated(US)) G%US => US ; endif
 
   if (present(HI)) then
     G%HI = HI
@@ -419,7 +425,7 @@ subroutine set_derived_metrics(G, US)
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
     G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
     G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
-    G%IareaT(i,j) = Adcroft_reciprocal(US%m_to_L**2*G%areaT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(US%m_to_L**2*US%L_to_m**2*G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -443,8 +449,8 @@ subroutine set_derived_metrics(G, US)
     G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
-    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) =  Adcroft_reciprocal(US%m_to_L**2*G%areaBu(I,J))
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = US%m_to_L**2*G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(US%m_to_L**2*US%L_to_m**2*G%areaBu(I,J))
   enddo ; enddo
 end subroutine set_derived_metrics
 

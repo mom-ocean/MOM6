@@ -393,7 +393,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
     call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
-    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 
   endif
 
@@ -659,9 +659,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   endif
 
 ! Translate state into Ocean.
-!  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
+!  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
   Time1 = OS%Time ; if (do_dyn) Time1 = OS%Time_dyn
   call coupler_type_send_data(Ocean_sfc%fields, Time1)
 
@@ -817,7 +817,7 @@ end subroutine initialize_ocean_public_type
 !! code that calculates the surface state in the first place.
 !! Note the offset in the arrays because the ocean_data_type has no
 !! halo points in its arrays and always uses absolute indicies.
-subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z)
+subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_to_z)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                !! describe the surface state of the ocean.
   type(ocean_public_type), &
@@ -825,6 +825,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
                                                !! visible ocean surface fields, whose elements
                                                !! have their data set here.
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface [Pa].
   real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
                                                !! ocean depth in m, usually 1/(rho_0*g) [m Pa-1].
@@ -871,12 +872,12 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
   if (present(patm)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
-      Ocean_sfc%area(i,j) = G%areaT(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
     enddo ; enddo
   else
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0)
-      Ocean_sfc%area(i,j) = G%areaT(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
     enddo ; enddo
   endif
 
@@ -938,7 +939,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 
 end subroutine ocean_model_init_sfc
 
@@ -1036,7 +1037,7 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
 
   select case(name)
   case('area')
-     array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
   case('mask')
      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result

@@ -224,7 +224,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 
   !$OMP parallel do default(private) shared(Isq,Ieq,Jsq,Jeq,G,Area_h)
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
-    Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
+    Area_h(i,j) = G%mask2dT(i,j) * US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
   if (associated(OBC)) then ; do n=1,OBC%number_of_segments
     if (.not. OBC%segment(n)%on_pe) cycle
@@ -863,10 +863,10 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      KE(i,j) = ( ( G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))   &
-                   +G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) &
-                 +( G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))   &
-                   +G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
+      KE(i,j) = ( ( US%L_to_m**2*G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))   &
+                   +US%L_to_m**2*G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) &
+                 +( US%L_to_m**2*G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))   &
+                   +US%L_to_m**2*G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) &
                 )*0.25*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
@@ -883,10 +883,10 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
     ! The following discretization of KE is based on the one-dimensinal Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
-      um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
-      vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
-      vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
+      up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*US%L_to_m**2*G%areaCu(I-1,j)
+      um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*US%L_to_m**2*G%areaCu( I ,j)
+      vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*US%L_to_m**2*G%areaCv(i,J-1)
+      vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*US%L_to_m**2*G%areaCv(i, J )
       KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*US%m_to_L**2*G%IareaT(i,j)
     enddo ; enddo
   endif

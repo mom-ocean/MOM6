@@ -2134,7 +2134,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! (potentially static) ocean-specific grid type.
   !   The next line would be needed if G%Domain had not already been init'd above:
   !     call clone_MOM_domain(dG%Domain, G%Domain)
-  call MOM_grid_init(G, param_file, HI, bathymetry_at_vel=bathy_at_vel)
+  call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG, G, US)
   call destroy_dyn_horgrid(dG)
 
@@ -2163,7 +2163,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call clone_MOM_domain(G%Domain, dG%Domain)
 
     call clone_MOM_domain(G%Domain, CS%G%Domain)
-    call MOM_grid_init(CS%G, param_file)
+    call MOM_grid_init(CS%G, param_file, US)
 
     call copy_MOM_grid_to_dyngrid(G, dg, US)
     call copy_dyngrid_to_MOM_grid(dg, CS%G, US)
@@ -2208,7 +2208,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       ! compute fractional ice shelf coverage of h
       do j=jsd,jed ; do i=isd,ied
         if (G%areaT(i,j) > 0.0) &
-          frac_shelf_h(i,j) = area_shelf_h(i,j) / (G%areaT(i,j))
+          frac_shelf_h(i,j) = area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
       enddo ; enddo
       ! pass to the pointer
       shelf_area => frac_shelf_h

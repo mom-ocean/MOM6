@@ -716,9 +716,9 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (m_to_L**2*G%areaCu(I,j))
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -730,9 +730,9 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (m_to_L**2*G%areaCv(i,J))
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
 end subroutine reset_face_lengths_named
@@ -783,9 +783,9 @@ subroutine reset_face_lengths_file(G, param_file, US)
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (m_to_L**2*G%areaCu(I,j))
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -797,9 +797,9 @@ subroutine reset_face_lengths_file(G, param_file, US)
 
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (m_to_L**2*G%areaCv(i,J))
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave(trim(mdl)//'()')
@@ -997,9 +997,9 @@ subroutine reset_face_lengths_list(G, param_file, US)
       endif
     enddo
 
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j)*G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (m_to_L**2*G%areaCu(I,j))
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -1026,9 +1026,9 @@ subroutine reset_face_lengths_list(G, param_file, US)
       endif
     enddo
 
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J)*G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (m_to_L**2*G%areaCv(i,J))
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
   if (num_lines > 0) then

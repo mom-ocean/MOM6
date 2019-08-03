@@ -157,13 +157,13 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
     ! tracers were updated, probably just after the diabatic forcing.  A useful
     ! diagnostic could be to compare this reconstruction with that older value.
       do i=is,ie ; do j=js,je
-        hprev(i,j,k) = max(0.0, US%m_to_L**2*G%areaT(i,j)*h_end(i,j,k) + &
+        hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
              ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
     ! In the case that the layer is now dramatically thinner than it was previously,
     ! add a bit of mass to avoid truncation errors.  This will lead to
     ! non-conservation of tracers
         hprev(i,j,k) = hprev(i,j,k) + &
-                       max(0.0, 1.0e-13*hprev(i,j,k) - US%m_to_L**2*G%areaT(i,j)*h_end(i,j,k))
+                       max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
       enddo ; enddo
     else
       do i=is,ie ; do j=js,je
@@ -175,11 +175,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
 !$OMP do
   do j=jsd,jed ; do I=isd,ied-1
-    uh_neglect(I,j) = GV%H_subroundoff*MIN(US%m_to_L**2*G%areaT(i,j),US%m_to_L**2*G%areaT(i+1,j))
+    uh_neglect(I,j) = GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
   enddo ; enddo
 !$OMP do
   do J=jsd,jed-1 ; do i=isd,ied
-    vh_neglect(i,J) = GV%H_subroundoff*MIN(US%m_to_L**2*G%areaT(i,j),US%m_to_L**2*G%areaT(i,j+1))
+    vh_neglect(i,J) = GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
   enddo ; enddo
 
 !$OMP do
@@ -431,7 +431,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         uhh(I) = 0.0
         CFL(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
-        hup = hprev(i+1,j,k) - US%m_to_L**2*G%areaT(i+1,j)*min_h
+        hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
         if ((((hup - hlos) + uhr(I,j,k)) < 0.0) .and. &
             ((0.5*hup + uhr(I,j,k)) < 0.0)) then
@@ -443,7 +443,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
        !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
         CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
       else
-        hup = hprev(i,j,k) - US%m_to_L**2*G%areaT(i,j)*min_h
+        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
         if ((((hup - hlos) - uhr(I,j,k)) < 0.0) .and. &
             ((0.5*hup - uhr(I,j,k)) < 0.0)) then
@@ -612,9 +612,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         hlst(i) = hprev(i,j,k)
         hprev(i,j,k) = hprev(i,j,k) - (uhh(I) - uhh(I-1))
         if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
-        elseif (hprev(i,j,k) < h_neglect*US%m_to_L**2*G%areaT(i,j)) then
-          hlst(i) = hlst(i) + (h_neglect*US%m_to_L**2*G%areaT(i,j) - hprev(i,j,k))
-          Ihnew(i) = 1.0 / (h_neglect*US%m_to_L**2*G%areaT(i,j))
+        elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
+          hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
+          Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
       else
         do_i(i) = .false.
@@ -773,7 +773,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         vhh(i,J) = 0.0
         CFL(i) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
-        hup = hprev(i,j+1,k) - US%m_to_L**2*G%areaT(i,j+1)*min_h
+        hup = hprev(i,j+1,k) - G%areaT(i,j+1)*min_h
         hlos = MAX(0.0,vhr(i,J+1,k))
         if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup + vhr(i,J,k)) < 0.0)) then
@@ -785,7 +785,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
        !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
         CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
       else
-        hup = hprev(i,j,k) - US%m_to_L**2*G%areaT(i,j)*min_h
+        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-vhr(i,J-1,k))
         if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup - vhr(i,J,k)) < 0.0)) then
@@ -958,9 +958,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         hlst(i) = hprev(i,j,k)
         hprev(i,j,k) = max(hprev(i,j,k) - (vhh(i,J) - vhh(i,J-1)), 0.0)
         if (hprev(i,j,k) <= 0.0) then ; do_i(i) = .false.
-        elseif (hprev(i,j,k) < h_neglect*US%m_to_L**2*G%areaT(i,j)) then
-          hlst(i) = hlst(i) + (h_neglect*US%m_to_L**2*G%areaT(i,j) - hprev(i,j,k))
-          Ihnew(i) = 1.0 / (h_neglect*US%m_to_L**2*G%areaT(i,j))
+        elseif (hprev(i,j,k) < h_neglect*G%areaT(i,j)) then
+          hlst(i) = hlst(i) + (h_neglect*G%areaT(i,j) - hprev(i,j,k))
+          Ihnew(i) = 1.0 / (h_neglect*G%areaT(i,j))
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
       else ; do_i(i) = .false. ; endif
     enddo

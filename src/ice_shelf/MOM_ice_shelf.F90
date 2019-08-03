@@ -781,13 +781,13 @@ subroutine add_shelf_forces(G, US, CS, forces, do_shelf_area)
       forces%frac_shelf_u(I,j) = 0.0
       if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%areaCu(I,j) > 0.0)) &
         forces%frac_shelf_u(I,j) = ((ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i+1,j)) / &
-                                    (G%areaT(i,j) + G%areaT(i+1,j)))
+                                    (US%L_to_m**2*G%areaT(i,j) + US%L_to_m**2*G%areaT(i+1,j)))
     enddo ; enddo
     do J=jsd,jed-1 ; do i=isd,ied
       forces%frac_shelf_v(i,J) = 0.0
       if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%areaCv(i,J) > 0.0)) &
         forces%frac_shelf_v(i,J) = ((ISS%area_shelf_h(i,j) + ISS%area_shelf_h(i,j+1)) / &
-                                    (G%areaT(i,j) + G%areaT(i,j+1)))
+                                    (US%L_to_m**2*G%areaT(i,j) + US%L_to_m**2*G%areaT(i,j+1)))
     enddo ; enddo
     call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
@@ -996,7 +996,7 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
 
       !### These hard-coded limits need to be corrected.  They are inappropriate here.
       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
-        sponge_area = sponge_area + G%areaT(i,j)
+        sponge_area = sponge_area + US%L_to_m**2*G%areaT(i,j)
       endif
     enddo ; enddo
 
@@ -1124,12 +1124,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call MOM_domains_init(CS%grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_)
   ! call diag_mediator_init(CS%grid,param_file,CS%diag)
   ! this needs to be fixed - will probably break when not using coupled driver 0
-  call MOM_grid_init(CS%grid, param_file)
+  call MOM_grid_init(CS%grid, param_file, CS%US)
 
   call create_dyn_horgrid(dG, CS%grid%HI)
   call clone_MOM_domain(CS%grid%Domain, dG%Domain)
 
-  call set_grid_metrics(dG, param_file)
+  call set_grid_metrics(dG, param_file, CS%US)
   ! call set_diag_mediator_grid(CS%grid, CS%diag)
 
   ! The ocean grid possibly uses different symmetry.
@@ -1508,13 +1508,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   call cpu_clock_end(id_clock_pass)
 
   do j=jsd,jed ; do i=isd,ied
-    if (ISS%area_shelf_h(i,j) > G%areaT(i,j)) then
+    if (ISS%area_shelf_h(i,j) > US%L_to_m**2*G%areaT(i,j)) then
       call MOM_error(WARNING,"Initialize_ice_shelf: area_shelf_h exceeds G%areaT.")
-      ISS%area_shelf_h(i,j) = G%areaT(i,j)
+      ISS%area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j)
     endif
   enddo ; enddo
   if (present(fluxes)) then ; do j=jsd,jed ; do i=isd,ied
-    if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / (G%areaT(i,j))
+    if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = ISS%area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
   enddo ; enddo ; endif
 
   if (CS%debug) then
@@ -1687,7 +1687,7 @@ subroutine update_shelf_mass(G, CS, ISS, Time)
     ISS%area_shelf_h(i,j) = 0.0
     ISS%hmask(i,j) = 0.
     if (ISS%mass_shelf(i,j) > 0.0) then
-      ISS%area_shelf_h(i,j) = G%areaT(i,j)
+      ISS%area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j)
       ISS%h_shelf(i,j) = ISS%mass_shelf(i,j) / CS%rho_ice
       ISS%hmask(i,j) = 1.
     endif

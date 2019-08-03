@@ -319,9 +319,11 @@ subroutine set_derived_dyn_horgrid(G, US)
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m  = US%L_to_m 
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -331,7 +333,7 @@ subroutine set_derived_dyn_horgrid(G, US)
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
     G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
     G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
-    G%IareaT(i,j) = Adcroft_reciprocal(m_to_L**2*G%areaT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(m_to_L**2*L_to_m**2*G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -355,8 +357,8 @@ subroutine set_derived_dyn_horgrid(G, US)
     G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
-    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) =  Adcroft_reciprocal(m_to_L**2*G%areaBu(I,J))
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = m_to_L**2*G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(m_to_L**2*L_to_m**2*G%areaBu(I,J))
   enddo ; enddo
 
 end subroutine set_derived_dyn_horgrid

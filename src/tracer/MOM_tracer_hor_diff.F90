@@ -294,7 +294,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if ((CS%id_KhTr_u > 0) .or. (CS%id_KhTr_h > 0)) then
         !$OMP parallel do default(shared) private(khdt_max)
         do j=js,je ; do I=is-1,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(G%areaT(i,j), G%areaT(i+1,j))
+          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i+1,j))
           if (khdt_x(I,j) > khdt_max) then
             khdt_x(I,j) = khdt_max
             if (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)) > 0.0) &
@@ -304,14 +304,14 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       else
         !$OMP parallel do default(shared) private(khdt_max)
         do j=js,je ; do I=is-1,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(G%areaT(i,j), G%areaT(i+1,j))
+          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i+1,j))
           khdt_x(I,j) = min(khdt_x(I,j), khdt_max)
         enddo ; enddo
       endif
       if ((CS%id_KhTr_v > 0) .or. (CS%id_KhTr_h > 0)) then
         !$OMP parallel do default(shared) private(khdt_max)
         do J=js-1,je ; do i=is,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(G%areaT(i,j), G%areaT(i,j+1))
+          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i,j+1))
           if (khdt_y(i,J) > khdt_max) then
             khdt_y(i,J) = khdt_max
             if (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)) > 0.0) &
@@ -321,7 +321,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       else
         !$OMP parallel do default(shared) private(khdt_max)
         do J=js-1,je ; do i=is,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(G%areaT(i,j), G%areaT(i,j+1))
+          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i,j+1))
           khdt_y(i,J) = min(khdt_y(i,J), khdt_max)
         enddo ; enddo
       endif
@@ -1129,7 +1129,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           else
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Lu(j)%p(I,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Lu(j)%p(I,k) * G%areaT(i,j)
+            vol = hP_Lu(j)%p(I,k) * G%US%L_to_m**2*G%areaT(i,j)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face, or if it
@@ -1164,7 +1164,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           else
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Ru(j)%p(I,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Ru(j)%p(I,k) * G%areaT(i+1,j)
+            vol = hP_Ru(j)%p(I,k) * G%US%L_to_m**2*G%areaT(i+1,j)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face, or if it
@@ -1266,7 +1266,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           if (deep_wt_Lv(J)%p(i,k) < 1.0) then
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Lv(J)%p(i,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Lv(J)%p(i,k) * G%areaT(i,j)
+            vol = hP_Lv(J)%p(i,k) * G%US%L_to_m**2*G%areaT(i,j)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face.
@@ -1293,7 +1293,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           if (deep_wt_Rv(J)%p(i,k) < 1.0) then
             Tr_adj_vert = 0.0
             wt_b = deep_wt_Rv(J)%p(i,k) ; wt_a = 1.0 - wt_b
-            vol = hP_Rv(J)%p(i,k) * G%areaT(i,j+1)
+            vol = hP_Rv(J)%p(i,k) * G%US%L_to_m**2*G%areaT(i,j+1)
 
             !   Ensure that the tracer flux does not drive the tracer values
             ! outside of the range Tr_min_face <= Tr <= Tr_max_face.
@@ -1351,7 +1351,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
-                                            (h(i,j,k)*G%areaT(i,j))
+                                            (h(i,j,k)*G%US%L_to_m**2*G%areaT(i,j))
           tr_flux_conv(i,j,k) = 0.0
         endif
       enddo ; enddo ; enddo

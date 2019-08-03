@@ -238,10 +238,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         drag_rate_visc(i,j) = (0.25*US%m_to_L**2*G%IareaT(i,j) * &
-                ((G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
-                  G%areaCu(I,j)*drag_vel_u(I,j)) + &
-                 (G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
-                  G%areaCv(i,J)*drag_vel_v(i,J)) ) )
+                ((US%L_to_m**2*G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
+                  US%L_to_m**2*G%areaCu(I,j)*drag_vel_u(I,j)) + &
+                 (US%L_to_m**2*G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
+                  US%L_to_m**2*G%areaCv(i,J)*drag_vel_v(i,J)) ) )
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -538,13 +538,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
             !$OMP parallel do default(shared)
             do j=js,je ; do i=is,ie
               MEKE%Kh(i,j) = (CS%MEKE_KhCoeff &
-                         * sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))) &
+                         * sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*US%L_to_m**2*G%areaT(i,j))) &
                          * min(MEKE%Rd_dx_h(i,j), 1.0)
             enddo ; enddo
           else
             !$OMP parallel do default(shared)
             do j=js,je ; do i=is,ie
-              MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j))
+              MEKE%Kh(i,j) = CS%MEKE_KhCoeff*sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*US%L_to_m**2*G%areaT(i,j))
             enddo ; enddo
           endif
         else
@@ -684,7 +684,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
       do while (resid>0.)
         n1 = n1 + 1
         EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j), &
+        call MEKE_lengthScales_0d(CS, US%L_to_m**2*G%areaT(i,j), beta, G%bathyT(i,j), &
                                   MEKE%Rd_dx_h(i,j), SN, EKE, US%Z_to_m, &
                                   bottomFac2, barotrFac2, LmixScale,     &
                                   Lrhines, Leady)
@@ -821,7 +821,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
       beta = 0.
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, G%areaT(i,j), beta, G%bathyT(i,j),  &
+    call MEKE_lengthScales_0d(CS, US%L_to_m**2*G%areaT(i,j), beta, G%bathyT(i,j),  &
                               MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), US%Z_to_m, &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               Lrhines(i,j), Leady(i,j))

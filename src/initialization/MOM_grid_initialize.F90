@@ -118,8 +118,10 @@ subroutine grid_metrics_chksum(parent, G, US)
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   integer :: halo
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
@@ -146,8 +148,8 @@ subroutine grid_metrics_chksum(parent, G, US)
   call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', &
                     G%IdxBu, G%IdyBu, G%HI, haloshift=halo)
 
-  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo)
-  call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo)
+  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo, scale=L_to_m**2)
+  call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo, scale=L_to_m**2)
 
   call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo, scale=m_to_L**2)
   call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo, scale=m_to_L**2)
@@ -361,7 +363,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   call pass_var(areaBu, G%Domain, position=CORNER)
 
   do i=G%isd,G%ied ; do j=G%jsd,G%jed
-    G%dxT(i,j) = dxT(i,j) ; G%dyT(i,j) = dyT(i,j) ; G%areaT(i,j) = areaT(i,j)
+    G%dxT(i,j) = dxT(i,j) ; G%dyT(i,j) = dyT(i,j) ; G%areaT(i,j) = m_to_L**2*areaT(i,j)
   enddo ; enddo
   do I=G%IsdB,G%IedB ; do j=G%jsd,G%jed
     G%dxCu(I,j) = dxCu(I,j) ; G%dyCu(I,j) = dyCu(I,j)
@@ -370,7 +372,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     G%dxCv(i,J) = dxCv(i,J) ; G%dyCv(i,J) = dyCv(i,J)
   enddo ; enddo
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
-    G%dxBu(I,J) = dxBu(I,J) ; G%dyBu(I,J) = dyBu(I,J) ; G%areaBu(I,J) = areaBu(I,J)
+    G%dxBu(I,J) = dxBu(I,J) ; G%dyBu(I,J) = dyBu(I,J) ; G%areaBu(I,J) = m_to_L**2*areaBu(I,J)
   enddo ; enddo
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
@@ -523,14 +525,14 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
 
     G%dxBu(I,J) = dx_everywhere ; G%IdxBu(I,J) = I_dx
     G%dyBu(I,J) = dy_everywhere ; G%IdyBu(I,J) = I_dy
-    G%areaBu(I,J) = dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = L_to_m**2*I_dx * I_dy
+    G%areaBu(I,J) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
     G%dxT(i,j) = dx_everywhere ; G%IdxT(i,j) = I_dx
     G%dyT(i,j) = dy_everywhere ; G%IdyT(i,j) = I_dy
-    G%areaT(i,j) = dx_everywhere * dy_everywhere ; G%IareaT(i,j) = L_to_m**2*I_dx * I_dy
+    G%areaT(i,j) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaT(i,j) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -647,7 +649,7 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
     G%dxBu(I,J) = G%Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
 !   G%dxBu(I,J) = G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
     G%dyBu(I,J) = G%Rad_Earth * dLat*PI_180
-    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%areaBu(I,J) = m_to_L**2 * G%dxBu(I,J) * G%dyBu(I,J)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -684,8 +686,8 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
 !   latitude = G%geoLatCv(i,J)*PI_180             ! In radians
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
-!   G%areaT(i,j) = Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
-    G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
+!   G%areaT(i,j) = m_to_L**2 * Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
+    G%areaT(i,j) = m_to_L**2 * G%dxT(i,j) * G%dyT(i,j)
   enddo ; enddo
 
   call callTree_leave("set_grid_metrics_spherical()")
@@ -873,8 +875,8 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     G%dxBu(I,J) = ds_di(xq(I,J), yq(I,J), GP)
     G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
 
-    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) = 1.0 / (m_to_L**2*G%areaBu(I,J))
+    G%areaBu(I,J) = m_to_L**2*G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) = 1.0 / (G%areaBu(I,J))
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -883,8 +885,8 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     G%dxT(i,j) = ds_di(xh(i,j), yh(i,j), GP)
     G%dyT(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
 
-    G%areaT(i,j) = G%dxT(i,j)*G%dyT(i,j)
-    G%IareaT(i,j) = 1.0 / (m_to_L**2*G%areaT(i,j))
+    G%areaT(i,j) = m_to_L**2*G%dxT(i,j)*G%dyT(i,j)
+    G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -903,7 +905,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
 
   if (.not.simple_area) then
     do j=JsdB+1,jed ; do i=IsdB+1,ied
-      G%areaT(I,J) = GP%Rad_Earth**2 * &
+      G%areaT(I,J) = m_to_L**2*GP%Rad_Earth**2 * &
           (dL(xq(I-1,J-1),xq(I-1,J),yq(I-1,J-1),yq(I-1,J)) + &
           (dL(xq(I-1,J),xq(I,J),yq(I-1,J),yq(I,J)) +          &
           (dL(xq(I,J),xq(I,J-1),yq(I,J),yq(I,J-1)) +          &
@@ -920,7 +922,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
       call pass_var(G%areaT,G%Domain)
     endif
     do j=jsd,jed ; do i=isd,ied
-      G%IareaT(i,j) = 1.0 / (m_to_L**2*G%areaT(i,j))
+      G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
     enddo ; enddo
   endif
 
@@ -1310,14 +1312,14 @@ subroutine initialize_masks(G, PF, US)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
-    G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
-    G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(m_to_L**2*G%areaCu(I,j))
+    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j) * G%dy_Cu(I,j)
+    G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
-    G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
-    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(m_to_L**2*G%areaCv(i,J))
+    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J) * G%dx_Cv(i,J)
+    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave("initialize_masks()")

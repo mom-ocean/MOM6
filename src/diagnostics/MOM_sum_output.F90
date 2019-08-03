@@ -483,7 +483,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
          "write_energy: Module must be initialized before it is used.")
 
   do j=js,je ; do i=is,ie
-    areaTm(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
+    areaTm(i,j) = G%mask2dT(i,j)*US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
 
   if (GV%Boussinesq) then
@@ -972,7 +972,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   if (associated(fluxes%evap)) then
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
-        FW_in(i,j) = dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
+        FW_in(i,j) = dt*G%US%L_to_m**2*G%areaT(i,j)*(fluxes%evap(i,j) + &
             (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
               (fluxes%fprec(i,j) + fluxes%frunoff(i,j))))
       enddo ; enddo
@@ -983,25 +983,25 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   endif
 
   if (associated(fluxes%seaice_melt)) then ; do j=js,je ; do i=is,ie
-    FW_in(i,j) = FW_in(i,j) + dt * G%areaT(i,j) * fluxes%seaice_melt(i,j)
+    FW_in(i,j) = FW_in(i,j) + dt * G%US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt(i,j)
   enddo ; enddo ; endif
 
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * (fluxes%sw(i,j) + &
+      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
+       heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                          &
+!      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) *                          &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
@@ -1011,7 +1011,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
     ! smg: old code
     if (associated(sfc_state%TempxPmE)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * sfc_state%TempxPmE(i,j)
+        heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * sfc_state%TempxPmE(i,j)
       enddo ; enddo
     elseif (associated(fluxes%evap)) then
       do j=js,je ; do i=is,ie
@@ -1023,23 +1023,23 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
     ! The following heat sources may or may not be used.
     if (associated(sfc_state%internal_heat)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * &
+        heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * &
                      sfc_state%internal_heat(i,j)
       enddo ; enddo
     endif
     if (associated(sfc_state%frazil)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * sfc_state%frazil(i,j)
+      heat_in(i,j) = heat_in(i,j) + G%US%L_to_m**2*G%areaT(i,j) * sfc_state%frazil(i,j)
     enddo ; enddo ; endif
     if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_added(i,j)
+      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (associated(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * sfc_state%sw_lost(i,j)
+!      heat_in(i,j) = heat_in(i,j) - G%US%L_to_m**2*G%areaT(i,j) * sfc_state%sw_lost(i,j)
 !    enddo ; enddo ; endif
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
       ! convert salt_flux from kg (salt)/(m^2 s) to ppt * [m s-1].
-      salt_in(i,j) = dt*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
+      salt_in(i,j) = dt*G%US%L_to_m**2*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif
 
@@ -1128,7 +1128,7 @@ subroutine create_depth_list(G, CS)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
     Dlist(list_pos) = G%bathyT(i,j)
-    Arealist(list_pos) = G%mask2dT(i,j) * G%areaT(i,j)
+    Arealist(list_pos) = G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
 
   ! These sums reproduce across PEs because the arrays are only nonzero on one PE.
@@ -1488,7 +1488,7 @@ subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
 
   ! Area checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
+    field(i,j) = G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
   write(area_chksum, '(Z16)') mpp_chksum(field(:,:))
 

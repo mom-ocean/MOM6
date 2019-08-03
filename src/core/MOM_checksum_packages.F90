@@ -252,14 +252,14 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   ! First collect local stats
   Area = 0. ; Vol = 0.
   do j = js, je ; do i = is, ie
-    Area = Area + G%areaT(i,j)
+    Area = Area + G%US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
   T%minimum = 1.E34 ; T%maximum = -1.E34 ; T%average = 0.
   S%minimum = 1.E34 ; S%maximum = -1.E34 ; S%average = 0.
   h_minimum = 1.E34
   do k = 1, nz ; do j = js, je ; do i = is, ie
     if (G%mask2dT(i,j)>0.) then
-      dV = G%areaT(i,j)*h(i,j,k) ; Vol = Vol + dV
+      dV = G%US%L_to_m**2*G%areaT(i,j)*h(i,j,k) ; Vol = Vol + dV
       if (do_TS .and. h(i,j,k)>0.) then
         T%minimum = min( T%minimum, Temp(i,j,k) ) ; T%maximum = max( T%maximum, Temp(i,j,k) )
         T%average = T%average + dV*Temp(i,j,k)

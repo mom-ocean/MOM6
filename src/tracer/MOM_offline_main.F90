@@ -322,7 +322,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   do iter=1,CS%num_off_iter
 
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_vol(i,j,k) = h_new(i,j,k) * G%areaT(i,j)
+      h_vol(i,j,k) = h_new(i,j,k) * G%US%L_to_m**2*G%areaT(i,j)
       h_pre(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
 
@@ -342,7 +342,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
     ! Update the new layer thicknesses after one round of advection has happened
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
+      h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
     enddo ; enddo ; enddo
 
     if (MODULO(iter,CS%off_ale_mod)==0) then
@@ -483,7 +483,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
 
         ! Calculate the layer volumes at beginning of redistribute
         do k=1,nz ; do j=js,je ; do i=is,ie
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+          h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call pass_var(h_vol,G%Domain)
         call pass_vector(uhtr,vhtr,G%Domain)
@@ -517,7 +517,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
           h_vol(i,j,k) = h_new(i,j,k)
-          h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
+          h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
@@ -528,7 +528,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
 
         ! Calculate the layer volumes at beginning of redistribute
         do k=1,nz ; do j=js,je ; do i=is,ie
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+          h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call pass_var(h_vol,G%Domain)
         call pass_vector(uhtr,vhtr,G%Domain)
@@ -562,7 +562,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
           h_vol(i,j,k) = h_new(i,j,k)
-          h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
+          h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
@@ -628,8 +628,8 @@ real function remaining_transport_sum(CS, uhtr, vhtr)
 
   remaining_transport_sum = 0.
   do k=1,nz; do j=js,je ; do i=is,ie
-    uh_neglect = h_min*MIN(CS%G%areaT(i,j),CS%G%areaT(i+1,j))
-    vh_neglect = h_min*MIN(CS%G%areaT(i,j),CS%G%areaT(i,j+1))
+    uh_neglect = h_min*CS%G%US%L_to_m**2*MIN(CS%G%areaT(i,j),CS%G%areaT(i+1,j))
+    vh_neglect = h_min*CS%G%US%L_to_m**2*MIN(CS%G%areaT(i,j),CS%G%areaT(i,j+1))
     if (ABS(uhtr(I,j,k))>uh_neglect) then
       remaining_transport_sum = remaining_transport_sum + ABS(uhtr(I,j,k))
     endif
@@ -917,7 +917,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second zonal and meridional advection
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-        h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
       enddo ; enddo ; enddo
       call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, CS%US, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
@@ -934,7 +934,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First zonal and meridional advection
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-        h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
       enddo ; enddo ; enddo
       call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, CS%US, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)

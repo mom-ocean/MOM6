@@ -320,7 +320,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (CS%id_masso > 0) then
     work_2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_2d(i,j) = work_2d(i,j) + (GV%H_to_kg_m2*h(i,j,k)) * G%areaT(i,j)
+      work_2d(i,j) = work_2d(i,j) + (GV%H_to_kg_m2*h(i,j,k)) * US%L_to_m**2*G%areaT(i,j)
     enddo ; enddo ; enddo
     masso = reproducing_sum(work_2d)
     call post_data(CS%id_masso, masso, CS%diag)
@@ -339,7 +339,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       endif ; endif
       if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
         do k=1,nz; do j=js,je ; do i=is,ie
-          work_3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * G%areaT(i,j)
+          work_3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call post_data(CS%id_volcello, work_3d, CS%diag)
       endif
@@ -372,7 +372,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, work_3d, CS%diag)
       if (CS%id_volcello > 0) then
         do k=1,nz; do j=js,je ; do i=is,ie ! volcello = dp/(rho*g)*area for non-Boussinesq
-          work_3d(i,j,k) = G%areaT(i,j) * work_3d(i,j,k)
+          work_3d(i,j,k) = US%L_to_m**2*G%areaT(i,j) * work_3d(i,j,k)
         enddo ; enddo ; enddo
         call post_data(CS%id_volcello, work_3d, CS%diag)
       endif
@@ -1883,7 +1883,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
-        'Surface area of tracer (T) cells', 'm2',                    &
+        'Surface area of tracer (T) cells', 'm2', conversion=US%m_to_L**2,  &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',      &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
@@ -1893,21 +1893,21 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   endif
 
   id = register_static_field('ocean_model', 'area_u', diag%axesCu1,     &
-        'Surface area of x-direction flow (U) cells', 'm2',             &
+        'Surface area of x-direction flow (U) cells', 'm2', conversion=US%m_to_L**2, &
         cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
-        'Surface area of y-direction flow (V) cells', 'm2',             &
+        'Surface area of y-direction flow (V) cells', 'm2', conversion=US%m_to_L**2, &
         cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
-        'Surface area of B-grid flow (Q) cells', 'm2',                  &
+        'Surface area of B-grid flow (Q) cells', 'm2', conversion=US%m_to_L**2, &
         cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')

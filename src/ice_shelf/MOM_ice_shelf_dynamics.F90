@@ -580,14 +580,16 @@ function ice_time_step_CFL(CS, ISS, G)
   real :: local_u_max, local_v_max
   integer :: i, j
 
-  min_ratio = 1.0e16 ! This is just an arbitrary large value.
+  min_ratio = 1.0e16 ! This is just an arbitrary large nondiensional value.
   do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (ISS%hmask(i,j) == 1.0) then
     local_u_max = max(abs(CS%u_shelf(i,j)), abs(CS%u_shelf(i+1,j+1)), &
                       abs(CS%u_shelf(i+1,j)), abs(CS%u_shelf(i,j+1)))
     local_v_max = max(abs(CS%v_shelf(i,j)), abs(CS%v_shelf(i+1,j+1)), &
                       abs(CS%v_shelf(i+1,j)), abs(CS%v_shelf(i,j+1)))
 
-    ratio = min(G%areaT(i,j) / (local_u_max+1.0e-12), G%areaT(i,j) / (local_v_max+1.0e-12))
+    ! Here the hard-coded 1e-12 has units of m s-1.  Consider revising.
+    ratio = G%US%L_to_m**2*min(G%areaT(i,j) / (local_u_max + 1.0e-12), &
+                               G%areaT(i,j) / (local_v_max + 1.0e-12))
     min_ratio = min(min_ratio, ratio)
   endif ; enddo ; enddo ! i- and j- loops
 
@@ -896,7 +898,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
   Au(:,:) = 0.0 ; Av(:,:) = 0.0
 
   call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-            CS%ice_visc, float_cond, G%bathyT(:,:), CS%taub_beta_eff, G%areaT, &
+            CS%ice_visc, float_cond, G%bathyT(:,:), CS%taub_beta_eff, G%US%L_to_m**2*G%areaT, &
             G, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
 
   err_init = 0 ; err_tempu = 0; err_tempv = 0
@@ -955,7 +957,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
     Au(:,:) = 0 ; Av(:,:) = 0
 
     call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-            CS%ice_visc, float_cond, G%bathyT(:,:), CS%taub_beta_eff, G%areaT, &
+            CS%ice_visc, float_cond, G%bathyT(:,:), CS%taub_beta_eff, G%US%L_to_m**2*G%areaT, &
             G, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
 
     err_max = 0
@@ -1120,7 +1122,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
 
   call CG_action(Au, Av, u, v, Phi, Phisub, CS%umask, CS%vmask, hmask, &
           H_node, CS%ice_visc, float_cond, G%bathyT(:,:), CS%taub_beta_eff, &
-          G%areaT, G, isc-1, iec+1, jsc-1, jec+1, CS%density_ice/CS%density_ocean_avg)
+          G%US%L_to_m**2*G%areaT, G, isc-1, iec+1, jsc-1, jec+1, CS%density_ice/CS%density_ocean_avg)
 
   call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
 
@@ -1191,7 +1193,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, u, v, taudx, taudy, H_node, float_c
 
     call CG_action(Au, Av, Du, Dv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
           H_node, CS%ice_visc, float_cond, G%bathyT(:,:), CS%taub_beta_eff, &
-          G%areaT, G, is, ie, js, je, CS%density_ice/CS%density_ocean_avg)
+          G%US%L_to_m**2*G%areaT, G, is, ie, js, je, CS%density_ice/CS%density_ocean_avg)
 
     ! Au, Av valid region moves in by 1
 
@@ -1483,7 +1485,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
 
           if (hmask(i,j) == 1) then
 
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
+            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
             h_after_uflux(i,j) = h0(i,j)
 
@@ -1712,7 +1714,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
           endif
 
           if (hmask(i,j) == 1) then
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
+            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
             h_after_vflux(i,j) = h_after_uflux(i,j)
 
             stencil(:) = h_after_uflux(i,j-2:j+2)  ! fine as long has ny_halo >= 2
@@ -1952,7 +1954,7 @@ subroutine shelf_advance_front(CS, ISS, G, flux_enter)
             enddo
 
             if (n_flux > 0) then
-              dxdyh = G%areaT(i,j)
+              dxdyh = G%US%L_to_m**2*G%areaT(i,j)
               h_reference = h_reference / real(n_flux)
               partial_vol = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) + tot_flux
 
@@ -2142,7 +2144,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, TAUD_X, TAUD_Y, OD)
       sy = 0
       dxh = G%dxT(i,j)
       dyh = G%dyT(i,j)
-      dxdyh = G%areaT(i,j)
+      dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
       if (ISS%hmask(i,j) == 1) then ! we are inside the global computational bdry, at an ice-filled cell
 
@@ -2673,7 +2675,7 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
 
     dxh = G%dxT(i,j)
     dyh = G%dyT(i,j)
-    dxdyh = G%areaT(i,j)
+    dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
     X(1:2) = G%geoLonBu(i-1:i,j-1)*1000
     X(3:4) = G%geoLonBu(i-1:i,j) *1000
@@ -2866,7 +2868,7 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
 
       dxh = G%dxT(i,j)
       dyh = G%dyT(i,j)
-      dxdyh = G%areaT(i,j)
+      dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
       X(1:2) = G%geoLonBu(i-1:i,j-1)*1000
       X(3:4) = G%geoLonBu(i-1:i,j)*1000
@@ -3022,7 +3024,7 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u, v)
 
       dxh = G%dxT(i,j)
       dyh = G%dyT(i,j)
-      dxdyh = G%areaT(i,j)
+      dxdyh = US%L_to_m**2*G%areaT(i,j)
 
       if (ISS%hmask(i,j) == 1) then
         ux = (u(i,j) + u(i,j-1) - u(i-1,j) - u(i-1,j-1)) / (2*dxh)
@@ -3679,7 +3681,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
 
           if (hmask(i,j) == 1) then
 
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
+            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
             h_after_uflux(i,j) = h0(i,j)
 
@@ -3907,7 +3909,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
           endif
 
           if (hmask(i,j) == 1) then
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%areaT(i,j)
+            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
             h_after_vflux(i,j) = h_after_uflux(i,j)
 
             stencil(:) = h_after_uflux(i,j-2:j+2)  ! fine as long has ny_halo >= 2

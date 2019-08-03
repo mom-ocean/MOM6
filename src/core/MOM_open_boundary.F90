@@ -1410,11 +1410,12 @@ end subroutine open_boundary_impose_normal_slope
 !> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed.
 !! Also adjust u- and v-point cell area on specified open boundaries and mask all
 !! points outside open boundaries.
-subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
+subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
-  type(dyn_horgrid_type),            intent(inout) :: G !< Ocean grid structure
-  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell [m2]
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell [m2]
+  type(dyn_horgrid_type),            intent(inout) :: G   !< Ocean grid structure
+  type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell [L2 ~> m2]
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell [L2 ~> m2]
   ! Local variables
   integer :: i, j, n
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -1473,9 +1474,9 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
         if (segment%direction == OBC_DIRECTION_E) then
-          areaCu(I,j) = G%areaT(i,j)
-        else   ! West
-          areaCu(I,j) = G%areaT(i+1,j)
+          areaCu(I,j) = G%areaT(i,j)   ! Both of these are in [L2]
+        else   ! West 
+          areaCu(I,j) = G%areaT(i+1,j) ! Both of these are in [L2]
         endif
       enddo
     else
@@ -1483,9 +1484,9 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         if (segment%direction == OBC_DIRECTION_S) then
-          areaCv(i,J) = G%areaT(i,j+1)
+          areaCv(i,J) = G%areaT(i,j+1) ! Both of these are in [L2]
         else      ! North
-          areaCu(i,J) = G%areaT(i,j)
+          areaCu(i,J) = G%areaT(i,j)   ! Both of these are in [L2]
         endif
       enddo
     endif

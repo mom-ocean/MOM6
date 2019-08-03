@@ -63,17 +63,17 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
   do k = 1, nz
     do i=is-1,ie+1 ; do j=js-1,je+1
 
-      h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
+      h_new(i,j,k) = max(0.0, G%US%L_to_m**2*G%areaT(i,j)*h_pre(i,j,k) + &
         ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
 
       ! In the case that the layer is now dramatically thinner than it was previously,
       ! add a bit of mass to avoid truncation errors.  This will lead to
       ! non-conservation of tracers
       h_new(i,j,k) = h_new(i,j,k) + &
-        max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
+        max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%US%L_to_m**2*G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
-      h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
+      h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
 
     enddo ; enddo
   enddo
@@ -189,10 +189,10 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
   ! in a given cell and scale it back if it would deplete a layer
   do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
 
-    hvol = h_pre(i,j,k)*G%areaT(i,j)
+    hvol = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
     pos_flux  = max(0.0,-uh(I-1,j,k)) + max(0.0, -vh(i,J-1,k)) + &
       max(0.0, uh(I,j,k)) + max(0.0, vh(i,J,k)) + &
-      max(0.0, top_flux(i,j,k)*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%areaT(i,j))
+      max(0.0, top_flux(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%US%L_to_m**2*G%areaT(i,j))
 
     if (pos_flux>hvol .and. pos_flux>0.0) then
       scale_factor = ( hvol )/pos_flux*max_off_cfl
@@ -294,7 +294,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i+1,j))
       if ( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "barotropic redistribution")
@@ -364,7 +364,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i,j+1))
       if ( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) then
           call MOM_error(WARNING,"Column integral of vh does not match after "//&
           "barotropic redistribution")
@@ -409,7 +409,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
     enddo ; enddo
     do k=1,nz ; do i=is-1,ie+1
       ! Subtract just a little bit of thickness to avoid roundoff errors
-      h2d(i,k) = hvol(i,j,k)-min_h*G%areaT(i,j)
+      h2d(i,k) = hvol(i,j,k)-min_h*G%US%L_to_m**2*G%areaT(i,j)
     enddo ; enddo
 
     do i=is-1,ie
@@ -460,7 +460,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i+1,j))
+      uh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i+1,j))
       if (abs(uh_col - sum(uh2d(I,:)))>uh_neglect) then
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "upwards redistribution")
@@ -506,7 +506,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
       vh2d(J,k) = vh(i,J,k)
     enddo ; enddo
     do k=1,nz ; do j=js-1,je+1
-      h2d(j,k) = hvol(i,j,k)-min_h*G%areaT(i,j)
+      h2d(j,k) = hvol(i,j,k)-min_h*G%US%L_to_m**2*G%areaT(i,j)
     enddo ; enddo
 
     do j=js-1,je
@@ -558,7 +558,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
 
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = GV%Angstrom_H*min(G%areaT(i,j),G%areaT(i,j+1))
+      vh_neglect = GV%Angstrom_H*min(G%US%L_to_m**2*G%areaT(i,j),G%US%L_to_m**2*G%areaT(i,j+1))
       if ( ABS(vh_col-SUM(vh2d(J,:))) > vh_neglect) then
         call MOM_error(WARNING,"Column integral of vh does not match after "//&
                                "upwards redistribution")

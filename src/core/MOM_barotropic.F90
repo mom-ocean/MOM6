@@ -1546,19 +1546,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       do j=jsv,jev ; do I=isv-1,iev
         if ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           ! Add some error reporting later.
-          ubt(I,j) = (-0.95*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i+1,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
+          ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
         elseif ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
-          ubt(I,j) = (0.95*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
+          ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
         endif
       enddo ; enddo
       do J=jsv-1,jev ; do i=isv,iev
         if ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           ! Add some error reporting later.
-          vbt(i,J) = (-0.9*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i,j+1) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
+          vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
         elseif ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
-          vbt(i,J) = (0.9*CS%CFL_trunc) * (US%m_to_L**2*G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
+          vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
         endif
       enddo ; enddo
     endif
