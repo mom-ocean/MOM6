@@ -71,9 +71,9 @@ type, public :: dyn_horgrid_type
     mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid [nondim].
     geoLatT, &   !< The geographic latitude at q points [degrees of latitude] or [m].
     geoLonT, &   !< The geographic longitude at q points [degrees of longitude] or [m].
-    dxT, &       !< dxT is delta x at h points [m].
+    dxT, &       !< dxT is delta x at h points [L ~> m].
     IdxT, &      !< 1/dxT [m-1].
-    dyT, &       !< dyT is delta y at h points [m].
+    dyT, &       !< dyT is delta y at h points [L ~> m].
     IdyT, &      !< IdyT is 1/dyT [m-1].
     areaT, &     !< The area of an h-cell [L-2 ~> m-2].
     IareaT       !< 1/areaT [m-2].
@@ -331,8 +331,8 @@ subroutine set_derived_dyn_horgrid(G, US)
   do j=jsd,jed ; do i=isd,ied
     if (G%dxT(i,j) < 0.0) G%dxT(i,j) = 0.0
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
-    G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
-    G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
+    G%IdxT(i,j) = Adcroft_reciprocal(L_to_m*G%dxT(i,j))
+    G%IdyT(i,j) = Adcroft_reciprocal(L_to_m*G%dyT(i,j))
     G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
   enddo ; enddo
 

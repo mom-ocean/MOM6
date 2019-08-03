@@ -1351,8 +1351,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of
         ! CFL_cor.
-        u_max_cor = US%m_to_L*G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
-        v_max_cor = US%m_to_L*G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
+        u_max_cor = G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
+        v_max_cor = G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
         eta_cor_max = dt_in_T * (CS%IareaT(i,j) * &
                    (((find_uhbt(u_max_cor, BTCL_u(I,j), US) + uhbt0(I,j)) - &
                      (find_uhbt(-u_max_cor, BTCL_u(I-1,j), US) + uhbt0(I-1,j))) + &

@@ -1869,8 +1869,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
   enddo ; enddo
   do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-    CS%DX2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%DY2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
-    CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
+    CS%DX2h(i,j) = US%L_to_m**2*G%dxT(i,j)*G%dxT(i,j) ; CS%DY2h(i,j) = US%L_to_m**2*G%dyT(i,j)*G%dyT(i,j)
+    CS%DX_dyT(i,j) = US%L_to_m*G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = US%L_to_m*G%dyT(i,j)*G%IdxT(i,j)
   enddo ; enddo
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

@@ -871,9 +871,9 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u, v, iters, time)
       Y(:,:) = G%geoLatBu(i-1:i,j-1:j)*1000
     else
       X(2,:) = G%geoLonBu(i,j)*1000
-      X(1,:) = G%geoLonBu(i,j)*1000-G%dxT(i,j)
+      X(1,:) = G%geoLonBu(i,j)*1000 - US%L_to_m*G%dxT(i,j)
       Y(:,2) = G%geoLatBu(i,j)*1000
-      Y(:,1) = G%geoLatBu(i,j)*1000-G%dyT(i,j)
+      Y(:,1) = G%geoLatBu(i,j)*1000 - US%L_to_m*G%dyT(i,j)
     endif
 
     call bilinear_shape_functions(X, Y, Phi_temp, area)
@@ -1485,7 +1485,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
 
           if (hmask(i,j) == 1) then
 
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
+            dxh = G%US%L_to_m*G%dxT(i,j) ; dyh = G%US%L_to_m*G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
             h_after_uflux(i,j) = h0(i,j)
 
@@ -1605,16 +1605,16 @@ subroutine ice_shelf_advect_thickness_x(CS, G, time_step, hmask, h0, h_after_ufl
 
             if (at_west_bdry .AND. (hmask(i-1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
-              flux_enter(i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * CS%thickness_bdry_val(i-1,j)
+              flux_enter(i,j,1) = ABS(u_face) * G%US%L_to_m*G%dyT(i,j) * time_step * CS%thickness_bdry_val(i-1,j)
             elseif (CS%u_face_mask(i-1,j) == 4.) then
-              flux_enter(i,j,1) = G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i-1,j)
+              flux_enter(i,j,1) = G%US%L_to_m*G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i-1,j)
             endif
 
             if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
-              flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * CS%thickness_bdry_val(i+1,j)
+              flux_enter(i,j,2) = ABS(u_face) * G%US%L_to_m*G%dyT(i,j) * time_step * CS%thickness_bdry_val(i+1,j)
             elseif (CS%u_face_mask(i+1,j) == 4.) then
-              flux_enter(i,j,2) = G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i+1,j)
+              flux_enter(i,j,2) = G%US%L_to_m*G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i+1,j)
             endif
 
             if ((i == is) .AND. (hmask(i,j) == 0) .AND. (hmask(i-1,j) == 1)) then
@@ -1714,7 +1714,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
           endif
 
           if (hmask(i,j) == 1) then
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
+            dxh = G%US%L_to_m*G%dxT(i,j) ; dyh = G%US%L_to_m*G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
             h_after_vflux(i,j) = h_after_uflux(i,j)
 
             stencil(:) = h_after_uflux(i,j-2:j+2)  ! fine as long has ny_halo >= 2
@@ -1821,16 +1821,16 @@ subroutine ice_shelf_advect_thickness_y(CS, G, time_step, hmask, h_after_uflux, 
 
             if (at_south_bdry .AND. (hmask(i,j-1) == 3)) then
               v_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i,j-1))
-              flux_enter(i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * CS%thickness_bdry_val(i,j-1)
+              flux_enter(i,j,3) = ABS(v_face) * G%US%L_to_m*G%dxT(i,j) * time_step * CS%thickness_bdry_val(i,j-1)
             elseif (CS%v_face_mask(i,j-1) == 4.) then
-              flux_enter(i,j,3) = G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j-1)
+              flux_enter(i,j,3) = G%US%L_to_m*G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j-1)
             endif
 
             if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then
               v_face = 0.5 * (CS%u_shelf(i-1,j) + CS%u_shelf(i,j))
-              flux_enter(i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * CS%thickness_bdry_val(i,j+1)
+              flux_enter(i,j,4) = ABS(v_face) * G%US%L_to_m*G%dxT(i,j) * time_step * CS%thickness_bdry_val(i,j+1)
             elseif (CS%v_face_mask(i,j+1) == 4.) then
-              flux_enter(i,j,4) = G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j+1)
+              flux_enter(i,j,4) = G%US%L_to_m*G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j+1)
             endif
 
             if ((j == js) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j-1) == 1)) then
@@ -2142,9 +2142,9 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, TAUD_X, TAUD_Y, OD)
       cnt = 0
       sx = 0
       sy = 0
-      dxh = G%dxT(i,j)
-      dyh = G%dyT(i,j)
-      dxdyh = G%US%L_to_m**2*G%areaT(i,j)
+      dxh = US%L_to_m*G%dxT(i,j)
+      dyh = US%L_to_m*G%dyT(i,j)
+      dxdyh = US%L_to_m**2*G%areaT(i,j)
 
       if (ISS%hmask(i,j) == 1) then ! we are inside the global computational bdry, at an ice-filled cell
 
@@ -2673,8 +2673,8 @@ subroutine matrix_diagonal(CS, G, float_cond, H_node, nu, beta, hmask, dens_rati
 
   do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) == 1) then
 
-    dxh = G%dxT(i,j)
-    dyh = G%dyT(i,j)
+    dxh = G%US%L_to_m*G%dxT(i,j)
+    dyh = G%US%L_to_m*G%dyT(i,j)
     dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
     X(1:2) = G%geoLonBu(i-1:i,j-1)*1000
@@ -2865,9 +2865,8 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
     if ((CS%umask(i-1,j-1) == 3) .OR. (CS%umask(i,j-1) == 3) .OR. &
         (CS%umask(i-1,j) == 3) .OR. (CS%umask(i,j) == 3)) then
 
-
-      dxh = G%dxT(i,j)
-      dyh = G%dyT(i,j)
+      dxh = G%US%L_to_m*G%dxT(i,j)
+      dyh = G%US%L_to_m*G%dyT(i,j)
       dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
       X(1:2) = G%geoLonBu(i-1:i,j-1)*1000
@@ -2883,8 +2882,6 @@ subroutine apply_boundary_values(CS, ISS, G, time, Phisub, H_node, nu, beta, flo
           !  1 - 2
       ! Phi (2*i-1,j) gives d(Phi_i)/dx at quadrature point j
       ! Phi (2*i,j) gives d(Phi_i)/dy at quadrature point j
-
-
 
       do iq=1,2 ; do jq=1,2
 
@@ -3022,8 +3019,8 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u, v)
   do j=jsd+1,jed-1
     do i=isd+1,ied-1
 
-      dxh = G%dxT(i,j)
-      dyh = G%dyT(i,j)
+      dxh = US%L_to_m*G%dxT(i,j)
+      dyh = US%L_to_m*G%dyT(i,j)
       dxdyh = US%L_to_m**2*G%areaT(i,j)
 
       if (ISS%hmask(i,j) == 1) then
@@ -3681,7 +3678,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
 
           if (hmask(i,j) == 1) then
 
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
+            dxh = G%US%L_to_m*G%dxT(i,j) ; dyh = G%US%L_to_m*G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
 
             h_after_uflux(i,j) = h0(i,j)
 
@@ -3801,18 +3798,18 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux, f
 
             if (at_west_bdry .AND. (hmask(i-1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i-1,j-1) + CS%u_shelf(i-1,j))
-              flux_enter(i,j,1) = ABS(u_face) * G%dyT(i,j) * time_step * CS%t_bdry_val(i-1,j)* &
+              flux_enter(i,j,1) = ABS(u_face) * G%US%L_to_m*G%dyT(i,j) * time_step * CS%t_bdry_val(i-1,j)* &
                                   CS%thickness_bdry_val(i+1,j)
             elseif (CS%u_face_mask(i-1,j) == 4.) then
-              flux_enter(i,j,1) = G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i-1,j)*CS%t_bdry_val(i-1,j)
+              flux_enter(i,j,1) = G%US%L_to_m*G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i-1,j)*CS%t_bdry_val(i-1,j)
             endif
 
             if (at_east_bdry .AND. (hmask(i+1,j) == 3)) then
               u_face = 0.5 * (CS%u_shelf(i,j-1) + CS%u_shelf(i,j))
-              flux_enter(i,j,2) = ABS(u_face) * G%dyT(i,j) * time_step * CS%t_bdry_val(i+1,j)* &
+              flux_enter(i,j,2) = ABS(u_face) * G%US%L_to_m*G%dyT(i,j) * time_step * CS%t_bdry_val(i+1,j)* &
                                   CS%thickness_bdry_val(i+1,j)
             elseif (CS%u_face_mask(i+1,j) == 4.) then
-              flux_enter(i,j,2) = G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i+1,j) * CS%t_bdry_val(i+1,j)
+              flux_enter(i,j,2) = G%US%L_to_m*G%dyT(i,j) * time_step * CS%u_flux_bdry_val(i+1,j) * CS%t_bdry_val(i+1,j)
             endif
 
 !            if ((i == is) .AND. (hmask(i,j) == 0) .AND. (hmask(i-1,j) == 1)) then
@@ -3909,7 +3906,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
           endif
 
           if (hmask(i,j) == 1) then
-            dxh = G%dxT(i,j) ; dyh = G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
+            dxh = G%US%L_to_m*G%dxT(i,j) ; dyh = G%US%L_to_m*G%dyT(i,j) ; dxdyh = G%US%L_to_m**2*G%areaT(i,j)
             h_after_vflux(i,j) = h_after_uflux(i,j)
 
             stencil(:) = h_after_uflux(i,j-2:j+2)  ! fine as long has ny_halo >= 2
@@ -4016,18 +4013,18 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
 
             if (at_south_bdry .AND. (hmask(i,j-1) == 3)) then
               v_face = 0.5 * (CS%v_shelf(i-1,j-1) + CS%v_shelf(i,j-1))
-              flux_enter(i,j,3) = ABS(v_face) * G%dxT(i,j) * time_step * CS%t_bdry_val(i,j-1)* &
+              flux_enter(i,j,3) = ABS(v_face) * G%US%L_to_m*G%dxT(i,j) * time_step * CS%t_bdry_val(i,j-1)* &
                                    CS%thickness_bdry_val(i,j-1)
             elseif (CS%v_face_mask(i,j-1) == 4.) then
-              flux_enter(i,j,3) = G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j-1)*CS%t_bdry_val(i,j-1)
+              flux_enter(i,j,3) = G%US%L_to_m*G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j-1)*CS%t_bdry_val(i,j-1)
             endif
 
             if (at_north_bdry .AND. (hmask(i,j+1) == 3)) then
               v_face = 0.5 * (CS%v_shelf(i-1,j) + CS%v_shelf(i,j))
-              flux_enter(i,j,4) = ABS(v_face) * G%dxT(i,j) * time_step * CS%t_bdry_val(i,j+1)* &
+              flux_enter(i,j,4) = ABS(v_face) * G%US%L_to_m*G%dxT(i,j) * time_step * CS%t_bdry_val(i,j+1)* &
                                    CS%thickness_bdry_val(i,j+1)
             elseif (CS%v_face_mask(i,j+1) == 4.) then
-              flux_enter(i,j,4) = G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j+1)*CS%t_bdry_val(i,j+1)
+              flux_enter(i,j,4) = G%US%L_to_m*G%dxT(i,j) * time_step * CS%v_flux_bdry_val(i,j+1)*CS%t_bdry_val(i,j+1)
             endif
 
 !            if ((j == js) .AND. (hmask(i,j) == 0) .AND. (hmask(i,j-1) == 1)) then

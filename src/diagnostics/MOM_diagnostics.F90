@@ -1943,12 +1943,12 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxt', diag%axesT1, &
-        'Delta(x) at thickness/tracer points (meter)', 'm', interp_method='none')
-  if (id > 0) call post_data(id, G%dxt, diag, .true.)
+        'Delta(x) at thickness/tracer points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
+  if (id > 0) call post_data(id, G%dxT, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyt', diag%axesT1, &
-        'Delta(y) at thickness/tracer points (meter)', 'm', interp_method='none')
-  if (id > 0) call post_data(id, G%dyt, diag, .true.)
+        'Delta(y) at thickness/tracer points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
+  if (id > 0) call post_data(id, G%dyT, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
         'Delta(x) at u points (meter)', 'm', interp_method='none')

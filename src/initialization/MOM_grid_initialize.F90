@@ -126,7 +126,7 @@ subroutine grid_metrics_chksum(parent, G, US)
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
   call hchksum_pair(trim(parent)//': d[xy]T', &
-                    G%dxT, G%dyT, G%HI, haloshift=halo)
+                    G%dxT, G%dyT, G%HI, haloshift=halo, scale=L_to_m)
 
   call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo)
 
@@ -363,7 +363,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   call pass_var(areaBu, G%Domain, position=CORNER)
 
   do i=G%isd,G%ied ; do j=G%jsd,G%jed
-    G%dxT(i,j) = dxT(i,j) ; G%dyT(i,j) = dyT(i,j) ; G%areaT(i,j) = m_to_L**2*areaT(i,j)
+    G%dxT(i,j) = m_to_L*dxT(i,j) ; G%dyT(i,j) = m_to_L*dyT(i,j) ; G%areaT(i,j) = m_to_L**2*areaT(i,j)
   enddo ; enddo
   do I=G%IsdB,G%IedB ; do j=G%jsd,G%jed
     G%dxCu(I,j) = dxCu(I,j) ; G%dyCu(I,j) = dyCu(I,j)
@@ -530,8 +530,8 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
-    G%dxT(i,j) = dx_everywhere ; G%IdxT(i,j) = I_dx
-    G%dyT(i,j) = dy_everywhere ; G%IdyT(i,j) = I_dy
+    G%dxT(i,j) = m_to_L*dx_everywhere ; G%IdxT(i,j) = I_dx
+    G%dyT(i,j) = m_to_L*dy_everywhere ; G%IdyT(i,j) = I_dy
     G%areaT(i,j) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaT(i,j) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 
@@ -680,14 +680,14 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxT(i,j) = G%Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
+    G%dxT(i,j) = m_to_L*G%Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
 !   G%dxT(i,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%dyT(i,j) = G%Rad_Earth * dLat*PI_180
+    G%dyT(i,j) = m_to_L*G%Rad_Earth * dLat*PI_180
 
 !   latitude = G%geoLatCv(i,J)*PI_180             ! In radians
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
 !   G%areaT(i,j) = m_to_L**2 * Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
-    G%areaT(i,j) = m_to_L**2 * G%dxT(i,j) * G%dyT(i,j)
+    G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
   enddo ; enddo
 
   call callTree_leave("set_grid_metrics_spherical()")
@@ -882,10 +882,10 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = xh(i,j)*180.0/PI
     G%geoLatT(i,j) = yh(i,j)*180.0/PI
-    G%dxT(i,j) = ds_di(xh(i,j), yh(i,j), GP)
-    G%dyT(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
+    G%dxT(i,j) = m_to_L*ds_di(xh(i,j), yh(i,j), GP)
+    G%dyT(i,j) = m_to_L*ds_dj(xh(i,j), yh(i,j), GP)
 
-    G%areaT(i,j) = m_to_L**2*G%dxT(i,j)*G%dyT(i,j)
+    G%areaT(i,j) = G%dxT(i,j)*G%dyT(i,j)
     G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
   enddo ; enddo
 

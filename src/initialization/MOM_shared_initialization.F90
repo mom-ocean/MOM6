@@ -1289,9 +1289,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dyCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dxT(i,j); enddo ; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
   call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dyT(i,j) ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
 
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = G%dxBu(I,J) ; enddo ; enddo
