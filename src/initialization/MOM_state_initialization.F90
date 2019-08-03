@@ -1385,12 +1385,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
     psi2 = my_psi(I,j-1)
-    u(I,j,k) = (psi1-psi2) / (G%dy_Cu(I,j)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
+    u(I,j,k) = (psi1-psi2) / (G%US%L_to_m*G%dy_Cu(I,j)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     psi1 = my_psi(i,J)
     psi2 = my_psi(i-1,J)
-    v(i,J,k) = (psi2-psi1) / (G%dx_Cv(i,J)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
+    v(i,J,k) = (psi2-psi1) / (G%US%L_to_m*G%dx_Cv(i,J)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
   contains

@@ -1544,21 +1544,21 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (CS%clip_velocity) then
       do j=jsv,jev ; do I=isv-1,iev
-        if ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+        if ((ubt(I,j) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           ! Add some error reporting later.
-          ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
-        elseif ((ubt(I,j) * (dt_in_T * US%m_to_L*G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt_in_T * G%dy_Cu(I,j)))
+        elseif ((ubt(I,j) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
-          ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dy_Cu(I,j)))
+          ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dy_Cu(I,j)))
         endif
       enddo ; enddo
       do J=jsv-1,jev ; do i=isv,iev
-        if ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+        if ((vbt(i,J) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           ! Add some error reporting later.
-          vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
-        elseif ((vbt(i,J) * (dt_in_T * US%m_to_L*G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt_in_T * G%dx_Cv(i,J)))
+        elseif ((vbt(i,J) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
-          vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * US%m_to_L*G%dx_Cv(i,J)))
+          vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dx_Cv(i,J)))
         endif
       enddo ; enddo
     endif
@@ -4085,10 +4085,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   ! Note: G%IdxCu & G%IdyCv may be valid for a smaller extent than CS%IdxCu & CS%IdyCv, even without
   !   wide halos.
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    CS%IdxCu(I,j) = US%L_to_m*G%IdxCu(I,j) ; CS%dy_Cu(I,j) = US%m_to_L*G%dy_Cu(I,j)
+    CS%IdxCu(I,j) = US%L_to_m*G%IdxCu(I,j) ; CS%dy_Cu(I,j) = G%dy_Cu(I,j)
   enddo ; enddo
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    CS%IdyCv(I,j) = US%L_to_m*G%IdyCv(I,j) ; CS%dx_Cv(i,J) = US%m_to_L*G%dx_Cv(i,J)
+    CS%IdyCv(I,j) = US%L_to_m*G%IdyCv(I,j) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
   call create_group_pass(pass_static_data, CS%IareaT, CS%BT_domain, To_All)
   call create_group_pass(pass_static_data, CS%bathyT, CS%BT_domain, To_All)

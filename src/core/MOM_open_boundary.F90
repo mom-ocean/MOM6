@@ -1475,7 +1475,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
       do j=segment%HI%jsd,segment%HI%jed
         if (segment%direction == OBC_DIRECTION_E) then
           areaCu(I,j) = G%areaT(i,j)   ! Both of these are in [L2]
-        else   ! West 
+        else   ! West
           areaCu(I,j) = G%areaT(i+1,j) ! Both of these are in [L2]
         endif
       enddo

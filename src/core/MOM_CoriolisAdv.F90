@@ -273,10 +273,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     enddo ; enddo
     if (CS%Coriolis_En_Dis) then
       do j=Jsq,Jeq+1 ; do I=is-1,ie
-        uh_center(I,j) = 0.5 * (US%m_to_L*G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
+        uh_center(I,j) = 0.5 * (G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo
       do J=js-1,je ; do i=Isq,Ieq+1
-        vh_center(i,J) = 0.5 * (US%m_to_L*G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
+        vh_center(i,J) = 0.5 * (G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
     endif
 
@@ -319,9 +319,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         if (CS%Coriolis_En_Dis) then
           do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
             if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-              vh_center(i,J) = US%m_to_L*G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k) * h(i,j,k)
+              vh_center(i,J) = G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k) * h(i,j,k)
             else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-              vh_center(i,J) = US%m_to_L*G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k) * h(i,j+1,k)
+              vh_center(i,J) = G%dx_Cv(i,J) * US%m_s_to_L_T*v(i,J,k) * h(i,j+1,k)
             endif
           enddo
         endif
@@ -358,9 +358,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         if (CS%Coriolis_En_Dis) then
           do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
             if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-              uh_center(I,j) = US%m_to_L*G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k) * h(i,j,k)
+              uh_center(I,j) = G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k) * h(i,j,k)
             else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-              uh_center(I,j) = US%m_to_L*G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k) * h(i+1,j,k)
+              uh_center(I,j) = G%dy_Cu(I,j) * US%m_s_to_L_T*u(I,j,k) * h(i+1,j,k)
             endif
           enddo
         endif

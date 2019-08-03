@@ -92,7 +92,7 @@ type, public :: dyn_horgrid_type
     IdxCu, &     !< 1/dxCu [m-1].
     dyCu, &      !< dyCu is delta y at u points [m].
     IdyCu, &     !< 1/dyCu [m-1].
-    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [m].
+    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
     IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
     areaCu       !< The areas of the u-grid cells [m2].
 
@@ -104,7 +104,7 @@ type, public :: dyn_horgrid_type
     IdxCv, &     !< 1/dxCv [m-1].
     dyCv, &      !< dyCv is delta y at v points [m].
     IdyCv, &     !< 1/dyCv [m-1].
-    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [m].
+    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
     IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
     areaCv       !< The areas of the v-grid cells [m2].
 
@@ -323,7 +323,7 @@ subroutine set_derived_dyn_horgrid(G, US)
   integer :: i, j, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
-  L_to_m = 1.0 ; if (present(US)) L_to_m  = US%L_to_m 
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -333,7 +333,7 @@ subroutine set_derived_dyn_horgrid(G, US)
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
     G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
     G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
-    G%IareaT(i,j) = Adcroft_reciprocal(m_to_L**2*L_to_m**2*G%areaT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -357,8 +357,8 @@ subroutine set_derived_dyn_horgrid(G, US)
     G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
-    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = m_to_L**2*G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) =  Adcroft_reciprocal(m_to_L**2*L_to_m**2*G%areaBu(I,J))
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = m_to_L*G%dxBu(I,J) * m_to_L*G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
   enddo ; enddo
 
 end subroutine set_derived_dyn_horgrid

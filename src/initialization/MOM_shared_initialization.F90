@@ -624,6 +624,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   real    :: dx_2 = -1.0, dy_2 = -1.0
   real    :: pi_180
   integer :: option = -1
@@ -639,6 +640,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
   end select
 
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   if (option==1) then ! 1-degree settings.
     do j=jsd,jed ; do I=IsdB,IedB  ! Change any u-face lengths within this loop.
@@ -646,62 +648,61 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
       if ((abs(G%geoLatCu(I,j)-35.5) < dy_2) .and. (G%geoLonCu(I,j) < -4.5) .and. &
           (G%geoLonCu(I,j) > -6.5)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*12000.0   ! Gibraltar
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*12000.0*m_to_L   ! Gibraltar
 
       if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0   ! Red Sea
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0*m_to_L   ! Red Sea
 
       if ((abs(G%geoLatCu(I,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-26.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0   ! Dardanelles
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0*m_to_L   ! Dardanelles
 
       if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0   ! Tsugaru strait at 140.0e
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0*m_to_L   ! Tsugaru strait at 140.0e
 
       if ((abs(G%geoLatCu(I,j)-45.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+217.5) < 0.9)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*15000.0   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
-
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*15000.0*m_to_L   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
 
       ! Greater care needs to be taken in the tripolar region.
       if ((abs(G%geoLatCu(I,j)-80.84) < 0.2) .and. (abs(G%geoLonCu(I,j)+64.9) < 0.8)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*38000.0   ! Smith Sound in Canadian Arch - tripolar region
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*38000.0*m_to_L   ! Smith Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
 
     do J=JsdB,JedB ; do i=isd,ied  ! Change any v-face lengths within this loop.
       dy_2 = dx_2 * G%dyCv(i,J)*G%IdxCv(i,J) * cos(pi_180 * G%geoLatCv(i,J))
       if ((abs(G%geoLatCv(i,J)-41.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-28.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0   ! Bosporus - should be 1000.0 m wide.
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0*m_to_L   ! Bosporus - should be 1000.0 m wide.
 
       if ((abs(G%geoLatCv(i,J)-13.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-42.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*10000.0   ! Red Sea
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*10000.0*m_to_L   ! Red Sea
 
       if ((abs(G%geoLatCv(i,J)+2.8) < 0.8) .and. (abs(G%geoLonCv(i,J)+241.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*40000.0   ! Makassar Straits at 241.5 W = 118.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*40000.0*m_to_L   ! Makassar Straits at 241.5 W = 118.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.56) < 0.5) .and. (abs(G%geoLonCv(i,J)+240.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*80000.0   ! entry to Makassar Straits at 240.5 W = 119.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*80000.0*m_to_L   ! entry to Makassar Straits at 240.5 W = 119.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+230.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0*m_to_L   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+229.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0*m_to_L   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.0) < 0.25) .and. (abs(G%geoLonCv(i,J)+228.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0*m_to_L   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
 
       if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+244.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0   ! Lombok Straits at 244.5 W = 115.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0*m_to_L   ! Lombok Straits at 244.5 W = 115.5 E
 
       if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+235.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0   ! Timor Straits at 235.5 W = 124.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0*m_to_L   ! Timor Straits at 235.5 W = 124.5 E
 
       if ((abs(G%geoLatCv(i,J)-52.5) < dy_2) .and. (abs(G%geoLonCv(i,J)+218.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0*m_to_L    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
 
       ! Greater care needs to be taken in the tripolar region.
       if ((abs(G%geoLatCv(i,J)-76.8) < 0.06) .and. (abs(G%geoLonCv(i,J)+88.7) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*8400.0    ! Jones Sound in Canadian Arch - tripolar region
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*8400.0*m_to_L    ! Jones Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
   endif
@@ -709,28 +710,28 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
   ! These checks apply regardless of the chosen option.
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (G%dy_Cu(I,j) > G%dyCu(I,j)) then
+    if (L_to_m*G%dy_Cu(I,j) > G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dy_Cu(I,j), G%dyCu(I,j), G%dy_Cu(I,j)-G%dyCu(I,j), &
+                   L_to_m*G%dy_Cu(I,j), G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-G%dyCu(I,j), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = m_to_L*G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
     if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (G%dx_Cv(i,J) > G%dxCv(i,J)) then
+    if (L_to_m*G%dx_Cv(i,J) > G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dx_Cv(i,J), G%dxCv(i,J), G%dx_Cv(i,J)-G%dxCv(i,J), &
+                   L_to_m*G%dx_Cv(i,J), G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-G%dxCv(i,J), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = m_to_L*G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
@@ -751,6 +752,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -758,6 +760,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   call get_param(param_file, mdl, "CHANNEL_WIDTH_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -772,32 +775,32 @@ subroutine reset_face_lengths_file(G, param_file, US)
                            trim(filename))
   endif
 
-  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain)
+  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=m_to_L)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (G%dy_Cu(I,j) > G%dyCu(I,j)) then
+    if (L_to_m*G%dy_Cu(I,j) > G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dy_Cu(I,j), G%dyCu(I,j), G%dy_Cu(I,j)-G%dyCu(I,j), &
+                   L_to_m*G%dy_Cu(I,j), G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-G%dyCu(I,j), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = m_to_L*G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
     if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (G%dx_Cv(i,J) > G%dxCv(i,J)) then
+    if (L_to_m*G%dx_Cv(i,J) > G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dx_Cv(i,J), G%dxCv(i,J), G%dx_Cv(i,J)-G%dxCv(i,J), &
+                   L_to_m*G%dx_Cv(i,J), G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-G%dxCv(i,J), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = m_to_L*G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
@@ -824,6 +827,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   real, pointer, dimension(:) :: &
     u_width => NULL(), v_width => NULL()
   real    :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real    :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.
@@ -840,6 +844,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   call get_param(param_file, mdl, "CHANNEL_LIST_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -983,7 +988,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*min(G%dyCu(I,j), max(u_width(npt), 0.0))
         if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCu(I,j) == 0.0 )  then
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
@@ -991,13 +996,13 @@ subroutine reset_face_lengths_list(G, param_file, US)
           else
             write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
-                  u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
+                  u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",L_to_m*G%dy_Cu(I,j),"m"
           endif
         endif
       endif
     enddo
 
-    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = m_to_L*G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
     if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
@@ -1012,7 +1017,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
-        G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*min(G%dxCv(i,J), max(v_width(npt), 0.0))
         if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCv(i,J) == 0.0 )  then
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
@@ -1020,13 +1025,13 @@ subroutine reset_face_lengths_list(G, param_file, US)
           else
             write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
-                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
+                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",L_to_m*G%dx_Cv(I,j),"m"
           endif
         endif
       endif
     enddo
 
-    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = m_to_L*G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
@@ -1177,6 +1182,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   type(fieldtype) :: fields(nFlds)
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
+  real :: L_to_m_scale ! A unit conversion factor from L to m.
   integer :: unit
   integer :: file_threading
   integer :: nFlds_used
@@ -1195,6 +1201,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
   s_to_T_scale = 1.0 ; if (present(US)) s_to_T_scale = US%s_to_T
+  L_to_m_scale = 1.0 ; if (present(US)) L_to_m_scale = US%L_to_m
 
 !   vardesc is a structure defined in MOM_io.F90.  The elements of
 ! this structure, in order, are:
@@ -1297,8 +1304,10 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
 
-  call write_field(unit, fields(17), G%Domain%mpp_domain, G%dx_Cv)
-  call write_field(unit, fields(18), G%Domain%mpp_domain, G%dy_Cu)
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
+  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
+  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
   call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then

@@ -831,8 +831,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
               BBL_frac = 0.0
             endif
 
-            if (m==1) then ; Cell_width = G%dy_Cu(I,j)
-            else ; Cell_width = G%dx_Cv(i,J) ; endif
+            if (m==1) then ; Cell_width = US%L_to_m*G%dy_Cu(I,j)
+            else ; Cell_width = US%L_to_m*G%dx_Cv(i,J) ; endif
             gam = 1.0 - L(K+1)/L(K)
             Rayleigh = US%m_to_Z * CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
                 (12.0*CS%c_Smag*h_vel_pos) /  (12.0*CS%c_Smag*h_vel_pos + &

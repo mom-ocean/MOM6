@@ -831,7 +831,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [m3 s-1].
-            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
+            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j))*US%m_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
             ! the bottom on the receiving side.
@@ -860,7 +860,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               Slope = US%Z_to_m*((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
-            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
+            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j))*US%m_to_Z*Slope)
             hN2_u(I,K) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -922,7 +922,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !         sfn_slope_x(I,j,K) = max(uhtot(I,j)-h_avail(i+1,j,k), &
 !                                  min(uhtot(I,j)+h_avail(i,j,k), &
 !               min(h_avail_rsum(i+1,j,K), max(-h_avail_rsum(i,j,K), &
-!               (KH_u(I,j,K)*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
+!               (KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
         else ! k <= nk_linear
           ! Balance the deeper flow with a return flow uniformly distributed
           ! though the remaining near-surface layers.  This is the same as
@@ -1080,7 +1080,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [m3 s-1].
-            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
+            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J))*US%m_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
             ! the bottom on the receiving side.
@@ -1109,7 +1109,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               Slope = US%Z_to_m*((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
-            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
+            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J))*US%m_to_Z*Slope)
             hN2_v(i,K) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -1171,7 +1171,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !         sfn_slope_y(i,J,K) = max(vhtot(i,J)-h_avail(i,j+1,k), &
 !                                  min(vhtot(i,J)+h_avail(i,j,k), &
 !               min(h_avail_rsum(i,j+1,K), max(-h_avail_rsum(i,j,K), &
-!               (KH_v(i,J,K)*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
+!               (KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
         else ! k <= nk_linear
           ! Balance the deeper flow with a return flow uniformly distributed
           ! though the remaining near-surface layers.  This is the same as
@@ -1526,7 +1526,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
       do k=k_top,nz ; do i=ish,ie ; if (do_i(i)) then
         if (n==1) then ! This is a u-column.
           dH = 0.0
-          denom = ((US%m_to_L**2*G%IareaT(i+1,j) + US%m_to_L**2*G%IareaT(i,j))*G%dy_Cu(I,j))
+          denom = ((US%m_to_L**2*G%IareaT(i+1,j) + US%m_to_L**2*G%IareaT(i,j))*US%L_to_m*G%dy_Cu(I,j))
           !   This expression uses differences in e in place of h for better
           ! consistency with the slopes.
           if (denom > 0.0) &
@@ -1551,7 +1551,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
           Kh_detangle(I,K+1) = Kh_detangle(I,K+1) + wt2*Kh_lay_u(I,j,k)
         else ! This is a v-column.
           dH = 0.0
-          denom = ((US%m_to_L**2*G%IareaT(i,j+1) + US%m_to_L**2*G%IareaT(i,j))*G%dx_Cv(I,j))
+          denom = ((US%m_to_L**2*G%IareaT(i,j+1) + US%m_to_L**2*G%IareaT(i,j))*US%L_to_m*G%dx_Cv(I,j))
           if (denom > 0.0) &
             dH = I_4t * ((e(i,j+1,K) - e(i,j+1,K+1)) - &
                          (e(i,j,K) - e(i,j,K+1))) / denom
@@ -1683,7 +1683,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 !                 ((e(i+1,j,K)-e(i+1,j,K+1)) - (e(i,j,K)-e(i,j,K+1))) > 0.0) then
 !               Sfn(K) = -Kh(i,K) * (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
 !               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
-!               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dy_Cu(I,j)
+!               uh_here(k) = (Sfn(K) - Sfn(K+1))*US%L_to_m*G%dy_Cu(I,j)
 !               if (abs(uh_here(k))*min(US%m_to_L**2*G%IareaT(i,j), US%m_to_L**2*G%IareaT(i+1,j)) > &
 !                   (1e-10*GV%m_to_H)) then
 !                 if (uh_here(k) * (h(i+1,j,k) - h(i,j,k)) > 0.0) then
@@ -1703,7 +1703,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 !                 ((e(i,j+1,K)-e(i,j+1,K+1)) - (e(i,j,K)-e(i,j,K+1))) > 0.0) then
 !               Sfn(K) = -Kh(i,K) * (e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J)
 !               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
-!               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dx_Cv(i,J)
+!               uh_here(k) = (Sfn(K) - Sfn(K+1))*US%L_to_m*G%dx_Cv(i,J)
 !               if (abs(uh_here(K))*min(US%m_to_L**2*G%IareaT(i,j), US%m_to_L**2*G%IareaT(i,j+1)) > &
 !                   (1e-10*GV%m_to_H)) then
 !                 if (uh_here(K) * (h(i,j+1,k) - h(i,j,k)) > 0.0) then

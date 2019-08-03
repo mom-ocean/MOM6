@@ -1967,11 +1967,11 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCuo', diag%axesCu1, &
-        'Open meridional grid spacing at u points (meter)', 'm', interp_method='none')
+        'Open meridional grid spacing at u points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dy_Cu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCvo', diag%axesCv1, &
-        'Open zonal grid spacing at v points (meter)', 'm', interp_method='none')
+        'Open zonal grid spacing at v points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
 
   id = register_static_field('ocean_model', 'sin_rot', diag%axesT1, &

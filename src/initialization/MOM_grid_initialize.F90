@@ -1311,14 +1311,14 @@ subroutine initialize_masks(G, PF, US)
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
-    G%areaCu(I,j) = m_to_L**2*G%dxCu(I,j) * G%dy_Cu(I,j)
+    G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*G%dyCu(I,j)
+    G%areaCu(I,j) = m_to_L*G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
-    G%areaCv(i,J) = m_to_L**2*G%dyCv(i,J) * G%dx_Cv(i,J)
+    G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*G%dxCv(i,J)
+    G%areaCv(i,J) = m_to_L*G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo
 
