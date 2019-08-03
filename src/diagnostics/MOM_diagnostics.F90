@@ -936,10 +936,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
+        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*CS%du_dt(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
+        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*CS%dv_dt(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k)*CS%dh_dt(i,j,k)
@@ -957,10 +957,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%PE_to_KE)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*US%m_to_L*G%dxCu(I,j)*ADp%PFu(I,j,k)
+        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%PFu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%PFv(i,J,k)
+        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%PFv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -975,10 +975,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_CorAdv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*US%m_to_L*G%dxCu(I,j)*ADp%CAu(I,j,k)
+        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%CAu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%CAv(i,J,k)
+        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
@@ -1002,11 +1002,11 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         if (G%mask2dCu(i,j) /= 0.) &
-          KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*US%m_to_L*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
+          KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         if (G%mask2dCv(i,j) /= 0.) &
-          KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*US%m_to_L*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
+          KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
@@ -1025,10 +1025,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_visc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_visc(I,j,k)
+        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*ADp%du_dt_visc(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_visc(i,J,k)
+        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*ADp%dv_dt_visc(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1043,10 +1043,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_horvisc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*US%s_to_T*ADp%diffu(I,j,k)
+        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*US%s_to_T*ADp%diffu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*US%s_to_T*ADp%diffv(i,J,k)
+        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*US%s_to_T*ADp%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1061,10 +1061,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_dia)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
+        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
+        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k) * &
@@ -1951,19 +1951,19 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%dyT, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
-        'Delta(x) at u points (meter)', 'm', interp_method='none')
+        'Delta(x) at u points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dxCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
-        'Delta(y) at u points (meter)', 'm', interp_method='none')
+        'Delta(y) at u points (meter)', 'm', interp_method='none') !(, conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dyCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
-        'Delta(x) at v points (meter)', 'm', interp_method='none')
+        'Delta(x) at v points (meter)', 'm', interp_method='none') !(, conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dxCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
-        'Delta(y) at v points (meter)', 'm', interp_method='none')
+        'Delta(y) at v points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCuo', diag%axesCu1, &

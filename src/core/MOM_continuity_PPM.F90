@@ -930,7 +930,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
   domore = .false.
   do I=ish-1,ieh
     if (do_I(I)) domore = .true.
-    du_CFL(I) = (CFL_min * Idt) * US%m_to_L*G%dxCu(I,j)
+    du_CFL(I) = (CFL_min * Idt) * G%dxCu(I,j)
     duR(I) = min(0.0,du0(I) - du_CFL(I))
     duL(I) = max(0.0,du0(I) + du_CFL(I))
     FAmt_L(I) = 0.0 ; FAmt_R(I) = 0.0 ; FAmt_0(I) = 0.0
@@ -1730,7 +1730,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
   domore = .false.
   do i=ish,ieh ; if (do_I(i)) then
     domore = .true.
-    dv_CFL(i) = (CFL_min * Idt) * US%m_to_L*G%dyCv(i,J)
+    dv_CFL(i) = (CFL_min * Idt) * G%dyCv(i,J)
     dvR(i) = min(0.0,dv0(i) - dv_CFL(i))
     dvL(i) = max(0.0,dv0(i) + dv_CFL(i))
     FAmt_L(i) = 0.0 ; FAmt_R(i) = 0.0 ; FAmt_0(i) = 0.0
