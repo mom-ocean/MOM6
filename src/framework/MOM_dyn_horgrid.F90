@@ -90,7 +90,7 @@ type, public :: dyn_horgrid_type
     geoLonCu, &  !< The geographic longitude at u points [degrees of longitude] or [m].
     dxCu, &      !< dxCu is delta x at u points [L ~> m].
     IdxCu, &     !< 1/dxCu [m-1].
-    dyCu, &      !< dyCu is delta y at u points [m].
+    dyCu, &      !< dyCu is delta y at u points [L ~> m].
     IdyCu, &     !< 1/dyCu [m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
     IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
@@ -100,7 +100,7 @@ type, public :: dyn_horgrid_type
     mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid [nondim].
     geoLatCv, &  !< The geographic latitude at v points [degrees of latitude] or [m].
     geoLonCv, &  !< The geographic longitude at v points [degrees of longitude] or [m].
-    dxCv, &      !< dxCv is delta x at v points [m].
+    dxCv, &      !< dxCv is delta x at v points [L ~> m].
     IdxCv, &     !< 1/dxCv [m-1].
     dyCv, &      !< dyCv is delta y at v points [L ~> m].
     IdyCv, &     !< 1/dyCv [m-1].
@@ -340,13 +340,13 @@ subroutine set_derived_dyn_horgrid(G, US)
     if (G%dxCu(I,j) < 0.0) G%dxCu(I,j) = 0.0
     if (G%dyCu(I,j) < 0.0) G%dyCu(I,j) = 0.0
     G%IdxCu(I,j) = Adcroft_reciprocal(L_to_m*G%dxCu(I,j))
-    G%IdyCu(I,j) = Adcroft_reciprocal(G%dyCu(I,j))
+    G%IdyCu(I,j) = Adcroft_reciprocal(L_to_m*G%dyCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     if (G%dxCv(i,J) < 0.0) G%dxCv(i,J) = 0.0
     if (G%dyCv(i,J) < 0.0) G%dyCv(i,J) = 0.0
-    G%IdxCv(i,J) = Adcroft_reciprocal(G%dxCv(i,J))
+    G%IdxCv(i,J) = Adcroft_reciprocal(L_to_m*G%dxCv(i,J))
     G%IdyCv(i,J) = Adcroft_reciprocal(L_to_m*G%dyCv(i,J))
   enddo ; enddo
 

@@ -130,8 +130,7 @@ subroutine grid_metrics_chksum(parent, G, US)
 
   call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, scale=L_to_m)
 
-  call uvchksum(trim(parent)//': dxC[uv]', &
-                G%dyCu, G%dxCv, G%HI, haloshift=halo)
+  call uvchksum(trim(parent)//': dxC[uv]', G%dyCu, G%dxCv, G%HI, haloshift=halo, scale=L_to_m)
 
   call Bchksum_pair(trim(parent)//': dxB[uv]', &
                     G%dxBu, G%dyBu, G%HI, haloshift=halo)
@@ -366,10 +365,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     G%dxT(i,j) = m_to_L*dxT(i,j) ; G%dyT(i,j) = m_to_L*dyT(i,j) ; G%areaT(i,j) = m_to_L**2*areaT(i,j)
   enddo ; enddo
   do I=G%IsdB,G%IedB ; do j=G%jsd,G%jed
-    G%dxCu(I,j) = m_to_L*dxCu(I,j) ; G%dyCu(I,j) = dyCu(I,j)
+    G%dxCu(I,j) = m_to_L*dxCu(I,j) ; G%dyCu(I,j) = m_to_L*dyCu(I,j)
   enddo ; enddo
   do i=G%isd,G%ied ; do J=G%JsdB,G%JedB
-    G%dxCv(i,J) = dxCv(i,J) ; G%dyCv(i,J) = m_to_L*dyCv(i,J)
+    G%dxCv(i,J) = m_to_L*dxCv(i,J) ; G%dyCv(i,J) = m_to_L*dyCv(i,J)
   enddo ; enddo
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
     G%dxBu(I,J) = dxBu(I,J) ; G%dyBu(I,J) = dyBu(I,J) ; G%areaBu(I,J) = m_to_L**2*areaBu(I,J)
@@ -539,13 +538,13 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
     G%geoLonCu(I,j) = grid_lonB(I) ; G%geoLatCu(I,j) = grid_LatT(j)
 
     G%dxCu(I,j) = m_to_L*dx_everywhere ; G%IdxCu(I,j) = I_dx
-    G%dyCu(I,j) = dy_everywhere ; G%IdyCu(I,j) = I_dy
+    G%dyCu(I,j) = m_to_L*dy_everywhere ; G%IdyCu(I,j) = I_dy
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = grid_lonT(i) ; G%geoLatCv(i,J) = grid_latB(J)
 
-    G%dxCv(i,J) = dx_everywhere ; G%IdxCv(i,J) = I_dx
+    G%dxCv(i,J) = m_to_L*dx_everywhere ; G%IdxCv(i,J) = I_dx
     G%dyCv(i,J) = m_to_L*dy_everywhere ; G%IdyCv(i,J) = I_dy
   enddo ; enddo
 
@@ -658,8 +657,8 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxCv(i,J) = G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
-!   G%dxCv(i,J) = G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
+    G%dxCv(i,J) = m_to_L*G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
+!   G%dxCv(i,J) = m_to_L*G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
     G%dyCv(i,J) = m_to_L*G%Rad_Earth * dLat*PI_180
   enddo ; enddo
 
@@ -671,7 +670,7 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
     G%dxCu(I,j) = m_to_L*G%Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
 !   G%dxCu(I,j) = m_to_L*G%Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%dyCu(I,j) = G%Rad_Earth * dLat*PI_180
+    G%dyCu(I,j) = m_to_L*G%Rad_Earth * dLat*PI_180
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -893,13 +892,13 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     G%geoLonCu(I,j) = xu(I,j)*180.0/PI
     G%geoLatCu(I,j) = yu(I,j)*180.0/PI
     G%dxCu(I,j) = m_to_L*ds_di(xu(I,j), yu(I,j), GP)
-    G%dyCu(I,j) = ds_dj(xu(I,j), yu(I,j), GP)
+    G%dyCu(I,j) = m_to_L*ds_dj(xu(I,j), yu(I,j), GP)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = xv(i,J)*180.0/PI
     G%geoLatCv(i,J) = yv(i,J)*180.0/PI
-    G%dxCv(i,J) = ds_di(xv(i,J), yv(i,J), GP)
+    G%dxCv(i,J) = m_to_L*ds_di(xv(i,J), yv(i,J), GP)
     G%dyCv(i,J) = m_to_L*ds_dj(xv(i,J), yv(i,J), GP)
   enddo ; enddo
 
@@ -1311,13 +1310,13 @@ subroutine initialize_masks(G, PF, US)
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*G%dyCu(I,j)
+    G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*G%dxCv(i,J)
+    G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo

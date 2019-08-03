@@ -172,7 +172,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
             segment%normal_vel(I,j,k) = flow
           endif
           if (segment%specified) then
-            segment%normal_trans(I,j,k) = flow * G%dyCu(I,j)
+            segment%normal_trans(I,j,k) = flow * G%US%L_to_m*G%dyCu(I,j)
           endif
         enddo ; enddo
       enddo

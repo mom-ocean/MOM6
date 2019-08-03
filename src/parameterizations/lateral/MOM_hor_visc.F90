@@ -752,10 +752,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       if (CS%modified_Leith) then
         ! Divergence
         do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-          div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
-                        G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
-                        (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
-                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*US%m_to_L**2*G%IareaT(i,j) / &
+          div_xx(i,j) = 0.5*((US%L_to_m*G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
+                        US%L_to_m*G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
+                        (US%L_to_m*G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
+                        US%L_to_m*G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*US%m_to_L**2*G%IareaT(i,j) / &
                         (h(i,j,k) + GV%H_subroundoff)
         enddo ; enddo
 
@@ -1875,34 +1875,34 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     CS%reduction_xx(i,j) = 1.0
-    if ((G%dy_Cu(I,j) > 0.0) .and. (US%L_to_m*G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
-        (US%L_to_m*G%dy_Cu(I,j) < G%dyCu(I,j) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = US%L_to_m*G%dy_Cu(I,j) / (G%dyCu(I,j))
-    if ((G%dy_Cu(I-1,j) > 0.0) .and. (US%L_to_m*G%dy_Cu(I-1,j) < G%dyCu(I-1,j)) .and. &
-        (US%L_to_m*G%dy_Cu(I-1,j) < G%dyCu(I-1,j) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = US%L_to_m*G%dy_Cu(I-1,j) / (G%dyCu(I-1,j))
-    if ((G%dx_Cv(i,J) > 0.0) .and. (US%L_to_m*G%dx_Cv(i,J) < G%dxCv(i,J)) .and. &
-        (US%L_to_m*G%dx_Cv(i,J) < G%dxCv(i,J) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = US%L_to_m*G%dx_Cv(i,J) / (G%dxCv(i,J))
-    if ((G%dx_Cv(i,J-1) > 0.0) .and. (US%L_to_m*G%dx_Cv(i,J-1) < G%dxCv(i,J-1)) .and. &
-        (US%L_to_m*G%dx_Cv(i,J-1) < G%dxCv(i,J-1) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = US%L_to_m*G%dx_Cv(i,J-1) / (G%dxCv(i,J-1))
+    if ((G%dy_Cu(I,j) > 0.0) .and. (US%L_to_m*G%dy_Cu(I,j) < US%L_to_m*G%dyCu(I,j)) .and. &
+        (US%L_to_m*G%dy_Cu(I,j) < US%L_to_m*G%dyCu(I,j) * CS%reduction_xx(i,j))) &
+      CS%reduction_xx(i,j) = US%L_to_m*G%dy_Cu(I,j) / (US%L_to_m*G%dyCu(I,j))
+    if ((G%dy_Cu(I-1,j) > 0.0) .and. (US%L_to_m*G%dy_Cu(I-1,j) < US%L_to_m*G%dyCu(I-1,j)) .and. &
+        (US%L_to_m*G%dy_Cu(I-1,j) < US%L_to_m*G%dyCu(I-1,j) * CS%reduction_xx(i,j))) &
+      CS%reduction_xx(i,j) = US%L_to_m*G%dy_Cu(I-1,j) / (US%L_to_m*G%dyCu(I-1,j))
+    if ((G%dx_Cv(i,J) > 0.0) .and. (US%L_to_m*G%dx_Cv(i,J) < US%L_to_m*G%dxCv(i,J)) .and. &
+        (US%L_to_m*G%dx_Cv(i,J) < US%L_to_m*G%dxCv(i,J) * CS%reduction_xx(i,j))) &
+      CS%reduction_xx(i,j) = US%L_to_m*G%dx_Cv(i,J) / (US%L_to_m*G%dxCv(i,J))
+    if ((G%dx_Cv(i,J-1) > 0.0) .and. (US%L_to_m*G%dx_Cv(i,J-1) < US%L_to_m*G%dxCv(i,J-1)) .and. &
+        (US%L_to_m*G%dx_Cv(i,J-1) < US%L_to_m*G%dxCv(i,J-1) * CS%reduction_xx(i,j))) &
+      CS%reduction_xx(i,j) = US%L_to_m*G%dx_Cv(i,J-1) / (US%L_to_m*G%dxCv(i,J-1))
   enddo ; enddo
 
   do J=js-1,Jeq ; do I=is-1,Ieq
     CS%reduction_xy(I,J) = 1.0
-    if ((G%dy_Cu(I,j) > 0.0) .and. (US%L_to_m*G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
-        (US%L_to_m*G%dy_Cu(I,j) < G%dyCu(I,j) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = US%L_to_m*G%dy_Cu(I,j) / (G%dyCu(I,j))
-    if ((G%dy_Cu(I,j+1) > 0.0) .and. (US%L_to_m*G%dy_Cu(I,j+1) < G%dyCu(I,j+1)) .and. &
-        (US%L_to_m*G%dy_Cu(I,j+1) < G%dyCu(I,j+1) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = US%L_to_m*G%dy_Cu(I,j+1) / (G%dyCu(I,j+1))
-    if ((G%dx_Cv(i,J) > 0.0) .and. (US%L_to_m*G%dx_Cv(i,J) < G%dxCv(i,J)) .and. &
-        (US%L_to_m*G%dx_Cv(i,J) < G%dxCv(i,J) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = US%L_to_m*G%dx_Cv(i,J) / (G%dxCv(i,J))
-    if ((G%dx_Cv(i+1,J) > 0.0) .and. (US%L_to_m*G%dx_Cv(i+1,J) < G%dxCv(i+1,J)) .and. &
-        (US%L_to_m*G%dx_Cv(i+1,J) < G%dxCv(i+1,J) * CS%reduction_xy(I,J))) &
-      CS%reduction_xy(I,J) = US%L_to_m*G%dx_Cv(i+1,J) / (G%dxCv(i+1,J))
+    if ((G%dy_Cu(I,j) > 0.0) .and. (US%L_to_m*G%dy_Cu(I,j) < US%L_to_m*G%dyCu(I,j)) .and. &
+        (US%L_to_m*G%dy_Cu(I,j) < US%L_to_m*G%dyCu(I,j) * CS%reduction_xy(I,J))) &
+      CS%reduction_xy(I,J) = US%L_to_m*G%dy_Cu(I,j) / (US%L_to_m*G%dyCu(I,j))
+    if ((G%dy_Cu(I,j+1) > 0.0) .and. (US%L_to_m*G%dy_Cu(I,j+1) < US%L_to_m*G%dyCu(I,j+1)) .and. &
+        (US%L_to_m*G%dy_Cu(I,j+1) < US%L_to_m*G%dyCu(I,j+1) * CS%reduction_xy(I,J))) &
+      CS%reduction_xy(I,J) = US%L_to_m*G%dy_Cu(I,j+1) / (US%L_to_m*G%dyCu(I,j+1))
+    if ((G%dx_Cv(i,J) > 0.0) .and. (US%L_to_m*G%dx_Cv(i,J) < US%L_to_m*G%dxCv(i,J)) .and. &
+        (US%L_to_m*G%dx_Cv(i,J) < US%L_to_m*G%dxCv(i,J) * CS%reduction_xy(I,J))) &
+      CS%reduction_xy(I,J) = US%L_to_m*G%dx_Cv(i,J) / (US%L_to_m*G%dxCv(i,J))
+    if ((G%dx_Cv(i+1,J) > 0.0) .and. (US%L_to_m*G%dx_Cv(i+1,J) < US%L_to_m*G%dxCv(i+1,J)) .and. &
+        (US%L_to_m*G%dx_Cv(i+1,J) < US%L_to_m*G%dxCv(i+1,J) * CS%reduction_xy(I,J))) &
+      CS%reduction_xy(I,J) = US%L_to_m*G%dx_Cv(i+1,J) / (US%L_to_m*G%dxCv(i+1,J))
   enddo ; enddo
 
   if (CS%Laplacian) then

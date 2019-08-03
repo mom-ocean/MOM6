@@ -1955,11 +1955,11 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%dxCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
-        'Delta(y) at u points (meter)', 'm', interp_method='none') !(, conversion=US%L_to_m)
+        'Delta(y) at u points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dyCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
-        'Delta(x) at v points (meter)', 'm', interp_method='none') !(, conversion=US%L_to_m)
+        'Delta(x) at v points (meter)', 'm', interp_method='none', conversion=US%L_to_m)
   if (id > 0) call post_data(id, G%dxCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &

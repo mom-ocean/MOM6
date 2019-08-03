@@ -644,7 +644,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
   if (option==1) then ! 1-degree settings.
     do j=jsd,jed ; do I=IsdB,IedB  ! Change any u-face lengths within this loop.
-      dy_2 = dx_2 * G%dyCu(I,j)*G%IdxCu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
+      dy_2 = dx_2 * L_to_m*G%dyCu(I,j)*G%IdxCu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
 
       if ((abs(G%geoLatCu(I,j)-35.5) < dy_2) .and. (G%geoLonCu(I,j) < -4.5) .and. &
           (G%geoLonCu(I,j) > -6.5)) &
@@ -710,10 +710,10 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
   ! These checks apply regardless of the chosen option.
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (L_to_m*G%dy_Cu(I,j) > G%dyCu(I,j)) then
+    if (L_to_m*G%dy_Cu(I,j) > L_to_m*G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
-                   L_to_m*G%dy_Cu(I,j), G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-G%dyCu(I,j), &
+                   L_to_m*G%dy_Cu(I,j), L_to_m*G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-L_to_m*G%dyCu(I,j), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
@@ -723,10 +723,10 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (L_to_m*G%dx_Cv(i,J) > G%dxCv(i,J)) then
+    if (L_to_m*G%dx_Cv(i,J) > L_to_m*G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
-                   L_to_m*G%dx_Cv(i,J), G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-G%dxCv(i,J), &
+                   L_to_m*G%dx_Cv(i,J), L_to_m*G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-L_to_m*G%dxCv(i,J), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
@@ -779,10 +779,10 @@ subroutine reset_face_lengths_file(G, param_file, US)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (L_to_m*G%dy_Cu(I,j) > G%dyCu(I,j)) then
+    if (L_to_m*G%dy_Cu(I,j) > L_to_m*G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
-                   L_to_m*G%dy_Cu(I,j), G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-G%dyCu(I,j), &
+                   L_to_m*G%dy_Cu(I,j), L_to_m*G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-L_to_m*G%dyCu(I,j), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
@@ -792,10 +792,10 @@ subroutine reset_face_lengths_file(G, param_file, US)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (L_to_m*G%dx_Cv(i,J) > G%dxCv(i,J)) then
+    if (L_to_m*G%dx_Cv(i,J) > L_to_m*G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
-                   L_to_m*G%dx_Cv(i,J), G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-G%dxCv(i,J), &
+                   L_to_m*G%dx_Cv(i,J), L_to_m*G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-L_to_m*G%dxCv(i,J), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
@@ -988,7 +988,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*min(L_to_m*G%dyCu(I,j), max(u_width(npt), 0.0))
         if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCu(I,j) == 0.0 )  then
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
@@ -1017,7 +1017,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
-        G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*min(L_to_m*G%dxCv(i,J), max(v_width(npt), 0.0))
         if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCv(i,J) == 0.0 )  then
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
@@ -1279,9 +1279,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dxCv(i,J) ; enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = G%dyCu(I,j) ; enddo ; enddo
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
   call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
 
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo

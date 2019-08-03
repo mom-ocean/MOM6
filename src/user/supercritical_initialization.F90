@@ -58,7 +58,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
             segment%normal_vel(I,j,k) = zonal_flow
           endif
           if (segment%specified) then
-            segment%normal_trans(I,j,k) = zonal_flow * G%dyCu(I,j)
+            segment%normal_trans(I,j,k) = zonal_flow * G%US%L_to_m*G%dyCu(I,j)
           endif
         enddo ; enddo
       enddo

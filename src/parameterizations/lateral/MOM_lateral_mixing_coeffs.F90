@@ -1128,9 +1128,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     enddo ; enddo
 
     do j=js,je ; do I=is-1,Ieq
-      CS%f2_dx2_u(I,j) = ((US%L_to_m*G%dxCu(I,j))**2 + (G%dyCu(I,j))**2) * &
+      CS%f2_dx2_u(I,j) = ((US%L_to_m*G%dxCu(I,j))**2 + (US%L_to_m*G%dyCu(I,j))**2) * &
           max(0.5* (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq**2)
-      CS%beta_dx2_u(I,j) = oneOrTwo * ((US%L_to_m*G%dxCu(I,j))**2 + (G%dyCu(I,j))**2) * (sqrt( &
+      CS%beta_dx2_u(I,j) = oneOrTwo * ((US%L_to_m*G%dxCu(I,j))**2 + (US%L_to_m*G%dyCu(I,j))**2) * (sqrt( &
           0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
                   ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
                  (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2 + &
@@ -1139,9 +1139,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      CS%f2_dx2_v(i,J) = ((G%dxCv(i,J))**2 + (US%L_to_m*G%dyCv(i,J))**2) * &
+      CS%f2_dx2_v(i,J) = ((US%L_to_m*G%dxCv(i,J))**2 + (US%L_to_m*G%dyCv(i,J))**2) * &
           max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq**2)
-      CS%beta_dx2_v(i,J) = oneOrTwo * ((G%dxCv(i,J))**2 + (US%L_to_m*G%dyCv(i,J))**2) * (sqrt( &
+      CS%beta_dx2_v(i,J) = oneOrTwo * ((US%L_to_m*G%dxCv(i,J))**2 + (US%L_to_m*G%dyCv(i,J))**2) * (sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
           0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
                   ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2) + &
@@ -1207,13 +1207,13 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do j=Jsq,Jeq+1 ; do I=is-1,Ieq
       ! Static factors in the Leith schemes
-      grid_sp_u2 = G%dyCu(I,j)*US%L_to_m*G%dxCu(I,j)
+      grid_sp_u2 = US%L_to_m*G%dyCu(I,j)*US%L_to_m*G%dxCu(I,j)
       grid_sp_u3 = grid_sp_u2*sqrt(grid_sp_u2)
       CS%Laplac3_const_u(I,j) = Leith_Lap_const * grid_sp_u3
     enddo ; enddo
     do j=js-1,Jeq ; do I=Isq,Ieq+1
       ! Static factors in the Leith schemes
-      !### The second factor here is wrong.
+      !### The second factor here is wrong.  It should be G%dxCv(i,J).
       grid_sp_v2 = US%L_to_m*G%dyCv(i,J)*US%L_to_m*G%dxCu(i,J)
       grid_sp_v3 = grid_sp_v2*sqrt(grid_sp_v2)
       CS%Laplac3_const_v(i,J) = Leith_Lap_const * grid_sp_v3

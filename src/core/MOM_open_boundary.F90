@@ -3285,11 +3285,11 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               do k=1,G%ke
                 segment%normal_vel(I,j,k) = segment%field(m)%buffer_dst(I,j,k)
                 segment%normal_trans(I,j,k) = segment%field(m)%buffer_dst(I,j,k)*segment%h(I,j,k) * &
-                          G%dyCu(I,j)
+                          US%L_to_m*G%dyCu(I,j)
                 normal_trans_bt(I,j) = normal_trans_bt(I,j)+segment%normal_trans(I,j,k)
               enddo
               segment%normal_vel_bt(I,j) = normal_trans_bt(I,j)/(max(segment%Htot(I,j),1.e-12) * &
-                          G%dyCu(I,j))
+                          US%L_to_m*G%dyCu(I,j))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
@@ -3299,11 +3299,11 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               do k=1,G%ke
                 segment%normal_vel(i,J,k) = segment%field(m)%buffer_dst(i,J,k)
                 segment%normal_trans(i,J,k) = segment%field(m)%buffer_dst(i,J,k)*segment%h(i,J,k) * &
-                          G%dxCv(i,J)
+                          US%L_to_m*G%dxCv(i,J)
                 normal_trans_bt(i,J) = normal_trans_bt(i,J)+segment%normal_trans(i,J,k)
               enddo
               segment%normal_vel_bt(i,J) = normal_trans_bt(i,J)/(max(segment%Htot(i,J),1.e-12) * &
-                          G%dxCv(i,J))
+                          US%L_to_m*G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
