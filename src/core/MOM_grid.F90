@@ -78,9 +78,9 @@ type, public :: ocean_grid_type
     geoLatT, &   !< The geographic latitude at q points in degrees of latitude or m.
     geoLonT, &   !< The geographic longitude at q points in degrees of longitude or m.
     dxT, &       !< dxT is delta x at h points [L ~> m].
-    IdxT, &      !< 1/dxT [m-1].
+    IdxT, &      !< 1/dxT [L-1 ~> m-1].
     dyT, &       !< dyT is delta y at h points [L ~> m].
-    IdyT, &      !< IdyT is 1/dyT [m-1].
+    IdyT, &      !< IdyT is 1/dyT [L-1 ~> m-1].
     areaT, &     !< The area of an h-cell [L2 ~> m2].
     IareaT, &    !< 1/areaT [L-2 ~> m-2].
     sin_rot, &   !< The sine of the angular rotation between the local model grid's northward
@@ -423,8 +423,8 @@ subroutine set_derived_metrics(G, US)
   do j=jsd,jed ; do i=isd,ied
     if (G%dxT(i,j) < 0.0) G%dxT(i,j) = 0.0
     if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
-    G%IdxT(i,j) = Adcroft_reciprocal(US%L_to_m*G%dxT(i,j))
-    G%IdyT(i,j) = Adcroft_reciprocal(US%L_to_m*G%dyT(i,j))
+    G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
+    G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
     G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
   enddo ; enddo
 

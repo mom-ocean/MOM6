@@ -796,20 +796,20 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       favg = 0.25*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
                              (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
-      df2_dx = 0.5*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2) - &
+      df2_dx = 0.5*US%m_to_L*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2) - &
                     (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I-1,J-1)**2)) * &
                G%IdxT(i,j)
-      df_dx = 0.5*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
+      df_dx = 0.5*US%m_to_L*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * &
                G%IdxT(i,j)
       dlnCn_dx = 0.5*( G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
                        (0.5*(cn(i+1,j) + cn(i,j)) + cn_subRO) + &
                        G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
                        (0.5*(cn(i,j) + cn(i-1,j)) + cn_subRO) )
-      df2_dy = 0.5*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2) - &
+      df2_dy = 0.5*US%m_to_L*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2) - &
                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2)) * &
                G%IdyT(i,j)
-      df_dy = 0.5*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
+      df_dy = 0.5*US%m_to_L*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                     (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * &
                G%IdyT(i,j)
       dlnCn_dy = 0.5*( G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
@@ -1536,14 +1536,14 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, US, j, ish, ieh, vol_CFL)
   do I=ish-1,ieh
     ! Set new values of uh and duhdu.
     if (u(I) > 0.0) then
-      if (vol_CFL) then ; CFL = (u(I) * dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i,j))
-      else ; CFL = u(I) * dt * G%IdxT(i,j) ; endif
+      if (vol_CFL) then ; CFL = (u(I) * dt) * (G%dy_Cu(I,j) * US%m_to_L*G%IareaT(i,j))
+      else ; CFL = u(I) * dt * US%m_to_L*G%IdxT(i,j) ; endif
       curv_3 = (hL(i) + hR(i)) - 2.0*h(i)
       uh(I) = US%L_to_m*G%dy_Cu(I,j) * u(I) * &
           (hR(i) + CFL * (0.5*(hL(i) - hR(i)) + curv_3*(CFL - 1.5)))
     elseif (u(I) < 0.0) then
-      if (vol_CFL) then ; CFL = (-u(I) * dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i+1,j))
-      else ; CFL = -u(I) * dt * G%IdxT(i+1,j) ; endif
+      if (vol_CFL) then ; CFL = (-u(I) * dt) * (G%dy_Cu(I,j) * US%m_to_L*G%IareaT(i+1,j))
+      else ; CFL = -u(I) * dt * US%m_to_L*G%IdxT(i+1,j) ; endif
       curv_3 = (hL(i+1) + hR(i+1)) - 2.0*h(i+1)
       uh(I) = US%L_to_m*G%dy_Cu(I,j) * u(I) * &
           (hL(i+1) + CFL * (0.5*(hR(i+1)-hL(i+1)) + curv_3*(CFL - 1.5)))
@@ -1580,14 +1580,14 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, US, J, ish, ieh, vol_CFL)
 
   do i=ish,ieh
     if (v(i) > 0.0) then
-      if (vol_CFL) then ; CFL = (v(i) * dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j))
-      else ; CFL = v(i) * dt * G%IdyT(i,j) ; endif
+      if (vol_CFL) then ; CFL = (v(i) * dt) * (G%dx_Cv(i,J) * US%m_to_L*G%IareaT(i,j))
+      else ; CFL = v(i) * dt * US%m_to_L*G%IdyT(i,j) ; endif
       curv_3 = hL(i,j) + hR(i,j) - 2.0*h(i,j)
       vh(i) = US%L_to_m*G%dx_Cv(i,J) * v(i) * ( hR(i,j) + CFL * &
           (0.5*(hL(i,j) - hR(i,j)) + curv_3*(CFL - 1.5)) )
     elseif (v(i) < 0.0) then
-      if (vol_CFL) then ; CFL = (-v(i) * dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j+1))
-      else ; CFL = -v(i) * dt * G%IdyT(i,j+1) ; endif
+      if (vol_CFL) then ; CFL = (-v(i) * dt) * (G%dx_Cv(i,J) * US%m_to_L*G%IareaT(i,j+1))
+      else ; CFL = -v(i) * dt * US%m_to_L*G%IdyT(i,j+1) ; endif
       curv_3 = hL(i,j+1) + hR(i,j+1) - 2.0*h(i,j+1)
       vh(i) = US%L_to_m*G%dx_Cv(i,J) * v(i) * ( hL(i,j+1) + CFL * &
           (0.5*(hR(i,j+1)-hL(i,j+1)) + curv_3*(CFL - 1.5)) )

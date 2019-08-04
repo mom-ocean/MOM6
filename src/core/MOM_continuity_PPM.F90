@@ -540,14 +540,14 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt_in_T, G, US,
     ! Set new values of uh and duhdu.
     if (u(I) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I) * dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i,j))
-      else ; CFL = u(I) * dt_in_T * US%L_to_m*G%IdxT(i,j) ; endif
+      else ; CFL = u(I) * dt_in_T * G%IdxT(i,j) ; endif
       curv_3 = h_L(i) + h_R(i) - 2.0*h(i)
       uh(I) = G%dy_Cu(I,j) * u(I) * &
           (h_R(i) + CFL * (0.5*(h_L(i) - h_R(i)) + curv_3*(CFL - 1.5)))
       h_marg = h_R(i) + CFL * ((h_L(i) - h_R(i)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I) * dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
-      else ; CFL = -u(I) * dt_in_T * US%L_to_m*G%IdxT(i+1,j) ; endif
+      else ; CFL = -u(I) * dt_in_T * G%IdxT(i+1,j) ; endif
       curv_3 = h_L(i+1) + h_R(i+1) - 2.0*h(i+1)
       uh(I) = G%dy_Cu(I,j) * u(I) * &
           (h_L(i+1) + CFL * (0.5*(h_R(i+1)-h_L(i+1)) + curv_3*(CFL - 1.5)))
@@ -615,13 +615,13 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt_in_T, G, US, LB, vol_CFL
   do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
     if (u(I,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i,j))
-      else ; CFL = u(I,j,k) * dt_in_T * US%L_to_m*G%IdxT(i,j) ; endif
+      else ; CFL = u(I,j,k) * dt_in_T * G%IdxT(i,j) ; endif
       curv_3 = h_L(i,j,k) + h_R(i,j,k) - 2.0*h(i,j,k)
       h_avg = h_R(i,j,k) + CFL * (0.5*(h_L(i,j,k) - h_R(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_R(i,j,k) + CFL * ((h_L(i,j,k) - h_R(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I,j,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I,j,k)*dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
-      else ; CFL = -u(I,j,k) * dt_in_T * US%L_to_m*G%IdxT(i+1,j) ; endif
+      else ; CFL = -u(I,j,k) * dt_in_T * G%IdxT(i+1,j) ; endif
       curv_3 = h_L(i+1,j,k) + h_R(i+1,j,k) - 2.0*h(i+1,j,k)
       h_avg = h_L(i+1,j,k) + CFL * (0.5*(h_R(i+1,j,k)-h_L(i+1,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_L(i+1,j,k) + CFL * ((h_R(i+1,j,k)-h_L(i+1,j,k)) + &
@@ -1338,7 +1338,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt_in_T, G, US,
   do i=ish,ieh ; if (do_I(i)) then
     if (v(i) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i) * dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j))
-      else ; CFL = v(i) * dt_in_T * US%L_to_m*G%IdyT(i,j) ; endif
+      else ; CFL = v(i) * dt_in_T * G%IdyT(i,j) ; endif
       curv_3 = h_L(i,j) + h_R(i,j) - 2.0*h(i,j)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( h_R(i,j) + CFL * &
           (0.5*(h_L(i,j) - h_R(i,j)) + curv_3*(CFL - 1.5)) )
@@ -1346,7 +1346,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt_in_T, G, US,
                                   3.0*curv_3*(CFL - 1.0))
     elseif (v(i) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i) * dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
-      else ; CFL = -v(i) * dt_in_T * US%L_to_m*G%IdyT(i,j+1) ; endif
+      else ; CFL = -v(i) * dt_in_T * G%IdyT(i,j+1) ; endif
       curv_3 = h_L(i,j+1) + h_R(i,j+1) - 2.0*h(i,j+1)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( h_L(i,j+1) + CFL * &
           (0.5*(h_R(i,j+1)-h_L(i,j+1)) + curv_3*(CFL - 1.5)) )
@@ -1415,14 +1415,14 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt_in_T, G, US, LB, vol_CFL
   do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
     if (v(i,J,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j))
-      else ; CFL = v(i,J,k) * dt_in_T * US%L_to_m*G%IdyT(i,j) ; endif
+      else ; CFL = v(i,J,k) * dt_in_T * G%IdyT(i,j) ; endif
       curv_3 = h_L(i,j,k) + h_R(i,j,k) - 2.0*h(i,j,k)
       h_avg = h_R(i,j,k) + CFL * (0.5*(h_L(i,j,k) - h_R(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_R(i,j,k) + CFL * ((h_L(i,j,k) - h_R(i,j,k)) + &
                                 3.0*curv_3*(CFL - 1.0))
     elseif (v(i,J,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i,J,k)*dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
-      else ; CFL = -v(i,J,k) * dt_in_T * US%L_to_m*G%IdyT(i,j+1) ; endif
+      else ; CFL = -v(i,J,k) * dt_in_T * G%IdyT(i,j+1) ; endif
       curv_3 = h_L(i,j+1,k) + h_R(i,j+1,k) - 2.0*h(i,j+1,k)
       h_avg = h_L(i,j+1,k) + CFL * (0.5*(h_R(i,j+1,k)-h_L(i,j+1,k)) + curv_3*(CFL - 1.5))
       h_marg = h_L(i,j+1,k) + CFL * ((h_R(i,j+1,k)-h_L(i,j+1,k)) + &

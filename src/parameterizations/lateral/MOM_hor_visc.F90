@@ -1318,8 +1318,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       ! This is the old formulation that includes energy diffusion
       FrictWork(i,j,k) = US%s_to_T*GV%H_to_kg_m2 * ( &
-              (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
-              -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
+              (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*US%m_to_L*G%IdxT(i,j)     &
+              -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*US%m_to_L*G%IdyT(i,j))    &
        +0.25*((str_xy(I,J)*(                                     &
                    (u(I,j+1,k)-u(I,j,k))*US%m_to_L*G%IdyBu(I,J)            &
                   +(v(i+1,J,k)-v(i,J,k))*US%m_to_L*G%IdxBu(I,J) )          &
@@ -1369,8 +1369,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
             endif
           endif
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + US%s_to_T*GV%H_to_kg_m2 * (         &
-                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
-                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
+                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*US%m_to_L*G%IdxT(i,j)  &
+                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*US%m_to_L*G%IdyT(i,j)) &
          +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
                      (u(I,j+1,k)-u(I,j,k))*US%m_to_L*G%IdyBu(I,J)                               &
                     +(v(i+1,J,k)-v(i,J,k))*US%m_to_L*G%IdxBu(I,J) )                             &
@@ -1870,7 +1870,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   enddo ; enddo
   do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
     CS%DX2h(i,j) = US%L_to_m**2*G%dxT(i,j)*G%dxT(i,j) ; CS%DY2h(i,j) = US%L_to_m**2*G%dyT(i,j)*G%dyT(i,j)
-    CS%DX_dyT(i,j) = US%L_to_m*G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = US%L_to_m*G%dyT(i,j)*G%IdxT(i,j)
+    CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
   enddo ; enddo
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

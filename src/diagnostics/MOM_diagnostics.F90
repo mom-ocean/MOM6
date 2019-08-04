@@ -641,19 +641,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     endif
     if (CS%id_cfl_cg1>0) then
       do j=js,je ; do i=is,ie
-        CS%cfl_cg1(i,j) = (dt*CS%cg1(i,j)) * (G%IdxT(i,j) + G%IdyT(i,j))
+        CS%cfl_cg1(i,j) = (dt*US%m_to_L*CS%cg1(i,j)) * (G%IdxT(i,j) + G%IdyT(i,j))
       enddo ; enddo
       call post_data(CS%id_cfl_cg1, CS%cfl_cg1, CS%diag)
     endif
     if (CS%id_cfl_cg1_x>0) then
       do j=js,je ; do i=is,ie
-        CS%cfl_cg1_x(i,j) = (dt*CS%cg1(i,j)) * G%IdxT(i,j)
+        CS%cfl_cg1_x(i,j) = (dt*US%m_to_L*CS%cg1(i,j)) * G%IdxT(i,j)
       enddo ; enddo
       call post_data(CS%id_cfl_cg1_x, CS%cfl_cg1_x, CS%diag)
     endif
     if (CS%id_cfl_cg1_y>0) then
       do j=js,je ; do i=is,ie
-        CS%cfl_cg1_y(i,j) = (dt*CS%cg1(i,j)) * G%IdyT(i,j)
+        CS%cfl_cg1_y(i,j) = (dt*US%m_to_L*CS%cg1(i,j)) * G%IdyT(i,j)
       enddo ; enddo
       call post_data(CS%id_cfl_cg1_y, CS%cfl_cg1_y, CS%diag)
     endif

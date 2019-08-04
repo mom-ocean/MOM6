@@ -564,7 +564,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
 
   ! d/dx ssh
   ! This is a simple second-order difference
-  ! dhdx(i,j) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(ig,jg)
+  ! dhdx(i,j) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * ocean_grid%US%m_to_L*ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(ig,jg)
 
   do jglob = jsc, jec
     j  = jglob + ocean_grid%jsc - jsc
@@ -587,14 +587,14 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
         ! larger extreme values.
         slope = 0.0
       endif
-      dhdx(iglob,jglob) = slope * ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
+      dhdx(iglob,jglob) = slope * ocean_grid%US%m_to_L*ocean_grid%IdxT(i,j) * ocean_grid%mask2dT(i,j)
       if (ocean_grid%mask2dT(i,j)==0.) dhdx(iglob,jglob) = 0.0
     enddo
   enddo
 
   ! d/dy ssh
   ! This is a simple second-order difference
-  ! dhdy(i,j) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(ig,jg)
+  ! dhdy(i,j) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * ocean_grid%US%m_to_L*ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(ig,jg)
 
   do jglob = jsc, jec
     j = jglob + ocean_grid%jsc - jsc
@@ -617,7 +617,7 @@ subroutine mom_export(ocean_public, ocean_grid, ocean_state, exportState, clock,
         ! larger extreme values.
         slope = 0.0
       endif
-      dhdy(iglob,jglob) = slope * ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
+      dhdy(iglob,jglob) = slope * ocean_grid%US%m_to_L*ocean_grid%IdyT(i,j) * ocean_grid%mask2dT(i,j)
       if (ocean_grid%mask2dT(i,j)==0.) dhdy(iglob,jglob) = 0.0
     enddo
   enddo

@@ -217,7 +217,7 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
   ! d/dx ssh
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
     ! This is a simple second-order difference
-    ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%US%m_to_L*grid%IdxT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
     slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
     if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
@@ -235,14 +235,14 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! larger extreme values.
       slope = 0.0
     endif
-    sshx(i,j) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    sshx(i,j) = slope * grid%US%m_to_L*grid%IdxT(i,j) * grid%mask2dT(i,j)
     if (grid%mask2dT(i,j)==0.) sshx(i,j) = 0.0
   enddo; enddo
 
   ! d/dy ssh
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
     ! This is a simple second-order difference
-    ! o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    ! o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%US%m_to_L*grid%IdyT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
     slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
     if (grid%mask2dCv(i,J-1)==0.) slp_L = 0.
@@ -262,7 +262,7 @@ subroutine ocn_export(ind, ocn_public, grid, o2x, dt_int, ncouple_per_day)
       ! larger extreme values.
       slope = 0.0
     endif
-    sshy(i,j) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    sshy(i,j) = slope * grid%US%m_to_L*grid%IdyT(i,j) * grid%mask2dT(i,j)
     if (grid%mask2dT(i,j)==0.) sshy(i,j) = 0.0
   enddo; enddo
 

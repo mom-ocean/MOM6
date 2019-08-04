@@ -133,8 +133,7 @@ subroutine grid_metrics_chksum(parent, G, US)
 
   call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, scale=L_to_m)
 
-  call hchksum_pair(trim(parent)//': Id[xy]T', &
-                    G%IdxT, G%IdyT, G%HI, haloshift=halo)
+  call hchksum_pair(trim(parent)//': Id[xy]T', G%IdxT, G%IdyT, G%HI, haloshift=halo, scale=m_to_L)
 
   call uvchksum(trim(parent)//': Id[xy]C[uv]', &
                 G%IdxCu, G%IdyCv, G%HI, haloshift=halo)
@@ -524,8 +523,8 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
-    G%dxT(i,j) = m_to_L*dx_everywhere ; G%IdxT(i,j) = I_dx
-    G%dyT(i,j) = m_to_L*dy_everywhere ; G%IdyT(i,j) = I_dy
+    G%dxT(i,j) = m_to_L*dx_everywhere ; G%IdxT(i,j) = L_to_m*I_dx
+    G%dyT(i,j) = m_to_L*dy_everywhere ; G%IdyT(i,j) = L_to_m*I_dy
     G%areaT(i,j) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaT(i,j) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 

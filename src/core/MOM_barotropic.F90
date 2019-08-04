@@ -1399,7 +1399,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
               gtot_S(i,j) * (Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1)))) + &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
-      H_eff_dx2 = max(H_min_dyn * ((US%L_to_m*G%IdxT(i,j))**2 + (US%L_to_m*G%IdyT(i,j))**2), &
+      H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j))**2 + (G%IdyT(i,j))**2), &
                       G%IareaT(i,j) * &
                         ((Datu(I,j)*US%L_to_m*G%IdxCu(I,j) + Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j)) + &
                          (Datv(i,J)*US%L_to_m*G%IdyCv(i,J) + Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1)) ) )

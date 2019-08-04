@@ -96,7 +96,10 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real :: f1, f2
+
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
       (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
@@ -108,10 +111,10 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
     f2 = 0.5*( G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1) )
-    dF_dx(i,j) = G%IdxT(i,j) * ( f1 - f2 )
+    dF_dx(i,j) = m_to_L*G%IdxT(i,j) * ( f1 - f2 )
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
     f2 = 0.5*( G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1) )
-    dF_dy(i,j) = G%IdyT(i,j) * ( f1 - f2 )
+    dF_dy(i,j) = m_to_L*G%IdyT(i,j) * ( f1 - f2 )
   enddo ; enddo
   call pass_vector(dF_dx, dF_dy, G%Domain, stagger=AGRID)
 end subroutine MOM_calculate_grad_Coriolis
