@@ -1125,8 +1125,8 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   !energized_angle = Angle_size * real(energized_wedge - 1) + 0.5*Angle_size !
   x = G%geoLonBu
   y = G%geoLatBu
-  Idx = G%IdxBu; dx = G%US%L_to_m*G%dxBu
-  Idy = G%IdyBu; dy = G%US%L_to_m*G%dyBu
+  Idx = G%US%m_to_L*G%IdxBu ; dx = G%US%L_to_m*G%dxBu
+  Idy = G%US%m_to_L*G%IdyBu ; dy = G%US%L_to_m*G%dyBu
 
   do j=jsh,jeh; do i=ish,ieh
     do m=1,int(Nsubrays)

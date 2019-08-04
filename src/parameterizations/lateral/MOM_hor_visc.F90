@@ -713,9 +713,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! We will consider using a circulation based calculation of vorticity later.
       ! Also note this will need OBC boundary conditions re-applied...
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        DY_dxBu = US%L_to_m*G%dyBu(I,J) * G%IdxBu(I,J)
+        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
         dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
-        DX_dyBu = US%L_to_m*G%dxBu(I,J) * G%IdyBu(I,J)
+        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
         dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
       enddo ; enddo
 
@@ -738,12 +738,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       ! Vorticity gradient
       do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
-        DY_dxBu = US%L_to_m*G%dyBu(I,J) * G%IdxBu(I,J)
+        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
         vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
       enddo ; enddo
 
       do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
-        DX_dyBu = US%L_to_m*G%dxBu(I,J) * G%IdyBu(I,J)
+        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
         vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
@@ -1321,17 +1321,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
        +0.25*((str_xy(I,J)*(                                     &
-                   (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)            &
-                  +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )          &
+                   (u(I,j+1,k)-u(I,j,k))*US%m_to_L*G%IdyBu(I,J)            &
+                  +(v(i+1,J,k)-v(i,J,k))*US%m_to_L*G%IdxBu(I,J) )          &
               +str_xy(I-1,J-1)*(                                 &
-                   (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)    &
-                  +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) )) &
+                   (u(I-1,j,k)-u(I-1,j-1,k))*US%m_to_L*G%IdyBu(I-1,J-1)    &
+                  +(v(i,J-1,k)-v(i-1,J-1,k))*US%m_to_L*G%IdxBu(I-1,J-1) )) &
              +(str_xy(I-1,J)*(                                   &
-                   (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
-                  +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )        &
+                   (u(I-1,j+1,k)-u(I-1,j,k))*US%m_to_L*G%IdyBu(I-1,J)      &
+                  +(v(i,J,k)-v(i-1,J,k))*US%m_to_L*G%IdxBu(I-1,J) )        &
               +str_xy(I,J-1)*(                                   &
-                   (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
-                  +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+                   (u(I,j,k)-u(I,j-1,k))*US%m_to_L*G%IdyBu(I,J-1)          &
+                  +(v(i+1,J-1,k)-v(i,J-1,k))*US%m_to_L*G%IdxBu(I,J-1) )) ) )
     enddo ; enddo ; endif
 
     ! Make a similar calculation as for FrictWork above but accumulating into
@@ -1372,17 +1372,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
                 -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
          +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
-                     (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)                               &
-                    +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )                             &
+                     (u(I,j+1,k)-u(I,j,k))*US%m_to_L*G%IdyBu(I,J)                               &
+                    +(v(i+1,J,k)-v(i,J,k))*US%m_to_L*G%IdxBu(I,J) )                             &
                 +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
-                     (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
-                    +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
+                     (u(I-1,j,k)-u(I-1,j-1,k))*US%m_to_L*G%IdyBu(I-1,J-1)                       &
+                    +(v(i,J-1,k)-v(i-1,J-1,k))*US%m_to_L*G%IdxBu(I-1,J-1) ))                    &
                +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
-                     (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
-                    +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
+                     (u(I-1,j+1,k)-u(I-1,j,k))*US%m_to_L*G%IdyBu(I-1,J)                         &
+                    +(v(i,J,k)-v(i-1,J,k))*US%m_to_L*G%IdxBu(I-1,J) )                           &
                 +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
-                     (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
-                    +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+                     (u(I,j,k)-u(I,j-1,k))*US%m_to_L*G%IdyBu(I,J-1)                             &
+                    +(v(i+1,J-1,k)-v(i,J-1,k))*US%m_to_L*G%IdxBu(I,J-1) )) ) )
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
@@ -1866,7 +1866,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%DX2q(I,J) = US%L_to_m**2*G%dxBu(I,J)*G%dxBu(I,J) ; CS%DY2q(I,J) = US%L_to_m**2*G%dyBu(I,J)*G%dyBu(I,J)
-    CS%DX_dyBu(I,J) = US%L_to_m*G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = US%L_to_m*G%dyBu(I,J)*G%IdxBu(I,J)
+    CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
   enddo ; enddo
   do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
     CS%DX2h(i,j) = US%L_to_m**2*G%dxT(i,j)*G%dxT(i,j) ; CS%DY2h(i,j) = US%L_to_m**2*G%dyT(i,j)*G%dyT(i,j)

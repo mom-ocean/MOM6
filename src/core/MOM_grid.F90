@@ -117,9 +117,9 @@ type, public :: ocean_grid_type
     geoLatBu, &  !< The geographic latitude at q points in degrees of latitude or m.
     geoLonBu, &  !< The geographic longitude at q points in degrees of longitude or m.
     dxBu, &      !< dxBu is delta x at q points [L ~> m].
-    IdxBu, &     !< 1/dxBu [m-1].
+    IdxBu, &     !< 1/dxBu [L-1 ~> m-1].
     dyBu, &      !< dyBu is delta y at q points [L ~> m].
-    IdyBu, &     !< 1/dyBu [m-1].
+    IdyBu, &     !< 1/dyBu [L-1 ~> m-1].
     areaBu, &    !< areaBu is the area of a q-cell [L2 ~> m2]
     IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
@@ -446,8 +446,8 @@ subroutine set_derived_metrics(G, US)
     if (G%dxBu(I,J) < 0.0) G%dxBu(I,J) = 0.0
     if (G%dyBu(I,J) < 0.0) G%dyBu(I,J) = 0.0
 
-    G%IdxBu(I,J) = Adcroft_reciprocal(US%L_to_m*G%dxBu(I,J))
-    G%IdyBu(I,J) = Adcroft_reciprocal(US%L_to_m*G%dyBu(I,J))
+    G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
+    G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
     if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
     G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
