@@ -580,9 +580,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               endif
             elseif (OBC%specified_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*US%L_to_m*G%dxBu(I,J)
               else
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*US%L_to_m*G%dxBu(I,J)
               endif
             endif
           enddo
@@ -600,9 +600,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               endif
             elseif (OBC%specified_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*US%L_to_m*G%dxBu(I,J)
               else
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*US%L_to_m*G%dxBu(I,J)
               endif
             endif
           enddo
@@ -713,9 +713,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! We will consider using a circulation based calculation of vorticity later.
       ! Also note this will need OBC boundary conditions re-applied...
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+        DY_dxBu = US%L_to_m*G%dyBu(I,J) * G%IdxBu(I,J)
         dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
-        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+        DX_dyBu = US%L_to_m*G%dxBu(I,J) * G%IdyBu(I,J)
         dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
       enddo ; enddo
 
@@ -738,12 +738,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       ! Vorticity gradient
       do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
-        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+        DY_dxBu = US%L_to_m*G%dyBu(I,J) * G%IdxBu(I,J)
         vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
       enddo ; enddo
 
       do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
-        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+        DX_dyBu = US%L_to_m*G%dxBu(I,J) * G%IdyBu(I,J)
         vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
@@ -1865,8 +1865,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   endif
 
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-    CS%DX2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; CS%DY2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
-    CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
+    CS%DX2q(I,J) = US%L_to_m**2*G%dxBu(I,J)*G%dxBu(I,J) ; CS%DY2q(I,J) = US%L_to_m**2*G%dyBu(I,J)*G%dyBu(I,J)
+    CS%DX_dyBu(I,J) = US%L_to_m*G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = US%L_to_m*G%dyBu(I,J)*G%IdxBu(I,J)
   enddo ; enddo
   do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
     CS%DX2h(i,j) = US%L_to_m**2*G%dxT(i,j)*G%dxT(i,j) ; CS%DY2h(i,j) = US%L_to_m**2*G%dyT(i,j)*G%dyT(i,j)

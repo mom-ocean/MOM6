@@ -74,14 +74,14 @@ type, public :: ocean_grid_type
                              !! set_first_direction.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid. Nd.
+    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid [nondim].
     geoLatT, &   !< The geographic latitude at q points in degrees of latitude or m.
     geoLonT, &   !< The geographic longitude at q points in degrees of longitude or m.
     dxT, &       !< dxT is delta x at h points [L ~> m].
     IdxT, &      !< 1/dxT [m-1].
     dyT, &       !< dyT is delta y at h points [L ~> m].
     IdyT, &      !< IdyT is 1/dyT [m-1].
-    areaT, &     !< The area of an h-cell [m2].
+    areaT, &     !< The area of an h-cell [L2 ~> m2].
     IareaT, &    !< 1/areaT [L-2 ~> m-2].
     sin_rot, &   !< The sine of the angular rotation between the local model grid's northward
                  !! and the true northward directions.
@@ -89,7 +89,7 @@ type, public :: ocean_grid_type
                  !! and the true northward directions.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
+    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid [nondim].
     geoLatCu, &  !< The geographic latitude at u points in degrees of latitude or m.
     geoLonCu, &  !< The geographic longitude at u points in degrees of longitude or m.
     dxCu, &      !< dxCu is delta x at u points [L ~> m].
@@ -98,10 +98,10 @@ type, public :: ocean_grid_type
     IdyCu, &     !< 1/dyCu [m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
     IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
-    areaCu       !< The areas of the u-grid cells [m2].
+    areaCu       !< The areas of the u-grid cells [L2 ~> m2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
+    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid [nondim].
     geoLatCv, &  !< The geographic latitude at v points in degrees of latitude or m.
     geoLonCv, &  !< The geographic longitude at v points in degrees of longitude or m.
     dxCv, &      !< dxCv is delta x at v points [L ~> m].
@@ -110,17 +110,17 @@ type, public :: ocean_grid_type
     IdyCv, &     !< 1/dyCv [m-1].
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
     IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
-    areaCv       !< The areas of the v-grid cells [m2].
+    areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
+    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points in degrees of latitude or m.
     geoLonBu, &  !< The geographic longitude at q points in degrees of longitude or m.
-    dxBu, &      !< dxBu is delta x at q points [m].
+    dxBu, &      !< dxBu is delta x at q points [L ~> m].
     IdxBu, &     !< 1/dxBu [m-1].
-    dyBu, &      !< dyBu is delta y at q points [m].
+    dyBu, &      !< dyBu is delta y at q points [L ~> m].
     IdyBu, &     !< 1/dyBu [m-1].
-    areaBu, &    !< areaBu is the area of a q-cell [m2]
+    areaBu, &    !< areaBu is the area of a q-cell [L2 ~> m2]
     IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: &
@@ -446,10 +446,10 @@ subroutine set_derived_metrics(G, US)
     if (G%dxBu(I,J) < 0.0) G%dxBu(I,J) = 0.0
     if (G%dyBu(I,J) < 0.0) G%dyBu(I,J) = 0.0
 
-    G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
-    G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
+    G%IdxBu(I,J) = Adcroft_reciprocal(US%L_to_m*G%dxBu(I,J))
+    G%IdyBu(I,J) = Adcroft_reciprocal(US%L_to_m*G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
-    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = US%m_to_L*G%dxBu(I,J) * US%m_to_L*G%dyBu(I,J)
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
     G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
   enddo ; enddo
 end subroutine set_derived_metrics

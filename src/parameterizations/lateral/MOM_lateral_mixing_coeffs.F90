@@ -1118,9 +1118,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
-      CS%f2_dx2_q(I,J) = ((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * &
+      CS%f2_dx2_q(I,J) = US%L_to_m**2*((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * &
                          max(G%CoriolisBu(I,J)**2, absurdly_small_freq**2)
-      CS%beta_dx2_q(I,J) = oneOrTwo * ((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * (sqrt(0.5 * &
+      CS%beta_dx2_q(I,J) = oneOrTwo * US%L_to_m**2*((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * (sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &

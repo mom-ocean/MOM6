@@ -125,15 +125,13 @@ subroutine grid_metrics_chksum(parent, G, US)
 
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
-  call hchksum_pair(trim(parent)//': d[xy]T', &
-                    G%dxT, G%dyT, G%HI, haloshift=halo, scale=L_to_m)
+  call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, haloshift=halo, scale=L_to_m)
 
   call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, scale=L_to_m)
 
   call uvchksum(trim(parent)//': dxC[uv]', G%dyCu, G%dxCv, G%HI, haloshift=halo, scale=L_to_m)
 
-  call Bchksum_pair(trim(parent)//': dxB[uv]', &
-                    G%dxBu, G%dyBu, G%HI, haloshift=halo)
+  call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, scale=L_to_m)
 
   call hchksum_pair(trim(parent)//': Id[xy]T', &
                     G%IdxT, G%IdyT, G%HI, haloshift=halo)
@@ -159,11 +157,9 @@ subroutine grid_metrics_chksum(parent, G, US)
   call Bchksum(G%geoLonBu, trim(parent)//': geoLonBu',G%HI, haloshift=halo)
   call Bchksum(G%geoLatBu, trim(parent)//': geoLatBu',G%HI, haloshift=halo)
 
-  call uvchksum(trim(parent)//': geoLonC[uv]', &
-                G%geoLonCu, G%geoLonCv, G%HI, haloshift=halo)
+  call uvchksum(trim(parent)//': geoLonC[uv]', G%geoLonCu, G%geoLonCv, G%HI, haloshift=halo)
 
-  call uvchksum(trim(parent)//': geoLatC[uv]', &
-                G%geoLatCu, G%geoLatCv, G%HI, haloshift=halo)
+  call uvchksum(trim(parent)//': geoLatC[uv]', G%geoLatCu, G%geoLatCv, G%HI, haloshift=halo)
 
 end subroutine grid_metrics_chksum
 
@@ -371,7 +367,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     G%dxCv(i,J) = m_to_L*dxCv(i,J) ; G%dyCv(i,J) = m_to_L*dyCv(i,J)
   enddo ; enddo
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
-    G%dxBu(I,J) = dxBu(I,J) ; G%dyBu(I,J) = dyBu(I,J) ; G%areaBu(I,J) = m_to_L**2*areaBu(I,J)
+    G%dxBu(I,J) = m_to_L*dxBu(I,J) ; G%dyBu(I,J) = m_to_L*dyBu(I,J) ; G%areaBu(I,J) = m_to_L**2*areaBu(I,J)
   enddo ; enddo
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
@@ -522,8 +518,8 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(I,J) = grid_lonB(I) ; G%geoLatBu(I,J) = grid_latB(J)
 
-    G%dxBu(I,J) = dx_everywhere ; G%IdxBu(I,J) = I_dx
-    G%dyBu(I,J) = dy_everywhere ; G%IdyBu(I,J) = I_dy
+    G%dxBu(I,J) = m_to_L*dx_everywhere ; G%IdxBu(I,J) = I_dx
+    G%dyBu(I,J) = m_to_L*dy_everywhere ; G%IdyBu(I,J) = I_dy
     G%areaBu(I,J) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = L_to_m**2*I_dx * I_dy
   enddo ; enddo
 
@@ -645,10 +641,10 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxBu(I,J) = G%Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
-!   G%dxBu(I,J) = G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
-    G%dyBu(I,J) = G%Rad_Earth * dLat*PI_180
-    G%areaBu(I,J) = m_to_L**2 * G%dxBu(I,J) * G%dyBu(I,J)
+    G%dxBu(I,J) = m_to_L*G%Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
+!   G%dxBu(I,J) = m_to_L*G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
+    G%dyBu(I,J) = m_to_L*G%Rad_Earth * dLat*PI_180
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -871,10 +867,10 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(I,J) = xq(I,J)*180.0/PI
     G%geoLatBu(I,J) = yq(I,J)*180.0/PI
-    G%dxBu(I,J) = ds_di(xq(I,J), yq(I,J), GP)
-    G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
+    G%dxBu(I,J) = m_to_L*ds_di(xq(I,J), yq(I,J), GP)
+    G%dyBu(I,J) = m_to_L*ds_dj(xq(I,J), yq(I,J), GP)
 
-    G%areaBu(I,J) = m_to_L**2*G%dxBu(I,J) * G%dyBu(I,J)
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
     G%IareaBu(I,J) = 1.0 / (G%areaBu(I,J))
   enddo ; enddo
 

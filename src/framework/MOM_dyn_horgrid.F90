@@ -75,8 +75,8 @@ type, public :: dyn_horgrid_type
     IdxT, &      !< 1/dxT [m-1].
     dyT, &       !< dyT is delta y at h points [L ~> m].
     IdyT, &      !< IdyT is 1/dyT [m-1].
-    areaT, &     !< The area of an h-cell [L-2 ~> m-2].
-    IareaT       !< 1/areaT [m-2].
+    areaT, &     !< The area of an h-cell [L2 ~> m2].
+    IareaT       !< 1/areaT [L-2 ~> m-2].
   real, allocatable, dimension(:,:) :: sin_rot
                  !< The sine of the angular rotation between the local model grid's northward
                  !! and the true northward directions [nondim].
@@ -94,7 +94,7 @@ type, public :: dyn_horgrid_type
     IdyCu, &     !< 1/dyCu [m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
     IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
-    areaCu       !< The areas of the u-grid cells [m2].
+    areaCu       !< The areas of the u-grid cells [L2 ~> m2].
 
   real, allocatable, dimension(:,:) :: &
     mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid [nondim].
@@ -106,18 +106,18 @@ type, public :: dyn_horgrid_type
     IdyCv, &     !< 1/dyCv [m-1].
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
     IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
-    areaCv       !< The areas of the v-grid cells [m2].
+    areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real, allocatable, dimension(:,:) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points [degrees of latitude] or [m].
     geoLonBu, &  !< The geographic longitude at q points [degrees of longitude] or [m].
-    dxBu, &      !< dxBu is delta x at q points [m].
+    dxBu, &      !< dxBu is delta x at q points [L ~> m].
     IdxBu, &     !< 1/dxBu [m-1].
-    dyBu, &      !< dyBu is delta y at q points [m].
+    dyBu, &      !< dyBu is delta y at q points [L ~> m].
     IdyBu, &     !< 1/dyBu [m-1].
-    areaBu, &    !< areaBu is the area of a q-cell [L-2 ~> m-2]
-    IareaBu      !< IareaBu = 1/areaBu [m-2].
+    areaBu, &    !< areaBu is the area of a q-cell [L ~> m]
+    IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: gridLatT => NULL()
         !< The latitude of T points for the purpose of labeling the output axes.
@@ -354,10 +354,10 @@ subroutine set_derived_dyn_horgrid(G, US)
     if (G%dxBu(I,J) < 0.0) G%dxBu(I,J) = 0.0
     if (G%dyBu(I,J) < 0.0) G%dyBu(I,J) = 0.0
 
-    G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
-    G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
+    G%IdxBu(I,J) = Adcroft_reciprocal(L_to_m*G%dxBu(I,J))
+    G%IdyBu(I,J) = Adcroft_reciprocal(L_to_m*G%dyBu(I,J))
     ! areaBu has usually been set to a positive area elsewhere.
-    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = m_to_L*G%dxBu(I,J) * m_to_L*G%dyBu(I,J)
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
     G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
   enddo ; enddo
 
