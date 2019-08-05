@@ -237,11 +237,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        drag_rate_visc(i,j) = (0.25*US%m_to_L**2*G%IareaT(i,j) * &
-                ((US%L_to_m**2*G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
-                  US%L_to_m**2*G%areaCu(I,j)*drag_vel_u(I,j)) + &
-                 (US%L_to_m**2*G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
-                  US%L_to_m**2*G%areaCv(i,J)*drag_vel_v(i,J)) ) )
+        drag_rate_visc(i,j) = (0.25*G%IareaT(i,j) * &
+                ((G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
+                  G%areaCu(I,j)*drag_vel_u(I,j)) + &
+                 (G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
+                  G%areaCv(i,J)*drag_vel_v(i,J)) ) )
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -364,17 +364,17 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       ! Calculate Laplacian of MEKE
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do I=is-2,ie+1
-        MEKE_uflux(I,j) = ((US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)) * G%mask2dCu(I,j)) * &
+        MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * G%mask2dCu(I,j)) * &
             (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
-      ! MEKE_uflux(I,j) = ((US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)) * &
+      ! MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
       !     ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
       !     (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-2,je+1 ; do i=is-1,ie+1
-        MEKE_vflux(i,J) = ((US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)) * G%mask2dCv(i,J)) * &
+        MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * G%mask2dCv(i,J)) * &
             (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
-      ! MEKE_vflux(i,J) = ((US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)) * &
+      ! MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
       !     ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
       !     (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
       enddo ; enddo
@@ -392,22 +392,22 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do j=js,je ; do I=is-1,ie
         K4_here = CS%MEKE_K4
         ! Limit Kh to avoid CFL violations.
-        Inv_Kh_max = 64.0*sdt * (((US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)) * &
+        Inv_Kh_max = 64.0*sdt * (((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
                      max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i+1,j))))**2
         if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
-        MEKE_uflux(I,j) = ((K4_here * (US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j))) * &
+        MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (del2MEKE(i+1,j) - del2MEKE(i,j))
       enddo ; enddo
       !$OMP parallel do default(shared) private(K4_here,Inv_Kh_max)
       do J=js-1,je ; do i=is,ie
         K4_here = CS%MEKE_K4
-        Inv_Kh_max = 64.0*sdt * (((US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)) * &
+        Inv_Kh_max = 64.0*sdt * (((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
                      max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i,j+1))))**2
         if (K4_here*Inv_Kh_max > 0.3) K4_here = 0.3 / Inv_Kh_max
 
-        MEKE_vflux(i,J) = ((K4_here * (US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J))) * &
+        MEKE_vflux(i,J) = ((K4_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (del2MEKE(i,j+1) - del2MEKE(i,j))
       enddo ; enddo
@@ -431,12 +431,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i+1,j))
         if (associated(MEKE%Kh_diff)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i+1,j))
-        Inv_Kh_max = 2.0*sdt * ((US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)) * &
+        Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
                      max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i+1,j)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
-        MEKE_uflux(I,j) = ((Kh_here * (US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j))) * &
+        MEKE_uflux(I,j) = ((Kh_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i+1,j))
       enddo ; enddo
@@ -446,12 +446,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
         if (associated(MEKE%Kh_diff)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i,j+1))
-        Inv_Kh_max = 2.0*sdt * ((US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)) * &
+        Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
                      max(US%m_to_L**2*G%IareaT(i,j),US%m_to_L**2*G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
-        MEKE_vflux(i,J) = ((Kh_here * (US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J))) * &
+        MEKE_vflux(i,J) = ((Kh_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i,j+1))
       enddo ; enddo
