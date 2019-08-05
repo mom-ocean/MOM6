@@ -244,48 +244,48 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
-        khdt_x(I,j) = dt*(Kh_u(I,j)*(US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)))
+        khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie
-        khdt_y(i,J) = dt*(Kh_v(i,J)*(US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)))
+        khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
       enddo ; enddo
     elseif (Resoln_scaled) then
       !$OMP parallel do default(shared) private(Res_fn)
       do j=js,je ; do I=is-1,ie
         Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
         Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-        khdt_x(I,j) = dt*(CS%KhTr*(US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j))) * Res_fn
+        khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
       enddo ; enddo
       !$OMP parallel do default(shared) private(Res_fn)
       do J=js-1,je ;  do i=is,ie
         Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
         Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-        khdt_y(i,J) = dt*(CS%KhTr*(US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J))) * Res_fn
+        khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
       enddo ; enddo
     else  ! Use a simple constant diffusivity.
       if (CS%id_KhTr_u > 0) then
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
           Kh_u(I,j) = CS%KhTr
-          khdt_x(I,j) = dt*(CS%KhTr*(US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)))
+          khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
-          khdt_x(I,j) = dt*(CS%KhTr*(US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)))
+          khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
         enddo ; enddo
       endif
       if (CS%id_KhTr_v > 0) then
         !$OMP parallel do default(shared)
         do J=js-1,je ;  do i=is,ie
           Kh_v(i,J) = CS%KhTr
-          khdt_y(i,J) = dt*(CS%KhTr*(US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)))
+          khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do J=js-1,je ;  do i=is,ie
-          khdt_y(i,J) = dt*(CS%KhTr*(US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)))
+          khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
         enddo ; enddo
       endif
     endif ! VarMix
@@ -294,34 +294,34 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if ((CS%id_KhTr_u > 0) .or. (CS%id_KhTr_h > 0)) then
         !$OMP parallel do default(shared) private(khdt_max)
         do j=js,je ; do I=is-1,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i+1,j))
+          khdt_max = 0.125*CS%max_diff_CFL * US%L_to_m**2*min(G%areaT(i,j), G%areaT(i+1,j))
           if (khdt_x(I,j) > khdt_max) then
             khdt_x(I,j) = khdt_max
-            if (dt*(US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)) > 0.0) &
-              Kh_u(I,j) = khdt_x(I,j) / (dt*(US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j)))
+            if (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)) > 0.0) &
+              Kh_u(I,j) = khdt_x(I,j) / (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
           endif
         enddo ; enddo
       else
         !$OMP parallel do default(shared) private(khdt_max)
         do j=js,je ; do I=is-1,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i+1,j))
+          khdt_max = 0.125*CS%max_diff_CFL * US%L_to_m**2*min(G%areaT(i,j), G%areaT(i+1,j))
           khdt_x(I,j) = min(khdt_x(I,j), khdt_max)
         enddo ; enddo
       endif
       if ((CS%id_KhTr_v > 0) .or. (CS%id_KhTr_h > 0)) then
         !$OMP parallel do default(shared) private(khdt_max)
         do J=js-1,je ; do i=is,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i,j+1))
+          khdt_max = 0.125*CS%max_diff_CFL * US%L_to_m**2*min(G%areaT(i,j), G%areaT(i,j+1))
           if (khdt_y(i,J) > khdt_max) then
             khdt_y(i,J) = khdt_max
-            if (dt*(US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)) > 0.0) &
-              Kh_v(i,J) = khdt_y(i,J) / (dt*(US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J)))
+            if (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)) > 0.0) &
+              Kh_v(i,J) = khdt_y(i,J) / (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
           endif
         enddo ; enddo
       else
         !$OMP parallel do default(shared) private(khdt_max)
         do J=js-1,je ; do i=is,ie
-          khdt_max = 0.125*CS%max_diff_CFL * min(US%L_to_m**2*G%areaT(i,j), US%L_to_m**2*G%areaT(i,j+1))
+          khdt_max = 0.125*CS%max_diff_CFL * US%L_to_m**2*min(G%areaT(i,j), G%areaT(i,j+1))
           khdt_y(i,J) = min(khdt_y(i,J), khdt_max)
         enddo ; enddo
       endif
