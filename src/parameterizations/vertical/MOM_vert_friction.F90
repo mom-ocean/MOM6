@@ -1395,9 +1395,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
         do k=1,nz ; do I=Isq,Ieq
           if (abs(u(I,j,k)) < CS%vel_underflow) u(I,j,k) = 0.0
           if (u(I,j,k) < 0.0) then
-            CFL = (-u(I,j,k) * dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i+1,j))
+            CFL = (-US%m_s_to_L_T*u(I,j,k) * US%s_to_T*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
           else
-            CFL = (u(I,j,k) * dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i,j))
+            CFL = (US%m_s_to_L_T*u(I,j,k) * US%s_to_T*dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1421,11 +1421,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq
-          if ((u(I,j,k) * (dt * US%L_to_m*G%dy_Cu(I,j))) * US%m_to_L**2*G%IareaT(i+1,j) < -CS%CFL_trunc) then
-            u(I,j,k) = (-0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i+1,j) / (dt * US%L_to_m*G%dy_Cu(I,j)))
+          if ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+            u(I,j,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-          elseif ((u(I,j,k) * (dt * US%L_to_m*G%dy_Cu(I,j))) * US%m_to_L**2*G%IareaT(i,j) > CS%CFL_trunc) then
-            u(I,j,k) = (0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i,j) / (dt * US%L_to_m*G%dy_Cu(I,j)))
+          elseif ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            u(I,j,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1441,11 +1441,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 !$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
-        elseif ((u(I,j,k) * (dt * US%L_to_m*G%dy_Cu(I,j))) * US%m_to_L**2*G%IareaT(i+1,j) < -CS%CFL_trunc) then
-          u(I,j,k) = (-0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i+1,j) / (dt * US%L_to_m*G%dy_Cu(I,j)))
+        elseif ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+          u(I,j,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        elseif ((u(I,j,k) * (dt * US%L_to_m*G%dy_Cu(I,j))) * US%m_to_L**2*G%IareaT(i,j) > CS%CFL_trunc) then
-          u(I,j,k) = (0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i,j) / (dt * US%L_to_m*G%dy_Cu(I,j)))
+        elseif ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          u(I,j,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
@@ -1480,9 +1480,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
         do k=1,nz ; do i=is,ie
           if (abs(v(i,J,k)) < CS%vel_underflow) v(i,J,k) = 0.0
           if (v(i,J,k) < 0.0) then
-            CFL = (-v(i,J,k) * dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j+1))
+            CFL = (-US%m_s_to_L_T*v(i,J,k) * US%s_to_T*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
           else
-            CFL = (v(i,J,k) * dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j))
+            CFL = (US%m_s_to_L_T*v(i,J,k) * US%s_to_T*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1506,11 +1506,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz; do i=is,ie
-          if ((v(i,J,k) * (dt * US%L_to_m*G%dx_Cv(i,J))) * US%m_to_L**2*G%IareaT(i,j+1) < -CS%CFL_trunc) then
-            v(i,J,k) = (-0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i,j+1) / (dt * US%L_to_m*G%dx_Cv(i,J)))
+          if ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+            v(i,J,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (US%s_to_T*dt * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-          elseif ((v(i,J,k) * (dt * US%L_to_m*G%dx_Cv(i,J))) * US%m_to_L**2*G%IareaT(i,j) > CS%CFL_trunc) then
-            v(i,J,k) = (0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i,j) / (dt * US%L_to_m*G%dx_Cv(i,J)))
+          elseif ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            v(i,J,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1526,11 +1526,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       !$OMP parallel do default(shared)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if (abs(v(i,J,k)) < CS%vel_underflow) then ; v(i,J,k) = 0.0
-        elseif ((v(i,J,k) * (dt * US%L_to_m*G%dx_Cv(i,J))) * US%m_to_L**2*G%IareaT(i,j+1) < -CS%CFL_trunc) then
-          v(i,J,k) = (-0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i,j+1) / (dt * US%L_to_m*G%dx_Cv(i,J)))
+        elseif ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+          v(i,J,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (US%s_to_T*dt * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        elseif ((v(i,J,k) * (dt * US%L_to_m*G%dx_Cv(i,J))) * US%m_to_L**2*G%IareaT(i,j) > CS%CFL_trunc) then
-          v(i,J,k) = (0.9*CS%CFL_trunc) * (US%L_to_m**2*G%areaT(i,j) / (dt * US%L_to_m*G%dx_Cv(i,J)))
+        elseif ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          v(i,J,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
