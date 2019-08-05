@@ -664,7 +664,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
           hint = Z_0APE(K) + (hbelow - G%bathyT(i,j))
           hbot = Z_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * US%Z_to_m*(GV%Rho0*US%L_to_m**2*US%s_to_T**2*GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * US%Z_to_m*US%L_T_to_m_s**2*(GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -673,7 +673,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         do k=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * US%Z_to_m*(GV%Rho0*US%L_to_m**2*US%s_to_T**2*GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * US%Z_to_m*US%L_T_to_m_s**2*(GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -713,21 +713,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   max_CFL(1:2) = 0.0
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     if (u(I,j,k) < 0.0) then
-      CFL_trans = (-u(I,j,k) * CS%dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i+1,j))
+      CFL_trans = (-US%m_s_to_L_T*u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
     else
-      CFL_trans = (u(I,j,k) * CS%dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i,j))
+      CFL_trans = (US%m_s_to_L_T*u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
     endif
-    CFL_lin = abs(u(I,j,k) * CS%dt) * US%m_to_L*G%IdxCu(I,j)
+    CFL_lin = abs(US%m_s_to_L_T*u(I,j,k) * US%s_to_T*CS%dt) * G%IdxCu(I,j)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     if (v(i,J,k) < 0.0) then
-      CFL_trans = (-v(i,J,k) * CS%dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j+1))
+      CFL_trans = (-US%m_s_to_L_T*v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
     else
-      CFL_trans = (v(i,J,k) * CS%dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j))
+      CFL_trans = (US%m_s_to_L_T*v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
     endif
-    CFL_lin = abs(v(i,J,k) * CS%dt) * US%m_to_L*G%IdyCv(i,J)
+    CFL_lin = abs(US%m_s_to_L_T*v(i,J,k) * US%s_to_T*CS%dt) * G%IdyCv(i,J)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
