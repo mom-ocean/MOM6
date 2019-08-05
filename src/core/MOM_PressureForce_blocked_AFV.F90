@@ -365,7 +365,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                      (za_bk(ib+1,jb)*dp_bk(ib+1,jb) + intp_dza(i+1,j,k))) + &
                      ((dp_bk(ib+1,jb) - dp_bk(ib,jb)) * intx_za_bk(Ib,jb) - &
                      (p(i+1,j,K) - p(i,j,K)) * intx_dza(I,j,k))) * &
-                     (US%m_s_to_L_T**2 * 2.0*US%L_to_m*G%IdxCu(I,j) / &
+                     (US%m_s_to_L_T**2 * 2.0*G%IdxCu(I,j) / &
                      ((dp_bk(ib,jb) + dp_bk(ib+1,jb)) + dp_neglect))
       enddo ; enddo
       do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
@@ -375,17 +375,17 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                      (za_bk(ib,jb+1)*dp_bk(ib,jb+1) + intp_dza(i,j+1,k))) + &
                      ((dp_bk(ib,jb+1) - dp_bk(ib,jb)) * inty_za_bk(ib,Jb) - &
                      (p(i,j+1,K) - p(i,j,K)) * inty_dza(i,J,k))) * &
-                     (US%m_s_to_L_T**2 * 2.0*US%L_to_m*G%IdyCv(i,J) / &
+                     (US%m_s_to_L_T**2 * 2.0*G%IdyCv(i,J) / &
                      ((dp_bk(ib,jb) + dp_bk(ib,jb+1)) + dp_neglect))
       enddo ; enddo
 
       if (CS%GFS_scale < 1.0) then
         ! Adjust the Montgomery potential to make this a reduced gravity model.
         do j=js_bk+joff_bk,je_bk+joff_bk ; do I=Isq_bk+ioff_bk,Ieq_bk+ioff_bk
-          PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * US%L_to_m*G%IdxCu(I,j)
+          PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
         enddo ; enddo
         do J=Jsq_bk+joff_bk,Jeq_bk+joff_bk ; do i=is_bk+ioff_bk,ie_bk+ioff_bk
-          PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * US%L_to_m*G%IdyCv(i,J)
+          PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
         enddo ; enddo
       endif
     enddo
@@ -716,7 +716,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
                      (pa_bk(ib+1,jb)*h(i+1,j,k) + intz_dpa_bk(ib+1,jb))) + &
                      ((h(i+1,j,k) - h(i,j,k)) * intx_pa_bk(Ib,jb) - &
                      (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * GV%Z_to_H)) * &
-                     ((2.0*I_Rho0*US%L_to_m*G%IdxCu(I,j)) / &
+                     ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                      ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
         intx_pa_bk(Ib,jb) = intx_pa_bk(Ib,jb) + intx_dpa_bk(Ib,jb)
       enddo ; enddo
@@ -727,7 +727,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
                      (pa_bk(ib,jb+1)*h(i,j+1,k) + intz_dpa_bk(ib,jb+1))) + &
                      ((h(i,j+1,k) - h(i,j,k)) * inty_pa_bk(ib,Jb) - &
                      (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * GV%Z_to_H)) * &
-                     ((2.0*I_Rho0*US%L_to_m*G%IdyCv(i,J)) / &
+                     ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                      ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
         inty_pa_bk(ib,Jb) = inty_pa_bk(ib,Jb) + inty_dpa_bk(ib,Jb)
       enddo ; enddo
@@ -739,10 +739,10 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
     if (CS%GFS_scale < 1.0) then
       do k=1,nz
         do j=js_bk+joff_bk,je_bk+joff_bk ; do I=Isq_bk+ioff_bk,Ieq_bk+ioff_bk
-          PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * US%L_to_m*G%IdxCu(I,j)
+          PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
         enddo ; enddo
         do J=Jsq_bk+joff_bk,Jeq_bk+joff_bk ; do i=is_bk+ioff_bk,ie_bk+ioff_bk
-          PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * US%L_to_m*G%IdyCv(i,J)
+          PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
         enddo ; enddo
       enddo
     endif

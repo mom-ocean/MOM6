@@ -802,9 +802,9 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
       df_dx = 0.5*US%m_to_L*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * &
                G%IdxT(i,j)
-      dlnCn_dx = 0.5*( G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
+      dlnCn_dx = 0.5*( US%m_to_L*G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
                        (0.5*(cn(i+1,j) + cn(i,j)) + cn_subRO) + &
-                       G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
+                       US%m_to_L*G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
                        (0.5*(cn(i,j) + cn(i-1,j)) + cn_subRO) )
       df2_dy = 0.5*US%m_to_L*US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2) - &
                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2)) * &
@@ -812,9 +812,9 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
       df_dy = 0.5*US%m_to_L*US%s_to_T*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                     (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * &
                G%IdyT(i,j)
-      dlnCn_dy = 0.5*( G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
+      dlnCn_dy = 0.5*( US%m_to_L*G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
                        (0.5*(cn(i,j+1) + cn(i,j)) + cn_subRO) + &
-                       G%IdyCv(i,J-1) * (cn(i,j) - cn(i,j-1)) / &
+                       US%m_to_L*G%IdyCv(i,J-1) * (cn(i,j) - cn(i,j-1)) / &
                        (0.5*(cn(i,j) + cn(i,j-1)) + cn_subRO) )
       Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cn_subRO**2)
       if (Kmag2 > 0.0) then

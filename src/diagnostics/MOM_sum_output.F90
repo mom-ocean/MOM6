@@ -717,7 +717,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     else
       CFL_trans = (u(I,j,k) * CS%dt) * (US%L_to_m*G%dy_Cu(I,j) * US%m_to_L**2*G%IareaT(i,j))
     endif
-    CFL_lin = abs(u(I,j,k) * CS%dt) * G%IdxCu(I,j)
+    CFL_lin = abs(u(I,j,k) * CS%dt) * US%m_to_L*G%IdxCu(I,j)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
@@ -727,7 +727,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     else
       CFL_trans = (v(i,J,k) * CS%dt) * (US%L_to_m*G%dx_Cv(i,J) * US%m_to_L**2*G%IareaT(i,j))
     endif
-    CFL_lin = abs(v(i,J,k) * CS%dt) * G%IdyCv(i,J)
+    CFL_lin = abs(v(i,J,k) * CS%dt) * US%m_to_L*G%IdyCv(i,J)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo

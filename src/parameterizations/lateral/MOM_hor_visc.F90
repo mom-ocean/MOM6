@@ -450,9 +450,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Components for the barotropic shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      dvdx_bt(I,J) = CS%DY_dxBu(I,J)*(vbtav(i+1,J)*G%IdyCv(i+1,J) &
+      dvdx_bt(I,J) = CS%DY_dxBu(I,J)*US%m_to_L*(vbtav(i+1,J)*G%IdyCv(i+1,J) &
                                     - vbtav(i,J)*G%IdyCv(i,J))
-      dudy_bt(I,J) = CS%DX_dyBu(I,J)*(ubtav(I,j+1)*G%IdxCu(I,j+1) &
+      dudy_bt(I,J) = CS%DX_dyBu(I,J)*US%m_to_L*(ubtav(I,j+1)*G%IdxCu(I,j+1) &
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
 
@@ -536,8 +536,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Components for the shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
-      dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
+      dvdx(I,J) = CS%DY_dxBu(I,J)*US%m_to_L*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
+      dudy(I,J) = CS%DX_dyBu(I,J)*US%m_to_L*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
 
     ! Interpolate the thicknesses to velocity points.
@@ -574,15 +574,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               dudy(I,J) = 0.
             elseif (OBC%computed_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
+                dudy(I,J) = 2.0*US%m_to_L*CS%DX_dyBu(I,J)* &
+                            (OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
               else
-                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
+                dudy(I,J) = 2.0*US%m_to_L*CS%DX_dyBu(I,J)* &
+                            (u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
               endif
             elseif (OBC%specified_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*US%L_to_m*G%dxBu(I,J)
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
               else
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*US%L_to_m*G%dxBu(I,J)
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
               endif
             endif
           enddo
@@ -594,15 +596,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               dvdx(I,J) = 0.
             elseif (OBC%computed_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
+                dvdx(I,J) = 2.0*US%m_to_L*CS%DY_dxBu(I,J)* &
+                            (OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
               else
-                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
+                dvdx(I,J) = 2.0*US%m_to_L*CS%DY_dxBu(I,J)* &
+                            (v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
               endif
             elseif (OBC%specified_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*US%L_to_m*G%dxBu(I,J)
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
               else
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*US%L_to_m*G%dxBu(I,J)
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
               endif
             endif
           enddo
@@ -714,9 +718,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! Also note this will need OBC boundary conditions re-applied...
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
-        dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
+        dvdx(I,J) = DY_dxBu * US%m_to_L*(v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
         DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
-        dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
+        dudy(I,J) = DX_dyBu * US%m_to_L*(u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
       enddo ; enddo
 
       ! Vorticity
@@ -766,11 +770,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! Divergence gradient
         !#GME# This index range should be: do j=Jsq,Jeq+1 ; do I=Isq-1,Ieq+1
         do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
-          div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+          div_xx_dx(I,j) = US%m_to_L*G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
         enddo ; enddo
         !#GME# This index range should be: do j=Jsq-1,Jeq+1 ; do i=Isq,Ieq+1
         do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
-          div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+          div_xx_dy(i,J) = US%m_to_L*G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
         enddo ; enddo
 
         !#GME# With the correct index ranges, this halo update is unnecessary.
@@ -969,8 +973,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (CS%biharmonic) then
       ! Gradient of Laplacian, for use in bi-harmonic term
       do J=js-1,Jeq ; do I=is-1,Ieq
-        dvdx(I,J) = CS%DY_dxBu(I,J)*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J))
-        dudy(I,J) = CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j))
+        dvdx(I,J) = CS%DY_dxBu(I,J)*US%m_to_L*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J))
+        dudy(I,J) = CS%DX_dyBu(I,J)*US%m_to_L*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j))
       enddo ; enddo
       ! Adjust contributions to shearing strain on open boundaries.
       if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
@@ -1275,7 +1279,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     do j=js,je ; do I=Isq,Ieq
       diffu(I,j,k) = ((US%m_to_L*G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
                                      CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
-                       G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
+                       US%m_to_L*G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
                                      CS%DX2q(I,J) *str_xy(I,J))) * &
                      US%m_to_L**2*G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
 
@@ -1295,7 +1299,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
-      diffv(i,J,k) = ((G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
+      diffv(i,J,k) = ((US%m_to_L*G%IdyCv(i,J)*(CS%DY2q(I-1,J)*str_xy(I-1,J) - &
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
                        US%m_to_L*G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
@@ -1967,12 +1971,12 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   if (CS%biharmonic) then
 
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
-      CS%IDX2dyCu(I,j) = (G%IdxCu(I,j)*G%IdxCu(I,j)) * US%m_to_L*G%IdyCu(I,j)
-      CS%IDXDY2u(I,j) = G%IdxCu(I,j) * US%m_to_L**2*(G%IdyCu(I,j)*G%IdyCu(I,j))
+      CS%IDX2dyCu(I,j) = (US%m_to_L*G%IdxCu(I,j)*US%m_to_L*G%IdxCu(I,j)) * US%m_to_L*G%IdyCu(I,j)
+      CS%IDXDY2u(I,j) = US%m_to_L*G%IdxCu(I,j) * US%m_to_L**2*(G%IdyCu(I,j)*G%IdyCu(I,j))
     enddo ; enddo
     do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
-      CS%IDX2dyCv(i,J) = US%m_to_L**2*(G%IdxCv(i,J)*G%IdxCv(i,J)) * G%IdyCv(i,J)
-      CS%IDXDY2v(i,J) = US%m_to_L*G%IdxCv(i,J) * (G%IdyCv(i,J)*G%IdyCv(i,J))
+      CS%IDX2dyCv(i,J) = US%m_to_L**2*(G%IdxCv(i,J)*G%IdxCv(i,J)) * US%m_to_L*G%IdyCv(i,J)
+      CS%IDXDY2v(i,J) = US%m_to_L*G%IdxCv(i,J) * (US%m_to_L*G%IdyCv(i,J)*US%m_to_L*G%IdyCv(i,J))
     enddo ; enddo
 
     CS%Ah_bg_xy(:,:) = 0.0
@@ -2045,10 +2049,10 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     enddo ; enddo
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
-         (CS%DX2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) * &
-          max(G%IdxCu(I,j)*US%m_to_L**2*G%IareaCu(I,j), G%IdxCu(I,j+1)*US%m_to_L**2*G%IareaCu(I,j+1)) ), &
-         (CS%DY2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J)) * &
-          max(G%IdyCv(i,J)*US%m_to_L**2*G%IareaCv(i,J), G%IdyCv(i+1,J)*US%m_to_L**2*G%IareaCv(i+1,J)) ) )
+         (CS%DX2q(I,J) * CS%DX_dyBu(I,J) * US%m_to_L*(G%IdxCu(I,j+1) + G%IdxCu(I,j)) * &
+          US%m_to_L**3*max(G%IdxCu(I,j)*G%IareaCu(I,j), G%IdxCu(I,j+1)*G%IareaCu(I,j+1)) ), &
+         (CS%DY2q(I,J) * CS%DY_dxBu(I,J) * US%m_to_L*(G%IdyCv(i+1,J) + G%IdyCv(i,J)) * &
+          US%m_to_L**3*max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Kh_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
         CS%Kh_Max_xy(I,J) = CS%bound_coef * 0.25 * Idt / denom
@@ -2066,22 +2070,22 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
       u0u(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DY_dxT(i+1,j)*US%m_to_L*(G%IdyCu(I+1,j) + G%IdyCu(I,j))   + &
                                   CS%DY2h(i,j) * CS%DY_dxT(i,j) * US%m_to_L*(G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
-                 CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
-                                  CS%DX2q(I,J-1)*CS%DX_dyBu(I,J-1)*(G%IdxCu(I,j) + G%IdxCu(I,j-1)) )
+                 CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DX_dyBu(I,J) * US%m_to_L*(G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
+                                  CS%DX2q(I,J-1)*CS%DX_dyBu(I,J-1)*US%m_to_L*(G%IdxCu(I,j) + G%IdxCu(I,j-1)) )
 
       u0v(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DX_dyT(i+1,j)*US%m_to_L*(G%IdxCv(i+1,J) + G%IdxCv(i+1,J-1)) + &
                                   CS%DY2h(i,j) * CS%DX_dyT(i,j) * US%m_to_L*(G%IdxCv(i,J) + G%IdxCv(i,J-1)) )   + &
-                 CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
-                                  CS%DX2q(I,J-1)*CS%DY_dxBu(I,J-1)*(G%IdyCv(i+1,J-1) + G%IdyCv(i,J-1)) )
+                 CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DY_dxBu(I,J) * US%m_to_L*(G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
+                                  CS%DX2q(I,J-1)*CS%DY_dxBu(I,J-1)*US%m_to_L*(G%IdyCv(i+1,J-1) + G%IdyCv(i,J-1)) )
     enddo ; enddo
     do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
-      v0u(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j))       + &
-                                  CS%DY2q(I-1,J)*CS%DX_dyBu(I-1,J)*(G%IdxCu(I-1,j+1) + G%IdxCu(I-1,j)) ) + &
+      v0u(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DX_dyBu(I,J) * US%m_to_L*(G%IdxCu(I,j+1) + G%IdxCu(I,j))       + &
+                                  CS%DY2q(I-1,J)*CS%DX_dyBu(I-1,J)*US%m_to_L*(G%IdxCu(I-1,j+1) + G%IdxCu(I-1,j)) ) + &
                  CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*CS%DY_dxT(i,j+1)*US%m_to_L*(G%IdyCu(I,j+1) + G%IdyCu(I-1,j+1))   + &
                                   CS%DX2h(i,j) * CS%DY_dxT(i,j) * US%m_to_L*(G%IdyCu(I,j) + G%IdyCu(I-1,j)) )
 
-      v0v(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
-                                  CS%DY2q(I-1,J)*CS%DY_dxBu(I-1,J)*(G%IdyCv(i,J) + G%IdyCv(i-1,J)) ) + &
+      v0v(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J) * CS%DY_dxBu(I,J) * US%m_to_L*(G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
+                                  CS%DY2q(I-1,J)*CS%DY_dxBu(I-1,J)*US%m_to_L*(G%IdyCv(i,J) + G%IdyCv(i-1,J)) ) + &
                  CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*CS%DX_dyT(i,j+1)*US%m_to_L*(G%IdxCv(i,J+1) + G%IdxCv(i,J))   + &
                                   CS%DX2h(i,j) * CS%DX_dyT(i,j) * US%m_to_L*(G%IdxCv(i,J) + G%IdxCv(i,J-1)) )
     enddo ; enddo
@@ -2104,13 +2108,13 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     do J=js-1,Jeq ; do I=is-1,Ieq
       denom = max( &
          (CS%DX2q(I,J) * &
-          (CS%DX_dyBu(I,J)*(u0u(I,j+1)*G%IdxCu(I,j+1) + u0u(I,j)*G%IdxCu(I,j))  + &
-           CS%DY_dxBu(I,J)*(v0u(i+1,J)*G%IdyCv(i+1,J) + v0u(i,J)*G%IdyCv(i,J))) * &
-          max(G%IdxCu(I,j)*US%m_to_L**2*G%IareaCu(I,j), G%IdxCu(I,j+1)*US%m_to_L**2*G%IareaCu(I,j+1)) ),    &
+          (CS%DX_dyBu(I,J)*US%m_to_L*(u0u(I,j+1)*G%IdxCu(I,j+1) + u0u(I,j)*G%IdxCu(I,j))  + &
+           CS%DY_dxBu(I,J)*US%m_to_L*(v0u(i+1,J)*G%IdyCv(i+1,J) + v0u(i,J)*G%IdyCv(i,J))) * &
+          US%m_to_L**3*max(G%IdxCu(I,j)*G%IareaCu(I,j), G%IdxCu(I,j+1)*G%IareaCu(I,j+1)) ),    &
          (CS%DY2q(I,J) * &
-          (CS%DX_dyBu(I,J)*(u0v(I,j+1)*G%IdxCu(I,j+1) + u0v(I,j)*G%IdxCu(I,j))  + &
-           CS%DY_dxBu(I,J)*(v0v(i+1,J)*G%IdyCv(i+1,J) + v0v(i,J)*G%IdyCv(i,J))) * &
-          max(G%IdyCv(i,J)*US%m_to_L**2*G%IareaCv(i,J), G%IdyCv(i+1,J)*US%m_to_L**2*G%IareaCv(i+1,J)) ) )
+          (CS%DX_dyBu(I,J)*US%m_to_L*(u0v(I,j+1)*G%IdxCu(I,j+1) + u0v(I,j)*G%IdxCu(I,j))  + &
+           CS%DY_dxBu(I,J)*US%m_to_L*(v0v(i+1,J)*G%IdyCv(i+1,J) + v0v(i,J)*G%IdyCv(i,J))) * &
+          US%m_to_L**3*max(G%IdyCv(i,J)*G%IareaCv(i,J), G%IdyCv(i+1,J)*G%IareaCv(i+1,J)) ) )
       CS%Ah_Max_xy(I,J) = 0.0
       if (denom > 0.0) &
         CS%Ah_Max_xy(I,J) = CS%bound_coef * 0.5 * Idt / denom

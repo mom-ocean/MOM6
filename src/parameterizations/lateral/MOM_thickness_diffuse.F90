@@ -183,12 +183,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
   do j=js,je ; do I=is-1,ie
     KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
-      (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + US%m_to_L**2*G%IdyCu(I,j)*G%IdyCu(I,j)))
+      (dt*US%m_to_L**2*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
   enddo ; enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
   do j=js-1,je ; do I=is,ie
     KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
-      (dt*(US%m_to_L**2*G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
+      (dt*US%m_to_L**2*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
 
   ! Calculates interface heights, e, in [Z ~> m].
@@ -804,7 +804,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               wtA = hg2A*haB ; wtB = hg2B*haA
               ! This is the gradient of density along geopotentials.
               drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
-                      drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+                      drdz * (e(i,j,K)-e(i+1,j,K))) * US%m_to_L*G%IdxCu(I,j)
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
@@ -822,7 +822,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! that ignore density gradients along layers.
             if (present_int_slope_u) then
               Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
-                      int_slope_u(I,j,K) * US%Z_to_m*((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
+                      int_slope_u(I,j,K) * US%Z_to_m*((e(i+1,j,K)-e(i,j,K)) * US%m_to_L*G%IdxCu(I,j))
               slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
             endif
 
@@ -857,7 +857,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
             else
-              Slope = US%Z_to_m*((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
+              Slope = US%Z_to_m*((e(i,j,K)-e(i+1,j,K))*US%m_to_L*G%IdxCu(I,j)) * G%mask2dCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
             Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j))*US%m_to_Z*Slope)
@@ -922,7 +922,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !         sfn_slope_x(I,j,K) = max(uhtot(I,j)-h_avail(i+1,j,k), &
 !                                  min(uhtot(I,j)+h_avail(i,j,k), &
 !               min(h_avail_rsum(i+1,j,K), max(-h_avail_rsum(i,j,K), &
-!               (KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
+!               (KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*US%m_to_L*G%IdxCu(I,j)) )) ))
         else ! k <= nk_linear
           ! Balance the deeper flow with a return flow uniformly distributed
           ! though the remaining near-surface layers.  This is the same as
@@ -1053,7 +1053,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               wtA = hg2A*haB ; wtB = hg2B*haA
               ! This is the gradient of density along geopotentials.
               drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                      drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+                      drdz * (e(i,j,K)-e(i,j+1,K))) * US%m_to_L*G%IdyCv(i,J)
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
@@ -1071,7 +1071,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! that ignore density gradients along layers.
             if (present_int_slope_v) then
               Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
-                      int_slope_v(i,J,K) * US%Z_to_m*((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
+                      int_slope_v(i,J,K) * US%Z_to_m*((e(i,j+1,K)-e(i,j,K)) * US%m_to_L*G%IdyCv(i,J))
               slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
             endif
 
@@ -1106,7 +1106,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
             else
-              Slope = US%Z_to_m*((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
+              Slope = US%Z_to_m*((e(i,j,K)-e(i,j+1,K))*US%m_to_L*G%IdyCv(i,J)) * G%mask2dCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
             Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J))*US%m_to_Z*Slope)
@@ -1171,7 +1171,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !         sfn_slope_y(i,J,K) = max(vhtot(i,J)-h_avail(i,j+1,k), &
 !                                  min(vhtot(i,J)+h_avail(i,j,k), &
 !               min(h_avail_rsum(i,j+1,K), max(-h_avail_rsum(i,j,K), &
-!               (KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
+!               (KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*US%m_to_L*G%IdyCv(i,J)) )) ))
         else ! k <= nk_linear
           ! Balance the deeper flow with a return flow uniformly distributed
           ! though the remaining near-surface layers.  This is the same as
@@ -1536,8 +1536,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 
           adH = abs(dH)
           sign = 1.0*US%Z_to_m ; if (dH < 0) sign = -1.0*US%Z_to_m
-          sl_K = sign * (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
-          sl_Kp1 = sign * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
+          sl_K = sign * (e(i+1,j,K)-e(i,j,K)) * US%m_to_L*G%IdxCu(I,j)
+          sl_Kp1 = sign * (e(i+1,j,K+1)-e(i,j,K+1)) * US%m_to_L*G%IdxCu(I,j)
 
           ! Add the incremental diffusivites to the surrounding interfaces.
           ! Adding more to the more steeply sloping layers (as below) makes
@@ -1559,8 +1559,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 
           adH = abs(dH)
           sign = 1.0*US%Z_to_m ; if (dH < 0) sign = -1.0*US%Z_to_m
-          sl_K = sign * (e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J)
-          sl_Kp1 = sign * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
+          sl_K = sign * (e(i,j+1,K)-e(i,j,K)) * US%m_to_L*G%IdyCv(i,J)
+          sl_Kp1 = sign * (e(i,j+1,K+1)-e(i,j,K+1)) * US%m_to_L*G%IdyCv(i,J)
 
           ! Add the incremental diffusviites to the surrounding interfaces.
           ! Adding more to the more steeply sloping layers (as below) makes
@@ -1681,8 +1681,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 !           if (n==1) then ! u-point.
 !             if ((h(i+1,j,k) - h(i,j,k)) * &
 !                 ((e(i+1,j,K)-e(i+1,j,K+1)) - (e(i,j,K)-e(i,j,K+1))) > 0.0) then
-!               Sfn(K) = -Kh(i,K) * (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
-!               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
+!               Sfn(K) = -Kh(i,K) * (e(i+1,j,K)-e(i,j,K)) * US%m_to_L*G%IdxCu(I,j)
+!               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * US%m_to_L*G%IdxCu(I,j)
 !               uh_here(k) = (Sfn(K) - Sfn(K+1))*US%L_to_m*G%dy_Cu(I,j)
 !               if (abs(uh_here(k))*min(US%m_to_L**2*G%IareaT(i,j), US%m_to_L**2*G%IareaT(i+1,j)) > &
 !                   (1e-10*GV%m_to_H)) then
@@ -1701,8 +1701,8 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 !           else ! v-point
 !             if ((h(i,j+1,k) - h(i,j,k)) * &
 !                 ((e(i,j+1,K)-e(i,j+1,K+1)) - (e(i,j,K)-e(i,j,K+1))) > 0.0) then
-!               Sfn(K) = -Kh(i,K) * (e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J)
-!               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
+!               Sfn(K) = -Kh(i,K) * (e(i,j+1,K)-e(i,j,K)) * US%m_to_L*G%IdyCv(i,J)
+!               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * US%m_to_L*G%IdyCv(i,J)
 !               uh_here(k) = (Sfn(K) - Sfn(K+1))*US%L_to_m*G%dx_Cv(i,J)
 !               if (abs(uh_here(K))*min(US%m_to_L**2*G%IareaT(i,j), US%m_to_L**2*G%IareaT(i,j+1)) > &
 !                   (1e-10*GV%m_to_H)) then
@@ -1719,7 +1719,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 !               endif
 !             endif
 !           endif ! u- or v- selection.
-!          !  de_dx(I,K) = (e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j)
+!          !  de_dx(I,K) = (e(i+1,j,K)-e(i,j,K)) * US%m_to_L*G%IdxCu(I,j)
 !         endif
 !       enddo
 !     enddo

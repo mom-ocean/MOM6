@@ -647,7 +647,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
   if (option==1) then ! 1-degree settings.
     do j=jsd,jed ; do I=IsdB,IedB  ! Change any u-face lengths within this loop.
-      dy_2 = dx_2 * L_to_m*G%dyCu(I,j)*G%IdxCu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
+      dy_2 = dx_2 * G%dyCu(I,j)*G%IdxCu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
 
       if ((abs(G%geoLatCu(I,j)-35.5) < dy_2) .and. (G%geoLonCu(I,j) < -4.5) .and. &
           (G%geoLonCu(I,j) > -6.5)) &

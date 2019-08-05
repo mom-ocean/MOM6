@@ -590,19 +590,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           else
             temp2 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
           endif
-          CAu(I,j,k) = 0.25 * US%L_to_m*G%IdxCu(I,j) * (temp1 + temp2)
+          CAu(I,j,k) = 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do j=js,je ; do I=Isq,Ieq
           CAu(I,j,k) = 0.25 * &
             (q(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * US%L_to_m*G%IdxCu(I,j)
+             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = 0.125 * (US%L_to_m*G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
+        CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
                      ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -611,7 +611,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
       do j=js,je ; do I=Isq,Ieq
         CAu(I,j,k) = ((a(I,j) * vh(i+1,J,k) +  c(I,j) * vh(i,J-1,k))  + &
-                      (b(I,j) * vh(i,J,k) +  d(I,j) * vh(i+1,J-1,k))) * US%L_to_m*G%IdxCu(I,j)
+                      (b(I,j) * vh(i,J,k) +  d(I,j) * vh(i+1,J-1,k))) * G%IdxCu(I,j)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
@@ -633,12 +633,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
           CAu(I,j,k) = 0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
                        ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k)) ) /  &
-                       (h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) * US%L_to_m*G%IdxCu(I,j)
+                       (h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) * G%IdxCu(I,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           VHeff = ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k)) )
           QVHeff = 0.5*( (abs_vort(I,J)+abs_vort(I,J-1))*VHeff &
                         -(abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff) )
-          CAu(I,j,k) = (QVHeff / ( h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) ) * US%L_to_m*G%IdxCu(I,j)
+          CAu(I,j,k) = (QVHeff / ( h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) ) * G%IdxCu(I,j)
         endif
       enddo ; enddo
     endif
@@ -646,7 +646,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) + &
-            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * US%L_to_m*G%IdxCu(I,j)
+            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IdxCu(I,j)
     enddo ; enddo ; endif
 
 
@@ -694,19 +694,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           else
             temp2 = q(I,J) * (uh_min(i,j)+uh_min(i,j+1))
           endif
-          CAv(i,J,k) = -0.25 * US%L_to_m*G%IdyCv(i,J) * (temp1 + temp2)
+          CAv(i,J,k) = -0.25 * G%IdyCv(i,J) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do J=Jsq,Jeq ; do i=is,ie
           CAv(i,J,k) = - 0.25* &
               (q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * US%L_to_m*G%IdyCv(i,J)
+               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = -0.125 * (US%L_to_m*G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
+        CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
                      ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -717,7 +717,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         CAv(i,J,k) = - ((a(I-1,j)   * uh(I-1,j,k) + &
                          c(I,j+1)   * uh(I,j+1,k))  &
                       + (b(I,j)     * uh(I,j,k) +   &
-                         d(I-1,j+1) * uh(I-1,j+1,k))) * US%L_to_m*G%IdyCv(i,J)
+                         d(I-1,j+1) * uh(I-1,j+1,k))) * G%IdyCv(i,J)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
@@ -740,14 +740,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           CAv(i,J,k) = - 0.5*(abs_vort(I,J)+abs_vort(I-1,J)) * &
                          ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                           (uh(I-1,j  ,k)+uh(I  ,j+1,k)) ) /    &
-                      (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * US%L_to_m*G%IdyCv(i,J)
+                      (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           UHeff = ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                    (uh(I-1,j  ,k)+uh(I  ,j+1,k)) )
           QUHeff = 0.5*( (abs_vort(I,J)+abs_vort(I-1,J))*UHeff &
                         -(abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff) )
           CAv(i,J,k) = - QUHeff / &
-                       (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * US%L_to_m*G%IdyCv(i,J)
+                       (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         endif
       enddo ; enddo
     endif
@@ -755,7 +755,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) + &
-            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * US%L_to_m*G%IdyCv(i,J)
+            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * G%IdyCv(i,J)
     enddo ; enddo ; endif
 
     if (CS%bound_Coriolis) then
@@ -783,7 +783,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * US%L_to_m*G%IdyCv(i,J)
+               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
           enddo ; enddo
         endif
 
@@ -791,13 +791,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
-               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * US%L_to_m*G%IdxCu(I,j)
+               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
           enddo ; enddo
         endif
       else
         if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            AD%rv_x_u(i,J,k) = -US%L_to_m*G%IdyCv(i,J) * C1_12 * &
+            AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * uh(I,j,k) + &
                (q2(I-1,J) + q2(I,J+1) + q2(I,J)) * uh(I,j+1,k) + &
@@ -807,7 +807,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 
         if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
-            AD%rv_x_v(I,j,k) = US%L_to_m*G%IdxCu(I,j) * C1_12 * &
+            AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
                (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * vh(i,J,k) + &
                (q2(I-1,J-1) + q2(I,J) + q2(I,J-1)) * vh(i,J-1,k) + &
@@ -893,12 +893,12 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, US, CS)
 
   ! Term - d(KE)/dx.
   do j=js,je ; do I=Isq,Ieq
-    KEx(I,j) = US%m_s_to_L_T**2*(KE(i+1,j) - KE(i,j)) * US%L_to_m*G%IdxCu(I,j)
+    KEx(I,j) = US%m_s_to_L_T**2*(KE(i+1,j) - KE(i,j)) * G%IdxCu(I,j)
   enddo ; enddo
 
   ! Term - d(KE)/dy.
   do J=Jsq,Jeq ; do i=is,ie
-    KEy(i,J) = US%m_s_to_L_T**2*(KE(i,j+1) - KE(i,j)) * US%L_to_m*G%IdyCv(i,J)
+    KEy(i,J) = US%m_s_to_L_T**2*(KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
   enddo ; enddo
 
   if (associated(OBC)) then

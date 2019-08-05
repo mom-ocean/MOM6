@@ -384,7 +384,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                    (za(i+1,j)*dp(i+1,j) + intp_dza(i+1,j,k))) + &
                    ((dp(i+1,j) - dp(i,j)) * intx_za(I,j) - &
                    (p(i+1,j,K) - p(i,j,K)) * intx_dza(I,j,k))) * &
-                   (US%m_s_to_L_T**2 * 2.0*US%L_to_m*G%IdxCu(I,j) / &
+                   (US%m_s_to_L_T**2 * 2.0*G%IdxCu(I,j) / &
                    ((dp(i,j) + dp(i+1,j)) + dp_neglect))
     enddo ; enddo
     !$OMP parallel do default(shared)
@@ -394,7 +394,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
                    (za(i,j+1)*dp(i,j+1) + intp_dza(i,j+1,k))) + &
                    ((dp(i,j+1) - dp(i,j)) * inty_za(i,J) - &
                    (p(i,j+1,K) - p(i,j,K)) * inty_dza(i,J,k))) * &
-                   (US%m_s_to_L_T**2 * 2.0*US%L_to_m*G%IdyCv(i,J) / &
+                   (US%m_s_to_L_T**2 * 2.0*G%IdyCv(i,J) / &
                    ((dp(i,j) + dp(i,j+1)) + dp_neglect))
     enddo ; enddo
 
@@ -402,11 +402,11 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p
       ! Adjust the Montgomery potential to make this a reduced gravity model.
       !$OMP parallel do default(shared)
       do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * US%L_to_m*G%IdxCu(I,j)
+        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * US%L_to_m*G%IdyCv(i,J)
+        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo ; enddo
     endif
   enddo
@@ -722,7 +722,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                    (pa(i+1,j)*h(i+1,j,k) + intz_dpa(i+1,j))) + &
                    ((h(i+1,j,k) - h(i,j,k)) * intx_pa(I,j) - &
                    (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa(I,j) * GV%Z_to_H)) * &
-                   ((2.0*I_Rho0*US%L_to_m*G%IdxCu(I,j)) / &
+                   ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                    ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
       intx_pa(I,j) = intx_pa(I,j) + intx_dpa(I,j)
     enddo ; enddo
@@ -733,7 +733,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
                    (pa(i,j+1)*h(i,j+1,k) + intz_dpa(i,j+1))) + &
                    ((h(i,j+1,k) - h(i,j,k)) * inty_pa(i,J) - &
                    (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa(i,J) * GV%Z_to_H)) * &
-                   ((2.0*I_Rho0*US%L_to_m*G%IdyCv(i,J)) / &
+                   ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                    ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
       inty_pa(i,J) = inty_pa(i,J) + inty_dpa(i,J)
     enddo ; enddo
@@ -747,11 +747,11 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_at
     do k=1,nz
       !$OMP parallel do default(shared)
       do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * US%L_to_m*G%IdxCu(I,j)
+        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * US%L_to_m*G%IdyCv(i,J)
+        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
   endif

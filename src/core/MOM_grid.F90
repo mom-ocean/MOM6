@@ -93,7 +93,7 @@ type, public :: ocean_grid_type
     geoLatCu, &  !< The geographic latitude at u points in degrees of latitude or m.
     geoLonCu, &  !< The geographic longitude at u points in degrees of longitude or m.
     dxCu, &      !< dxCu is delta x at u points [L ~> m].
-    IdxCu, &     !< 1/dxCu [m-1].
+    IdxCu, &     !< 1/dxCu [L-1 ~> m-1].
     dyCu, &      !< dyCu is delta y at u points [L ~> m].
     IdyCu, &     !< 1/dyCu [L-1 ~> m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
@@ -107,7 +107,7 @@ type, public :: ocean_grid_type
     dxCv, &      !< dxCv is delta x at v points [L ~> m].
     IdxCv, &     !< 1/dxCv [L-1 ~> m-1].
     dyCv, &      !< dyCv is delta y at v points [L ~> m].
-    IdyCv, &     !< 1/dyCv [m-1].
+    IdyCv, &     !< 1/dyCv [L-1 ~> m-1].
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
     IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
@@ -431,7 +431,7 @@ subroutine set_derived_metrics(G, US)
   do j=jsd,jed ; do I=IsdB,IedB
     if (G%dxCu(I,j) < 0.0) G%dxCu(I,j) = 0.0
     if (G%dyCu(I,j) < 0.0) G%dyCu(I,j) = 0.0
-    G%IdxCu(I,j) = Adcroft_reciprocal(US%L_to_m*G%dxCu(I,j))
+    G%IdxCu(I,j) = Adcroft_reciprocal(G%dxCu(I,j))
     G%IdyCu(I,j) = Adcroft_reciprocal(G%dyCu(I,j))
   enddo ; enddo
 
@@ -439,7 +439,7 @@ subroutine set_derived_metrics(G, US)
     if (G%dxCv(i,J) < 0.0) G%dxCv(i,J) = 0.0
     if (G%dyCv(i,J) < 0.0) G%dyCv(i,J) = 0.0
     G%IdxCv(i,J) = Adcroft_reciprocal(G%dxCv(i,J))
-    G%IdyCv(i,J) = Adcroft_reciprocal(US%L_to_m*G%dyCv(i,J))
+    G%IdyCv(i,J) = Adcroft_reciprocal(G%dyCv(i,J))
   enddo ; enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB

@@ -157,7 +157,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
     enddo ; enddo
   enddo
 
-  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
   !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
   !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
@@ -223,7 +223,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         !          ((hg2L/haL) + (hg2R/haR))
         ! This is the gradient of density along geopotentials.
         drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
-                drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+                drdz * (e(i,j,K)-e(i+1,j,K))) * US%m_to_L*G%IdxCu(I,j)
 
         ! This estimate of slope is accurate for small slopes, but bounded
         ! to be between -1 and 1.
@@ -237,7 +237,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of Brunt-Vaisala frequency [s-2]
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = (Z_to_L*(e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+        slope_x(I,j,K) = (Z_to_L*(e(i,j,K)-e(i+1,j,K))) * US%m_to_L*G%IdxCu(I,j)
       endif
 
     enddo ! I
@@ -307,7 +307,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         !          ((hg2L/haL) + (hg2R/haR))
         ! This is the gradient of density along geopotentials.
         drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+                drdz * (e(i,j,K)-e(i,j+1,K))) * US%m_to_L*G%IdyCv(i,J)
 
         ! This estimate of slope is accurate for small slopes, but bounded
         ! to be between -1 and 1.
@@ -321,7 +321,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of Brunt-Vaisala frequency [s-2]
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = (Z_to_L*(e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+        slope_y(i,J,K) = (Z_to_L*(e(i,j,K)-e(i,j+1,K))) * US%m_to_L*G%IdyCv(i,J)
       endif
 
     enddo ! i

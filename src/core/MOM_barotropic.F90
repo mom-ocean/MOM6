@@ -1393,16 +1393,16 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ! gravity waves, but it is a conservative estimate since it ignores the
       ! stabilizing effect of the bottom drag.
       Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (G%IareaT(i,j) * &
-            ((gtot_E(i,j) * (Datu(I,j)*US%L_to_m*G%IdxCu(I,j)) + &
-              gtot_W(i,j) * (Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j))) + &
-             (gtot_N(i,j) * (Datv(i,J)*US%L_to_m*G%IdyCv(i,J)) + &
-              gtot_S(i,j) * (Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1)))) + &
+            ((gtot_E(i,j) * (Datu(I,j)*G%IdxCu(I,j)) + &
+              gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
+             (gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J)) + &
+              gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1)))) + &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
       H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j))**2 + (G%IdyT(i,j))**2), &
                       G%IareaT(i,j) * &
-                        ((Datu(I,j)*US%L_to_m*G%IdxCu(I,j) + Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j)) + &
-                         (Datv(i,J)*US%L_to_m*G%IdyCv(i,J) + Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1)) ) )
+                        ((Datu(I,j)*G%IdxCu(I,j) + Datu(I-1,j)*G%IdxCu(I-1,j)) + &
+                         (Datv(i,J)*G%IdyCv(i,J) + Datv(i,J-1)*G%IdyCv(i,J-1)) ) )
       dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
                      (dtbt**2 * H_eff_dx2)
 
@@ -2351,8 +2351,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
-      ((gtot_E(i,j)*Datu(I,j)*US%L_to_m*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*US%L_to_m*G%IdxCu(I-1,j)) + &
-       (gtot_N(i,j)*Datv(i,J)*US%L_to_m*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*US%L_to_m*G%IdyCv(i,J-1))) + &
+      ((gtot_E(i,j)*Datu(I,j)*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IdxCu(I-1,j)) + &
+       (gtot_N(i,j)*Datv(i,J)*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IdyCv(i,J-1))) + &
       ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
        (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)))
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
@@ -2449,7 +2449,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vel_trans = ubt(I,j)
       elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
         if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
-          cfl = dtbt * BT_OBC%Cg_u(I,j) * US%L_to_m*G%IdxCu(I,j) ! CFL
+          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
           h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
           H_u = BT_OBC%H_u(I,j)
@@ -2463,7 +2463,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
       elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
         if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
-          cfl = dtbt * BT_OBC%Cg_u(I,j) * US%L_to_m*G%IdxCu(I,j) ! CFL
+          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
           h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! external
 
@@ -2499,7 +2499,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vel_trans = vbt(i,J)
       elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
         if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
-          cfl = dtbt * BT_OBC%Cg_v(i,J) * US%L_to_m*G%IdyCv(I,j) ! CFL
+          cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j) ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
           h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
 
@@ -2515,7 +2515,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
       elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
         if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
-          cfl = dtbt * BT_OBC%Cg_v(i,J) * US%L_to_m*G%IdyCv(I,j) ! CFL
+          cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j) ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
           h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
 
@@ -4085,10 +4085,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   ! Note: G%IdxCu & G%IdyCv may be valid for a smaller extent than CS%IdxCu & CS%IdyCv, even without
   !   wide halos.
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    CS%IdxCu(I,j) = US%L_to_m*G%IdxCu(I,j) ; CS%dy_Cu(I,j) = G%dy_Cu(I,j)
+    CS%IdxCu(I,j) = G%IdxCu(I,j) ; CS%dy_Cu(I,j) = G%dy_Cu(I,j)
   enddo ; enddo
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    CS%IdyCv(I,j) = US%L_to_m*G%IdyCv(I,j) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
+    CS%IdyCv(I,j) = G%IdyCv(I,j) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
   call create_group_pass(pass_static_data, CS%IareaT, CS%BT_domain, To_All)
   call create_group_pass(pass_static_data, CS%bathyT, CS%BT_domain, To_All)

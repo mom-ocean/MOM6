@@ -180,7 +180,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     endif ; enddo
     write(file,'(/,"CFL0 u:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    abs(um(I,j,k)) * dt * G%IdxCu(I,j) ; enddo
+                                    abs(um(I,j,k)) * dt * US%m_to_L*G%IdxCu(I,j) ; enddo
 
     if (prev_avail) then
       write(file,'(/,"du:    ",$)')
@@ -511,7 +511,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     endif ; enddo
     write(file,'(/,"CFL0 v:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    abs(vm(i,J,k)) * dt * G%IdyCv(i,J) ; enddo
+                                    abs(vm(i,J,k)) * dt * US%m_to_L*G%IdyCv(i,J) ; enddo
 
     if (prev_avail) then
       write(file,'(/,"dv:    ",$)')

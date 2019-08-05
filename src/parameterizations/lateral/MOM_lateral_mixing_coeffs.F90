@@ -622,12 +622,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
     if (calculate_slopes) then
       ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        E_x(I,j) = Z_to_L*(e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
+        E_x(I,j) = Z_to_L*(e(i+1,j,K)-e(i,j,K))*US%m_to_L*G%IdxCu(I,j)
         ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) E_x(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        E_y(i,J) = Z_to_L*(e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
+        E_y(i,J) = Z_to_L*(e(i,j+1,K)-e(i,j,K))*US%m_to_L*G%IdyCv(i,J)
         ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
       enddo ; enddo

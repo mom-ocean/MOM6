@@ -320,17 +320,17 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
         ! PFu_bc = p* grad alpha*
-        PFu_bc = US%m_s_to_L_T**2*(alpha_star(i+1,j,k) - alpha_star(i,j,k)) * (US%L_to_m*G%IdxCu(I,j) * &
+        PFu_bc = US%m_s_to_L_T**2*(alpha_star(i+1,j,k) - alpha_star(i,j,k)) * (G%IdxCu(I,j) * &
           ((dp_star(i,j) * dp_star(i+1,j) + (p(i,j,K) * dp_star(i+1,j) + &
            p(i+1,j,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i+1,j))))
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * US%L_to_m*G%IdxCu(I,j) + PFu_bc
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
         if (associated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv_bc = US%m_s_to_L_T**2*(alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (US%L_to_m*G%IdyCv(i,J) * &
+        PFv_bc = US%m_s_to_L_T**2*(alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((dp_star(i,j) * dp_star(i,j+1) + (p(i,j,K) * dp_star(i,j+1) + &
           p(i,j+1,K) * dp_star(i,j))) / (dp_star(i,j) + dp_star(i,j+1))))
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * US%L_to_m*G%IdyCv(i,J) + PFv_bc
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
         if (associated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
@@ -338,10 +338,10 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     !$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * US%L_to_m*G%IdxCu(I,j)
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * US%L_to_m*G%IdyCv(i,J)
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
   endif ! use_EOS
@@ -552,17 +552,17 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
         h_star(i,j) = (e(i,j,K) - e(i,j,K+1)) + h_neglect
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
-        PFu_bc = -1.0*(rho_star(i+1,j,k) - rho_star(i,j,k)) * (US%L_to_m*G%IdxCu(I,j) * &
+        PFu_bc = -1.0*(rho_star(i+1,j,k) - rho_star(i,j,k)) * (G%IdxCu(I,j) * &
           ((h_star(i,j) * h_star(i+1,j) - (e(i,j,K) * h_star(i+1,j) + &
           e(i+1,j,K) * h_star(i,j))) / (h_star(i,j) + h_star(i+1,j))))
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * US%L_to_m*G%IdxCu(I,j) + PFu_bc
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
         if (associated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (US%L_to_m*G%IdyCv(i,J) * &
+        PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((h_star(i,j) * h_star(i,j+1) - (e(i,j,K) * h_star(i,j+1) + &
           e(i,j+1,K) * h_star(i,j))) / (h_star(i,j) + h_star(i,j+1))))
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * US%L_to_m*G%IdyCv(i,J) + PFv_bc
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
         if (associated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
@@ -570,10 +570,10 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     !$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * US%L_to_m*G%IdxCu(I,j)
+        PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * US%L_to_m*G%IdyCv(i,J)
+        PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
   endif ! use_EOS
