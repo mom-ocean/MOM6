@@ -28,31 +28,52 @@ MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
 #MKMF_TEMPLATE = "ncrc-gnu.mk"
 #MKMF_TEMPLATE = "ncrc-intel.mk"
 
+# Reference codebase
+MOM_COMMIT = $(shell git rev-parse HEAD)
+MOM_REF = origin/dev/gfdl
+
+# Grid types
+GRIDS = symmetric asymmetric
+
+# Test experiments
+TESTS = benchmark unit_tests
+
 #-------------------
+# Executable
 
 .PHONY: all
-all: MOM6
+all: $(foreach g,$(GRIDS),build/$(g)/MOM6)
 
-# TODO: Split into libmom6 and executable?
-MOM6: build/Makefile $(FMS)/lib/libfms.a
-	make -C build NETCDF=3 DEBUG=1 COVERAGE=1 ../$@
+build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
+	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
 
-build/Makefile: build/path_names
+build/%/Makefile: build/%/path_names
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(MKMF_TEMPLATE) \
-		-o '-I ../$(FMS)/build' \
-		-p ../MOM6 \
-		-l '../$(FMS)/lib/libfms.a' \
+		-o '-I ../../$(FMS)/build' \
+		-p MOM6 \
+		-l '../../$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
-		$(notdir $<)
+		path_names
 
-build/path_names: src $(MOM_FILES) $(LIST_PATHS)
+# TODO: Merge path_names rules?
+build/symmetric/path_names: $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		../src \
-		../config_src/solo_driver \
-		../config_src/dynamic_symmetric
+		../../src \
+		../../config_src/solo_driver \
+		../../config_src/dynamic_symmetric
+
+build/asymmetric/path_names: $(LIST_PATHS)
+	mkdir -p $(@D)
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../src \
+		../../config_src/solo_driver \
+		../../config_src/dynamic
+
+#----
+# FMS build
 
 $(FMS)/lib/libfms.a: $(FMS)/build/Makefile
 	mkdir -p $(FMS)/lib
@@ -64,7 +85,7 @@ $(FMS)/build/Makefile: $(FMS)/build/path_names
 		-t $(MKMF_TEMPLATE) \
 		-p ../lib/libfms.a \
 		-c $(MKMF_CPP) \
-		$(notdir $<)
+		path_names
 
 $(FMS)/build/path_names: $(FMS)/src $(FMS_FILES) $(LIST_PATHS)
 	mkdir -p $(@D)
@@ -74,18 +95,49 @@ $(FMS)/src:
 	git clone $(FMS_URL) $@
 	cd $@; git checkout $(FMS_COMMIT)
 
+#----
+# Build Toolchain
+
 $(LIST_PATHS) $(MKMF):
 	git clone $(MKMF_URL) $(DEPS)/mkmf
 	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
 #----
-TESTS = benchmark unit_tests circle_obcs
+# Testing
 
-.PHONY: test $(TESTS)
+.PHONY: test
 test: $(TESTS)
 
+.PHONY: $(TESTS)
 $(TESTS):
-	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
+	# Clear prior gcov results
+	find build -name *.gcda -exec rm -f '{}' \;
 	mkdir -p .testing/$@/RESTART
-	cd .testing/$@ && $(MPIRUN) -n 1 ../../MOM6
+	cd .testing/$@ && $(MPIRUN) -n 1 ../../build/symmetric/MOM6
+	# Report to codecov.io
 	bash <(curl -s https://codecov.io/bash) -n $@
+
+.PHONY: gridtest
+gridtest: $(foreach t,$(TESTS),$(t).grid)
+
+expt = $(word 3,$(subst /, ,$@))
+
+%.grid: $(foreach g,$(GRIDS),.testing/results/%/ocean.stats.$(g))
+	cmp $^
+
+.testing/results/%/ocean.stats.symmetric: build/symmetric/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
+.testing/results/%/ocean.stats.asymmetric: build/asymmetric/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
+#----
+.PHONY: clean
+clean:
+	rm -rf build
