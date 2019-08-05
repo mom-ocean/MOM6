@@ -629,7 +629,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         f2_h = absurdly_small_freq2 + 0.25 * US%s_to_T**2 * &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        mag_beta = sqrt(0.5 * US%s_to_T**2 * ( &
+        mag_beta = sqrt(0.5 * US%s_to_T**2*US%m_to_L**2 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -678,7 +678,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         f2_h = absurdly_small_freq2 + 0.25 * US%s_to_T**2 * &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        mag_beta = sqrt(0.5 * US%s_to_T**2 * ( &
+        mag_beta = sqrt(0.5 * US%s_to_T**2*US%m_to_L**2 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &

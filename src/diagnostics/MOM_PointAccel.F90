@@ -285,7 +285,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"vh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%vh(i,J-1,k)*G%IdxCv(i,J-1)); enddo
+                                    (uh_scale*CDp%vh(i,J-1,k)*US%m_to_L*G%IdxCv(i,J-1)); enddo
     write(file,'(/," vhC--:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                         (0.5*CS%v_av(i,j-1,k)*h_scale*(hin(i,j-1,k) + hin(i,j,k))); enddo
@@ -297,7 +297,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"vh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%vh(i,J,k)*G%IdxCv(i,J)); enddo
+                                    (uh_scale*CDp%vh(i,J,k)*US%m_to_L*G%IdxCv(i,J)); enddo
     write(file,'(/," vhC-+:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                         (0.5*CS%v_av(i,J,k)*h_scale*(hin(i,j,k) + hin(i,j+1,k))); enddo
@@ -309,7 +309,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"vh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (uh_scale*CDp%vh(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
+                                      (uh_scale*CDp%vh(i+1,J-1,k)*US%m_to_L*G%IdxCv(i+1,J-1)); enddo
     write(file,'(/," vhC+-:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                     (0.5*CS%v_av(i+1,J-1,k)*h_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
@@ -321,7 +321,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"vh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (uh_scale*CDp%vh(i+1,J,k)*G%IdxCv(i+1,J)); enddo
+                          (uh_scale*CDp%vh(i+1,J,k)*US%m_to_L*G%IdxCv(i+1,J)); enddo
     write(file,'(/," vhC++:",$)')
          do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
                      (0.5*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
@@ -619,7 +619,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"uh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I-1,j,k)*G%IdyCu(I-1,j)); enddo
+                                    (uh_scale*CDp%uh(I-1,j,k)*US%m_to_L*G%IdyCu(I-1,j)); enddo
     write(file,'(/," uhC--: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
             (CS%u_av(I-1,j,k) * h_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))); enddo
@@ -631,7 +631,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"uh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
+                                    (uh_scale*CDp%uh(I-1,j+1,k)*US%m_to_L*G%IdyCu(I-1,j+1)); enddo
     write(file,'(/," uhC-+: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
             (CS%u_av(I-1,j+1,k) * h_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
@@ -643,7 +643,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"uh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I,j,k)*G%IdyCu(I,j)); enddo
+                                    (uh_scale*CDp%uh(I,j,k)*US%m_to_L*G%IdyCu(I,j)); enddo
     write(file,'(/," uhC+-: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
             (CS%u_av(I,j,k) * h_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))); enddo
@@ -655,7 +655,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     write(file,'(/,"uh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I,j+1,k)*G%IdyCu(I,j+1)); enddo
+                                    (uh_scale*CDp%uh(I,j+1,k)*US%m_to_L*G%IdyCu(I,j+1)); enddo
     write(file,'(/," uhC++: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
             (CS%u_av(I,j+1,k) * 0.5*h_scale*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo

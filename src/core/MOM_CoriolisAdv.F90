@@ -618,16 +618,16 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       ! Note: Heffs are in lieu of h_at_v that should be returned by the
       !       continuity solver. AJA
       do j=js,je ; do I=Isq,Ieq
-        Heff1 = abs(vh(i,J,k) * US%L_to_m*G%IdxCv(i,J)) / (US%m_s_to_L_T*(eps_vel+abs(v(i,J,k))))
+        Heff1 = abs(vh(i,J,k) * G%IdxCv(i,J)) / (US%m_s_to_L_T*(eps_vel+abs(v(i,J,k))))
         Heff1 = max(Heff1, min(h(i,j,k),h(i,j+1,k)))
         Heff1 = min(Heff1, max(h(i,j,k),h(i,j+1,k)))
-        Heff2 = abs(vh(i,J-1,k) * US%L_to_m*G%IdxCv(i,J-1)) / (US%m_s_to_L_T*(eps_vel+abs(v(i,J-1,k))))
+        Heff2 = abs(vh(i,J-1,k) * G%IdxCv(i,J-1)) / (US%m_s_to_L_T*(eps_vel+abs(v(i,J-1,k))))
         Heff2 = max(Heff2, min(h(i,j-1,k),h(i,j,k)))
         Heff2 = min(Heff2, max(h(i,j-1,k),h(i,j,k)))
-        Heff3 = abs(vh(i+1,J,k) * US%L_to_m*G%IdxCv(i+1,J)) / (US%m_s_to_L_T*(eps_vel+abs(v(i+1,J,k))))
+        Heff3 = abs(vh(i+1,J,k) * G%IdxCv(i+1,J)) / (US%m_s_to_L_T*(eps_vel+abs(v(i+1,J,k))))
         Heff3 = max(Heff3, min(h(i+1,j,k),h(i+1,j+1,k)))
         Heff3 = min(Heff3, max(h(i+1,j,k),h(i+1,j+1,k)))
-        Heff4 = abs(vh(i+1,J-1,k) * US%L_to_m*G%IdxCv(i+1,J-1)) / (US%m_s_to_L_T*(eps_vel+abs(v(i+1,J-1,k))))
+        Heff4 = abs(vh(i+1,J-1,k) * G%IdxCv(i+1,J-1)) / (US%m_s_to_L_T*(eps_vel+abs(v(i+1,J-1,k))))
         Heff4 = max(Heff4, min(h(i+1,j-1,k),h(i+1,j,k)))
         Heff4 = min(Heff4, max(h(i+1,j-1,k),h(i+1,j,k)))
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
@@ -724,16 +724,16 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       ! Note: Heffs are in lieu of h_at_u that should be returned by the
       !       continuity solver. AJA
       do J=Jsq,Jeq ; do i=is,ie
-        Heff1 = abs(uh(I,j,k) * US%L_to_m*G%IdyCu(I,j)) / (US%m_s_to_L_T*(eps_vel+abs(u(I,j,k))))
+        Heff1 = abs(uh(I,j,k) * G%IdyCu(I,j)) / (US%m_s_to_L_T*(eps_vel+abs(u(I,j,k))))
         Heff1 = max(Heff1, min(h(i,j,k),h(i+1,j,k)))
         Heff1 = min(Heff1, max(h(i,j,k),h(i+1,j,k)))
-        Heff2 = abs(uh(I-1,j,k) * US%L_to_m*G%IdyCu(I-1,j)) / (US%m_s_to_L_T*(eps_vel+abs(u(I-1,j,k))))
+        Heff2 = abs(uh(I-1,j,k) * G%IdyCu(I-1,j)) / (US%m_s_to_L_T*(eps_vel+abs(u(I-1,j,k))))
         Heff2 = max(Heff2, min(h(i-1,j,k),h(i,j,k)))
         Heff2 = min(Heff2, max(h(i-1,j,k),h(i,j,k)))
-        Heff3 = abs(uh(I,j+1,k) * US%L_to_m*G%IdyCu(I,j+1)) / (US%m_s_to_L_T*(eps_vel+abs(u(I,j+1,k))))
+        Heff3 = abs(uh(I,j+1,k) * G%IdyCu(I,j+1)) / (US%m_s_to_L_T*(eps_vel+abs(u(I,j+1,k))))
         Heff3 = max(Heff3, min(h(i,j+1,k),h(i+1,j+1,k)))
         Heff3 = min(Heff3, max(h(i,j+1,k),h(i+1,j+1,k)))
-        Heff4 = abs(uh(I-1,j+1,k) * US%L_to_m*G%IdyCu(I-1,j+1)) / (US%m_s_to_L_T*(eps_vel+abs(u(I-1,j+1,k))))
+        Heff4 = abs(uh(I-1,j+1,k) * G%IdyCu(I-1,j+1)) / (US%m_s_to_L_T*(eps_vel+abs(u(I-1,j+1,k))))
         Heff4 = max(Heff4, min(h(i-1,j+1,k),h(i,j+1,k)))
         Heff4 = min(Heff4, max(h(i-1,j+1,k),h(i,j+1,k)))
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then

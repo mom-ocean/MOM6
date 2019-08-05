@@ -672,7 +672,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
     enddo ; enddo
 
     do J=JsdB,JedB ; do i=isd,ied  ! Change any v-face lengths within this loop.
-      dy_2 = dx_2 * L_to_m*G%dyCv(i,J)*G%IdxCv(i,J) * cos(pi_180 * G%geoLatCv(i,J))
+      dy_2 = dx_2 * G%dyCv(i,J)*G%IdxCv(i,J) * cos(pi_180 * G%geoLatCv(i,J))
       if ((abs(G%geoLatCv(i,J)-41.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-28.5) < dx_2)) &
         G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0*m_to_L   ! Bosporus - should be 1000.0 m wide.
 

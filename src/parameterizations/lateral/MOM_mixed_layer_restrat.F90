@@ -526,14 +526,14 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     if (CS%id_uml > 0) then
       do J=js,je ; do i=is-1,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
-        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
+        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * US%m_to_L*G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
       do J=js-1,je ; do i=is,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
-        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
+        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * US%m_to_L*G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
     endif
