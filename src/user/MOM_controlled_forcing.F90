@@ -136,12 +136,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     call pass_var(CS%precip_0, G%Domain)
 
     do j=js,je ; do I=is-1,ie
-      coef = CS%Len2 * (US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j))
+      coef = CS%Len2 * (G%dy_Cu(I,j)*G%IdxCu(I,j))
       flux_heat_x(I,j) = coef * (CS%heat_0(i,j) - CS%heat_0(i+1,j))
       flux_prec_x(I,j) = coef * (CS%precip_0(i,j) - CS%precip_0(i+1,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      coef = CS%Len2 * (US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J))
+      coef = CS%Len2 * (G%dx_Cv(i,J)*G%IdyCv(i,J))
       flux_heat_y(i,J) = coef * (CS%heat_0(i,j) - CS%heat_0(i,j+1))
       flux_prec_y(i,J) = coef * (CS%precip_0(i,j) - CS%precip_0(i,j+1))
     enddo ; enddo
@@ -320,12 +320,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
 
     if ((CS%avg_time(m_u1) == -1.0) .and. (CS%avg_time(m_u2) == -1.0)) then
       do j=js,je ; do I=is-1,ie
-        coef = CS%Len2 * (US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j))
+        coef = CS%Len2 * (G%dy_Cu(I,j)*G%IdxCu(I,j))
         flux_heat_x(I,j) = coef * (CS%heat_cyc(i,j,m_u1) - CS%heat_cyc(i+1,j,m_u1))
         flux_prec_x(I,j) = coef * (CS%precip_cyc(i,j,m_u1) - CS%precip_cyc(i+1,j,m_u1))
       enddo ; enddo
       do J=js-1,je ; do i=is,ie
-        coef = CS%Len2 * (US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J))
+        coef = CS%Len2 * (G%dx_Cv(i,J)*G%IdyCv(i,J))
         flux_heat_y(i,J) = coef * (CS%heat_cyc(i,j,m_u1) - CS%heat_cyc(i,j+1,m_u1))
         flux_prec_y(i,J) = coef * (CS%precip_cyc(i,j,m_u1) - CS%precip_cyc(i,j+1,m_u1))
       enddo ; enddo
@@ -345,12 +345,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
 
     if ((wt_per1 < 1.0) .and. (CS%avg_time(m_u1) == -1.0) .and. (CS%avg_time(m_u2) == -1.0))  then
       do j=js,je ; do I=is-1,ie
-        coef = CS%Len2 * (US%L_to_m*G%dy_Cu(I,j)*US%m_to_L*G%IdxCu(I,j))
+        coef = CS%Len2 * (G%dy_Cu(I,j)*G%IdxCu(I,j))
         flux_heat_x(I,j) = coef * (CS%heat_cyc(i,j,m_u2) - CS%heat_cyc(i+1,j,m_u2))
         flux_prec_x(I,j) = coef * (CS%precip_cyc(i,j,m_u2) - CS%precip_cyc(i+1,j,m_u2))
       enddo ; enddo
       do J=js-1,je ; do i=is,ie
-        coef = CS%Len2 * (US%L_to_m*G%dx_Cv(i,J)*US%m_to_L*G%IdyCv(i,J))
+        coef = CS%Len2 * (G%dx_Cv(i,J)*G%IdyCv(i,J))
         flux_heat_y(i,J) = coef * (CS%heat_cyc(i,j,m_u2) - CS%heat_cyc(i,j+1,m_u2))
         flux_prec_y(i,J) = coef * (CS%precip_cyc(i,j,m_u2) - CS%precip_cyc(i,j+1,m_u2))
       enddo ; enddo
