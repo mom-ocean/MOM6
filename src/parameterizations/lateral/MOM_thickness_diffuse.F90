@@ -922,7 +922,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !         sfn_slope_x(I,j,K) = max(uhtot(I,j)-h_avail(i+1,j,k), &
 !                                  min(uhtot(I,j)+h_avail(i,j,k), &
 !               min(h_avail_rsum(i+1,j,K), max(-h_avail_rsum(i,j,K), &
-!               (KH_u(I,j,K)*US%L_to_m*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*US%m_to_L*G%IdxCu(I,j)) )) ))
+!               (KH_u(I,j,K)*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
         else ! k <= nk_linear
           ! Balance the deeper flow with a return flow uniformly distributed
           ! though the remaining near-surface layers.  This is the same as
@@ -1171,7 +1171,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 !         sfn_slope_y(i,J,K) = max(vhtot(i,J)-h_avail(i,j+1,k), &
 !                                  min(vhtot(i,J)+h_avail(i,j,k), &
 !               min(h_avail_rsum(i,j+1,K), max(-h_avail_rsum(i,j,K), &
-!               (KH_v(i,J,K)*US%L_to_m*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*US%m_to_L*G%IdyCv(i,J)) )) ))
+!               (KH_v(i,J,K)*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
         else ! k <= nk_linear
           ! Balance the deeper flow with a return flow uniformly distributed
           ! though the remaining near-surface layers.  This is the same as
@@ -1526,7 +1526,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
       do k=k_top,nz ; do i=ish,ie ; if (do_i(i)) then
         if (n==1) then ! This is a u-column.
           dH = 0.0
-          denom = ((US%m_to_L**2*G%IareaT(i+1,j) + US%m_to_L**2*G%IareaT(i,j))*US%L_to_m*G%dy_Cu(I,j))
+          denom = US%m_to_L * ((G%IareaT(i+1,j) + G%IareaT(i,j)) * G%dy_Cu(I,j))
           !   This expression uses differences in e in place of h for better
           ! consistency with the slopes.
           if (denom > 0.0) &
@@ -1551,7 +1551,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
           Kh_detangle(I,K+1) = Kh_detangle(I,K+1) + wt2*Kh_lay_u(I,j,k)
         else ! This is a v-column.
           dH = 0.0
-          denom = ((US%m_to_L**2*G%IareaT(i,j+1) + US%m_to_L**2*G%IareaT(i,j))*US%L_to_m*G%dx_Cv(I,j))
+          denom = US%m_to_L * ((G%IareaT(i,j+1) + G%IareaT(i,j)) * G%dx_Cv(I,j))
           if (denom > 0.0) &
             dH = I_4t * ((e(i,j+1,K) - e(i,j+1,K+1)) - &
                          (e(i,j,K) - e(i,j,K+1))) / denom
