@@ -30,7 +30,7 @@ MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
 
 # Reference codebase
 MOM_COMMIT := $(shell git rev-parse HEAD)
-MOM_ORIGIN = origin/dev/gfdl
+MOM_ORIGIN = dev/gfdl
 
 # Grid types
 GRIDS = symmetric asymmetric
