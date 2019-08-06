@@ -152,6 +152,7 @@ test: $(TESTS)
 
 .PHONY: $(TESTS)
 $(TESTS):
+	mkdir -p .testing/results/$@
 	mkdir -p .testing/$@/RESTART
 	# Get reference state
 	cd .testing/$@ && $(MPIRUN) -n 1 ../../build/target/MOM6
