@@ -225,4 +225,3 @@ DAYMAX = 1.0                    !   [days]
 ! === module MOM_file_parser ===
 
 DIAG_AS_CHKSUM = True
-DEBUG = True

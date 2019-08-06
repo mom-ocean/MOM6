@@ -29,11 +29,15 @@ MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
 #MKMF_TEMPLATE = "ncrc-intel.mk"
 
 # Reference codebase
-MOM_COMMIT = $(shell git rev-parse HEAD)
-MOM_REF = origin/dev/gfdl
+MOM_COMMIT := $(shell git rev-parse HEAD)
+MOM_ORIGIN = origin/dev/gfdl
 
 # Grid types
 GRIDS = symmetric asymmetric
+
+# Executables
+# TODO: REPRO, coverage, ??
+BUILDS = origin $(GRIDS)
 
 # Test experiments
 TESTS = benchmark unit_tests
@@ -42,7 +46,7 @@ TESTS = benchmark unit_tests
 # Executable
 
 .PHONY: all
-all: $(foreach g,$(GRIDS),build/$(g)/MOM6)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 
 build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
 	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
@@ -59,6 +63,7 @@ build/%/Makefile: build/%/path_names
 
 # TODO: Merge path_names rules?
 build/symmetric/path_names: $(LIST_PATHS)
+	git checkout HEAD
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../src \
@@ -71,6 +76,36 @@ build/asymmetric/path_names: $(LIST_PATHS)
 		../../src \
 		../../config_src/solo_driver \
 		../../config_src/dynamic
+
+#----
+# Build the reference executable
+# TODO: Merge with other rules?
+
+build/origin/MOM6: build/origin/Makefile $(FMS)/lib/libfms.a
+	git checkout $(MOM_ORIGIN)
+	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
+	git checkout @{-1}
+
+build/origin/Makefile: build/origin/path_names
+	git checkout $(MOM_ORIGIN)
+	cp .testing/$(MKMF_TEMPLATE) $(@D)
+	cd $(@D) && $(MKMF) \
+		-t $(MKMF_TEMPLATE) \
+		-o '-I ../../$(FMS)/build' \
+		-p MOM6 \
+		-l '../../$(FMS)/lib/libfms.a' \
+		-c $(MKMF_CPP) \
+		path_names
+	git checkout @{-1}
+
+build/origin/path_names: $(LIST_PATHS)
+	git checkout $(MOM_ORIGIN)
+	mkdir -p $(@D)
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../src \
+		../../config_src/solo_driver \
+		../../config_src/dynamic_symmetric
+	git checkout @{-1}
 
 #----
 # FMS build
