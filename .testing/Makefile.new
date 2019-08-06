@@ -24,14 +24,14 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
-#MKMF_TEMPLATE = "ncrc-gnu.mk"
-#MKMF_TEMPLATE = "ncrc-intel.mk"
+MKMF_TEMPLATE ?= "linux-ubuntu-xenial-gnu.mk"
+#MKMF_TEMPLATE ?= "ncrc-gnu.mk"
+#MKMF_TEMPLATE ?= "ncrc-intel.mk"
 
 # Reference codebase
 MOM_TARGET_URL ?= https://github.com/NOAA-GFDL/MOM6.git
-MOM_TARGET_REMOTE = target
-MOM_TARGET_BRANCH = $(MOM_TARGET_REMOTE)/dev/gfdl
+MOM_TARGET_REMOTE ?= target
+MOM_TARGET_BRANCH ?= $(MOM_TARGET_REMOTE)/dev/gfdl
 
 # Grid types
 GRIDS = symmetric asymmetric
@@ -64,7 +64,6 @@ build/%/Makefile: build/%/path_names
 
 # TODO: Merge path_names rules?
 build/symmetric/path_names: $(LIST_PATHS)
-	git checkout HEAD
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../src \
@@ -82,6 +81,8 @@ build/asymmetric/path_names: $(LIST_PATHS)
 # Build the reference executable
 # TODO: Merge with other rules?
 
+# XXX: ls-remote is probably redundant here; no file means ls-remote is nonzero!
+# 	   Maybe move this into path_names rule?
 .git/refs/remotes/$(MOM_TARGET_BRANCH):
 	git ls-remote $(MOM_TARGET_REMOTE) \
 		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
@@ -151,10 +152,16 @@ test: $(TESTS)
 
 .PHONY: $(TESTS)
 $(TESTS):
+	mkdir -p .testing/$@/RESTART
+	# Get reference state
+	cd .testing/$@ && $(MPIRUN) -n 1 ../../build/target/MOM6
+	cp .testing/$@/ocean.stats .testing/results/$@/ocean.stats.target
 	# Clear prior gcov results
 	find build -name *.gcda -exec rm -f '{}' \;
-	mkdir -p .testing/$@/RESTART
 	cd .testing/$@ && $(MPIRUN) -n 1 ../../build/symmetric/MOM6
+	cp .testing/$@/ocean.stats .testing/results/$@/ocean.stats.symmetric
+	# Compare results
+	cd .testing/results/$@ && cmp ocean.stats.target ocean.stats.symmetric
 	# Report to codecov.io
 	bash <(curl -s https://codecov.io/bash) -n $@
 
