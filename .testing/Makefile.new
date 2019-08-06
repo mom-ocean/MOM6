@@ -24,8 +24,8 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-#MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
-MKMF_TEMPLATE = "ncrc-gnu.mk"
+MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
+#MKMF_TEMPLATE = "ncrc-gnu.mk"
 #MKMF_TEMPLATE = "ncrc-intel.mk"
 
 # Reference codebase
@@ -82,11 +82,10 @@ build/asymmetric/path_names: $(LIST_PATHS)
 # Build the reference executable
 # TODO: Merge with other rules?
 
-build/target/path_names: .git/refs/remotes/$(MOM_TARGET_BRANCH)
-
 .git/refs/remotes/$(MOM_TARGET_BRANCH):
-	git ls-remote $(MOM_TARGET_REMOTE) \
-		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
+	if git ls-remote $(MOM_TARGET_REMOTE); then : ; else \
+		git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL); \
+	fi
 	git fetch $(MOM_TARGET_REMOTE)
 
 build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
@@ -106,7 +105,7 @@ build/target/Makefile: build/target/path_names
 		path_names
 	git checkout @{-1}
 
-build/target/path_names: $(LIST_PATHS)
+build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
 	git checkout $(MOM_TARGET_BRANCH)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
