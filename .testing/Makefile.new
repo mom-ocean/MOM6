@@ -83,10 +83,9 @@ build/asymmetric/path_names: $(LIST_PATHS)
 # TODO: Merge with other rules?
 
 .git/refs/remotes/$(MOM_TARGET_BRANCH):
-	if git ls-remote $(MOM_TARGET_REMOTE); then : ; else \
-		git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL); \
-	fi
-	git fetch $(MOM_TARGET_REMOTE)
+	git ls-remote $(MOM_TARGET_REMOTE) \
+		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
+	git fetch --no-recurse-submodules $(MOM_TARGET_REMOTE)
 
 build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
 	git checkout $(MOM_TARGET_BRANCH)
