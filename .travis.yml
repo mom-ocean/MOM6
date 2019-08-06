@@ -18,8 +18,7 @@ addons:
 # so that they can remain hidden from users.
 install:
   - echo "Install step"
-    #- cp .testing/{configure,Makefile} .
-  - cp .testing/configure .
+  - cp .testing/{configure,Makefile.new} .
 
 jobs:
   include:
