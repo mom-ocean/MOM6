@@ -4384,19 +4384,19 @@ subroutine barotropic_get_tav(CS, ubtav, vbtav, G, US)
   type(barotropic_CS),               pointer       :: CS    !< Control structure for this module
   type(ocean_grid_type),             intent(in)    :: G     !< Grid structure
   real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: ubtav !< Zonal barotropic velocity averaged
-                                                            !! over a baroclinic timestep [m s-1]
+                                                            !! over a baroclinic timestep [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: vbtav !< Meridional barotropic velocity averaged
-                                                            !! over a baroclinic timestep [m s-1]
+                                                            !! over a baroclinic timestep [L T-1 ~> m s-1]
   type(unit_scale_type),             intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
 
   do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
-    ubtav(I,j) = US%L_T_to_m_s*CS%ubtav(I,j)
+    ubtav(I,j) = CS%ubtav(I,j)
   enddo ; enddo
 
   do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
-    vbtav(i,J) = US%L_T_to_m_s*CS%vbtav(i,J)
+    vbtav(i,J) = CS%vbtav(i,J)
   enddo ; enddo
 
 end subroutine barotropic_get_tav

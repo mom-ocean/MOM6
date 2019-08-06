@@ -234,13 +234,13 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
     h_u, &        ! Thickness interpolated to u points [H ~> m or kg m-2].
     vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [m-1 s-1]
     div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [m-1 s-1]
-    ubtav         ! zonal barotropic vel. ave. over baroclinic time-step [m s-1]
+    ubtav         ! zonal barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
     v0, &         ! Laplacian of v [L-1 T-1 ~> m-1 s-1]
     h_v, &        ! Thickness interpolated to v points [H ~> m or kg m-2].
     vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [m-1 s-1]
     div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [m-1 s-1]
-    vbtav         ! meridional barotropic vel. ave. over baroclinic time-step [m s-1]
+    vbtav         ! meridional barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dudx_bt, dvdy_bt, & ! components in the barotropic horizontal tension [T-1 ~> s-1]
     div_xx, &     ! Estimate of horizontal divergence at h-points [T-1 ~> s-1]
@@ -435,9 +435,9 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
 
     !#GME# The following loop range should be:  do j=js-1,je+1 ; do i=is-1,ie+1
     do j=js,je ; do i=is,ie
-      dudx_bt(i,j) = CS%DY_dxT(i,j)*US%m_s_to_L_T*(G%IdyCu(I,j) * ubtav(I,j) - &
+      dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
-      dvdy_bt(i,j) = CS%DX_dyT(i,j)*US%m_s_to_L_T*(G%IdxCv(i,J) * vbtav(i,J) - &
+      dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
                                      G%IdxCv(i,J-1) * vbtav(i,J-1))
     enddo; enddo
 
@@ -453,9 +453,9 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
 
     ! Components for the barotropic shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      dvdx_bt(I,J) = CS%DY_dxBu(I,J)*US%m_s_to_L_T*(vbtav(i+1,J)*G%IdyCv(i+1,J) &
+      dvdx_bt(I,J) = CS%DY_dxBu(I,J)*(vbtav(i+1,J)*G%IdyCv(i+1,J) &
                                     - vbtav(i,J)*G%IdyCv(i,J))
-      dudy_bt(I,J) = CS%DX_dyBu(I,J)*US%m_s_to_L_T*(ubtav(I,j+1)*G%IdxCu(I,j+1) &
+      dudy_bt(I,J) = CS%DX_dyBu(I,J)*(ubtav(I,j+1)*G%IdxCu(I,j+1) &
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
 
