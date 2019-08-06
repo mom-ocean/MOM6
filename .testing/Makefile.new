@@ -24,20 +24,21 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
-#MKMF_TEMPLATE = "ncrc-gnu.mk"
+#MKMF_TEMPLATE = "linux-ubuntu-xenial-gnu.mk"
+MKMF_TEMPLATE = "ncrc-gnu.mk"
 #MKMF_TEMPLATE = "ncrc-intel.mk"
 
 # Reference codebase
-MOM_COMMIT := $(shell git rev-parse HEAD)
-MOM_ORIGIN = dev/gfdl
+MOM_TARGET_URL ?= https://github.com/NOAA-GFDL/MOM6.git
+MOM_TARGET_REMOTE = target
+MOM_TARGET_BRANCH = $(MOM_TARGET_REMOTE)/dev/gfdl
 
 # Grid types
 GRIDS = symmetric asymmetric
 
 # Executables
 # TODO: REPRO, coverage, ??
-BUILDS = origin $(GRIDS)
+BUILDS = target $(GRIDS)
 
 # Test experiments
 TESTS = benchmark unit_tests
@@ -81,13 +82,20 @@ build/asymmetric/path_names: $(LIST_PATHS)
 # Build the reference executable
 # TODO: Merge with other rules?
 
-build/origin/MOM6: build/origin/Makefile $(FMS)/lib/libfms.a
-	git checkout $(MOM_ORIGIN)
+build/target/path_names: .git/refs/remotes/$(MOM_TARGET_BRANCH)
+
+.git/refs/remotes/$(MOM_TARGET_BRANCH):
+	git ls-remote $(MOM_TARGET_REMOTE) \
+		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
+	git fetch $(MOM_TARGET_REMOTE)
+
+build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
+	git checkout $(MOM_TARGET_BRANCH)
 	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
 	git checkout @{-1}
 
-build/origin/Makefile: build/origin/path_names
-	git checkout $(MOM_ORIGIN)
+build/target/Makefile: build/target/path_names
+	git checkout $(MOM_TARGET_BRANCH)
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(MKMF_TEMPLATE) \
@@ -98,8 +106,8 @@ build/origin/Makefile: build/origin/path_names
 		path_names
 	git checkout @{-1}
 
-build/origin/path_names: $(LIST_PATHS)
-	git checkout $(MOM_ORIGIN)
+build/target/path_names: $(LIST_PATHS)
+	git checkout $(MOM_TARGET_BRANCH)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../src \
