@@ -19,6 +19,7 @@ addons:
 install:
   - echo "Install step"
   - cp .testing/{configure,Makefile.new} .
+  - mv Makefile.new Makefile
 
 jobs:
   include:
