@@ -43,16 +43,24 @@ BUILDS = target $(GRIDS)
 # Test experiments
 TESTS = benchmark unit_tests
 
+
 #-------------------
 # Executable
 
 .PHONY: all
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 
+build/target/MOM6: BRANCH=$(MOM_TARGET_BRANCH)
+build/target/Makefile: BRANCH=$(MOM_TARGET_BRANCH)
+build/target/path_names: BRANCH=$(MOM_TARGET_BRANCH)
+
 build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
+	if [ $(BRANCH) ]; then git checkout $(BRANCH); fi
 	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
+	if [ $(BRANCH) ]; then git checkout @{-1}; fi
 
 build/%/Makefile: build/%/path_names
+	if [ $(BRANCH) ]; then git checkout $(BRANCH); fi
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(MKMF_TEMPLATE) \
@@ -61,6 +69,7 @@ build/%/Makefile: build/%/path_names
 		-l '../../$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		path_names
+	if [ $(BRANCH) ]; then git checkout @{-1}; fi
 
 # TODO: Merge path_names rules?
 build/symmetric/path_names: $(LIST_PATHS)
@@ -77,34 +86,6 @@ build/asymmetric/path_names: $(LIST_PATHS)
 		../../config_src/solo_driver \
 		../../config_src/dynamic
 
-#----
-# Build the reference executable
-# TODO: Merge with other rules?
-
-# XXX: ls-remote is probably redundant here; no file means ls-remote is nonzero!
-# 	   Maybe move this into path_names rule?
-.git/refs/remotes/$(MOM_TARGET_BRANCH):
-	git ls-remote $(MOM_TARGET_REMOTE) \
-		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
-	git fetch --no-recurse-submodules $(MOM_TARGET_REMOTE)
-
-build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
-	git checkout $(MOM_TARGET_BRANCH)
-	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
-	git checkout @{-1}
-
-build/target/Makefile: build/target/path_names
-	git checkout $(MOM_TARGET_BRANCH)
-	cp .testing/$(MKMF_TEMPLATE) $(@D)
-	cd $(@D) && $(MKMF) \
-		-t $(MKMF_TEMPLATE) \
-		-o '-I ../../$(FMS)/build' \
-		-p MOM6 \
-		-l '../../$(FMS)/lib/libfms.a' \
-		-c $(MKMF_CPP) \
-		path_names
-	git checkout @{-1}
-
 build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
 	git checkout $(MOM_TARGET_BRANCH)
 	mkdir -p $(@D)
@@ -113,6 +94,14 @@ build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
 		../../config_src/solo_driver \
 		../../config_src/dynamic_symmetric
 	git checkout @{-1}
+
+# XXX: ls-remote is probably redundant here; no file means ls-remote is nonzero!
+# 	   Maybe move this into path_names rule?
+.git/refs/remotes/$(MOM_TARGET_BRANCH):
+	git ls-remote $(MOM_TARGET_REMOTE) \
+		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
+	git fetch --no-recurse-submodules $(MOM_TARGET_REMOTE)
+
 
 #----
 # FMS build
@@ -137,6 +126,7 @@ $(FMS)/src:
 	git clone $(FMS_URL) $@
 	cd $@; git checkout $(FMS_COMMIT)
 
+
 #----
 # Build Toolchain
 
@@ -144,47 +134,56 @@ $(LIST_PATHS) $(MKMF):
 	git clone $(MKMF_URL) $(DEPS)/mkmf
 	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
 
+
 #----
 # Testing
 
+# TODO: Add test.grid, test.layout, test.dimension, etc
 .PHONY: test
-test: $(TESTS)
+test: test.regressions test.grids
 
-.PHONY: $(TESTS)
-$(TESTS):
-	mkdir -p .testing/results/$@
-	mkdir -p .testing/$@/RESTART
-	# Get reference state
-	cd .testing/$@ && $(MPIRUN) -n 1 ../../build/target/MOM6
-	cp .testing/$@/ocean.stats .testing/results/$@/ocean.stats.target
-	# Clear prior gcov results
-	find build -name *.gcda -exec rm -f '{}' \;
-	cd .testing/$@ && $(MPIRUN) -n 1 ../../build/symmetric/MOM6
-	cp .testing/$@/ocean.stats .testing/results/$@/ocean.stats.symmetric
-	# Compare results
-	cd .testing/results/$@ && cmp ocean.stats.target ocean.stats.symmetric
-	# Report to codecov.io
-	bash <(curl -s https://codecov.io/bash) -n $@
+.PHONY: test.regressions test.grids
+test.regressions: $(foreach t,$(TESTS),$(t).regression)
+test.grids: $(foreach t,$(TESTS),$(t).grid)
 
-.PHONY: gridtest
-gridtest: $(foreach t,$(TESTS),$(t).grid)
-
-expt = $(word 3,$(subst /, ,$@))
+%.regression: $(foreach b,target symmetric,.testing/results/%/ocean.stats.$(b))
+	cmp $^
 
 %.grid: $(foreach g,$(GRIDS),.testing/results/%/ocean.stats.$(g))
 	cmp $^
 
+expt = $(word 3,$(subst /, ,$@))
+
+#.testing/results/%/ocean.stats.target: EXEC=build/target/MOM6
+#.testing/results/%/ocean.stats.symmetric: EXEC=build/symmetric/MOM6
+#
+#$(foreach b,$(BUILDS),.testing/results/%/ocean.stats.$(b)):
+#	mkdir -p .testing/$(expt)/RESTART
+#	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$(EXEC)
+#	mkdir -p $(@D)
+#	cp .testing/$(expt)/ocean.stats $@
+
 .testing/results/%/ocean.stats.symmetric: build/symmetric/MOM6
+	# Apply code coverage on symmetric tests
+	find build -name *.gcda -exec rm -f '{}' \;
 	mkdir -p .testing/$(expt)/RESTART
 	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
 	mkdir -p $(@D)
 	cp .testing/$(expt)/ocean.stats $@
+	bash <(curl -s https://codecov.io/bash) -n $@
 
 .testing/results/%/ocean.stats.asymmetric: build/asymmetric/MOM6
 	mkdir -p .testing/$(expt)/RESTART
 	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
 	mkdir -p $(@D)
 	cp .testing/$(expt)/ocean.stats $@
+
+.testing/results/%/ocean.stats.target: build/target/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
 
 #----
 .PHONY: clean
