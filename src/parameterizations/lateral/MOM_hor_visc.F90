@@ -232,14 +232,14 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     u0, &         ! Laplacian of u [L-1 T-1 ~> m-1 s-1]
     h_u, &        ! Thickness interpolated to u points [H ~> m or kg m-2].
-    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [m-1 s-1]
-    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [m-1 s-1]
+    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
+    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     ubtav         ! zonal barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
     v0, &         ! Laplacian of v [L-1 T-1 ~> m-1 s-1]
     h_v, &        ! Thickness interpolated to v points [H ~> m or kg m-2].
-    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [m-1 s-1]
-    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [m-1 s-1]
+    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
+    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     vbtav         ! meridional barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dudx_bt, dvdy_bt, & ! components in the barotropic horizontal tension [T-1 ~> s-1]
@@ -757,12 +757,12 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
       ! Vorticity gradient
       do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
-        vort_xy_dx(i,J) = DY_dxBu * US%m_to_L*US%s_to_T*(vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
+        vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
       enddo ; enddo
 
       do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
         DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
-        vort_xy_dy(I,j) = DX_dyBu * US%m_to_L*US%s_to_T*(vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
+        vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
       call pass_vector(vort_xy_dy, vort_xy_dx, G%Domain)
@@ -784,11 +784,11 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
         ! Divergence gradient
         !#GME# This index range should be: do j=Jsq,Jeq+1 ; do I=Isq-1,Ieq+1
         do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
-          div_xx_dx(I,j) = US%s_to_T*US%m_to_L*G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+          div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
         enddo ; enddo
         !#GME# This index range should be: do j=Jsq-1,Jeq+1 ; do i=Isq,Ieq+1
         do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
-          div_xx_dy(i,J) = US%s_to_T*US%m_to_L*G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+          div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
         enddo ; enddo
 
         !#GME# With the correct index ranges, this halo update is unnecessary.
@@ -798,12 +798,12 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
         ! Why use the magnitude of the average instead of the average magnitude?
         !#GME# This index range should be: do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-          grad_div_mag_h(i,j) = US%L_to_m*US%T_to_s*sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I-1,j)))**2 + &
+          grad_div_mag_h(i,j) = sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I-1,j)))**2 + &
                                      (0.5*(div_xx_dy(i,J) + div_xx_dy(i,J-1)))**2)
         enddo ; enddo
         !#GME# This index range should be: do J=js-1,Jeq ; do I=is-1,Ieq
         do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-          grad_div_mag_q(I,J) = US%L_to_m*US%T_to_s*sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I,j+1)))**2 + &
+          grad_div_mag_q(I,J) = sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I,j+1)))**2 + &
                                      (0.5*(div_xx_dy(i,J) + div_xx_dy(i+1,J)))**2)
         enddo ; enddo
 
@@ -849,29 +849,29 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
 
         !#GME# This should be do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-          grad_vort_mag_h_2d(i,j) = US%L_to_m*US%T_to_s*SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + &
+          grad_vort_mag_h_2d(i,j) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + &
                                          (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j)))**2 )
         enddo ; enddo
         !#GME# This index range should be:  do J=js-1,Jeq ; do I=is-1,Ieq
         do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-          grad_vort_mag_q_2d(I,J) = US%L_to_m*US%T_to_s*SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J)))**2 + &
+          grad_vort_mag_q_2d(I,J) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J)))**2 + &
                                          (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I,j+1)))**2 )
         enddo ; enddo
 
         ! This accumulates terms, some of which are in VarMix, so rescaling can not be done here.
-        call calc_QG_Leith_viscosity(VarMix, G, GV, h, k, div_xx_dx, div_xx_dy, &
+        call calc_QG_Leith_viscosity(VarMix, G, GV, US, h, k, div_xx_dx, div_xx_dy, &
                                      vort_xy_dx, vort_xy_dy)
 
       endif
 
       !#GME# This should be do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        grad_vort_mag_h(i,j) = US%L_to_m*US%T_to_s*SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + &
+        grad_vort_mag_h(i,j) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + &
                                     (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j)))**2 )
       enddo ; enddo
       !#GME# This index range should be:  do J=js-1,Jeq ; do I=is-1,Ieq
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        grad_vort_mag_q(I,J) = US%L_to_m*US%T_to_s*SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J)))**2 + &
+        grad_vort_mag_q(I,J) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J)))**2 + &
                                     (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I,j+1)))**2 )
       enddo ; enddo
 

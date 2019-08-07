@@ -706,22 +706,23 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
 end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
-subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
+subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
   type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),                     intent(in) :: US   !< A dimensional unit scaling type
 ! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [m s-1]
 ! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  !< x-derivative of horizontal divergence
-                                                                 !! (d/dx(du/dx + dv/dy)) [m-1 s-1]
+                                                                 !! (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
   real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  !< y-derivative of horizontal divergence
-                                                                 !! (d/dy(du/dx + dv/dy)) [m-1 s-1]
+                                                                 !! (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
   real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vort_xy_dx !< x-derivative of vertical vorticity
-                                                                 !! (d/dx(dv/dx - du/dy)) [m-1 s-1]
+                                                                 !! (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
   real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
-                                                                 !! (d/dy(dv/dx - du/dy)) [m-1 s-1]
+                                                                 !! (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
 !  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
                                                                  !! at h-points [m2 s-1]
 !  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
@@ -736,8 +737,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
 !                                        dudy, & ! Meridional shear of zonal velocity [s-1]
 !                                        dvdx    ! Zonal shear of meridional velocity [s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [m-1 s-1]
-!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [m-1 s-1]
+!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
+!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     dslopey_dz, & ! z-derivative of y-slope at v-points [m-1]
     h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
     beta_v,     & ! Beta at v-points [m-1 s-1]
@@ -745,16 +746,17 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
     grad_div_mag_v     ! mag. of div. grad. at v-points [s-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [m-1 s-1]
-!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [m-1 s-1]
-    dslopex_dz, & ! z-derivative of x-slope at u-points (m-1)
+!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
+!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
+    dslopex_dz, & ! z-derivative of x-slope at u-points [m-1]
     h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
     beta_u,     & ! Beta at u-points [m-1 s-1]
-    grad_vort_mag_u, & ! mag. of vort. grad. at u-points [s-1]
-    grad_div_mag_u     ! mag. of div. grad. at u-points [s-1]
+    grad_vort_mag_u, & ! mag. of vort. grad. at u-points [s-1 m-1]
+    grad_div_mag_u     ! mag. of div. grad. at u-points [s-1 m-1]
 !  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
 !  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
-  real :: h_at_slope_above, h_at_slope_below, Ih, f
+  real :: h_at_slope_above, h_at_slope_below, Ih
+  real :: f  ! A copy of the Coriolis parameter [T-1 ~> s-1]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
   real :: inv_PI3
 
@@ -801,7 +803,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
     !### do J=js-1,je ; do i=is-1,Ieq+1
     do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
-      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * &
+      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * US%L_to_m * &
             ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
             + ( h_at_u(I-1,j) * dslopex_dz(I-1,j) + h_at_u(I,j+1) * dslopex_dz(I,j+1) ) ) / &
               ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
@@ -811,7 +813,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
       !### I think that this should be vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * &
-      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * &
+      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * US%L_to_m * &
             ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
             + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
@@ -824,9 +826,9 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
   if (CS%use_QG_Leith_GM) then
 
     do j=js,je ; do I=is-1,Ieq
-      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
+      grad_vort_mag_u(I,j) = US%m_to_L*US%s_to_T*SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
                                 + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
-      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
+      grad_div_mag_u(I,j) = US%m_to_L*US%s_to_T*SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
                                + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
       if (CS%use_beta_in_QG_Leith) then
         beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
@@ -840,9 +842,9 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_x
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
+      grad_vort_mag_v(i,J) = US%m_to_L*US%s_to_T*SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
                            + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
-      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
+      grad_div_mag_v(i,J) = US%m_to_L*US%s_to_T*SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
                            + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
       if (CS%use_beta_in_QG_Leith) then
         beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
