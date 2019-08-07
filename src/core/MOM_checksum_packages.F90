@@ -179,10 +179,10 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
                                                !! (equal to -dM/dy) [L T-2 ~> m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: diffu !< Zonal acceleration due to convergence of the
-                                                !! along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
+                                                !! along-isopycnal stress tensor [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: diffv !< Meridional acceleration due to convergence of
-                                                !! the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
+                                                !! the along-isopycnal stress tensor [L T-2 ~> m s-2].
   type(unit_scale_type),    intent(in) :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
@@ -208,7 +208,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
   ! and js...je as their extent.
   call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
   call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
-  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, scale=US%s_to_T)
+  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
   if (present(pbce)) &
     call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H*US%L_T_to_m_s**2)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &

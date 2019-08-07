@@ -108,16 +108,16 @@ implicit none ; private
 type, public :: MOM_dyn_unsplit_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    !< CAu = f*v - u.grad(u) [L T-2 ~> m s-2].
-    PFu, &    !< PFu = -dM/dx [m s-2].
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> mm s-2].
+    PFu, &    !< PFu = -dM/dx [L T-2 ~> m s-2].
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2].
     PFv, &    !< PFv = -dM/dy [L T-2 ~> m s-2].
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2].
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor (Pa)
-  real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor [Pa]
+  real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor [Pa]
 
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
 
@@ -282,10 +282,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       h_av(i,j,k) = (h(i,j,k) + hp(i,j,k)) * 0.5
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      u(I,j,k) = u(I,j,k) + dt * US%s_to_T*CS%diffu(I,j,k) * G%mask2dCu(I,j)
+      u(I,j,k) = u(I,j,k) + US%s_to_T*dt * US%L_T_to_m_s*CS%diffu(I,j,k) * G%mask2dCu(I,j)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,J,k) = v(i,J,k) + dt * US%s_to_T*CS%diffv(i,J,k) * G%mask2dCv(i,J)
+      v(i,J,k) = v(i,J,k) + US%s_to_T*dt * US%L_T_to_m_s*CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
       uhtr(i,j,k) = uhtr(i,j,k) + 0.5*US%s_to_T*dt*uh(i,j,k)
