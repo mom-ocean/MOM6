@@ -217,13 +217,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (CS%MEKE_GEOMETRIC) then
       do j=js,je ; do I=is-1,ie
-        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + &
-                          G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
+        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * &
+                          US%L_T_to_m_s**2*0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
                           (VarMix%SN_u(I,j) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
       do j=js,je ; do I=is-1,ie
-        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+        Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + MEKE%KhTh_fac*US%L_to_m**2*US%s_to_T*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
       enddo ; enddo
     endif
   endif ; endif
@@ -296,13 +296,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (CS%MEKE_GEOMETRIC) then
       do j=js-1,je ; do I=is,ie
-        Khth_Loc(I,j) = Khth_Loc(I,j) + &
-                        G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
+        Khth_Loc(I,j) = Khth_Loc(I,j) + G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * &
+                        US%L_T_to_m_s**2*0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
                         (VarMix%SN_v(i,J) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
     else
       do J=js-1,je ; do i=is,ie
-        Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+        Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*US%L_to_m**2*US%s_to_T*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
       enddo ; enddo
     endif
   endif ; endif
@@ -365,7 +365,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (CS%MEKE_GEOMETRIC) then
       do j=js,je ; do I=is,ie
-        MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
+        MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * US%s_to_T*MEKE%MEKE(i,j) / &
                        (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)+VarMix%SN_v(i,J)+VarMix%SN_v(i,J-1)) + &
                        CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
@@ -458,7 +458,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         MEKE%Kh_diff(:,:) = 0.0
         do k=1,nz
           do j=js,je ; do i=is,ie
-            MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) + KH_t(i,j,k) * h(i,j,k)
+            MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) + US%m_to_L**2*US%T_to_s*KH_t(i,j,k) * h(i,j,k)
           enddo; enddo
         enddo
 
@@ -1278,9 +1278,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
     if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
       if (CS%GM_src_alt) then
-        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + PE_release_h
+        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%m_to_L**2*US%T_to_s**3*PE_release_h
       else
-        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
+        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%m_to_L**2*US%T_to_s**3*Work_h
       endif
     endif ; endif
   !enddo ; enddo ; enddo ; endif

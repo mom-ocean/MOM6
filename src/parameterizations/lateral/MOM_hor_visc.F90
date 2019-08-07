@@ -261,7 +261,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
     grad_vel_mag_h, & ! Magnitude of the velocity gradient tensor squared at h-points [T-2 ~> s-2]
     grad_vel_mag_bt_h, & ! Magnitude of the barotropic velocity gradient tensor squared at h-points [T-2 ~> s-2]
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
-    max_diss_rate_bt, & ! maximum possible energy dissipated by barotropic lateral friction [m2 s-3]
+    max_diss_rate_bt, & ! maximum possible energy dissipated by barotropic lateral friction [L2 T-3 ~> m2 s-3]
     boundary_mask ! A mask that zeroes out cells with at least one land edge [nondim]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -494,7 +494,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
     if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
       !#GME# These loops bounds should be: do j=js-1,je+1 ; do i=is-1,is+1
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        max_diss_rate_bt(i,j) = 2.0*MEKE%MEKE(i,j) * US%s_to_T**2*grad_vel_mag_bt_h(i,j)
+        max_diss_rate_bt(i,j) = 2.0*MEKE%MEKE(i,j) * US%s_to_T*grad_vel_mag_bt_h(i,j)
       enddo ; enddo
     endif ; endif
 
@@ -911,7 +911,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xx(i,j))
         Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
         if (use_MEKE_Ku) &
-          Kh = Kh + US%m_to_L**2*MEKE%Ku(i,j) * meke_res_fn ! *Add* the MEKE contribution (might be negative)
+          Kh = Kh + MEKE%Ku(i,j) * meke_res_fn ! *Add* the MEKE contribution (might be negative)
         if (CS%anisotropic) Kh = Kh + CS%Kh_aniso * ( 1. - CS%n1n2_h(i,j)**2 ) ! *Add* the tension component
                                                                                ! of anisotropic viscosity
 
@@ -963,7 +963,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
           Ah = CS%Ah_bg_xx(i,j)
         endif ! Smagorinsky_Ah or Leith_Ah
 
-        if (use_MEKE_Au) Ah = Ah + US%L_to_m**4*MEKE%Au(i,j) ! *Add* the MEKE contribution
+        if (use_MEKE_Au) Ah = Ah + MEKE%Au(i,j) ! *Add* the MEKE contribution
 
         if (CS%better_bound_Ah) then
           Ah = MIN(Ah, visc_bound_rem*hrat_min*CS%Ah_Max_xx(i,j))
@@ -1075,7 +1075,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
         if (legacy_bound) Kh = min(Kh, CS%Kh_Max_xy(i,j))
         Kh = max( Kh, CS%Kh_bg_min ) ! Place a floor on the viscosity, if desired.
         if (use_MEKE_Ku) then ! *Add* the MEKE contribution (might be negative)
-          Kh = Kh + 0.25*US%m_to_L**2*( (MEKE%Ku(i,j) + MEKE%Ku(i+1,j+1)) + &
+          Kh = Kh + 0.25*( (MEKE%Ku(i,j) + MEKE%Ku(i+1,j+1)) + &
                            (MEKE%Ku(i+1,j) + MEKE%Ku(i,j+1)) ) * meke_res_fn
         endif
         ! Older method of bounding for stability
@@ -1131,8 +1131,8 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
         endif ! Smagorinsky_Ah or Leith_Ah
 
         if (use_MEKE_Au) then ! *Add* the MEKE contribution
-          Ah = Ah + 0.25*US%L_to_m**4*( (MEKE%Au(I,J) + MEKE%Au(I+1,J+1)) +  &
-                                        (MEKE%Au(I+1,J) + MEKE%Au(I,J+1)) )
+          Ah = Ah + 0.25*( (MEKE%Au(I,J) + MEKE%Au(I+1,J+1)) +  &
+                           (MEKE%Au(I+1,J) + MEKE%Au(I,J+1)) )
         endif
 
         if (CS%better_bound_Ah) then
@@ -1203,7 +1203,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
         if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
           ! This is the maximum possible amount of energy that can be converted
           ! per unit time, according to theory (multiplied by h)
-          max_diss_rate(i,j,k) = 2.0*US%m_s_to_L_T**2*MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
+          max_diss_rate(i,j,k) = 2.0*MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
           FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
           FrictWorkMax(i,j,k) = -max_diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
 
@@ -1400,7 +1400,7 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
               RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
             endif
           endif
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + US%L_to_m**2*US%s_to_T**3*GV%H_to_kg_m2 * ( &
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
                 -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
          +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
@@ -1419,15 +1419,14 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
       else
         do j=js,je ; do i=is,ie
           ! MEKE%mom_src now is sign definite because it only uses the dissipation
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + &
-                US%L_to_m**2*US%s_to_T**3*MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
         enddo ; enddo
       endif ! MEKE%backscatter
 
       if (CS%use_GME .and. associated(MEKE)) then
         if (associated(MEKE%GME_snk)) then
           do j=js,je ; do i=is,ie
-            MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + US%L_to_m**2*US%s_to_T**3*FrictWork_GME(i,j,k)
+            MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
           enddo ; enddo
         endif
       endif
