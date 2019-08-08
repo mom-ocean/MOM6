@@ -1,87 +1,220 @@
-# Makefile steps to run on Travis-CI
-# e.g. make MEMORY_SHAPE=dynamic_symmetric REPRO=1 OPENMP=1
+DEPS = deps
+SHELL = bash
+MPIRUN ?= mpirun # srun in Slurm, aprun in Cray-land, etc.
 
-# Versions to use
-FMS_COMMIT ?= f2e2c86f6c0eb6d389a20509a8a60fa22924e16b
+# GFDL build toolchain
+MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
 MKMF_COMMIT ?= master
 
-# Where to clone from
+LIST_PATHS = $(abspath $(DEPS)/mkmf/bin/list_paths)
+MKMF = $(abspath $(DEPS)/mkmf/bin/mkmf)
+
+# FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
-MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
-CONFIGS_URL ?= https://github.com/NOAA-GFDL/MOM6-examples.git
-REGRESSIONS_URL ?= https://github.com/adcroft/Gaea-stats-MOM6-examples
+FMS_COMMIT ?= f2e2c86f6c0eb6d389a20509a8a60fa22924e16b
+FMS := $(DEPS)/fms
 
-# Experiments to run
-ifeq ($(MEMORY_SHAPE),"dynamic_symmetric")
-EXPERIMENTS ?= unit_tests double_gyre flow_downslope/z CVmix_SCM_tests/cooling_only/EPBL circle_obcs
-else
-EXPERIMENTS ?= unit_tests double_gyre flow_downslope/z CVmix_SCM_tests/cooling_only/EPBL
-endif
+# Function to get list of files
+# TODO: .h and .c files
+#FMS_FILES = $(sort $(shell find $(FMS)/src -name '*.F90'))
+#MOM_FILES = $(sort $(shell find src config_src/solo_driver -name '*.F90'))
 
-FMS_PACKAGES ?= platform,include,memutils,constants,mpp,fms,time_manager,diag_manager,data_override,coupler/coupler_types.F90,coupler/ensemble_manager.F90,axis_utils,horiz_interp,time_interp,astronomy,mosaic,random_numbers
-TEMPLATE ?= .testing/linux-ubuntu-xenial-gnu.mk
-MPIRUN ?= mpirun
+# Build settings
+MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
-# MEMORY_SHAPE must be defined for this Makefile to work
-MEMORY_SHAPE ?= dynamic_symmetric
+# Environment
+# TODO: This info ought to be determined by CMake, automake, etc.
+MKMF_TEMPLATE ?= "linux-ubuntu-xenial-gnu.mk"
+#MKMF_TEMPLATE ?= "ncrc-gnu.mk"
+#MKMF_TEMPLATE ?= "ncrc-intel.mk"
 
-# Everything above is above is "configurable" with environment variables
-SHELL = bash
+# Reference codebase
+MOM_TARGET_URL ?= https://github.com/NOAA-GFDL/MOM6.git
+MOM_TARGET_REMOTE ?= target
+MOM_TARGET_BRANCH ?= $(MOM_TARGET_REMOTE)/dev/gfdl
 
-# Path where executable will be built
-BUILD_PATH = build
-###/$(MEMORY_SHAPE)-$(EXEC_MODE)
-# Root of configurations (MOM6-examples)
-EXPERIMENTS_ROOT = experiments
-# Regression results
-REGRESSIONS_ROOT = answers
+# Grid types
+GRIDS = symmetric asymmetric
 
-expt=$(subst $(EXPERIMENTS_ROOT)/ocean_only/,,$(subst /ocean.stats,,$@))
+# Executables
+# TODO: REPRO, coverage, ??
+BUILDS = target $(GRIDS)
 
-.PRECIOUS: %/ocean.stats
+# Test experiments
+CONFIGS = benchmark unit_tests
+# regressions is currently broken (deliberately)
+#TESTS = regressions grids nans
+TESTS = grids nans
 
-run: $(foreach e,$(EXPERIMENTS),$(EXPERIMENTS_ROOT)/ocean_only/$(e)/ocean.stats)
 
-test: $(foreach e,$(EXPERIMENTS),$(REGRESSIONS_ROOT)/regressions/ocean_only/$(e)/ocean.stats.gnu)
+#-------------------
+# Executable
 
-compile: $(BUILD_PATH)/MOM6
+.PHONY: all
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 
-$(BUILD_PATH)/MOM6: FMS mkmf
+# Executable
+# TODO: Combine these, make checkout and MAKEFLAGS as inputs
+
+build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
+	git checkout $(MOM_TARGET_BRANCH)
+	make -C $(@D) NETCDF=3 DEBUG=1 $(@F)
+	git checkout @{-1}
+
+build/symmetric/MOM6: build/symmetric/Makefile $(FMS)/lib/libfms.a
+	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
+
+build/asymmetric/MOM6: build/asymmetric/Makefile $(FMS)/lib/libfms.a
+	make -C $(@D) NETCDF=3 DEBUG=1 $(@F)
+
+# Makefile
+
+build/target/Makefile: BRANCH=$(MOM_TARGET_BRANCH)
+build/%/Makefile: build/%/path_names
+	if [ $(BRANCH) ]; then git checkout $(BRANCH); fi
+	cp .testing/$(MKMF_TEMPLATE) $(@D)
+	cd $(@D) && $(MKMF) \
+		-t $(MKMF_TEMPLATE) \
+		-o '-I ../../$(FMS)/build' \
+		-p MOM6 \
+		-l '../../$(FMS)/lib/libfms.a' \
+		-c $(MKMF_CPP) \
+		path_names
+	if [ $(BRANCH) ]; then git checkout @{-1}; fi
+
+# path_names
+
+build/symmetric/path_names: $(LIST_PATHS)
 	mkdir -p $(@D)
-	cd $(@D); \
-	../mkmf/bin/list_paths -l ../FMS/{$(FMS_PACKAGES)} ../config_src/{$(MEMORY_SHAPE),solo_driver} ../src \
-	&& ../mkmf/bin/mkmf -t ../$(TEMPLATE) -c '-Duse_libMPI -Duse_netCDF -DSPMD -DUSE_LOG_DIAG_FIELD_INFO -DMAXFIELDMETHODS_=500' -p $(@F) path_names \
-	&& make -j NETCDF=3 $(@F)
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../src \
+		../../config_src/solo_driver \
+		../../config_src/dynamic_symmetric
 
-$(EXPERIMENTS_ROOT)/%/ocean.stats: $(EXPERIMENTS_ROOT)
-	@echo $(expt)
-	mkdir -p $(@D)/RESTART
-	cd $(@D) ; $(MPIRUN) -n 1 $(PWD)/$(BUILD_PATH)/MOM6
-	# Re-downloading is dumb...
-	bash <(curl -s https://codecov.io/bash) -n $(expt)
-	# Removing the name...
-	#bash <(curl -s https://codecov.io/bash)
-	# Clear out the .gcda files
-	# (codecov should delete the .gcov files?)
-	find $(BUILD_PATH) -name *.gcda -exec rm -f '{}' \;
-
-$(REGRESSIONS_ROOT)/regressions/%/ocean.stats.gnu: $(EXPERIMENTS_ROOT)/%/ocean.stats $(REGRESSIONS_ROOT)
-	cp $< $@
-	cd $(@D) ; git status --porcelain $(@F)
-
-# Targets to clone repositories needed to build
-FMS:
-	git clone -q $(FMS_URL)
-	cd $@ ; git checkout -q $(FMS_COMMIT)
-
-mkmf:
-	git clone -q $(MKMF_URL)
-	cd $@ ; git checkout -q $(MKMF_COMMIT)
-
-$(EXPERIMENTS_ROOT):
+build/asymmetric/path_names: $(LIST_PATHS)
 	mkdir -p $(@D)
-	cd $(@D) ; git clone --depth 1 $(CONFIGS_URL) experiments
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../src \
+		../../config_src/solo_driver \
+		../../config_src/dynamic
 
-$(REGRESSIONS_ROOT):
+build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
+	git checkout $(MOM_TARGET_BRANCH)
 	mkdir -p $(@D)
-	cd $(@D) ; git clone --depth 1 $(REGRESSIONS_URL) answers
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../src \
+		../../config_src/solo_driver \
+		../../config_src/dynamic_symmetric
+	git checkout @{-1}
+
+# Target remote configuration
+
+# XXX: ls-remote is probably redundant here; no file means ls-remote is nonzero!
+# 	   Maybe move this into path_names rule?
+.git/refs/remotes/$(MOM_TARGET_BRANCH):
+	git ls-remote $(MOM_TARGET_REMOTE) \
+		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
+	git fetch --no-recurse-submodules $(MOM_TARGET_REMOTE)
+
+
+#----
+# FMS build
+
+$(FMS)/lib/libfms.a: $(FMS)/build/Makefile
+	mkdir -p $(FMS)/lib
+	cd $(FMS)/build && make NETCDF=3 DEBUG=1 ../lib/libfms.a
+
+$(FMS)/build/Makefile: $(FMS)/build/path_names
+	cp .testing/$(MKMF_TEMPLATE) $(@D)
+	cd $(@D) && $(MKMF) \
+		-t $(MKMF_TEMPLATE) \
+		-p ../lib/libfms.a \
+		-c $(MKMF_CPP) \
+		path_names
+
+$(FMS)/build/path_names: $(FMS)/src $(FMS_FILES) $(LIST_PATHS)
+	mkdir -p $(@D)
+	cd $(@D) && $(LIST_PATHS) -l ../src
+
+$(FMS)/src:
+	git clone $(FMS_URL) $@
+	cd $@; git checkout $(FMS_COMMIT)
+
+
+#----
+# Build Toolchain
+
+$(LIST_PATHS) $(MKMF):
+	git clone $(MKMF_URL) $(DEPS)/mkmf
+	cd $(DEPS)/mkmf; git checkout $(MKMF_COMMIT)
+
+
+#----
+# Testing
+
+# TODO: Add test.grid, test.layout, test.dimension, etc
+.PHONY: test
+test: $(foreach t,$(TESTS),test.$(t))
+
+.PHONY: $(foreach t,$(TESTS),test.$(t))
+test.regressions: $(foreach c,$(CONFIGS),$(c).regression)
+test.grids: $(foreach c,$(CONFIGS),$(c).grid)
+test.nans: $(foreach c,$(CONFIGS),$(c).nan)
+
+%.regression: $(foreach b,target symmetric,.testing/results/%/ocean.stats.$(b))
+	cmp $^
+
+%.grid: $(foreach g,$(GRIDS),.testing/results/%/ocean.stats.$(g))
+	cmp $^
+
+%.nan: $(foreach b,symmetric nan,.testing/results/%/ocean.stats.$(b))
+	cmp $^
+
+# TODO: Keeping results in run directories should allow removal of $(expt)
+expt = $(word 3,$(subst /, ,$@))
+
+# symmetric is the "canonical" run for which we test and report code coverage
+.testing/results/%/ocean.stats.symmetric: build/symmetric/MOM6
+	# Report code coverage for symmetric tests
+	find build -name *.gcda -exec rm -f '{}' \;
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+	bash <(curl -s https://codecov.io/bash) -n $@
+
+.testing/results/%/ocean.stats.nan: build/symmetric/MOM6
+	# Report code coverage for symmetric tests
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
+.testing/results/%/ocean.stats.asymmetric: build/asymmetric/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
+.testing/results/%/ocean.stats.target: build/target/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
+# TODO: May be able to merge stats rules with something like this:
+#
+#.testing/results/%/ocean.stats.target: EXEC=build/target/MOM6
+#.testing/results/%/ocean.stats.symmetric: EXEC=build/symmetric/MOM6
+#
+#$(foreach b,$(BUILDS),.testing/results/%/ocean.stats.$(b)):
+#	mkdir -p .testing/$(expt)/RESTART
+#	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$(EXEC)
+#	mkdir -p $(@D)
+#	cp .testing/$(expt)/ocean.stats $@
+
+
+#----
+.PHONY: clean
+clean:
+	rm -rf build
