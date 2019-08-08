@@ -151,8 +151,8 @@ type, public :: dyn_horgrid_type
   real, allocatable, dimension(:,:) :: &
     CoriolisBu    !< The Coriolis parameter at corner points [T-1 ~> s-1].
   real, allocatable, dimension(:,:) :: &
-    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
-    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
 
   ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
   real :: areaT_global  !< Global sum of h-cell area [m2]

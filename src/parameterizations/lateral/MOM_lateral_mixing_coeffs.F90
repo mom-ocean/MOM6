@@ -831,8 +831,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       grad_div_mag_u(I,j) = US%m_to_L*US%s_to_T*SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
                                + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
-                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
+        beta_u(I,j) = US%m_to_L*sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+                                      (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
         CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)*3) &
              * CS%Laplac3_const_u(I,j) * inv_PI3
       else
@@ -847,8 +847,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       grad_div_mag_v(i,J) = US%m_to_L*US%s_to_T*SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
                            + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
-                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        beta_v(i,J) = US%m_to_L*sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                                      (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
         CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) &
              * CS%Laplac3_const_v(i,J) * inv_PI3
       else

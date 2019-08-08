@@ -90,9 +90,9 @@ end subroutine MOM_initialize_rotation
 subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(dyn_horgrid_type),             intent(inout) :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out)   :: dF_dx !< x-component of grad f [T-1 m-1 ~> s-1 m-1]
+                                      intent(out)   :: dF_dx !< x-component of grad f [T-1 L-1 ~> s-1 m-1]
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out)   :: dF_dy !< y-component of grad f [T-1 m-1 ~> s-1 m-1]
+                                      intent(out)   :: dF_dy !< y-component of grad f [T-1 L-1 ~> s-1 m-1]
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
@@ -111,12 +111,13 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
     f2 = 0.5*( G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1) )
-    dF_dx(i,j) = m_to_L*G%IdxT(i,j) * ( f1 - f2 )
+    dF_dx(i,j) = G%IdxT(i,j) * ( f1 - f2 )
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
     f2 = 0.5*( G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1) )
-    dF_dy(i,j) = m_to_L*G%IdyT(i,j) * ( f1 - f2 )
+    dF_dy(i,j) = G%IdyT(i,j) * ( f1 - f2 )
   enddo ; enddo
   call pass_vector(dF_dx, dF_dy, G%Domain, stagger=AGRID)
+
 end subroutine MOM_calculate_grad_Coriolis
 
 !> Return the global maximum ocean bottom depth in the same units as the input depth.

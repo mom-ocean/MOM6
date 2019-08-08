@@ -152,8 +152,8 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G, US=US)
   if (debug) then
     call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI, scale=US%s_to_T)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, scale=US%s_to_T)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, scale=US%s_to_T)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, scale=US%m_to_L*US%s_to_T)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, scale=US%m_to_L*US%s_to_T)
   endif
 
   call initialize_grid_rotation_angle(G, PF)

@@ -701,8 +701,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
                    (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdxCu(i,J-1) &
                / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
     endif
-    beta =  sqrt((US%L_to_m*G%dF_dx(i,j) - beta_topo_x)**2 + &
-                 (US%L_to_m*G%dF_dy(i,j) - beta_topo_y)**2 )
+    beta =  sqrt((G%dF_dx(i,j) - beta_topo_x)**2 + &
+                 (G%dF_dy(i,j) - beta_topo_y)**2 )
 
     I_H = US%L_to_m*GV%Rho0 * I_mass(i,j)
 
@@ -848,8 +848,8 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
                      (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdxCu(i,J-1) &
                 / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
       endif
-      beta =  sqrt((US%L_to_m*G%dF_dx(i,j) - beta_topo_x)**2 + &
-                   (US%L_to_m*G%dF_dy(i,j) - beta_topo_y)**2 )
+      beta =  sqrt((G%dF_dx(i,j) - beta_topo_x)**2 + &
+                   (G%dF_dy(i,j) - beta_topo_y)**2 )
 
     else
       beta = 0.
