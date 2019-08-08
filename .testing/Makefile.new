@@ -24,8 +24,8 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-MKMF_TEMPLATE ?= "linux-ubuntu-xenial-gnu.mk"
-#MKMF_TEMPLATE ?= "ncrc-gnu.mk"
+#MKMF_TEMPLATE ?= "linux-ubuntu-xenial-gnu.mk"
+MKMF_TEMPLATE ?= "ncrc-gnu.mk"
 #MKMF_TEMPLATE ?= "ncrc-intel.mk"
 
 # Reference codebase
@@ -152,6 +152,11 @@ $(LIST_PATHS) $(MKMF):
 #----
 # Testing
 
+# Keep results (not sure if I want this on all the time...)
+.PRECIOUS: $(foreach c,$(CONFIGS),$(foreach t,$(BUILDS) grid nan dim.z dim.t,.testing/results/$(c)/ocean.stats.$(t)))
+
+# TODO: Get rid of the `results` directory, it's complicating all of these rules!
+
 # TODO: Add test.grid, test.layout, test.dimension, etc
 .PHONY: test
 test: $(foreach t,$(TESTS),test.$(t))
@@ -170,6 +175,12 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan)
 %.nan: $(foreach b,symmetric nan,.testing/results/%/ocean.stats.$(b))
 	cmp $^
 
+%.dim.z: $(foreach b,symmetric dim.z,.testing/results/%/ocean.stats.$(b))
+	cmp $^
+
+%.dim.t: $(foreach b,symmetric dim.t,.testing/results/%/ocean.stats.$(b))
+	cmp $^
+
 # TODO: Keeping results in run directories should allow removal of $(expt)
 expt = $(word 3,$(subst /, ,$@))
 
@@ -183,13 +194,6 @@ expt = $(word 3,$(subst /, ,$@))
 	cp .testing/$(expt)/ocean.stats $@
 	bash <(curl -s https://codecov.io/bash) -n $@
 
-.testing/results/%/ocean.stats.nan: build/symmetric/MOM6
-	# Report code coverage for symmetric tests
-	mkdir -p .testing/$(expt)/RESTART
-	cd .testing/$(expt) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
-	mkdir -p $(@D)
-	cp .testing/$(expt)/ocean.stats $@
-
 .testing/results/%/ocean.stats.asymmetric: build/asymmetric/MOM6
 	mkdir -p .testing/$(expt)/RESTART
 	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
@@ -199,6 +203,28 @@ expt = $(word 3,$(subst /, ,$@))
 .testing/results/%/ocean.stats.target: build/target/MOM6
 	mkdir -p .testing/$(expt)/RESTART
 	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+
+.testing/results/%/ocean.stats.dim.z: build/symmetric/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	echo "Z_RESCALE_POWER=9" > .testing/$(expt)/MOM_override
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+	> .testing/$(expt)/MOM_override
+
+.testing/results/%/ocean.stats.dim.t: build/symmetric/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	echo "T_RESCALE_POWER=9" > .testing/$(expt)/MOM_override
+	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
+	mkdir -p $(@D)
+	cp .testing/$(expt)/ocean.stats $@
+	> .testing/$(expt)/MOM_override
+
+.testing/results/%/ocean.stats.nan: build/symmetric/MOM6
+	mkdir -p .testing/$(expt)/RESTART
+	cd .testing/$(expt) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
 	mkdir -p $(@D)
 	cp .testing/$(expt)/ocean.stats $@
 
