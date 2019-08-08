@@ -24,8 +24,8 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-#MKMF_TEMPLATE ?= "linux-ubuntu-xenial-gnu.mk"
-MKMF_TEMPLATE ?= "ncrc-gnu.mk"
+MKMF_TEMPLATE ?= "linux-ubuntu-xenial-gnu.mk"
+#MKMF_TEMPLATE ?= "ncrc-gnu.mk"
 #MKMF_TEMPLATE ?= "ncrc-intel.mk"
 
 # Reference codebase
