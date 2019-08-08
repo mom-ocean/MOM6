@@ -41,10 +41,7 @@ GRIDS = symmetric asymmetric
 BUILDS = target $(GRIDS)
 
 # Test experiments
-CONFIGS = benchmark unit_tests
-# regressions is currently broken (deliberately)
-#TESTS = regressions grids nans
-TESTS = grids nans
+TESTS = benchmark unit_tests
 
 
 #-------------------
@@ -53,23 +50,15 @@ TESTS = grids nans
 .PHONY: all
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 
-# Executable
-# TODO: Combine these, make checkout and MAKEFLAGS as inputs
-
-build/target/MOM6: build/target/Makefile
-	git checkout $(MOM_TARGET_BRANCH)
-	make -C $(@D) NETCDF=3 DEBUG=1 $(@F)
-	git checkout @{-1}
-
-build/symmetric/MOM6: build/symmetric/Makefile
-	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
-
-build/asymmetric/MOM6: build/asymmetric/Makefile
-	make -C $(@D) NETCDF=3 DEBUG=1 $(@F)
-
-# Makefile
-
+build/target/MOM6: BRANCH=$(MOM_TARGET_BRANCH)
 build/target/Makefile: BRANCH=$(MOM_TARGET_BRANCH)
+build/target/path_names: BRANCH=$(MOM_TARGET_BRANCH)
+
+build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
+	if [ $(BRANCH) ]; then git checkout $(BRANCH); fi
+	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
+	if [ $(BRANCH) ]; then git checkout @{-1}; fi
+
 build/%/Makefile: build/%/path_names
 	if [ $(BRANCH) ]; then git checkout $(BRANCH); fi
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
@@ -82,8 +71,7 @@ build/%/Makefile: build/%/path_names
 		path_names
 	if [ $(BRANCH) ]; then git checkout @{-1}; fi
 
-# path_names
-
+# TODO: Merge path_names rules?
 build/symmetric/path_names: $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
@@ -106,8 +94,6 @@ build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
 		../../config_src/solo_driver \
 		../../config_src/dynamic_symmetric
 	git checkout @{-1}
-
-# Target remote configuration
 
 # XXX: ls-remote is probably redundant here; no file means ls-remote is nonzero!
 # 	   Maybe move this into path_names rule?
@@ -154,12 +140,11 @@ $(LIST_PATHS) $(MKMF):
 
 # TODO: Add test.grid, test.layout, test.dimension, etc
 .PHONY: test
-test: $(foreach t,$(TESTS),test.$(t))
+test: test.regressions test.grids
 
-.PHONY: $(foreach t,$(TESTS),test.$(t))
-test.regressions: $(foreach c,$(CONFIGS),$(c).regression)
-test.grids: $(foreach c,$(CONFIGS),$(c).grid)
-test.nans: $(foreach c,$(CONFIGS),$(c).nan)
+.PHONY: test.regressions test.grids
+test.regressions: $(foreach t,$(TESTS),$(t).regression)
+test.grids: $(foreach t,$(TESTS),$(t).grid)
 
 %.regression: $(foreach b,target symmetric,.testing/results/%/ocean.stats.$(b))
 	cmp $^
@@ -167,28 +152,25 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan)
 %.grid: $(foreach g,$(GRIDS),.testing/results/%/ocean.stats.$(g))
 	cmp $^
 
-%.nan: $(foreach b,symmetric nan,.testing/results/%/ocean.stats.$(b))
-	cmp $^
-
-# TODO: Keeping results in run directories should allow removal of $(expt)
 expt = $(word 3,$(subst /, ,$@))
 
-# symmetric is the "canonical" run for which we test and report code coverage
+#.testing/results/%/ocean.stats.target: EXEC=build/target/MOM6
+#.testing/results/%/ocean.stats.symmetric: EXEC=build/symmetric/MOM6
+#
+#$(foreach b,$(BUILDS),.testing/results/%/ocean.stats.$(b)):
+#	mkdir -p .testing/$(expt)/RESTART
+#	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$(EXEC)
+#	mkdir -p $(@D)
+#	cp .testing/$(expt)/ocean.stats $@
+
 .testing/results/%/ocean.stats.symmetric: build/symmetric/MOM6
-	# Report code coverage for symmetric tests
+	# Apply code coverage on symmetric tests
 	find build -name *.gcda -exec rm -f '{}' \;
 	mkdir -p .testing/$(expt)/RESTART
 	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
 	mkdir -p $(@D)
 	cp .testing/$(expt)/ocean.stats $@
 	bash <(curl -s https://codecov.io/bash) -n $@
-
-.testing/results/%/ocean.stats.nan: build/symmetric/MOM6
-	# Report code coverage for symmetric tests
-	mkdir -p .testing/$(expt)/RESTART
-	cd .testing/$(expt) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
-	mkdir -p $(@D)
-	cp .testing/$(expt)/ocean.stats $@
 
 .testing/results/%/ocean.stats.asymmetric: build/asymmetric/MOM6
 	mkdir -p .testing/$(expt)/RESTART
@@ -201,17 +183,6 @@ expt = $(word 3,$(subst /, ,$@))
 	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$<
 	mkdir -p $(@D)
 	cp .testing/$(expt)/ocean.stats $@
-
-# TODO: May be able to merge stats rules with something like this:
-#
-#.testing/results/%/ocean.stats.target: EXEC=build/target/MOM6
-#.testing/results/%/ocean.stats.symmetric: EXEC=build/symmetric/MOM6
-#
-#$(foreach b,$(BUILDS),.testing/results/%/ocean.stats.$(b)):
-#	mkdir -p .testing/$(expt)/RESTART
-#	cd .testing/$(expt) && $(MPIRUN) -n 1 ../../$(EXEC)
-#	mkdir -p $(@D)
-#	cp .testing/$(expt)/ocean.stats $@
 
 
 #----
