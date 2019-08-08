@@ -3,7 +3,9 @@
     input_filename = 'n'
     restart_input_dir = 'INPUT/'
     restart_output_dir = 'RESTART/'
-    parameter_filename = 'MOM_input'
+    parameter_filename =
+        'MOM_input',
+        'MOM_override',
 /
 
 &diag_manager_nml
