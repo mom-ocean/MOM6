@@ -1153,16 +1153,16 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
 
     if (find_FrictWork) then
       if (CS%Laplacian) then
-        if (CS%biharmonic) then
+      !  if (CS%biharmonic) then
           !### This code is dimensionally incorrect, but needed to reproduce previous answers.
           ! This should be considered a serious bug in cases where the answers change if the
           ! following code is commented out - i.e. if both biharmonic and Laplacian are used
           ! and FindFrictWork is true.
-          do J=js-1,Jeq ; do I=is-1,Ieq
-            dvdx(I,J) = US%m_to_L**2*dDel2vdx(I,J)
-            dudy(I,J) = US%m_to_L**2*dDel2udy(I,J)
-          enddo ; enddo
-        endif
+      !    do J=js-1,Jeq ; do I=is-1,Ieq
+      !      dvdx(I,J) = US%m_to_L**2*dDel2vdx(I,J)
+      !      dudy(I,J) = US%m_to_L**2*dDel2udy(I,J)
+      !    enddo ; enddo
+      !  endif
 
         if (CS%answers_2018) then
           do j=js,je ; do i=is,ie
