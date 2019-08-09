@@ -412,8 +412,8 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [m2]
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [m2]
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts
                                                                      !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),                pointer       :: Reg    !< Tracer registry
@@ -497,12 +497,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
         enddo
         do k = 1, GV%ke
           tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
-                          ( US%m_to_L**2*G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
+                          ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
         enddo
 
         if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
           do k = 1, GV%ke
-            tendency(i,j,k) = dTracer(k) * US%m_to_L**2*G%IareaT(i,j) * Idt
+            tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
           enddo
         endif
 
