@@ -9,3 +9,4 @@ dependencies:
   - sphinx
   - doxygen
   - lua=5.3.4
+  - ragel=6.9
