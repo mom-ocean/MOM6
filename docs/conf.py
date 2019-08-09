@@ -15,6 +15,9 @@
 import sys
 import os
 import subprocess
+import shutil
+
+cmd_exists = lambda x: shutil.which(x) is not None
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -30,10 +33,8 @@ if return_code != 0: sys.exit(return_code)
 # Build doxyrest if needed:
 get_doxyrest = '(git clone https://github.com/vovkos/doxyrest_b ; cd doxyrest_b ; git submodule update --init)'
 build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cmake --build .)'
-import shutil
-cmd_exists = lambda x: shutil.which('doxyrest') is not None
 
-if not cmd_exists:
+if not cmd_exists('doxyrest'):
     return_code = subprocess.call(get_doxyrest, shell=True)
     if return_code != 0: sys.exit(return_code)
     return_code = subprocess.call(build_doxyrest, shell=True)
