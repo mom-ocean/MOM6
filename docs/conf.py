@@ -27,6 +27,27 @@ if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxyge
 return_code = subprocess.call(doxygenize, shell=True)
 if return_code != 0: sys.exit(return_code)
 
+# Build doxyrest if needed:
+get_doxyrest = '(git clone https://github.com/vovkos/doxyrest_b ; cd doxyrest_b ; git submodule update --init)'
+build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cmake --build .)'
+import shutil
+cmd_exists = lambda x: shutil.which('doxyrest') is not None
+
+if not cmd exists:
+    subprocess.call(get_doxyrest, shell=True)
+    subprocess.call(build_doxyrest, shell=True)
+    os.environ['PATH'] = os.environ['PATH'] + ':./doxyrest_b/build/doxyrest/bin/Release'
+
+# add doxyrest
+xml2rst = 'doxyrest -c mom6-config.lua'
+return_code = subprocess.call(xml2rst, shell=True)
+if return_code != 0: sys.exit(return_code)
+
+# link images
+linkimages = '(cd api ; ln -s ../images/*png .)'
+return_code = subprocess.call(linkimages, shell=True)
+if return_code != 0: sys.exit(return_code)
+
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
@@ -37,11 +58,8 @@ if return_code != 0: sys.exit(return_code)
 # ones.
 extensions = [
     'sphinx.ext.mathjax',
-    'sphinxcontrib.autodoc_doxygen',
-    'sphinxfortran.fortran_domain',
 ]
 
-autosummary_generate = ['api/modules.rst', 'api/pages.rst']
 doxygen_xml = 'xml'
 
 # Add any paths that contain templates here, relative to this directory.

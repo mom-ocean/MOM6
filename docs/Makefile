@@ -184,7 +184,7 @@ doxygen/bin/doxygen: doxygen
 nortd: doxygen/bin/doxygen
 	$< Doxyfile_nortd
 Clean: clean
-	rm -rf _build APIs xml doxygen.log
+	rm -rf _build APIs xml doxygen.log api
 CLEAN: Clean
 	rm -rf doxygen src
 	rm -rf _build APIs src xml doxygen doxygen.log
