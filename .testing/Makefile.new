@@ -33,6 +33,8 @@ MOM_TARGET_URL ?= https://github.com/NOAA-GFDL/MOM6.git
 MOM_TARGET_REMOTE ?= target
 MOM_TARGET_BRANCH ?= $(MOM_TARGET_REMOTE)/dev/gfdl
 
+MOM_MERGED_BRANCH := mergetest
+
 # Grid types
 GRIDS = symmetric asymmetric
 
@@ -43,8 +45,7 @@ BUILDS = target $(GRIDS)
 # Test experiments
 CONFIGS = benchmark unit_tests
 # regressions is currently broken (deliberately)
-#TESTS = regressions grids nans
-TESTS = grids nans
+TESTS = regressions grids nans layouts dims
 
 
 .PHONY: all
@@ -60,14 +61,21 @@ build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
 	git checkout @{-1}
 
 build/symmetric/MOM6: build/symmetric/Makefile $(FMS)/lib/libfms.a
+	git checkout $(MOM_MERGED_BRANCH)
 	make -C $(@D) NETCDF=3 DEBUG=1 COVERAGE=1 $(@F)
+	git checkout @{-1}
 
 build/asymmetric/MOM6: build/asymmetric/Makefile $(FMS)/lib/libfms.a
+	git checkout $(MOM_MERGED_BRANCH)
 	make -C $(@D) NETCDF=3 DEBUG=1 $(@F)
+	git checkout @{-1}
 
 # Makefile
 
 build/target/Makefile: BRANCH=$(MOM_TARGET_BRANCH)
+build/symmetric/Makefile: BRANCH=$(MOM_MERGED_BRANCH)
+build/asymmetric/Makefile: BRANCH=$(MOM_MERGED_BRANCH)
+
 build/%/Makefile: build/%/path_names
 	if [ $(BRANCH) ]; then git checkout $(BRANCH); fi
 	cp .testing/$(MKMF_TEMPLATE) $(@D)
@@ -82,19 +90,23 @@ build/%/Makefile: build/%/path_names
 
 # path_names
 
-build/symmetric/path_names: $(LIST_PATHS)
+build/symmetric/path_names: $(LIST_PATHS) .git/refs/heads/$(MOM_MERGED_BRANCH)
+	git checkout $(MOM_MERGED_BRANCH)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../src \
 		../../config_src/solo_driver \
 		../../config_src/dynamic_symmetric
+	git checkout @{-1}
 
-build/asymmetric/path_names: $(LIST_PATHS)
+build/asymmetric/path_names: $(LIST_PATHS) .git/refs/heads/$(MOM_MERGED_BRANCH)
+	git checkout $(MOM_MERGED_BRANCH)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../src \
 		../../config_src/solo_driver \
 		../../config_src/dynamic
+	git checkout @{-1}
 
 build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
 	git checkout $(MOM_TARGET_BRANCH)
@@ -114,6 +126,10 @@ build/target/path_names: $(LIST_PATHS) .git/refs/remotes/$(MOM_TARGET_BRANCH)
 		|| git remote add $(MOM_TARGET_REMOTE) $(MOM_TARGET_URL)
 	git fetch --no-recurse-submodules $(MOM_TARGET_REMOTE)
 
+.git/refs/heads/$(MOM_MERGED_BRANCH): .git/refs/remotes/$(MOM_TARGET_BRANCH)
+	git checkout -b $(MOM_MERGED_BRANCH)
+	git merge --no-edit $(MOM_TARGET_BRANCH)
+	git checkout @{-1}
 
 #----
 # FMS build
@@ -159,7 +175,9 @@ test: $(foreach t,$(TESTS),test.$(t))
 .PHONY: $(foreach t,$(TESTS),test.$(t))
 test.regressions: $(foreach c,$(CONFIGS),$(c).regression)
 test.grids: $(foreach c,$(CONFIGS),$(c).grid)
+test.layouts: $(foreach c,$(CONFIGS),$(c).layout)
 test.nans: $(foreach c,$(CONFIGS),$(c).nan)
+test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d)))
 
 %.regression: $(foreach b,target symmetric,.testing/%/ocean.stats.$(b))
 	cmp $^
@@ -167,10 +185,10 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan)
 %.grid: $(foreach g,$(GRIDS),.testing/%/ocean.stats.$(g))
 	cmp $^
 
-%.nan: $(foreach b,symmetric nan,.testing/%/ocean.stats.$(b))
+%.layout: $(foreach b,symmetric layout,.testing/%/ocean.stats.$(b))
 	cmp $^
 
-%.dim.z: $(foreach b,symmetric dim.z,.testing/%/ocean.stats.$(b))
+%.nan: $(foreach b,symmetric nan,.testing/%/ocean.stats.$(b))
 	cmp $^
 
 %.dim.t: $(foreach b,symmetric dim.t,.testing/%/ocean.stats.$(b))
@@ -179,31 +197,45 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan)
 %.dim.l: $(foreach b,symmetric dim.l,.testing/%/ocean.stats.$(b))
 	cmp $^
 
-# symmetric is the "canonical" run for which we test and report code coverage
+%.dim.h: $(foreach b,symmetric dim.h,.testing/%/ocean.stats.$(b))
+	cmp $^
+
+%.dim.z: $(foreach b,symmetric dim.z,.testing/%/ocean.stats.$(b))
+	cmp $^
+
 .testing/%/ocean.stats.symmetric: build/symmetric/MOM6
 	# Report code coverage for symmetric tests
 	find build -name *.gcda -exec rm -f '{}' \;
 	mkdir -p $(@D)/RESTART
+	> $(@D)/MOM_override
 	cd $(@D) && $(MPIRUN) -n 1 ../../$<
 	cp $(@D)/ocean.stats $@
 	bash <(curl -s https://codecov.io/bash) -n $@
 
 .testing/%/ocean.stats.asymmetric: build/asymmetric/MOM6
 	mkdir -p $(@D)/RESTART
+	> $(@D)/MOM_override
 	cd $(@D) && $(MPIRUN) -n 1 ../../$<
 	cp $(@D)/ocean.stats $@
 
 .testing/%/ocean.stats.target: build/target/MOM6
 	mkdir -p $(@D)/RESTART
+	> $(@D)/MOM_override
 	cd $(@D) && $(MPIRUN) -n 1 ../../$<
 	cp $(@D)/ocean.stats $@
 
-.testing/%/ocean.stats.dim.z: build/symmetric/MOM6
+.testing/%/ocean.stats.layout: build/symmetric/MOM6
 	mkdir -p $(@D)/RESTART
-	echo "Z_RESCALE_POWER=9" > $(@D)/MOM_override
-	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	echo "LAYOUT=2,1" > $(@D)/MOM_override
+	cd $(@D) && $(MPIRUN) -n 2 ../../$<
 	cp $(@D)/ocean.stats $@
 	> $(@D)/MOM_override
+
+.testing/%/ocean.stats.nan: build/symmetric/MOM6
+	> $(@D)/MOM_override
+	mkdir -p $(@D)/RESTART
+	cd $(@D) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
 
 .testing/%/ocean.stats.dim.t: build/symmetric/MOM6
 	mkdir -p $(@D)/RESTART
@@ -219,10 +251,19 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan)
 	cp $(@D)/ocean.stats $@
 	> $(@D)/MOM_override
 
-.testing/%/ocean.stats.nan: build/symmetric/MOM6
+.testing/%/ocean.stats.dim.h: build/symmetric/MOM6
 	mkdir -p $(@D)/RESTART
-	cd $(@D) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
+	echo "H_RESCALE_POWER=9" > $(@D)/MOM_override
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
 	cp $(@D)/ocean.stats $@
+	> $(@D)/MOM_override
+
+.testing/%/ocean.stats.dim.z: build/symmetric/MOM6
+	mkdir -p $(@D)/RESTART
+	echo "Z_RESCALE_POWER=9" > $(@D)/MOM_override
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
+	> $(@D)/MOM_override
 
 
 #----
