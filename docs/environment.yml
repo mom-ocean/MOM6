@@ -1,0 +1,12 @@
+name: mom6-docs
+
+channels:
+  - conda-forge
+
+dependencies:
+  - cmake
+  - python=3.6
+  - sphinx
+  - doxygen
+  - lua=5.2.4
+  - ragel
