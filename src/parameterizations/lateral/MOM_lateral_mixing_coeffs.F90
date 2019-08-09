@@ -53,8 +53,8 @@ type, public :: VarMix_CS
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   !< S*N at u-points [s-1]
     SN_v => NULL(), &  !< S*N at v-points [s-1]
-    L2u => NULL(), &   !< Length scale^2 at u-points [m2]
-    L2v => NULL(), &   !< Length scale^2 at v-points [m2]
+    L2u => NULL(), &   !< Length scale^2 at u-points [L2 ~> m2]
+    L2v => NULL(), &   !< Length scale^2 at v-points [L2 ~> m2]
     cg1 => NULL(), &   !< The first baroclinic gravity wave speed [m s-1].
     Res_fn_h => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at h points [nondim].
@@ -1026,20 +1026,22 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
     if (CS%Visbeck_L_scale<0) then
       do j=js,je ; do I=is-1,Ieq
-        CS%L2u(I,j) = CS%Visbeck_L_scale**2 * US%L_to_m**2*G%areaCu(I,j)
+        CS%L2u(I,j) = CS%Visbeck_L_scale**2 * G%areaCu(I,j)
       enddo; enddo
       do J=js-1,Jeq ; do i=is,ie
-        CS%L2v(i,J) = CS%Visbeck_L_scale**2 * US%L_to_m**2*G%areaCv(i,J)
+        CS%L2v(i,J) = CS%Visbeck_L_scale**2 * G%areaCv(i,J)
       enddo; enddo
     else
-      CS%L2u(:,:) = CS%Visbeck_L_scale**2
-      CS%L2v(:,:) = CS%Visbeck_L_scale**2
+      CS%L2u(:,:) = US%m_to_L**2*CS%Visbeck_L_scale**2
+      CS%L2v(:,:) = US%m_to_L**2*CS%Visbeck_L_scale**2
     endif
 
     CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
-       'Length scale squared for mixing coefficient, at u-points', 'm2')
+       'Length scale squared for mixing coefficient, at u-points', &
+       'm2', conversion=US%L_to_m**2)
     CS%id_L2v = register_diag_field('ocean_model', 'L2v', diag%axesCv1, Time, &
-       'Length scale squared for mixing coefficient, at v-points', 'm2')
+       'Length scale squared for mixing coefficient, at v-points', &
+       'm2', conversion=US%L_to_m**2)
   endif
 
   if (CS%use_stored_slopes) then

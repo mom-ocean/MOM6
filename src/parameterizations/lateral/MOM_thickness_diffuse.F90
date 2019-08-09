@@ -211,7 +211,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (use_Visbeck) then
       do j=js,je ; do I=is-1,ie
         Khth_loc_u(I,j) = Khth_loc_u(I,j) + &
-          CS%KHTH_Slope_Cff*US%m_to_L**2*VarMix%L2u(I,j) * US%T_to_s*VarMix%SN_u(I,j)
+          CS%KHTH_Slope_Cff*VarMix%L2u(I,j) * US%T_to_s*VarMix%SN_u(I,j)
       enddo ; enddo
     endif
   endif
@@ -291,7 +291,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (use_Visbeck) then
       do J=js-1,je ; do i=is,ie
-        Khth_loc(i,j) = Khth_loc(i,j) + CS%KHTH_Slope_Cff*US%m_to_L**2*VarMix%L2v(i,J)*US%T_to_s*VarMix%SN_v(i,J)
+        Khth_loc(i,j) = Khth_loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*US%T_to_s*VarMix%SN_v(i,J)
       enddo ; enddo
     endif
   endif
