@@ -4,8 +4,8 @@ channels:
   - conda-forge
 
 dependencies:
-  - cmake
-  - python=3.6
+  - cmake=3.7.2
+  - python=2.7
   - sphinx
   - doxygen
   - lua=5.2.4
