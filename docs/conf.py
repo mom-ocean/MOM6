@@ -35,6 +35,8 @@ get_doxyrest = '(git clone https://github.com/vovkos/doxyrest_b ; cd doxyrest_b 
 build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake -E env CXXFLAGS="-fPIC" cmake .. ; cmake --build .)'
 
 if not cmd_exists('doxyrest'):
+    if os.path.exists('doxyrest_b'):
+        subprocess.call('rm -rf doxyrest_b', shell=True)
     return_code = subprocess.call(get_doxyrest, shell=True)
     if return_code != 0: sys.exit(return_code)
     return_code = subprocess.call(build_doxyrest, shell=True)
