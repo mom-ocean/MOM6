@@ -65,34 +65,35 @@ type, public :: VarMix_CS
     Res_fn_v => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at v points [nondim].
     beta_dx2_h => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at h points [m T-1 ~> m s-1].
+                            !! times the grid spacing squared at h points [L T-1 ~> m s-1].
     beta_dx2_q => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at q points [m T-1 ~> m s-1].
+                            !! times the grid spacing squared at q points [L T-1 ~> m s-1].
     beta_dx2_u => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at u points [m T-1 ~> m s-1].
+                            !! times the grid spacing squared at u points [L T-1 ~> m s-1].
     beta_dx2_v => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at v points [m T-1 ~> m s-1].
+                            !! times the grid spacing squared at v points [L T-1 ~> m s-1].
     f2_dx2_h => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at h [m2 T-2 ~> m2 s-2].
+                          !! spacing squared at h [L2 T-2 ~> m2 s-2].
     f2_dx2_q => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at q [m2 T-2 ~> m2 s-2].
+                          !! spacing squared at q [L2 T-2 ~> m2 s-2].
     f2_dx2_u => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at u [m2 T-2 ~> m2 s-2].
+                          !! spacing squared at u [L2 T-2 ~> m2 s-2].
     f2_dx2_v => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at v [m2 T-2 ~> m2 s-2].
+                          !! spacing squared at v [L2 T-2 ~> m2 s-2].
     Rd_dx_h => NULL()     !< Deformation radius over grid spacing [nondim]
 
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
     slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
+    !### These are posted as diagnostics but are never set.
     N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points [s-2]
     N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points [s-2]
     ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Laplac3_const_u       !< Laplacian  metric-dependent constants [nondim]
+    Laplac3_const_u       !< Laplacian metric-dependent constants [L3 ~> m3]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Laplac3_const_v       !< Laplacian  metric-dependent constants [nondim]
+    Laplac3_const_v       !< Laplacian metric-dependent constants [L3 ~> m3]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     KH_u_QG               !< QG Leith GM coefficient at u-points [L2 T-1 ~> m2 s-1]
@@ -202,8 +203,8 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
     !$OMP parallel do default(shared)
     do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%Rd_dx_h(i,j) = US%L_to_m*CS%cg1(i,j) / &
-            (sqrt(CS%f2_dx2_h(i,j) + US%L_to_m*CS%cg1(i,j)*CS%beta_dx2_h(i,j)))
+      CS%Rd_dx_h(i,j) = CS%cg1(i,j) / &
+            (sqrt(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))
     enddo ; enddo
     if (query_averaging_enabled(CS%diag)) then
       if (CS%id_Rd_dx > 0) call post_data(CS%id_Rd_dx, CS%Rd_dx_h, CS%diag)
@@ -245,8 +246,8 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   if (CS%Res_fn_power_visc >= 100) then
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
-      dx_term = CS%f2_dx2_h(i,j) + US%L_to_m*CS%cg1(i,j)*CS%beta_dx2_h(i,j)
-      if ((CS%Res_coef_visc * US%L_to_m*CS%cg1(i,j))**2 > dx_term) then
+      dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
+      if ((CS%Res_coef_visc * CS%cg1(i,j))**2 > dx_term) then
         CS%Res_fn_h(i,j) = 0.0
       else
         CS%Res_fn_h(i,j) = 1.0
@@ -254,8 +255,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = US%L_to_m * 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
-                      (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
+      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J)
       if ((CS%Res_coef_visc * cg1_q)**2 > dx_term) then
         CS%Res_fn_q(I,J) = 0.0
@@ -266,13 +266,12 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   elseif (CS%Res_fn_power_visc == 2) then
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
-      dx_term = CS%f2_dx2_h(i,j) + US%L_to_m*CS%cg1(i,j)*CS%beta_dx2_h(i,j)
-      CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef_visc * US%L_to_m*CS%cg1(i,j))**2)
+      dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
+      CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**2)
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = US%L_to_m * 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
-                      (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
+      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J)
       CS%Res_fn_q(I,J) = dx_term / (dx_term + (CS%Res_coef_visc * cg1_q)**2)
     enddo ; enddo
@@ -280,34 +279,32 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
     power_2 = CS%Res_fn_power_visc / 2
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
-      dx_term = (US%s_to_T**2*CS%f2_dx2_h(i,j) + US%s_to_T*US%L_T_to_m_s*CS%cg1(i,j)*CS%beta_dx2_h(i,j))**power_2
+      dx_term = (US%L_T_to_m_s**2*(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**power_2
       CS%Res_fn_h(i,j) = dx_term / &
           (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = 0.25 * US%L_T_to_m_s*((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
-                      (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
-      dx_term = (US%s_to_T**2*CS%f2_dx2_q(I,J) +  cg1_q * US%s_to_T*CS%beta_dx2_q(I,J))**power_2
+      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
+      dx_term = (US%L_T_to_m_s**2*(CS%f2_dx2_q(I,J) + cg1_q * CS%beta_dx2_q(I,J)))**power_2
       CS%Res_fn_q(I,J) = dx_term / &
-          (dx_term + (CS%Res_coef_visc * cg1_q)**CS%Res_fn_power_visc)
+          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*cg1_q)**CS%Res_fn_power_visc)
     enddo ; enddo
   else
 !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
-      dx_term = (US%s_to_T*sqrt(CS%f2_dx2_h(i,j) + &
-                                US%L_to_m*CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power_visc
+      dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_h(i,j) + &
+                                    CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power_visc
       CS%Res_fn_h(i,j) = dx_term / &
          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = 0.25 * US%L_T_to_m_s*((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
-                      (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
-      dx_term = (US%s_to_T*sqrt(CS%f2_dx2_q(I,J) + &
-                                US%T_to_s*cg1_q * CS%beta_dx2_q(I,J)))**CS%Res_fn_power_visc
+      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
+      dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_q(I,J) + &
+                                    cg1_q * CS%beta_dx2_q(I,J)))**CS%Res_fn_power_visc
       CS%Res_fn_q(I,J) = dx_term / &
-          (dx_term + (CS%Res_coef_visc * cg1_q)**CS%Res_fn_power_visc)
+          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*cg1_q)**CS%Res_fn_power_visc)
     enddo ; enddo
   endif
 
@@ -322,7 +319,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
     if (CS%Res_fn_power_khth >= 100) then
 !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * US%L_to_m * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
         if ((CS%Res_coef_khth * cg1_u)**2 > dx_term) then
           CS%Res_fn_u(I,j) = 0.0
@@ -332,7 +329,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
       enddo ; enddo
 !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * US%L_to_m * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
         if ((CS%Res_coef_khth * cg1_v)**2 > dx_term) then
           CS%Res_fn_v(i,J) = 0.0
@@ -343,13 +340,13 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
     elseif (CS%Res_fn_power_khth == 2) then
 !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * US%L_to_m * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
         CS%Res_fn_u(I,j) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_u)**2)
       enddo ; enddo
 !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * US%L_to_m * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
         CS%Res_fn_v(i,J) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_v)**2)
       enddo ; enddo
@@ -357,34 +354,34 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
       power_2 = CS%Res_fn_power_khth / 2
 !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * US%L_T_to_m_s * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = (US%s_to_T**2*CS%f2_dx2_u(I,j) + cg1_u * US%s_to_T*CS%beta_dx2_u(I,j))**power_2
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        dx_term = (US%L_T_to_m_s**2 * (CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)))**power_2
         CS%Res_fn_u(I,j) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * cg1_u)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_u)**CS%Res_fn_power_khth)
       enddo ; enddo
 !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * US%L_T_to_m_s * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = (US%s_to_T**2*CS%f2_dx2_v(i,J) + cg1_v * US%s_to_T*CS%beta_dx2_v(i,J))**power_2
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        dx_term = (US%L_T_to_m_s**2 * (CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)))**power_2
         CS%Res_fn_v(i,J) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * cg1_v)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_v)**CS%Res_fn_power_khth)
       enddo ; enddo
     else
 !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * US%L_T_to_m_s * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = (US%s_to_T*sqrt(CS%f2_dx2_u(I,j) + &
-                                  US%T_to_s*cg1_u * CS%beta_dx2_u(I,j)))**CS%Res_fn_power_khth
+        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_u(I,j) + &
+                                      cg1_u * CS%beta_dx2_u(I,j)))**CS%Res_fn_power_khth
         CS%Res_fn_u(I,j) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * cg1_u)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_u)**CS%Res_fn_power_khth)
       enddo ; enddo
 !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * US%L_T_to_m_s * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = (US%s_to_T*sqrt(CS%f2_dx2_v(i,J) + &
-                                  US%T_to_s*cg1_v * CS%beta_dx2_v(i,J)))**CS%Res_fn_power_khth
+        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_v(i,J) + &
+                                      cg1_v * CS%beta_dx2_v(i,J)))**CS%Res_fn_power_khth
         CS%Res_fn_v(i,J) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * cg1_v)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_v)**CS%Res_fn_power_khth)
       enddo ; enddo
     endif
   endif
@@ -453,7 +450,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
-  real :: N2            ! Brunt-Vaisala frequency [s-1]
+  real :: N2            ! Positive Brunt-Vaisala frequency or zero [s-2]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
@@ -592,8 +589,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: N2            ! Brunt-Vaisala frequency squared [T-2 ~> s-2]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
-  real :: Z_to_L        ! A conversion factor between from units for e to the
-                        ! units for lateral distances.
   real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
@@ -613,7 +608,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
   H_cutoff = real(2*nz) * (GV%Angstrom_H + h_neglect)
-  Z_to_L = US%Z_to_m
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
@@ -625,12 +619,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
     if (calculate_slopes) then
       ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        E_x(I,j) = Z_to_L*(e(i+1,j,K)-e(i,j,K))*US%m_to_L*G%IdxCu(I,j)
+        E_x(I,j) = US%Z_to_L*(e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
         ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) E_x(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        E_y(i,J) = Z_to_L*(e(i,j+1,K)-e(i,j,K))*US%m_to_L*G%IdyCv(i,J)
+        E_y(i,J) = US%Z_to_L*(e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
         ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
       enddo ; enddo
@@ -674,14 +668,14 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   do j=js,je
     do I=is-1,ie ; CS%SN_u(I,j) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
-      CS%SN_u(I,j) = CS%SN_u(I,j) + US%T_to_s*S2N2_u_local(I,j,k)
+      CS%SN_u(I,j) = CS%SN_u(I,j) + S2N2_u_local(I,j,k)
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
-        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( US%s_to_T*CS%SN_u(I,j) / &
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
                                                (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
       else
         CS%SN_u(I,j) = 0.0
@@ -692,13 +686,13 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   do J=js-1,je
     do i=is,ie ; CS%SN_v(i,J) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
-      CS%SN_v(i,J) = CS%SN_v(i,J) + US%T_to_s*S2N2_v_local(i,J,k)
+      CS%SN_v(i,J) = CS%SN_v(i,J) + S2N2_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
-        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( US%s_to_T*CS%SN_v(i,J) / &
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
                                                (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
       else
         CS%SN_v(I,j) = 0.0
@@ -744,16 +738,16 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
 !    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
     dslopey_dz, & ! z-derivative of y-slope at v-points [m-1]
     h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
-    beta_v,     & ! Beta at v-points [m-1 s-1]
+    beta_v,     & ! Beta at v-points [T-1 L-1 ~> s-1 m-1]
     grad_vort_mag_v, & ! mag. of vort. grad. at v-points [s-1]
     grad_div_mag_v     ! mag. of div. grad. at v-points [s-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
 !    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
 !    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-    dslopex_dz, & ! z-derivative of x-slope at u-points [m-1]
+    dslopex_dz, & ! z-derivative of x-slope at u-points [Z-1 ~> m-1]
     h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
-    beta_u,     & ! Beta at u-points [m-1 s-1]
+    beta_u,     & ! Beta at u-points [T-1 L-1 ~> s-1 m-1]
     grad_vort_mag_u, & ! mag. of vort. grad. at u-points [s-1 m-1]
     grad_div_mag_u     ! mag. of div. grad. at u-points [s-1 m-1]
 !  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
@@ -785,7 +779,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       h_at_slope_below = 2. * ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) * h(i+1,j,k+1) ) / &
                          ( ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) + h(i+1,j,k+1) ) &
                          + ( h(i,j,k+1) * h(i+1,j,k+1) ) * ( h(i,j,k) + h(i+1,j,k) ) + GV%H_subroundoff )
-      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_Z )
       dslopex_dz(I,j) = 2. * ( CS%slope_x(i,j,k) - CS%slope_x(i,j,k+1) ) * Ih
       h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
@@ -798,7 +792,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       h_at_slope_below = 2. * ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) * h(i,j+1,k+1) ) / &
                          ( ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) + h(i,j+1,k+1) ) &
                          + ( h(i,j,k+1) * h(i,j+1,k+1) ) * ( h(i,j,k) + h(i,j+1,k) ) + GV%H_subroundoff )
-      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_Z )
       dslopey_dz(i,J) = 2. * ( CS%slope_y(i,j,k) - CS%slope_y(i,j,k+1) ) * Ih
       h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
     enddo ; enddo
@@ -806,7 +800,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     !### do J=js-1,je ; do i=is-1,Ieq+1
     do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
-      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * US%L_to_m * &
+      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * US%L_to_Z * &
             ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
             + ( h_at_u(I-1,j) * dslopex_dz(I-1,j) + h_at_u(I,j+1) * dslopex_dz(I,j+1) ) ) / &
               ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
@@ -816,7 +810,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
       !### I think that this should be vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * &
-      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * US%L_to_m * &
+      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * US%L_to_Z * &
             ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
             + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
@@ -829,34 +823,38 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   if (CS%use_QG_Leith_GM) then
 
     do j=js,je ; do I=is-1,Ieq
-      grad_vort_mag_u(I,j) = US%m_to_L*US%s_to_T*SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
-                                + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
-      grad_div_mag_u(I,j) = US%m_to_L*US%s_to_T*SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
-                               + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
+      !### These expressions are not rotationally symmetric.  Add parentheses and regroup, as in:
+    ! grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2 + (0.25*((vort_xy_dx(i,J) + vort_xy_dx(i+1,J-1)) +
+    !                                                         (vort_xy_dx(i+1,J) + vort_xy_dx(i,J-1))))**2 )
+      grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
+                                                             + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
+      grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
+                                                           + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_u(I,j) = US%m_to_L*sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+        beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
                                       (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
-        CS%KH_u_QG(I,j,k) = US%m_to_L**2*US%T_to_s*MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)*3) &
-             * CS%Laplac3_const_u(I,j) * inv_PI3
+        CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), 3.0*beta_u(I,j)) * &
+                            CS%Laplac3_const_u(I,j) * inv_PI3
       else
-        CS%KH_u_QG(I,j,k) = US%m_to_L**2*US%T_to_s*(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) &
-             * CS%Laplac3_const_u(I,j) * inv_PI3
+        CS%KH_u_QG(I,j,k) = (grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) * &
+                            CS%Laplac3_const_u(I,j) * inv_PI3
       endif
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      grad_vort_mag_v(i,J) = US%m_to_L*US%s_to_T*SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
-                           + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
-      grad_div_mag_v(i,J) = US%m_to_L*US%s_to_T*SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
-                           + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
+      !### These expressions are not rotationally symmetric.  Add parentheses and regroup.
+      grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
+                                                             + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
+      grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
+                                                           + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
       if (CS%use_beta_in_QG_Leith) then
-        beta_v(i,J) = US%m_to_L*sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
-                                      (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
-        CS%KH_v_QG(i,J,k) = US%m_to_L**2*US%T_to_s*MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) &
-             * CS%Laplac3_const_v(i,J) * inv_PI3
+        beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                            (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) * &
+                            CS%Laplac3_const_v(i,J) * inv_PI3
       else
-        CS%KH_v_QG(i,J,k) = US%m_to_L**2*US%T_to_s*(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) &
-             * CS%Laplac3_const_v(i,J) * inv_PI3
+        CS%KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) * &
+                            CS%Laplac3_const_v(i,J) * inv_PI3
       endif
     enddo ; enddo
     ! post diagnostics
@@ -886,8 +884,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   real :: MLE_front_length
   real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity
-  real :: grid_sp_u2, grid_sp_u3
-  real :: grid_sp_v2, grid_sp_v3 ! Intermediate quantities for Leith metrics
+  real :: grid_sp_u2, grid_sp_v2 ! Intermediate quantities for Leith metrics [L2 ~> m2]
+  real :: grid_sp_u3, grid_sp_v3 ! Intermediate quantities for Leith metrics [L3 ~> m3]
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
@@ -1125,35 +1123,35 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
-      CS%f2_dx2_q(I,J) = US%L_to_m**2*((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * &
+      CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
                          max(G%CoriolisBu(I,J)**2, absurdly_small_freq**2)
-      CS%beta_dx2_q(I,J) = oneOrTwo * US%L_to_m**2*((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * US%m_to_L*G%IdxCv(i,J))**2 + &
-             ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * US%m_to_L*G%IdxCv(i+1,J))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * US%m_to_L*G%IdyCu(I,j))**2 + &
-             ((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * US%m_to_L*G%IdyCu(I,j+1))**2) ) ))
+      CS%beta_dx2_q(I,J) = oneOrTwo * ((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * (sqrt(0.5 * &
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2) ) ))
     enddo ; enddo
 
     do j=js,je ; do I=is-1,Ieq
-      CS%f2_dx2_u(I,j) = ((US%L_to_m*G%dxCu(I,j))**2 + (US%L_to_m*G%dyCu(I,j))**2) * &
+      CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
           max(0.5* (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq**2)
-      CS%beta_dx2_u(I,j) = oneOrTwo * ((US%L_to_m*G%dxCu(I,j))**2 + (US%L_to_m*G%dyCu(I,j))**2) * (sqrt( &
-          0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * US%m_to_L*G%IdxCv(i,J-1))**2 + &
-                  ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * US%m_to_L*G%IdxCv(i+1,J))**2) + &
-                 (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * US%m_to_L*G%IdxCv(i+1,J-1))**2 + &
-                  ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * US%m_to_L*G%IdxCv(i,J))**2) ) + &
-                  ((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * US%m_to_L*G%IdyCu(I,j))**2 ))
+      CS%beta_dx2_u(I,j) = oneOrTwo * ((G%dxCu(I,j))**2 + (G%dyCu(I,j))**2) * (sqrt( &
+          0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
+                  ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
+                 (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2 + &
+                  ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2) ) + &
+                  ((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 ))
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      CS%f2_dx2_v(i,J) = ((US%L_to_m*G%dxCv(i,J))**2 + (US%L_to_m*G%dyCv(i,J))**2) * &
+      CS%f2_dx2_v(i,J) = ((G%dxCv(i,J))**2 + (G%dyCv(i,J))**2) * &
           max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq**2)
-      CS%beta_dx2_v(i,J) = oneOrTwo * ((US%L_to_m*G%dxCv(i,J))**2 + (US%L_to_m*G%dyCv(i,J))**2) * (sqrt( &
-          ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * US%m_to_L*G%IdxCv(i,J))**2 + &
-          0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * US%m_to_L*G%IdyCu(I,j))**2 + &
-                  ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * US%m_to_L*G%IdyCu(I-1,j+1))**2) + &
-                 (((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * US%m_to_L*G%IdyCu(I,j+1))**2 + &
-                  ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * US%m_to_L*G%IdyCu(I-1,j))**2) ) ))
+      CS%beta_dx2_v(i,J) = oneOrTwo * ((G%dxCv(i,J))**2 + (G%dyCv(i,J))**2) * (sqrt( &
+          ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+          0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+                  ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2) + &
+                 (((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2 + &
+                  ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
     enddo ; enddo
 
   endif
@@ -1169,15 +1167,15 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%beta_dx2_h(isd:ied,jsd:jed)); CS%beta_dx2_h(:,:) = 0.0
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed))  ; CS%f2_dx2_h(:,:) = 0.0
     do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%f2_dx2_h(i,j) = ((US%L_to_m*G%dxT(i,j))**2 + (US%L_to_m*G%dyT(i,j))**2) * &
+      CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
           max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
               absurdly_small_freq**2)
-      CS%beta_dx2_h(i,j) = oneOrTwo * ((US%L_to_m*G%dxT(i,j))**2 + (US%L_to_m*G%dyT(i,j))**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * US%m_to_L*G%IdxCv(i,J))**2 + &
-             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * US%m_to_L*G%IdxCv(i,J-1))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * US%m_to_L*G%IdyCu(I,j))**2 + &
-             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * US%m_to_L*G%IdyCu(I-1,j))**2) ) ))
+      CS%beta_dx2_h(i,j) = oneOrTwo * ((G%dxT(i,j))**2 + (G%dyT(i,j))**2) * (sqrt(0.5 * &
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
     enddo ; enddo
   endif
 
@@ -1214,14 +1212,14 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do j=Jsq,Jeq+1 ; do I=is-1,Ieq
       ! Static factors in the Leith schemes
-      grid_sp_u2 = US%L_to_m*G%dyCu(I,j)*US%L_to_m*G%dxCu(I,j)
-      grid_sp_u3 = grid_sp_u2*sqrt(grid_sp_u2)
+      grid_sp_u2 = G%dyCu(I,j)*G%dxCu(I,j)
+      grid_sp_u3 = sqrt(grid_sp_u2)
       CS%Laplac3_const_u(I,j) = Leith_Lap_const * grid_sp_u3
     enddo ; enddo
     do j=js-1,Jeq ; do I=Isq,Ieq+1
       ! Static factors in the Leith schemes
       !### The second factor here is wrong.  It should be G%dxCv(i,J).
-      grid_sp_v2 = US%L_to_m*G%dyCv(i,J)*US%L_to_m*G%dxCu(i,J)
+      grid_sp_v2 = G%dyCv(i,J)*G%dxCu(i,J)
       grid_sp_v3 = grid_sp_v2*sqrt(grid_sp_v2)
       CS%Laplac3_const_v(i,J) = Leith_Lap_const * grid_sp_v3
     enddo ; enddo
