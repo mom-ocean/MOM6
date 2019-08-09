@@ -51,11 +51,11 @@ type, public :: VarMix_CS
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
   real, dimension(:,:), pointer :: &
-    SN_u => NULL(), &   !< S*N at u-points [s-1]
-    SN_v => NULL(), &  !< S*N at v-points [s-1]
-    L2u => NULL(), &   !< Length scale^2 at u-points [L2 ~> m2]
-    L2v => NULL(), &   !< Length scale^2 at v-points [L2 ~> m2]
-    cg1 => NULL(), &   !< The first baroclinic gravity wave speed [m s-1].
+    SN_u => NULL(), &     !< S*N at u-points [T-1 ~> s-1]
+    SN_v => NULL(), &     !< S*N at v-points [T-1 ~> s-1]
+    L2u => NULL(), &      !< Length scale^2 at u-points [L2 ~> m2]
+    L2v => NULL(), &      !< Length scale^2 at v-points [L2 ~> m2]
+    cg1 => NULL(), &      !< The first baroclinic gravity wave speed [m s-1].
     Res_fn_h => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at h points [nondim].
     Res_fn_q => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
@@ -418,7 +418,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
-      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
@@ -438,7 +438,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
 end subroutine calc_slope_functions
 
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
-subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
+subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -446,6 +446,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points [s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points [s-2]
+  type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
 
   ! Local variables
@@ -504,7 +505,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
 
       N2 = max(0., N2_u(I,j,k))
-      CS%SN_u(I,j) = CS%SN_u(I,j) + sqrt( S2*N2 )*H_geom
+      CS%SN_u(I,j) = CS%SN_u(I,j) + US%T_to_s*sqrt( S2*N2 )*H_geom
       S2_u(I,j) = S2_u(I,j) + S2*H_geom
       H_u(I) = H_u(I) + H_geom
     enddo ; enddo
@@ -540,7 +541,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
 
       N2 = max(0., N2_v(i,J,K))
-      CS%SN_v(i,J) = CS%SN_v(i,J) + sqrt( S2*N2 )*H_geom
+      CS%SN_v(i,J) = CS%SN_v(i,J) + US%T_to_s*sqrt( S2*N2 )*H_geom
       S2_v(i,J) = S2_v(i,J) + S2*H_geom
       H_v(i) = H_v(i) + H_geom
     enddo ; enddo
@@ -563,7 +564,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   if (CS%debug) then
     call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
     call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI)
-    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI)
+    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, scale=US%s_to_T)
   endif
 
 end subroutine calc_Visbeck_coeffs
@@ -671,14 +672,14 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   do j=js,je
     do I=is-1,ie ; CS%SN_u(I,j) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
-      CS%SN_u(I,j) = CS%SN_u(I,j) + S2N2_u_local(I,j,k)
+      CS%SN_u(I,j) = CS%SN_u(I,j) + US%T_to_s*S2N2_u_local(I,j,k)
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
-        CS%SN_u(I,j) = G%mask2dCu(I,j) * US%s_to_T * sqrt( CS%SN_u(I,j) / &
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( US%s_to_T*CS%SN_u(I,j) / &
                                                (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
       else
         CS%SN_u(I,j) = 0.0
@@ -689,13 +690,13 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   do J=js-1,je
     do i=is,ie ; CS%SN_v(i,J) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
-      CS%SN_v(i,J) = CS%SN_v(i,J) + S2N2_v_local(i,J,k)
+      CS%SN_v(i,J) = CS%SN_v(i,J) + US%T_to_s*S2N2_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
-        CS%SN_v(i,J) = G%mask2dCv(i,J) * US%s_to_T * sqrt( CS%SN_v(i,J) / &
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( US%s_to_T*CS%SN_v(i,J) / &
                                                (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
       else
         CS%SN_v(I,j) = 0.0
@@ -1008,9 +1009,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%SN_u(IsdB:IedB,jsd:jed)) ; CS%SN_u(:,:) = 0.0
     allocate(CS%SN_v(isd:ied,JsdB:JedB)) ; CS%SN_v(:,:) = 0.0
     CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', diag%axesCu1, Time, &
-       'Inverse eddy time-scale, S*N, at u-points', 's-1')
+       'Inverse eddy time-scale, S*N, at u-points', 's-1', conversion=US%s_to_T)
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
-       'Inverse eddy time-scale, S*N, at v-points', 's-1')
+       'Inverse eddy time-scale, S*N, at v-points', 's-1', conversion=US%s_to_T)
     call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
                  "The layer number at which to start vertical integration "//&
                  "of S*N for purposes of finding the Eady growth rate.", &
