@@ -5,8 +5,8 @@ Working with MOM6
     :maxdepth: 1
 
     code_organization
-    api/generated/pages/Runtime_parameter_system.rst
-    api/generated/pages/Diagnostics.rst
-    api/generated/pages/Horizontal_indexing.rst
-    api/generated/pages/Advection.rst
+    api/page_Runtime_parameter_system.rst
+    api/page_Diagnostics.rst
+    api/page_Horizontal_indexing.rst
+    api/page_Advection.rst
 

@@ -15,7 +15,7 @@ Contents:
   equations/overview
   parameterizations
   working_with_MOM6
-  apiref
+  api/index.rst
 
 
 Indices and tables
