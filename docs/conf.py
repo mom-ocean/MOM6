@@ -33,7 +33,7 @@ build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cma
 import shutil
 cmd_exists = lambda x: shutil.which('doxyrest') is not None
 
-if not cmd exists:
+if not cmd_exists:
     subprocess.call(get_doxyrest, shell=True)
     subprocess.call(build_doxyrest, shell=True)
     os.environ['PATH'] = os.environ['PATH'] + ':./doxyrest_b/build/doxyrest/bin/Release'
