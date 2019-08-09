@@ -140,7 +140,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity [L2 T-1 ~> m2 s-1]
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [m s-1]
+  real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [L T-1 ~> m s-1]
   real :: dt_in_T   ! Time increment [T ~> s]
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct, use_Visbeck
   logical :: use_QG_Leith
@@ -270,7 +270,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (use_QG_Leith) then
       do k=1,nz ; do j=js,je ; do I=is-1,ie
-        KH_u(I,j,k) = US%m_to_L**2*US%T_to_s*VarMix%KH_u_QG(I,j,k)
+        KH_u(I,j,k) = VarMix%KH_u_QG(I,j,k)
       enddo ; enddo ; enddo
     endif
   endif
@@ -352,7 +352,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
     if (use_QG_Leith) then
       do k=1,nz ; do J=js-1,je ; do i=is,ie
-        KH_v(i,J,k) = US%m_to_L**2*US%T_to_s*VarMix%KH_v_QG(i,J,k)
+        KH_v(i,J,k) = VarMix%KH_v_QG(i,J,k)
       enddo ; enddo ; enddo
     endif
   endif
@@ -528,7 +528,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
                                                                      !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),   intent(out) :: vhD    !< Meridional mass fluxes
                                                                      !! [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(:,:),                        pointer     :: cg1    !< Wave speed [m s-1]
+  real, dimension(:,:),                        pointer     :: cg1    !< Wave speed [L T-1 ~> m s-1]
   real,                                        intent(in)  :: dt_in_T  !< Time increment [T ~> s]
   type(MEKE_type),                             pointer     :: MEKE   !< MEKE control structure
   type(thickness_diffuse_CS),                  pointer     :: CS     !< Control structure for thickness diffusion
@@ -880,7 +880,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
         h_harm = max( h_neglect, &
               2. * h(i,j,k) * h(i+1,j,k) / ( ( h(i,j,k) + h(i+1,j,k) ) + h_neglect ) )
         c2_h_u(I,k) = CS%FGNV_scale * &
-            ( 0.5*US%m_s_to_L_T*( cg1(i,j) + cg1(i+1,j) ) )**2 / (GV%H_to_Z*h_harm)
+            ( 0.5*( cg1(i,j) + cg1(i+1,j) ) )**2 / (GV%H_to_Z*h_harm)
       endif ; enddo ; enddo
 
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
@@ -1130,7 +1130,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
         h_harm = max( h_neglect, &
               2. * h(i,j,k) * h(i,j+1,k) / ( ( h(i,j,k) + h(i,j+1,k) ) + h_neglect ) )
         c2_h_v(i,k) = CS%FGNV_scale * &
-            ( 0.5*US%m_s_to_L_T*( cg1(i,j) + cg1(i,j+1) ) )**2 / (GV%H_to_Z*h_harm)
+            ( 0.5*( cg1(i,j) + cg1(i,j+1) ) )**2 / (GV%H_to_Z*h_harm)
       endif ; enddo ; enddo
 
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
