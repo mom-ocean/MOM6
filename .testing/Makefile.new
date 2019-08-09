@@ -41,20 +41,18 @@ GRIDS = symmetric asymmetric
 BUILDS = target $(GRIDS)
 
 # Test experiments
-CONFIGS ?= benchmark unit_tests
+CONFIGS = benchmark unit_tests
 # regressions is currently broken (deliberately)
 #TESTS = regressions grids nans
-TESTS ?= grids nans
+TESTS = grids nans
 
-
-#-------------------
-# Executable
 
 .PHONY: all
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 
+
+#-------------------
 # Executable
-# TODO: Combine these, make checkout and MAKEFLAGS as inputs
 
 build/target/MOM6: build/target/Makefile $(FMS)/lib/libfms.a
 	git checkout $(MOM_TARGET_BRANCH)
@@ -152,8 +150,8 @@ $(LIST_PATHS) $(MKMF):
 #----
 # Testing
 
-# Keep results (not sure if I want this on all the time...)
-.PRECIOUS: $(foreach c,$(CONFIGS),$(foreach t,$(BUILDS) grid nan dim.z dim.t,.testing/$(c)/ocean.stats.$(t)))
+## Keep results (not sure if I want this on all the time...)
+#.PRECIOUS: $(foreach c,$(CONFIGS),$(foreach t,$(BUILDS) grid nan dim.z dim.t,.testing/$(c)/ocean.stats.$(t)))
 
 .PHONY: test
 test: $(foreach t,$(TESTS),test.$(t))
@@ -182,39 +180,55 @@ test.nans: $(foreach c,$(CONFIGS),$(c).nan)
 	cmp $^
 
 # symmetric is the "canonical" run for which we test and report code coverage
-.testing/%/ocean.stats.symmetric: EXEC=build/symmetric/MOM6
-.testing/%/ocean.stats.symmetric: CODECOV=1
-
-.testing/%/ocean.stats.target: EXEC=build/target/MOM6
-
-.testing/%/ocean.stats.asymmetric: EXEC=build/asymmetric/MOM6
-
-.testing/%/ocean.stats.dim.z: EXEC=build/symmetric/MOM6
-.testing/%/ocean.stats.dim.z: OVERRIDE="Z_RESCALE_POWER=9"
-
-.testing/%/ocean.stats.dim.t: EXEC=build/symmetric/MOM6
-.testing/%/ocean.stats.dim.t: OVERRIDE="T_RESCALE_POWER=9"
-
-.testing/%/ocean.stats.dim.l: EXEC=build/symmetric/MOM6
-.testing/%/ocean.stats.dim.l: OVERRIDE="L_RESCALE_POWER=9"
-
-.testing/%/ocean.stats.nan: EXEC=build/symmetric/MOM6
-.testing/%/ocean.stats.nan: MOM_ENV=MALLOC_PERTURB_=256
-
-# TODO: Need to get my variable names straight...
-STATS=target symmetric asymmetric dim.z dim.t nan
-
-$(foreach t,$(STATS),.testing/%/ocean.stats.$(t)):
-	if [ $(CODECOV) ]; then find build -name *.gcda -exec rm -f '{}' \; ; fi
+.testing/%/ocean.stats.symmetric: build/symmetric/MOM6
+	# Report code coverage for symmetric tests
+	find build -name *.gcda -exec rm -f '{}' \;
 	mkdir -p $(@D)/RESTART
-	if [ $(OVERRIDE) ]; then echo $(OVERRIDE) > $(@D)/MOM_override; fi
-	cd $(@D) && $(MOM_ENV) $(MPIRUN) -n 1 ../../$(EXEC)
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
 	cp $(@D)/ocean.stats $@
-	if [ $(CODECOV) ]; then bash <(curl -s https://codecov.io/bash) -n $@; fi
-	if [ $(OVERRIDE) ]; then > $(@D)/MOM_override; fi
+	bash <(curl -s https://codecov.io/bash) -n $@
+
+.testing/%/ocean.stats.asymmetric: build/asymmetric/MOM6
+	mkdir -p $(@D)/RESTART
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
+
+.testing/%/ocean.stats.target: build/target/MOM6
+	mkdir -p $(@D)/RESTART
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
+
+.testing/%/ocean.stats.dim.z: build/symmetric/MOM6
+	mkdir -p $(@D)/RESTART
+	echo "Z_RESCALE_POWER=9" > $(@D)/MOM_override
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
+	> $(@D)/MOM_override
+
+.testing/%/ocean.stats.dim.t: build/symmetric/MOM6
+	mkdir -p $(@D)/RESTART
+	echo "T_RESCALE_POWER=9" > $(@D)/MOM_override
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
+	> $(@D)/MOM_override
+
+.testing/%/ocean.stats.dim.l: build/symmetric/MOM6
+	mkdir -p $(@D)/RESTART
+	echo "L_RESCALE_POWER=9" > $(@D)/MOM_override
+	cd $(@D) && $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
+	> $(@D)/MOM_override
+
+.testing/%/ocean.stats.nan: build/symmetric/MOM6
+	mkdir -p $(@D)/RESTART
+	cd $(@D) && MALLOC_PERTURB_=256 $(MPIRUN) -n 1 ../../$<
+	cp $(@D)/ocean.stats $@
 
 
 #----
 .PHONY: clean
-clean:
+clean: clean.stats
 	rm -rf build
+
+clean.stats:
+	find .testing -name ocean.stats* -exec rm {} \;
