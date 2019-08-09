@@ -34,8 +34,10 @@ import shutil
 cmd_exists = lambda x: shutil.which('doxyrest') is not None
 
 if not cmd_exists:
-    subprocess.call(get_doxyrest, shell=True)
-    subprocess.call(build_doxyrest, shell=True)
+    return_code = subprocess.call(get_doxyrest, shell=True)
+    if return_code != 0: sys.exit(return_code)
+    return_code = subprocess.call(build_doxyrest, shell=True)
+    if return_code != 0: sys.exit(return_code)
     os.environ['PATH'] = os.environ['PATH'] + ':./doxyrest_b/build/doxyrest/bin/Release'
 
 # add doxyrest
