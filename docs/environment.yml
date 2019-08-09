@@ -8,3 +8,4 @@ dependencies:
   - python=3.6
   - sphinx
   - doxygen
+  - lua=5.3.4
