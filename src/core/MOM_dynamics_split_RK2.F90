@@ -1011,6 +1011,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                      ! a restart file to the internal representation in this run.
   real :: uH_rescale ! A rescaling factor for thickness transports from the representation in
                      ! a restart file to the internal representation in this run.
+  real :: accel_rescale ! A rescaling factor for accelerations from the representation in
+                     ! a restart file to the internal representation in this run.
   real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
@@ -1146,10 +1148,23 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                        CS%tides_CSp)
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
-      .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
+      .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
                               G, GV, US, CS%hor_visc_CSp, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp)
+  else
+    if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+         (US%m_to_L * US%s_to_T_restart**2 /= US%m_to_L_restart * US%s_to_T**2) ) then
+      accel_rescale = (US%m_to_L * US%s_to_T_restart**2) / (US%m_to_L_restart * US%s_to_T**2)
+      do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB
+        CS%diffu(I,j,k) = accel_rescale * CS%diffu(I,j,k)
+      enddo ; enddo ; enddo
+      do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie
+        CS%diffv(i,J,k) = accel_rescale * CS%diffv(i,J,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
+
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
     CS%u_av(:,:,:) = u(:,:,:)
