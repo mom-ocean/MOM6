@@ -111,7 +111,7 @@ type, public :: VarMix_CS
   real :: Res_coef_visc   !< A non-dimensional number that determines the function
                           !! of resolution, used for lateral viscosity, as:
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
-  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [m2 s-1]
+  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [Z2 T-1 ~> m2 s-1]
   integer :: Res_fn_power_khth !< The power of dx/Ld in the KhTh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
@@ -156,10 +156,10 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   ! Local variables
   ! Depending on the power-function being used, dimensional rescaling may be limited, so some
   ! of the following variables have units that depend on that power.
-  real :: cg1_q  ! The gravity wave speed interpolated to q points [m T-1 ~> m s-1] or [m s-1].
-  real :: cg1_u  ! The gravity wave speed interpolated to u points [m T-1 ~> m s-1] or [m s-1].
-  real :: cg1_v  ! The gravity wave speed interpolated to v points [m T-1 ~> m s-1] or [m s-1].
-  real :: dx_term ! A term in the denominator [m2 T-2 ~> m2 s-2] or [m2 s-2]
+  real :: cg1_q  ! The gravity wave speed interpolated to q points [L T-1 ~> m s-1] or [m s-1].
+  real :: cg1_u  ! The gravity wave speed interpolated to u points [L T-1 ~> m s-1] or [m s-1].
+  real :: cg1_v  ! The gravity wave speed interpolated to v points [L T-1 ~> m s-1] or [m s-1].
+  real :: dx_term ! A term in the denominator [L2 T-2 ~> m2 s-2] or [m2 s-2]
   integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
@@ -406,7 +406,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [s-2]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [T-2 ~> s-2]
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [s-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
@@ -415,7 +415,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   if (CS%calculate_Eady_growth_rate) then
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
-      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
+      call calc_isoneutral_slopes(G, GV, US, h, e, tv, US%s_to_T*dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
       call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
@@ -430,6 +430,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
     if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
     if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
     if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
+    !### I do not believe that CS%N2_u and CS%N2_v are ever set, but because the contents
+    !    of CS are public, they might be set somewhere outside of this module.
     if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
     if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
   endif
@@ -442,15 +444,17 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points [s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Buoyancy (Brunt-Vaisala) frequency
+                                                                        !! at u-points [T-2 ~> s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points [s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
+                                                                        !! at v-points [T-2 ~> s-2]
   type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
-  real :: N2            ! Positive Brunt-Vaisala frequency or zero [s-2]
+  real :: N2            ! Positive buoyancy frequency or zero [T-2 ~> s-2]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
@@ -504,7 +508,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
 
       N2 = max(0., N2_u(I,j,k))
-      CS%SN_u(I,j) = CS%SN_u(I,j) + US%T_to_s*sqrt( S2*N2 )*H_geom
+      CS%SN_u(I,j) = CS%SN_u(I,j) + sqrt( S2*N2 )*H_geom
       S2_u(I,j) = S2_u(I,j) + S2*H_geom
       H_u(I) = H_u(I) + H_geom
     enddo ; enddo
@@ -540,7 +544,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
 
       N2 = max(0., N2_v(i,J,K))
-      CS%SN_v(i,J) = CS%SN_v(i,J) + US%T_to_s*sqrt( S2*N2 )*H_geom
+      CS%SN_v(i,J) = CS%SN_v(i,J) + sqrt( S2*N2 )*H_geom
       S2_v(i,J) = S2_v(i,J) + S2*H_geom
       H_v(i) = H_v(i) + H_geom
     enddo ; enddo
@@ -562,7 +566,7 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
 
   if (CS%debug) then
     call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
-    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI)
+    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI, scale=US%s_to_T**2)
     call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, scale=US%s_to_T)
   endif
 
@@ -707,14 +711,14 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  type(unit_scale_type),                     intent(in) :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
 ! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [m s-1]
 ! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
   integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  !< x-derivative of horizontal divergence
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)  :: div_xx_dx  !< x-derivative of horizontal divergence
                                                                  !! (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  !< y-derivative of horizontal divergence
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)  :: div_xx_dy  !< y-derivative of horizontal divergence
                                                                  !! (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
   real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vort_xy_dx !< x-derivative of vertical vorticity
                                                                  !! (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
@@ -736,11 +740,11 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   real, dimension(SZI_(G),SZJB_(G)) :: &
 !    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
 !    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-    dslopey_dz, & ! z-derivative of y-slope at v-points [m-1]
+    dslopey_dz, & ! z-derivative of y-slope at v-points [Z-1 ~> m-1]
     h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
     beta_v,     & ! Beta at v-points [T-1 L-1 ~> s-1 m-1]
-    grad_vort_mag_v, & ! mag. of vort. grad. at v-points [s-1]
-    grad_div_mag_v     ! mag. of div. grad. at v-points [s-1]
+    grad_vort_mag_v, & ! Magnitude of vorticity gradient at v-points [T-1 L-1 ~> s-1 m-1]
+    grad_div_mag_v     ! Magnitude of divergence gradient at v-points [T-1 L-1 ~> s-1 m-1]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
 !    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
@@ -748,8 +752,8 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
     dslopex_dz, & ! z-derivative of x-slope at u-points [Z-1 ~> m-1]
     h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
     beta_u,     & ! Beta at u-points [T-1 L-1 ~> s-1 m-1]
-    grad_vort_mag_u, & ! mag. of vort. grad. at u-points [s-1 m-1]
-    grad_div_mag_u     ! mag. of div. grad. at u-points [s-1 m-1]
+    grad_vort_mag_u, & ! Magnitude of vorticity gradient at u-points [T-1 L-1 ~> s-1 m-1]
+    grad_div_mag_u     ! Magnitude of divergence gradient at u-points [T-1 L-1 ~> s-1 m-1]
 !  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
 !  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
   real :: h_at_slope_above, h_at_slope_below, Ih
@@ -850,7 +854,7 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
       if (CS%use_beta_in_QG_Leith) then
         beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
                             (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
-        CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) * &
+        CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), 3.0*beta_v(i,J)) * &
                             CS%Laplac3_const_v(i,J) * inv_PI3
       else
         CS%KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) * &
@@ -1001,7 +1005,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 units="m2 s-1", default=1.0e-6, scale=US%m_to_Z**2)
+                 units="m2 s-1", default=1.0e-6, scale=US%m_to_Z**2*US%T_to_s)
   endif
 
   if (CS%calculate_Eady_growth_rate) then
