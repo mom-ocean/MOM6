@@ -162,22 +162,22 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       if (CS%frequency == 0.0) then
-        flow = CS%zonal_flow
+        flow = G%US%m_s_to_L_T*CS%zonal_flow
       else
-        flow = CS%zonal_flow + CS%tidal_amp * cos(2 * PI * CS%frequency * time_sec)
+        flow = G%US%m_s_to_L_T*CS%zonal_flow + CS%tidal_amp * cos(2 * PI * CS%frequency * time_sec)
       endif
       do k=1,G%ke
         do j=jsd,jed ; do I=IsdB,IedB
           if (segment%specified .or. segment%nudged) then
-            segment%normal_vel(I,j,k) = G%US%m_s_to_L_T*flow
+            segment%normal_vel(I,j,k) = flow
           endif
           if (segment%specified) then
-            segment%normal_trans(I,j,k) = flow * G%US%L_to_m*G%dyCu(I,j)
+            segment%normal_trans(I,j,k) = flow * G%dyCu(I,j)
           endif
         enddo ; enddo
       enddo
       do j=jsd,jed ; do I=IsdB,IedB
-        segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*flow
+        segment%normal_vel_bt(I,j) = flow
       enddo ; enddo
     else
       isd = segment%HI%isd ; ied = segment%HI%ied

@@ -319,7 +319,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, &
       if (local_specified_BC) then
         do I=ish-1,ieh
           if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-            uh(I,j,k) = US%m_to_L**2*US%T_to_s*OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+            uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
         enddo
       endif
     enddo
@@ -391,8 +391,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, &
         else
           do k=1,nz ; do I=ish-1,ieh
             if (CS%vol_CFL) then
-              dx_W = ratio_max(G%areaT(i,j), US%L_to_m*G%dy_Cu(I,j), 1000.0*US%L_to_m*G%dxT(i,j))
-              dx_E = ratio_max(G%areaT(i+1,j), US%L_to_m*G%dy_Cu(I,j), 1000.0*US%L_to_m*G%dxT(i+1,j))
+              dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+              dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
             else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
             du_max_CFL(I) = MIN(du_max_CFL(I), dx_W*CFL_dt - u(I,j,k))
@@ -444,9 +444,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, &
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
             if ((abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_u(I,j))%specified)) &
-              FAuI(I) = FAuI(I) + US%m_to_L**2*US%T_to_s * &
-                  OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
-                  OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+              FAuI(I) = FAuI(I) + OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
+                                  OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (do_I(I)) then
             BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
@@ -1120,7 +1119,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt_in_T, G, GV, US, CS, LB, vhbt, O
       if (local_specified_BC) then
         do i=ish,ieh
           if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-            vh(i,J,k) = US%m_to_L**2*US%T_to_s*OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+            vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
         enddo
       endif
     enddo ! k-loop
@@ -1240,9 +1239,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt_in_T, G, GV, US, CS, LB, vhbt, O
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
             if ((abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_v(i,J))%specified)) &
-              FAvi(i) = FAvi(i) + US%m_to_L**2*US%T_to_s * &
-                   OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
-                   OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+              FAvi(i) = FAvi(i) + OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
+                                  OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo
           do i=ish,ieh ; if (do_I(i)) then
             BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)

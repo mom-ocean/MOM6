@@ -273,8 +273,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
               segment%normal_vel(I,j,k) = US%m_s_to_L_T * fac * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
-              segment%normal_trans(I,j,k) = US%L_T_to_m_s*segment%normal_vel(I,j,k) * &
-                   h(i+1,j,k) * G%US%L_to_m*G%dyCu(I,j)
+              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
             enddo
           endif
         endif
@@ -329,8 +328,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
             do k=1,nz
               segment%normal_vel(i,J,k) = US%m_s_to_L_T*fac * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
-              segment%normal_trans(i,J,k) = US%L_T_to_m_s*segment%normal_vel(i,J,k) * &
-                   h(i,j+1,k) * G%US%L_to_m*G%dxCv(i,J)
+              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
           endif
         endif

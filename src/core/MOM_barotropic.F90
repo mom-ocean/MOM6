@@ -2622,7 +2622,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
             BT_OBC%uhbt(I,j) = 0.
           enddo ; enddo
           do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
-            BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + US%T_to_s*US%m_to_L**2*segment%normal_trans(I,j,k)
+            BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + segment%normal_trans(I,j,k)
           enddo ; enddo ; enddo
         endif
       enddo
@@ -2674,7 +2674,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
             BT_OBC%vhbt(i,J) = 0.
           enddo ; enddo
           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
-            BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + US%T_to_s*US%m_to_L**2*segment%normal_trans(i,J,k)
+            BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + segment%normal_trans(i,J,k)
           enddo ; enddo ; enddo
         endif
       enddo

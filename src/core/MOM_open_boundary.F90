@@ -142,8 +142,8 @@ type, public :: OBC_segment_type
   logical :: salt_segment_data_exists !< true if salinity data arrays are present
   real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity wave speed [m s-1]
                                                     !! at OBC-points.
-  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness [m] at OBC-points.
-  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness [m] at OBC-points.
+  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness [H ~> m or kg m-2] at OBC-points.
+  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness [H ~> m or kg m-2] at OBC-points.
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
                                                             !! segment [L T-1 ~> m s-1].
   real, pointer, dimension(:,:,:) :: tangential_vel=>NULL() !< The layer velocity tangential to the
@@ -151,7 +151,7 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: tangential_grad=>NULL() !< The gradient of the velocity tangential
                                                             !! to the OB segment [m s-1].
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
-                                                            !! segment [m3 s-1].
+                                                            !! segment [H L2 T-1 ~> m3 s-1].
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
                                                             !! the OB segment [L T-1 ~> m s-1].
   real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment [m].
@@ -3285,12 +3285,11 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               normal_trans_bt(I,j) = 0.0
               do k=1,G%ke
                 segment%normal_vel(I,j,k) = US%m_s_to_L_T*segment%field(m)%buffer_dst(I,j,k)
-                segment%normal_trans(I,j,k) = segment%field(m)%buffer_dst(I,j,k)*segment%h(I,j,k) * &
-                          US%L_to_m*G%dyCu(I,j)
-                normal_trans_bt(I,j) = normal_trans_bt(I,j)+segment%normal_trans(I,j,k)
+                segment%normal_trans(I,j,k) = US%m_s_to_L_T*segment%field(m)%buffer_dst(I,j,k)*segment%h(I,j,k) * &
+                          G%dyCu(I,j)
+                normal_trans_bt(I,j) = normal_trans_bt(I,j) + segment%normal_trans(I,j,k)
               enddo
-              segment%normal_vel_bt(I,j) = US%m_s_to_L_T*normal_trans_bt(I,j)/(max(segment%Htot(I,j),1.e-12) * &
-                          US%L_to_m*G%dyCu(I,j))
+              segment%normal_vel_bt(I,j) = normal_trans_bt(I,j) / (max(segment%Htot(I,j),1.e-12) * G%dyCu(I,j))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(I,j,:) = segment%normal_vel(I,j,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
@@ -3299,12 +3298,11 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               normal_trans_bt(i,J) = 0.0
               do k=1,G%ke
                 segment%normal_vel(i,J,k) = US%m_s_to_L_T*segment%field(m)%buffer_dst(i,J,k)
-                segment%normal_trans(i,J,k) = segment%field(m)%buffer_dst(i,J,k)*segment%h(i,J,k) * &
-                          US%L_to_m*G%dxCv(i,J)
-                normal_trans_bt(i,J) = normal_trans_bt(i,J)+segment%normal_trans(i,J,k)
+                segment%normal_trans(i,J,k) = US%m_s_to_L_T*segment%field(m)%buffer_dst(i,J,k)*segment%h(i,J,k) * &
+                          G%dxCv(i,J)
+                normal_trans_bt(i,J) = normal_trans_bt(i,J) + segment%normal_trans(i,J,k)
               enddo
-              segment%normal_vel_bt(i,J) = US%m_s_to_L_T*normal_trans_bt(i,J)/(max(segment%Htot(i,J),1.e-12) * &
-                          US%L_to_m*G%dxCv(i,J))
+              segment%normal_vel_bt(i,J) = normal_trans_bt(i,J) / (max(segment%Htot(i,J),1.e-12) * G%dxCv(i,J))
               if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,J,:) = segment%normal_vel(i,J,:)
             enddo
           elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_E_or_W .and. &
