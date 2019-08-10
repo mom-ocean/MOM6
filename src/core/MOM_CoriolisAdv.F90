@@ -316,9 +316,9 @@ subroutine CorAdCalc(u_in, v_in, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         enddo ; endif
         if (OBC%specified_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
           if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            dudy(I,J) = US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            dudy(I,J) = US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
+            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
           endif
         enddo ; endif
 
@@ -356,9 +356,9 @@ subroutine CorAdCalc(u_in, v_in, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
         enddo ; endif
         if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            dvdx(I,J) = US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            dvdx(I,J) = US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
+            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
           endif
         enddo ; endif
 

@@ -596,9 +596,9 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
               endif
             elseif (OBC%specified_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = CS%DX_dyBu(I,J)*US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
               else
-                dudy(I,J) = CS%DX_dyBu(I,J)*US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
+                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
               endif
             endif
           enddo
@@ -618,9 +618,9 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
               endif
             elseif (OBC%specified_strain) then
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = CS%DY_dxBu(I,J)*US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
               else
-                dvdx(I,J) = CS%DY_dxBu(I,J)*US%T_to_s*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
+                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
               endif
             endif
           enddo

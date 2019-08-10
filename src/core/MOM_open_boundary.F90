@@ -149,7 +149,7 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: tangential_vel=>NULL() !< The layer velocity tangential to the
                                                             !! OB segment [L T-1 ~> m s-1].
   real, pointer, dimension(:,:,:) :: tangential_grad=>NULL() !< The gradient of the velocity tangential
-                                                            !! to the OB segment [m s-1].
+                                                            !! to the OB segment [T-1 ~> s-1].
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
                                                             !! segment [H L2 T-1 ~> m3 s-1].
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
@@ -172,7 +172,7 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: nudged_tangential_vel=>NULL() !< The layer velocity tangential to the OB segment
                                                             !! that values should be nudged towards [L T-1 ~> m s-1].
   real, pointer, dimension(:,:,:) :: nudged_tangential_grad=>NULL() !< The layer dvdx or dudy towards which nudging
-                                                            !! can occur [s-1].
+                                                            !! can occur [T-1 ~> s-1].
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
   real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed [m-3]
@@ -1707,8 +1707,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = ((v_new(i,J,k) - v_new(i-1,J,k))*G%US%m_to_L*G%IdxBu(I-1,J) + &
-                               rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%US%m_to_L*G%IdxBu(I-2,J)) / (1.0+rx_avg)
+             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((v_new(i,J,k) - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
+                               rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%IdxBu(I-2,J)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_grad) then
@@ -1774,9 +1774,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = ((cff_avg*(v_new(i,J,k)  - v_new(i-1,J,k))*G%US%m_to_L*G%IdxBu(I-1,J) &
-                + rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%US%m_to_L*G%IdxBu(I-2,J)) - &
-              (max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k))) / &
+             segment%tangential_grad(I,J,k) =  &
+                 ((cff_avg*(v_new(i,J,k)  - v_new(i-1,J,k))*US%m_s_to_L_T*G%IdxBu(I-1,J) &
+                + rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*US%m_s_to_L_T*G%IdxBu(I-2,J)) - &
+              US%T_to_s*(max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + &
+                         min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k))) / &
                             (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -1903,8 +1905,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = ((v_new(i+2,J,k) - v_new(i+1,J,k))*G%US%m_to_L*G%IdxBu(I+1,J) + &
-                               rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%US%m_to_L*G%IdxBu(I+2,J)) / (1.0+rx_avg)
+             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
+                               rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%IdxBu(I+2,J)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_grad) then
@@ -1970,9 +1972,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = ((cff_avg*(v_new(i+2,J,k)  - v_new(i+1,J,k))*G%US%m_to_L*G%IdxBu(I+1,J) &
-                + rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%US%m_to_L*G%IdxBu(I+2,J)) - &
-              (max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k))) / &
+             segment%tangential_grad(I,J,k) = &
+               ((cff_avg*(v_new(i+2,J,k) - v_new(i+1,J,k))*US%m_s_to_L_T*G%IdxBu(I+1,J) &
+                + rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*US%m_s_to_L_T*G%IdxBu(I+2,J)) - &
+                US%T_to_s*(max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + &
+                           min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k))) / &
                             (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2100,8 +2104,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = ((u_new(I,j,k) - u_new(I,j-1,k))*G%US%m_to_L*G%IdyBu(I,J-1) + &
-                               rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%US%m_to_L*G%IdyBu(I,J-2)) / (1.0+rx_avg)
+             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((u_new(I,j,k) - u_new(I,j-1,k))*G%IdyBu(I,J-1) + &
+                               rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_grad) then
@@ -2167,9 +2171,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = ((cff_avg*(u_new(I,j,k)  - u_new(I,j-1,k))*G%US%m_to_L*G%IdyBu(I,J-1) &
-                + rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%US%m_to_L*G%IdyBu(I,J-2)) - &
-              (max(ry_avg,0.0)*segment%grad_gradient(I,2,k) + min(ry_avg,0.0)*segment%grad_gradient(I+1,2,k))) / &
+             segment%tangential_grad(I,J,k) = ( US%m_s_to_L_T* &
+                (cff_avg*(u_new(I,j,k)   - u_new(I,j-1,k))*G%IdyBu(I,J-1) + &
+                  rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) - &
+                US%T_to_s*(max(ry_avg,0.0)*segment%grad_gradient(I,2,k) + &
+                           min(ry_avg,0.0)*segment%grad_gradient(I+1,2,k))) / &
                             (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2296,8 +2302,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = ((u_new(I,j+2,k) - u_new(I,j+1,k))*G%US%m_to_L*G%IdyBu(I,J+1) + &
-                               rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%US%m_to_L*G%IdyBu(I,J+2)) / (1.0+rx_avg)
+             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
+                               rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_grad) then
@@ -2363,9 +2369,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = ((cff_avg*(u_new(I,j+2,k)  - u_new(I,j+1,k))*G%US%m_to_L*G%IdyBu(I,J+1) &
-                + rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%US%m_to_L*G%IdyBu(I,J+2)) - &
-              (max(ry_avg,0.0)*segment%grad_gradient(i,2,k) + min(ry_avg,0.0)*segment%grad_gradient(i+1,2,k))) / &
+             segment%tangential_grad(I,J,k) = (US%m_s_to_L_T * &
+                (cff_avg*(u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
+                  rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) - &
+                  US%T_to_s*(max(ry_avg,0.0)*segment%grad_gradient(i,2,k) + &
+                             min(ry_avg,0.0)*segment%grad_gradient(i+1,2,k))) / &
                             (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -3330,7 +3338,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             I=is_obc
             do J=js_obc,je_obc
               do k=1,G%ke
-                segment%tangential_grad(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
+                segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
               enddo
             enddo
           elseif (trim(segment%field(m)%name) == 'DUDY' .and. segment%is_N_or_S .and. &
@@ -3338,7 +3346,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             J=js_obc
             do I=is_obc,ie_obc
               do k=1,G%ke
-                segment%tangential_grad(I,J,k) = segment%field(m)%buffer_dst(I,J,k)
+                segment%tangential_grad(I,J,k) = US%T_to_s*segment%field(m)%buffer_dst(I,J,k)
               enddo
             enddo
           endif
