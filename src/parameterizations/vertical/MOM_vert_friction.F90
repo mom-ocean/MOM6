@@ -427,12 +427,12 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
         if (OBC%segment(n)%is_N_or_S) then
           J = OBC%segment(n)%HI%JsdB
           do k=1,nz ; do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
-            v(i,J,k) = OBC%segment(n)%normal_vel(i,J,k)
+            v(i,J,k) = US%L_T_to_m_s*OBC%segment(n)%normal_vel(i,J,k)
           enddo ; enddo
         elseif (OBC%segment(n)%is_E_or_W) then
           I = OBC%segment(n)%HI%IsdB
           do k=1,nz ; do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
-            u(I,j,k) = OBC%segment(n)%normal_vel(I,j,k)
+            u(I,j,k) = US%L_T_to_m_s*OBC%segment(n)%normal_vel(I,j,k)
           enddo ; enddo
         endif
       endif

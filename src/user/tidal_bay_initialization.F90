@@ -110,7 +110,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
 
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux/total_area
+    segment%normal_vel_bt(:,:) = G%US%m_s_to_L_T*my_flux/total_area
     segment%eta(:,:) = cff
 
   enddo ! end segment loop

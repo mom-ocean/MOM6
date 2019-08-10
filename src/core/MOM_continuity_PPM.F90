@@ -426,7 +426,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, &
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (local_specified_BC) then ; do I=ish-1,ieh
             if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-              u_cor(I,j,k) = US%m_s_to_L_T*OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+              u_cor(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           enddo ; endif
         enddo ; endif ! u-corrected
 
@@ -444,8 +444,9 @@ subroutine zonal_mass_flux(u, h_in, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, &
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
             if ((abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_u(I,j))%specified)) &
-              FAuI(I) = FAuI(I) + US%m_to_L*OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
-                                            OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+              FAuI(I) = FAuI(I) + US%m_to_L**2*US%T_to_s * &
+                  OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
+                  OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (do_I(I)) then
             BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
@@ -1222,7 +1223,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt_in_T, G, GV, US, CS, LB, vhbt, O
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (local_specified_BC) then ; do i=ish,ieh
             if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-              v_cor(i,J,k) = US%m_s_to_L_T*OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+              v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           enddo ; endif
         enddo ; endif ! v-corrected
       endif
@@ -1239,7 +1240,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt_in_T, G, GV, US, CS, LB, vhbt, O
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
             if ((abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_v(i,J))%specified)) &
-              FAvi(i) = FAvi(i) + US%m_to_L * &
+              FAvi(i) = FAvi(i) + US%m_to_L**2*US%T_to_s * &
                    OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
                    OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo

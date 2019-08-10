@@ -2657,7 +2657,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
         segment => OBC%segment(n)
         if (segment%is_E_or_W .and. segment%Flather) then
           do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
-            BT_OBC%ubt_outer(I,j) = US%m_s_to_L_T*segment%normal_vel_bt(I,j)
+            BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
             BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
           enddo ; enddo
         endif
@@ -2709,7 +2709,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
         segment => OBC%segment(n)
         if (segment%is_N_or_S .and. segment%Flather) then
           do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
-            BT_OBC%vbt_outer(i,J) = US%m_s_to_L_T*segment%normal_vel_bt(i,J)
+            BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
             BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
           enddo ; enddo
         endif

@@ -55,7 +55,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
       do k=1,G%ke
         do j=jsd,jed ; do I=IsdB,IedB
           if (segment%specified .or. segment%nudged) then
-            segment%normal_vel(I,j,k) = zonal_flow
+            segment%normal_vel(I,j,k) = G%US%m_s_to_L_T*zonal_flow
           endif
           if (segment%specified) then
             segment%normal_trans(I,j,k) = zonal_flow * G%US%L_to_m*G%dyCu(I,j)
@@ -63,7 +63,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
         enddo ; enddo
       enddo
       do j=jsd,jed ; do I=IsdB,IedB
-        segment%normal_vel_bt(I,j) = zonal_flow
+        segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*zonal_flow
       enddo ; enddo
     else
       isd = segment%HI%isd ; ied = segment%HI%ied

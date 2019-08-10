@@ -169,7 +169,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
       do k=1,G%ke
         do j=jsd,jed ; do I=IsdB,IedB
           if (segment%specified .or. segment%nudged) then
-            segment%normal_vel(I,j,k) = flow
+            segment%normal_vel(I,j,k) = G%US%m_s_to_L_T*flow
           endif
           if (segment%specified) then
             segment%normal_trans(I,j,k) = flow * G%US%L_to_m*G%dyCu(I,j)
@@ -177,7 +177,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
         enddo ; enddo
       enddo
       do j=jsd,jed ; do I=IsdB,IedB
-        segment%normal_vel_bt(I,j) = flow
+        segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*flow
       enddo ; enddo
     else
       isd = segment%HI%isd ; ied = segment%HI%ied
