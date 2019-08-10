@@ -33,6 +33,16 @@ jobs:
         - test ! -s  doxy_errors
     - env: JOB="Compile and run"
       script:
+        - echo 'Setup repository...' && echo -en 'travis_fold:start:script.0\\r'
+        - build_head=$(git rev-parse HEAD)
+        - git config --replace-all remote.origin.fetch +refs/heads/*:refs/remotes/origin/*
+        - git fetch
+        - git fetch --tags
+        - for branch in $(git branch -r|grep -v HEAD); do
+            git checkout -qf ${branch#origin/}
+          done
+        - git checkout ${build_head}
+        - echo -en 'travis_fold:end:script.0\\r'
         - echo 'Configuring...' && echo -en 'travis_fold:start:script.1\\r'
         - make
         - echo -en 'travis_fold:end:script.1\\r'
