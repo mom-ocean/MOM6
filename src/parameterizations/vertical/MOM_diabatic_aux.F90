@@ -582,7 +582,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
   real :: a_n(SZI_(G)), a_s(SZI_(G))  ! Fractional weights of the neighboring
   real :: a_e(SZI_(G)), a_w(SZI_(G))  ! velocity points, ~1/2 in the open
                                       ! ocean, nondimensional.
-  real :: s, Idenom
+  real :: sum_area, Idenom
   logical :: mix_vertically
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -598,20 +598,20 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
 !$OMP                          private(s,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
-      s = US%L_to_m**2*G%areaCu(I-1,j)+US%L_to_m**2*G%areaCu(I,j)
-      if (s>0.0) then
-        Idenom = sqrt(0.5*US%m_to_L**2*G%IareaT(i,j)/s)
-        a_w(i) = US%L_to_m**2*G%areaCu(I-1,j)*Idenom
-        a_e(i) = US%L_to_m**2*G%areaCu(I,j)*Idenom
+      sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
+      if (sum_area>0.0) then
+        Idenom = sqrt(0.5*G%IareaT(i,j) / sum_area)
+        a_w(i) = G%areaCu(I-1,j) * Idenom
+        a_e(i) = G%areaCu(I,j) * Idenom
       else
         a_w(i) = 0.0 ; a_e(i) = 0.0
       endif
 
-      s = US%L_to_m**2*G%areaCv(i,J-1)+US%L_to_m**2*G%areaCv(i,J)
-      if (s>0.0) then
-        Idenom = sqrt(0.5*US%m_to_L**2*G%IareaT(i,j)/s)
-        a_s(i) = US%L_to_m**2*G%areaCv(i,J-1)*Idenom
-        a_n(i) = US%L_to_m**2*G%areaCv(i,J)*Idenom
+      sum_area = G%areaCv(i,J-1) + G%areaCv(i,J)
+      if (sum_area>0.0) then
+        Idenom = sqrt(0.5*G%IareaT(i,j) / sum_area)
+        a_s(i) = G%areaCv(i,J-1) * Idenom
+        a_n(i) = G%areaCv(i,J) * Idenom
       else
         a_s(i) = 0.0 ; a_n(i) = 0.0
       endif
