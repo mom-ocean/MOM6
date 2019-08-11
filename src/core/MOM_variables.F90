@@ -156,8 +156,8 @@ type, public :: accel_diag_ptrs
 
   ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
-    diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
-    diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [m s-1 T-1 ~> m s-2]
+    diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [L T-2 ~> m s-2]
+    diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [L T-2 ~> m s-2]
     CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
     CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
     PFu => NULL(), &       !< Zonal acceleration due to pressure forces [L T-2 ~> m s-2]
@@ -186,10 +186,10 @@ type, public :: cont_diag_ptrs
 
 ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), &   !< Resolved zonal layer thickness fluxes, [H m2 s-1 ~> m3 s-1 or kg s-1]
-    vh => NULL(), &   !< Resolved meridional layer thickness fluxes, [H m2 s-1 ~> m3 s-1 or kg s-1]
-    uhGM => NULL(), & !< Isopycnal height diffusion induced zonal volume fluxes [H m2 s-1 ~> m3 s-1 or kg s-1]
-    vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes [H m2 s-1 ~> m3 s-1 or kg s-1]
+    uh => NULL(), &   !< Resolved zonal layer thickness fluxes, [H L2 T-1 ~> m3 s-1 or kg s-1]
+    vh => NULL(), &   !< Resolved meridional layer thickness fluxes, [H L2 T-1 ~> m3 s-1 or kg s-1]
+    uhGM => NULL(), & !< Isopycnal height diffusion induced zonal volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
+    vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
 
 ! Each of the following fields is found at nz+1 interfaces.
   real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity [H s-1 ~> m s-1 or kg m-2 s-1]

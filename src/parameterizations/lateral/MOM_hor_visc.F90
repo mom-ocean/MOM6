@@ -295,9 +295,9 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
 
   ! These 3-d arrays are unused.
   ! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1) :: &
-  !   KH_u_GME  !< interface height diffusivities in u-columns [m2 s-1]
+  !   KH_u_GME  !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
   ! real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1) :: &
-  !   KH_v_GME  !< interface height diffusivities in v-columns [m2 s-1]
+  !   KH_v_GME  !< interface height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]

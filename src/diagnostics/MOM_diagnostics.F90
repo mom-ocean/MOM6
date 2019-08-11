@@ -506,13 +506,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%uh_Rlay(I,j,k) = 0.0
         enddo ; enddo
         do k=nkmb+1,nz ; do I=Isq,Ieq
-          CS%uh_Rlay(I,j,k) = US%L_to_m**2*US%s_to_T*uh(I,j,k)
+          CS%uh_Rlay(I,j,k) = uh(I,j,k)
         enddo ; enddo
         k_list = nz/2
         do k=1,nkmb ; do I=Isq,Ieq
           call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
-          CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + US%L_to_m**2*US%s_to_T*uh(I,j,k)*wt
-          CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + US%L_to_m**2*US%s_to_T*uh(I,j,k)*wt_p
+          CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
+          CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
         enddo ; enddo
       enddo
 
@@ -528,12 +528,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%vh_Rlay(i,J,k) = 0.0
         enddo ; enddo
         do k=nkmb+1,nz ; do i=is,ie
-          CS%vh_Rlay(i,J,k) = US%L_to_m**2*US%s_to_T*vh(i,J,k)
+          CS%vh_Rlay(i,J,k) = vh(i,J,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
           call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
-          CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + US%L_to_m**2*US%s_to_T*vh(i,J,k)*wt
-          CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + US%L_to_m**2*US%s_to_T*vh(i,J,k)*wt_p
+          CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + vh(i,J,k)*wt
+          CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + vh(i,J,k)*wt_p
         enddo ; enddo
       enddo
 
@@ -558,7 +558,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         enddo ; enddo
       enddo
 
-      if (CS%id_uh_Rlay > 0) call post_data(CS%id_uhGM_Rlay, CS%uhGM_Rlay, CS%diag)
+      if (CS%id_uhGM_Rlay > 0) call post_data(CS%id_uhGM_Rlay, CS%uhGM_Rlay, CS%diag)
     endif
 
     if (associated(CS%vhGM_Rlay) .and. associated(CDp%vhGM)) then
@@ -1603,22 +1603,22 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
     CS%id_uh_Rlay = register_diag_field('ocean_model', 'uh_rho', diag%axesCuL, Time, &
         'Zonal volume transport in pure potential density coordinates', flux_units, &
-        conversion=convert_H)
+        conversion=US%L_to_m**2*US%s_to_T*convert_H)
     if (CS%id_uh_Rlay>0) call safe_alloc_ptr(CS%uh_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vh_Rlay = register_diag_field('ocean_model', 'vh_rho', diag%axesCvL, Time, &
         'Meridional volume transport in pure potential density coordinates', flux_units, &
-        conversion=convert_H)
+        conversion=US%L_to_m**2*US%s_to_T*convert_H)
     if (CS%id_vh_Rlay>0) call safe_alloc_ptr(CS%vh_Rlay,isd,ied,JsdB,JedB,nz)
 
     CS%id_uhGM_Rlay = register_diag_field('ocean_model', 'uhGM_rho', diag%axesCuL, Time, &
-        'Zonal volume transport due to interface height diffusion in pure potential &
-        &density coordinates', flux_units, conversion=convert_H)
+        'Zonal volume transport due to interface height diffusion in pure potential '//&
+        'density coordinates', flux_units, conversion=US%L_to_m**2*US%s_to_T*convert_H)
     if (CS%id_uhGM_Rlay>0) call safe_alloc_ptr(CS%uhGM_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vhGM_Rlay = register_diag_field('ocean_model', 'vhGM_rho', diag%axesCvL, Time, &
-        'Meridional volume transport due to interface height diffusion in pure &
-        &potential density coordinates', flux_units, conversion=convert_H)
+        'Meridional volume transport due to interface height diffusion in pure potential '//&
+        'density coordinates', flux_units, conversion=US%L_to_m**2*US%s_to_T*convert_H)
     if (CS%id_vhGM_Rlay>0) call safe_alloc_ptr(CS%vhGM_Rlay,isd,ied,JsdB,JedB,nz)
   !endif
 

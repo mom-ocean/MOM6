@@ -78,8 +78,8 @@ type, public :: thickness_diffuse_CS ; private
   real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
 
   real, dimension(:,:,:), pointer :: &
-    KH_u_GME => NULL(), &        !< interface height diffusivities in u-columns [m2 s-1]
-    KH_v_GME => NULL()           !< interface height diffusivities in v-columns [m2 s-1]
+    KH_u_GME => NULL(), &        !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+    KH_v_GME => NULL()           !< interface height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
 
   !>@{
   !! Diagnostic identifier
@@ -278,7 +278,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
   if (CS%use_GME_thickness_diffuse) then
     do k=1,nz+1 ; do j=js,je ; do I=is-1,ie
-      CS%KH_u_GME(I,j,k) = US%L_to_m**2*US%s_to_T*KH_u(I,j,k)
+      CS%KH_u_GME(I,j,k) = KH_u(I,j,k)
     enddo ; enddo ; enddo
   endif
 
@@ -360,7 +360,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 !$OMP do
   if (CS%use_GME_thickness_diffuse) then
     do k=1,nz+1 ; do J=js-1,je ; do i=is,ie
-      CS%KH_v_GME(i,J,k) = US%L_to_m**2*US%s_to_T*KH_v(i,J,k)
+      CS%KH_v_GME(i,J,k) = KH_v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -481,11 +481,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k) * dt_in_T
-      if (associated(CDp%uhGM)) CDp%uhGM(I,j,k) = US%L_to_m**2*US%s_to_T*uhD(I,j,k)
+      if (associated(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k) * dt_in_T
-      if (associated(CDp%vhGM)) CDp%vhGM(i,J,k) = US%L_to_m**2*US%s_to_T*vhD(i,J,k)
+      if (associated(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
     enddo ; enddo
     do j=js,je ; do i=is,ie
       h(i,j,k) = h(i,j,k) - dt_in_T * G%IareaT(i,j) * &
@@ -1946,10 +1946,10 @@ subroutine thickness_diffuse_get_KH(CS, KH_u_GME, KH_v_GME, G)
   type(thickness_diffuse_CS),          pointer     :: CS   !< Control structure for
                                                    !! this module
   type(ocean_grid_type),               intent(in)  :: G    !< Grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: KH_u_GME!< interface height
-                                                   !! diffusivities in u-columns [m2 s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: KH_v_GME!< interface height
-                                                   !! diffusivities in v-columns [m2 s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: KH_u_GME !< interface height
+                                                   !! diffusivities at u-faces [L2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: KH_v_GME !< interface height
+                                                   !! diffusivities at v-faces [L2 T-1 ~> m2 s-1]
   ! Local variables
   integer :: i,j,k
 
