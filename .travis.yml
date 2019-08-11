@@ -5,6 +5,10 @@
 language: c
 dist: xenial
 
+# --depth flag is breaking our merge, try disabling it
+git:
+    depth: false
+
 addons:
   apt:
     sources:
