@@ -323,8 +323,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     TKE_forced_2d, & ! A 2-d slice of TKE_forced [kg m-3 Z3 T-2 ~> J m-2].
     dSV_dT_2d, &    ! A 2-d slice of dSV_dT [m3 kg-1 degC-1].
     dSV_dS_2d, &    ! A 2-d slice of dSV_dS [m3 kg-1 ppt-1].
-    u_2d, &         ! A 2-d slice of the zonal velocity [m s-1].
-    v_2d            ! A 2-d slice of the meridional velocity [m s-1].
+    u_2d, &         ! A 2-d slice of the zonal velocity [L T-1 ~> m s-1].
+    v_2d            ! A 2-d slice of the meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd_2d           ! A 2-d version of the diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)) :: &
@@ -334,8 +334,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     dSV_dT_1d, &    ! The partial derivatives of specific volume with temperature [m3 kg-1 degC-1].
     dSV_dS_1d, &    ! The partial derivatives of specific volume with salinity [m3 kg-1 ppt-1].
     TKE_forcing, &  ! Forcing of the TKE in the layer coming from TKE_forced [kg m-3 Z3 T-2 ~> J m-2].
-    u, &            ! The zonal velocity [m s-1].
-    v               ! The meridional velocity [m s-1].
+    u, &            ! The zonal velocity [L T-1 ~> m s-1].
+    v               ! The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZK_(GV)+1) :: &
     Kd, &           ! The diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
     mixvel, &       ! A turbulent mixing veloxity [Z T-1 ~> m s-1].
@@ -404,7 +404,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
-      h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = u_3d(i,j,k) ; v_2d(i,k) = v_3d(i,j,k)
+      h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = US%m_s_to_L_T*u_3d(i,j,k) ; v_2d(i,k) = US%m_s_to_L_T*v_3d(i,j,k)
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
       TKE_forced_2d(i,k) = TKE_forced(i,j,k)
       dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = dSV_dS(i,j,k)
@@ -607,7 +607,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     ! of conv_PErel is available to drive mixing.
   real :: htot      !   The total depth of the layers above an interface [H ~> m or kg m-2].
   real :: uhtot     !   The depth integrated zonal and meridional velocities in the
-  real :: vhtot     ! layers above [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+  real :: vhtot     ! layers above [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: Idecay_len_TKE  ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
   real :: h_sum     ! The total thickness of the water column [H ~> m or kg m-2].
 
@@ -1085,7 +1085,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           if ((CS%MKE_to_TKE_effic > 0.0) .and. (htot*h(k) > 0.0)) then
             ! This is the energy that would be available from homogenizing the
             ! velocities between layer k and the layers above.
-            dMKE_max = (US%m_to_Z**3*US%T_to_s**2)*(GV%H_to_kg_m2 * CS%MKE_to_TKE_effic) * 0.5 * &
+            dMKE_max = (US%L_to_Z**2*US%m_to_Z*GV%H_to_kg_m2 * CS%MKE_to_TKE_effic) * 0.5 * &
                 (h(k) / ((htot + h(k))*htot)) * &
                 ((uhtot-u(k)*htot)**2 + (vhtot-v(k)*htot)**2)
             ! A fraction (1-exp(Kddt_h*MKE2_Hharm)) of this energy would be
