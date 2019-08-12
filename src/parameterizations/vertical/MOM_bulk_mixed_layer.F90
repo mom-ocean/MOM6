@@ -193,10 +193,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
                               intent(inout) :: h_3d   !< Layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: u_3d   !< Zonal velocities interpolated to h points
-                                                      !! [m s-1].
+                                                      !! [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: v_3d   !< Zonal velocities interpolated to h points
-                                                      !! [m s-1].
+                                                      !! [L T-1 ~> m s-1].
   type(thermo_var_ptrs),      intent(inout) :: tv     !< A structure containing pointers to any
                                                       !! available thermodynamic fields. Absent
                                                       !! fields have NULL ptrs.
@@ -450,7 +450,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
-      h(i,k) = h_3d(i,j,k) ; u(i,k) = US%m_s_to_L_T*u_3d(i,j,k) ; v(i,k) = US%m_s_to_L_T*v_3d(i,j,k)
+      h(i,k) = h_3d(i,j,k) ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
       h_orig(i,k) = h_3d(i,j,k)
       eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom_H
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)

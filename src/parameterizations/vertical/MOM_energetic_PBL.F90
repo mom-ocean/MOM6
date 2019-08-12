@@ -247,10 +247,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
                            intent(inout) :: h_3d   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u_3d   !< Zonal velocities interpolated to h points
-                                                   !! [m s-1].
+                                                   !! [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: v_3d   !< Zonal velocities interpolated to h points
-                                                   !! [m s-1].
+                                                   !! [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: dSV_dT !< The partial derivative of in-situ specific
                                                    !! volume with potential temperature
@@ -404,7 +404,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
-      h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = US%m_s_to_L_T*u_3d(i,j,k) ; v_2d(i,k) = US%m_s_to_L_T*v_3d(i,j,k)
+      h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = u_3d(i,j,k) ; v_2d(i,k) = v_3d(i,j,k)
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
       TKE_forced_2d(i,k) = TKE_forced(i,j,k)
       dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = dSV_dS(i,j,k)

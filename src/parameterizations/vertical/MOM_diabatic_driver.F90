@@ -665,7 +665,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
 
-    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
+    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, &
+                         US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), tv%eqn_of_state, &
                          fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
     call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
@@ -844,7 +845,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     endif
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
-    call energetic_PBL(h, u_h, v_h, tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
+    call energetic_PBL(h, US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
@@ -1450,7 +1451,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
 
-    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
+    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, &
+                         US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), tv%eqn_of_state, &
                          fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
     call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
@@ -1575,7 +1577,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     endif
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
-    call energetic_PBL(h, u_h, v_h, tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
+    call energetic_PBL(h, US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, dt_in_T, Kd_ePBL, G, GV, US, &
          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
@@ -2084,7 +2086,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       call cpu_clock_begin(id_clock_mixedlayer)
       if (CS%ML_mix_first < 1.0) then
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
-        call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_in_T*CS%ML_mix_first, &
+        call bulkmixedlayer(h, US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, dt_in_T*CS%ML_mix_first, &
                             eaml,ebml, G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
                             Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.false.)
         if (CS%salt_reject_below_ML) &
@@ -2092,7 +2094,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                             dt*CS%ML_mix_first, CS%id_brine_lay)
       else
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
-        call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_in_T, eaml, ebml, &
+        call bulkmixedlayer(h, US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, dt_in_T, eaml, ebml, &
                             G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
                             Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.true.)
       endif
@@ -2185,7 +2187,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       enddo ; enddo ; enddo
     endif
 
-    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
+    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, &
+                         US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), tv%eqn_of_state, &
                          fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
     call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
@@ -2478,7 +2481,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       dt_mix = min(dt_in_T, dt_in_T*(1.0 - CS%ML_mix_first))
       call cpu_clock_begin(id_clock_mixedlayer)
       ! Changes: h, tv%T, tv%S, ea and eb  (G is also inout???)
-      call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
+      call bulkmixedlayer(h, US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, dt_mix, ea, eb, &
                           G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
                           Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.true.)
 
