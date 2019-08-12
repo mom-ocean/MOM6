@@ -324,7 +324,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call diapyc_energy_req_test(h, dt_in_T, tv, G, GV, US, CS%diapyc_en_rec_CSp)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp)
+  call set_BBL_TKE(US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), h, fluxes, visc, G, GV, US, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
 
   ! Frazil formation keeps the temperature above the freezing point.
@@ -609,8 +609,9 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt_in_T, G, GV, US, &
-                       CS%set_diff_CSp, Kd_lay, Kd_int)
+  call set_diffusivity(US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), h, &
+                       US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, CS%optics, &
+                       visc, dt_in_T, G, GV, US, CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -1394,8 +1395,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd_lay, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S and visc%TKE_turb
   ! Also changes: visc%Kd_shear, visc%Kv_shear and visc%Kv_slow
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt_in_T, G, GV, US, &
-                       CS%set_diff_CSp, Kd_lay, Kd_int)
+  call set_diffusivity(US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), h, &
+                       US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, CS%optics,  &
+                       visc, dt_in_T, G, GV, US,CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
@@ -2136,8 +2138,9 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (associated(tv%T)) call pass_var(tv%S, G%Domain, halo=CS%halo_TS_diff, complete=.false.)
     call pass_var(h, G%domain, halo=CS%halo_TS_diff, complete=.true.)
   endif
-  call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt_in_T, G, GV, US, &
-                       CS%set_diff_CSp, Kd_lay, Kd_int)
+  call set_diffusivity(US%m_s_to_L_T*u(:,:,:), US%m_s_to_L_T*v(:,:,:), h, &
+                       US%m_s_to_L_T*u_h(:,:,:), US%m_s_to_L_T*v_h(:,:,:), tv, fluxes, CS%optics, &
+                       visc, dt_in_T, G, GV, US, CS%set_diff_CSp, Kd_lay, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
