@@ -166,7 +166,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(int_tide_CS),                pointer       :: CS !< The control structure returned by a
                                                         !! previous call to int_tide_init.
   real, dimension(SZI_(G),SZJ_(G),CS%nMode), &
-                                    intent(in)    :: cn !< The internal wave speeds of each mode [m s-1].
+                                    intent(in)    :: cn !< The internal wave speeds of each
+                                                        !! mode [L T-1 ~> m s-1].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),2) :: &
     test
@@ -247,7 +248,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
-    call refract(CS%En(:,:,:,fr,m), US%m_s_to_L_T*cn(:,:,m), CS%frequency(fr), 0.5*dt_in_T, &
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt_in_T, &
                  G, US, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
 
@@ -274,7 +275,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Propagate the waves.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call propagate(CS%En(:,:,:,fr,m), US%m_s_to_L_T*cn(:,:,m), CS%frequency(fr), dt_in_T, &
+    call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt_in_T, &
                    G, US, CS, CS%NAngle)
   enddo ; enddo
 
@@ -296,7 +297,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Apply the other half of the refraction.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call refract(CS%En(:,:,:,fr,m), US%m_s_to_L_T*cn(:,:,m), CS%frequency(fr), 0.5*dt_in_T, &
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt_in_T, &
                  G, US, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
 
@@ -387,7 +388,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       ! Calculate modal structure for given mode and frequency
-      call wave_structure(h, tv, G, GV, US, cn(:,:,m), m, US%s_to_T*CS%frequency(fr), &
+      call wave_structure(h, tv, G, GV, US, cn(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
@@ -428,7 +429,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         ! Calculate horizontal phase velocity magnitudes
         f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                    (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        Kmag2 = (freq2 - f2) / (US%m_s_to_L_T**2*cn(i,j,m)**2 + cn_subRO**2)
+        Kmag2 = (freq2 - f2) / (cn(i,j,m)**2 + cn_subRO**2)
         c_phase = 0.0
         if (Kmag2 > 0.0) then
           c_phase = sqrt(freq2/Kmag2)

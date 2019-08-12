@@ -121,7 +121,7 @@ type, public:: diabatic_CS; private
                                      !! shear and ePBL diffusivities are used.
   integer :: nMode = 1               !< Number of baroclinic modes to consider
   real    :: uniform_test_cg         !< Uniform group velocity of internal tide
-                                     !! for testing internal tides [m s-1] (BDM)
+                                     !! for testing internal tides [L T-1 ~> m s-1]
   logical :: useALEalgorithm         !< If true, use the ALE algorithm rather than layered
                                      !! isopycnal/stacked shallow water mode. This logical
                                      !! passed by argument to diabatic_driver_init.
@@ -3291,7 +3291,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "that will be calculated.", default=1, do_not_log=.true.)
     call get_param(param_file, mdl, "UNIFORM_TEST_CG", CS%uniform_test_cg, &
                  "If positive, a uniform group velocity of internal tide for test case", &
-                 default=-1., units="m s-1")
+                 default=-1., units="m s-1", scale=US%m_s_to_L_T)
   endif
 
   call get_param(param_file, mdl, "MASSLESS_MATCH_TARGETS", &
