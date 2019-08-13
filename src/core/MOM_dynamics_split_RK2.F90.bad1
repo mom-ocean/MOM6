@@ -105,10 +105,10 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                                                   !! mode) [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av   !< layer x-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
-                                                                  !! timestep [m s-1]
+                                                                  !! timestep [L T-1 ~> m s-1]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av   !< layer y-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
-                                                                  !! timestep [m s-1]
+                                                                  !! timestep [L T-1 ~> m s-1]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: h_av   !< arithmetic mean of two successive layer
                                                                   !! thicknesses [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta_PF !< instantaneous SSH used in calculating PFu and
@@ -321,8 +321,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, pointer, dimension(:,:,:) :: &
     uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
     u_init => NULL(), v_init => NULL(), & ! Pointers to u and v or u_adj and v_adj.
-    u_av, & ! The zonal velocity time-averaged over a time step [m s-1].
-    v_av, & ! The meridional velocity time-averaged over a time step [m s-1].
+    u_av, & ! The zonal velocity time-averaged over a time step [L T-1 ~> m s-1].
+    v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
   real :: Idt
   logical :: dyn_p_surf
@@ -373,10 +373,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, CS%OBC, h)
 
     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u_old_rad_OBC(I,j,k) = u_av(I,j,k)
+      u_old_rad_OBC(I,j,k) = US%L_T_to_m_s*u_av(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v_old_rad_OBC(i,J,k) = v_av(i,J,k)
+      v_old_rad_OBC(i,J,k) = US%L_T_to_m_s*v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -439,7 +439,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(US%m_s_to_L_T*u_av, US%m_s_to_L_T*v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+  call CorAdCalc(US%L_T_to_m_s*u_av, US%L_T_to_m_s*v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, Gv, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
@@ -518,8 +518,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_accel_bt = layer accelerations due to barotropic solver
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
     call cpu_clock_begin(id_clock_continuity)
-    call continuity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, &
-                    OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
+    call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC, &
+                    visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
       call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
@@ -538,7 +538,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, &
-              u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, &
+              US%L_T_to_m_s*u_av, US%L_T_to_m_s*v_av, CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, &
               G, GV, US, CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
               OBC=CS%OBC, BT_cont=CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
@@ -606,16 +606,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! uh = u_av * h
   ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(US%m_s_to_L_T*up, US%m_s_to_L_T*vp, h, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
+  call continuity(up, vp, h, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, &
                   u_av, v_av, BT_cont=CS%BT_cont)
-  !### Remove this later.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u_av(I,j,k) = US%L_T_to_m_s * u_av(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v_av(i,J,k) = US%L_T_to_m_s * v_av(i,J,k)
-  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
@@ -624,12 +617,18 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%OBC)) then
 
     if (CS%debug) &
-      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
 
+    !### Remove this later
+    u_av(:,:,:) = US%L_T_to_m_s*u_av(:,:,:)
+    v_av(:,:,:) = US%L_T_to_m_s*v_av(:,:,:)
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, US, dt_pred)
+    !### Remove this later
+    u_av(:,:,:) = US%m_s_to_L_T*u_av(:,:,:)
+    v_av(:,:,:) = US%m_s_to_L_T*v_av(:,:,:)
 
     if (CS%debug) &
-      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
 
     ! These should be done with a pass that excludes uh & vh.
 !   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
@@ -685,9 +684,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, US, symmetric=sym, vel_scale=1.0)
-    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
     call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_m)
-  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US, vel_scale=1.0)
+  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US,)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
   endif
@@ -739,6 +738,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! pbce = dM/deta
   call cpu_clock_begin(id_clock_btstep)
   if (CS%BT_use_layer_fluxes) then
+    !### Remove this later
+    u_av(:,:,:) = US%L_T_to_m_s*u_av(:,:,:) ; v_av(:,:,:) = US%L_T_to_m_s*v_av(:,:,:)
     uh_ptr => uh ; vh_ptr => vh ; u_ptr => u_av ; v_ptr => v_av
   endif
 
@@ -754,6 +755,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   do j=js,je ; do i=is,ie ; eta(i,j) = eta_pred(i,j) ; enddo ; enddo
   call cpu_clock_end(id_clock_btstep)
   if (showCallTree) call callTree_leave("btstep()")
+
+  if (CS%BT_use_layer_fluxes) then
+    !### Remove this later
+    u_av(:,:,:) = US%m_s_to_L_T*u_av(:,:,:) ; v_av(:,:,:) = US%m_s_to_L_T*v_av(:,:,:)
+  endif
 
   if (CS%debug) then
     call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G)
@@ -817,15 +823,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! h  = h + dt * div . uh
   ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
+  call continuity(u, v, h, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
-  !### Remove this later.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u_av(I,j,k) = US%L_T_to_m_s * u_av(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v_av(i,J,k) = US%L_T_to_m_s * v_av(i,J,k)
-  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_continuity)
   call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
@@ -882,7 +881,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, US, symmetric=sym, vel_scale=1.0)
-    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
     call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, scale=GV%H_to_m)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US, vel_scale=1.0)
   endif
@@ -1027,6 +1026,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                      ! a restart file to the internal representation in this run.
   real :: accel_rescale ! A rescaling factor for accelerations from the representation in
                      ! a restart file to the internal representation in this run.
+  real :: vel_rescale ! A rescaling factor for velocities from the representation in
+                     ! a restart file to the internal representation in this run.
   real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
@@ -1163,33 +1164,40 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
-    call horizontal_viscosity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
+    call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
                               G, GV, US, CS%hor_visc_CSp, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp)
-  else
-    if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+  elseif ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
          (US%m_to_L * US%s_to_T_restart**2 /= US%m_to_L_restart * US%s_to_T**2) ) then
-      accel_rescale = (US%m_to_L * US%s_to_T_restart**2) / (US%m_to_L_restart * US%s_to_T**2)
-      do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB
-        CS%diffu(I,j,k) = accel_rescale * CS%diffu(I,j,k)
-      enddo ; enddo ; enddo
-      do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie
-        CS%diffv(i,J,k) = accel_rescale * CS%diffv(i,J,k)
-      enddo ; enddo ; enddo
-    endif
+    accel_rescale = (US%m_to_L * US%s_to_T_restart**2) / (US%m_to_L_restart * US%s_to_T**2)
+    do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB
+      CS%diffu(I,j,k) = accel_rescale * CS%diffu(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie
+      CS%diffv(i,J,k) = accel_rescale * CS%diffv(i,J,k)
+    enddo ; enddo ; enddo
   endif
 
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
-    CS%u_av(:,:,:) = u(:,:,:)
-    CS%v_av(:,:,:) = v(:,:,:)
+    CS%u_av(:,:,:) = US%m_s_to_L_T*u(:,:,:)
+    CS%v_av(:,:,:) = US%m_s_to_L_T*v(:,:,:)
+  elseif ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+           (US%m_to_L * US%s_to_T_restart /= US%m_to_L_restart * US%s_to_T) ) then
+    vel_rescale = (US%m_to_L * US%s_to_T_restart) / (US%m_to_L_restart * US%s_to_T)
+    do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB
+      CS%u_av(I,j,k) = vel_rescale * CS%u_av(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie
+      CS%u_av(i,J,k) = vel_rescale * CS%u_av(i,J,k)
+    enddo ; enddo ; enddo
   endif
 
   ! This call is just here to initialize uh and vh.
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     h_tmp(:,:,:) = h(:,:,:)
-    call continuity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     CS%h_av(:,:,:) = 0.5*(h(:,:,:) + h_tmp(:,:,:))
   else

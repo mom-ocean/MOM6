@@ -197,14 +197,14 @@ contains
 !!   u[is-2:ie+2,js-2:je+2]
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
-subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
+subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
                                 CS, OBC, BT)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                 intent(in)  :: u_in   !< The zonal velocity [m s-1].
+                                 intent(in)  :: u      !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                 intent(in)  :: v_in   !< The meridional velocity [m s-1].
+                                 intent(in)  :: v      !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                                  intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -223,10 +223,6 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
   type(barotropic_CS),  optional, pointer    :: BT     !< Pointer to a structure containing
                                                        !! barotropic velocities.
-
-  !### Temporary variables that will be removed later.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u      !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v      !< The meridional velocity [L T-1 ~> m s-1].
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -525,15 +521,6 @@ subroutine horizontal_viscosity(u_in, v_in, h, diffu, diffv, MEKE, VarMix, G, GV
   !$OMP                                  meke_res_fn,Sh_F_pow,                          &
   !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
-
-    ! This is temporary code until the input velocities have been dimensionally rescaled.
-    do j=Jsq-1,Jeq+2 ; do I=Isq-2,Ieq+2
-      u(I,j,k) = US%m_s_to_L_T*u_in(I,j,k)
-    enddo ; enddo
-    do j=Jsq-2,Jeq+2 ; do i=Isq-1,Ieq+2
-      v(i,J,k) = US%m_s_to_L_T*v_in(i,J,k)
-    enddo ; enddo
-
 
     ! The following are the forms of the horizontal tension and horizontal
     ! shearing strain advocated by Smagorinsky (1993) and discussed in

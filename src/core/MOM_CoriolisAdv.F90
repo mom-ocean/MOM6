@@ -108,11 +108,11 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 contains
 
 !> Calculates the Coriolis and momentum advection contributions to the acceleration.
-subroutine CorAdCalc(u_in, v_in, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< Ocen grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_in  !< Zonal velocity [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_in  !< Meridional velocity [m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh !< Zonal transport u*h*dy
                                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -126,10 +126,6 @@ subroutine CorAdCalc(u_in, v_in, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   type(accel_diag_ptrs),                     intent(inout) :: AD  !< Storage for acceleration diagnostics
   type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
   type(CoriolisAdv_CS),                      pointer       :: CS  !< Control structure for MOM_CoriolisAdv
-
-  !### Temporary variables that will be removed later.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u      !< The zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v      !< The meridional velocity [L T-1 ~> m s-1].
 
   ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -261,15 +257,6 @@ subroutine CorAdCalc(u_in, v_in, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,&
   !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,h_neglect,h_tiny,OBC)
   do k=1,nz
-
-    !## This is temporary code until the input velocities have been dimensionally rescaled.
-    do j=Jsq-1,Jeq+2 ; do I=Isq-2,Ieq+2
-      u(I,j,k) = US%m_s_to_L_T*u_in(I,j,k)
-    enddo ; enddo
-    do j=Jsq-2,Jeq+2 ; do i=Isq-1,Ieq+2
-      v(i,J,k) = US%m_s_to_L_T*v_in(i,J,k)
-    enddo ; enddo
-
 
     ! Here the second order accurate layer potential vorticities, q,
     ! are calculated.  hq is  second order accurate in space.  Relative
