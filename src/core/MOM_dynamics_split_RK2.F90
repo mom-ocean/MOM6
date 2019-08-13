@@ -482,7 +482,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   enddo
 
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, &
+  call set_viscous_ML(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, tv, forces, visc, dt, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 

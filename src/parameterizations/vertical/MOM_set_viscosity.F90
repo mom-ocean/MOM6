@@ -47,7 +47,7 @@ type, public :: set_visc_CS ; private
   real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
                             !! calculating the drag in channels.
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
-                            !! calculating the bottom drag [m s-1].
+                            !! calculating the bottom drag [L T-1 ~> m s-1].
   real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness [H ~> m or kg m-2].
                             !! This might be Kv / (cdrag * drag_bg_vel) to give
                             !! Kv as the minimum near-bottom viscosity.
@@ -1007,9 +1007,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity [m s-1].
+                           intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity [m s-1].
+                           intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
@@ -1024,6 +1024,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                  !! of those values in visc that would be
                                                  !! calculated with symmetric memory.
+
   ! Local variables
   real, dimension(SZIB_(G)) :: &
     htot, &     !   The total depth of the layers being that are within the
@@ -1036,7 +1037,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                 ! [H kg m-3 ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
                 ! equation of state is used.
     uhtot, &    !   The depth integrated zonal and meridional velocities within
-    vhtot, &    ! the surface mixed layer [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+    vhtot, &    ! the surface mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
     Idecay_len_TKE, & ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     dR_dT, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with temperature [kg m-3 degC-1].
@@ -1066,7 +1067,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: hwtot     ! Sum of the thicknesses used to calculate
                     ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot     ! Running sum of thicknesses times the
-                    ! velocity magnitudes [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+                    ! velocity magnitudes [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: hweight   ! The thickness of a layer that is within Hbbl
                     ! of the bottom [H ~> m or kg m-2].
   real :: tbl_thick_Z  ! The thickness of the top boundary layer [Z ~> m].
@@ -1077,8 +1078,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: S_lay     ! The layer salinity at velocity points [ppt].
   real :: Rlay      ! The layer potential density at velocity points [kg m-3].
   real :: Rlb       ! The potential density of the layer below [kg m-3].
-  real :: v_at_u    ! The meridonal velocity at a zonal velocity point [m s-1].
-  real :: u_at_v    ! The zonal velocity at a meridonal velocity point [m s-1].
+  real :: v_at_u    ! The meridonal velocity at a zonal velocity point [L T-1 ~> m s-1].
+  real :: u_at_v    ! The zonal velocity at a meridonal velocity point [L T-1 ~> m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
                     ! on the mixed layer thickness and density difference across
                     ! the base of the mixed layer [L2 T-2 ~> m2 s-2].
@@ -1104,7 +1105,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                       ! the present layer [H ~> m or kg m-2].
   real :: U_bg_sq   ! The square of an assumed background velocity, for
                     ! calculating the mean magnitude near the top for use in
-                    ! the quadratic surface drag [m2 s-2].
+                    ! the quadratic surface drag [L2 T-2 ~> m2 s-2].
   real :: h_tiny    ! A very small thickness [H ~> m or kg m-2]. Layers that are less than
                     ! h_tiny can not be the deepest in the viscous mixed layer.
   real :: absf      ! The absolute value of f averaged to velocity points [T-1 ~> s-1].
@@ -1134,7 +1135,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   endif ; endif
 
   Rho0x400_G = 400.0*(GV%Rho0/(US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
-  U_bg_sq = US%L_T_to_m_s**2*CS%drag_bg_vel * CS%drag_bg_vel
+  U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_Z = US%L_to_Z * sqrt(CS%cdrag)
 
@@ -1204,8 +1205,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           do_i(I) = .true. ; do_any = .true.
           k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
-          uhtot(I) = dt_Rho0 * forces%taux(I,j)
-          vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
+          uhtot(I) = US%m_s_to_L_T*dt_Rho0 * forces%taux(I,j)
+          vhtot(I) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1241,7 +1242,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               I_2hlay = 1.0 / (h(i,j,k) + h(i+1,j,k))
               v_at_u = 0.5 * (h(i,j,k)   * (v(i,J,k) + v(i,J-1,k)) + &
                               h(i+1,j,k) * (v(i+1,J,k) + v(i+1,J-1,k))) * I_2hlay
-              Uh2 = US%m_s_to_L_T**2*((uhtot(I) - htot(I)*u(I,j,k))**2 + (vhtot(I) - htot(I)*v_at_u)**2)
+              Uh2 = ((uhtot(I) - htot(I)*u(I,j,k))**2 + (vhtot(I) - htot(I)*v_at_u)**2)
 
               if (use_EOS) then
                 T_lay = (h(i,j,k)*tv%T(i,j,k) + h(i+1,j,k)*tv%T(i+1,j,k)) * I_2hlay
@@ -1338,7 +1339,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
         enddo ; endif
 
         if ((.not.CS%linear_drag) .and. (hwtot > 0.0)) then
-          ustar(I) = cdrag_sqrt_Z * US%m_s_to_L_T*hutot/hwtot
+          ustar(I) = cdrag_sqrt_Z * hutot/hwtot
         else
           ustar(I) = cdrag_sqrt_Z * CS%drag_bg_vel
         endif
@@ -1439,8 +1440,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           do_i(i) = .true. ; do_any = .true.
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
-          vhtot(i) = dt_Rho0 * forces%tauy(i,J)
-          uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
+          vhtot(i) = US%m_s_to_L_T*dt_Rho0 * forces%tauy(i,J)
+          uhtot(i) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1478,7 +1479,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               I_2hlay = 1.0 / (h(i,j,k) + h(i,j+1,k))
               u_at_v = 0.5 * (h(i,j,k)   * (u(I-1,j,k)   + u(I,j,k)) + &
                               h(i,j+1,k) * (u(I-1,j+1,k) + u(I,j+1,k))) * I_2hlay
-              Uh2 = US%m_s_to_L_T**2*((uhtot(I) - htot(I)*u_at_v)**2 + (vhtot(I) - htot(I)*v(i,J,k))**2)
+              Uh2 = ((uhtot(I) - htot(I)*u_at_v)**2 + (vhtot(I) - htot(I)*v(i,J,k))**2)
 
               if (use_EOS) then
                 T_lay = (h(i,j,k)*tv%T(i,j,k) + h(i,j+1,k)*tv%T(i,j+1,k)) * I_2hlay
@@ -1575,7 +1576,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
         enddo ; endif
 
         if (.not.CS%linear_drag) then ; if (hwtot > 0.0) then
-          ustar(i) = cdrag_sqrt_Z * US%m_s_to_L_T*hutot/hwtot
+          ustar(i) = cdrag_sqrt_Z * hutot/hwtot
         else
           ustar(i) = cdrag_sqrt_Z * CS%drag_bg_vel
         endif ; endif

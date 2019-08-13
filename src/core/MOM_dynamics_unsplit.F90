@@ -341,7 +341,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
  ! up <- up + dt/2 d/dz visc d/dz up
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h_av, tv, forces, visc, dt*0.5, G, GV, US, &
+  call set_viscous_ML(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h_av, tv, forces, visc, dt*0.5, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
   call vertvisc_coef(up, vp, h_av, forces, visc, dt*0.5, G, GV, US, &
