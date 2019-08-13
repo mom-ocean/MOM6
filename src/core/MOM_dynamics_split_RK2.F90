@@ -529,7 +529,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (CS%BT_use_layer_fluxes) then
-    uh_ptr => uh_in; vh_ptr => vh_in; u_ptr => u; v_ptr => v
+    ! uh_ptr => uh_in; vh_ptr => vh_in; u_ptr => u; v_ptr => v
+    uh_ptr => uh_in; vh_ptr => vh_in
+    call safe_alloc_ptr(u_ptr, G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
+    call safe_alloc_ptr(v_ptr, G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    u_ptr(:,:,:) = US%m_s_to_L_T*u(:,:,:)
+    v_ptr(:,:,:) = US%m_s_to_L_T*v(:,:,:)
   endif
 
   u_init => u ; v_init => v
@@ -537,8 +542,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (calc_dtbt) call set_dtbt(G, GV, US, CS%barotropic_CSp, eta, CS%pbce)
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
-  call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, &
-              u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, &
+  call btstep(US%m_s_to_L_T*u, US%m_s_to_L_T*v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, &
+              US%m_s_to_L_T*u_av, US%m_s_to_L_T*v_av, CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, &
               G, GV, US, CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
               OBC=CS%OBC, BT_cont=CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
@@ -739,19 +744,25 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! pbce = dM/deta
   call cpu_clock_begin(id_clock_btstep)
   if (CS%BT_use_layer_fluxes) then
-    uh_ptr => uh ; vh_ptr => vh ; u_ptr => u_av ; v_ptr => v_av
+    uh_ptr => uh ; vh_ptr => vh ! ; u_ptr => u_av ; v_ptr => v_av
+    u_ptr(:,:,:) = US%m_s_to_L_T*u_av(:,:,:)
+    v_ptr(:,:,:) = US%m_s_to_L_T*v_av(:,:,:)
   endif
 
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the corrector step call to btstep.
-  call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, &
-              CS%eta_PF, u_av, v_av, CS%u_accel_bt, CS%v_accel_bt, &
+  call btstep(US%m_s_to_L_T*u, US%m_s_to_L_T*v, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, &
+              CS%eta_PF, US%m_s_to_L_T*u_av, US%m_s_to_L_T*v_av, CS%u_accel_bt, CS%v_accel_bt, &
               eta_pred, CS%uhbt, CS%vhbt, G, GV, US, CS%barotropic_CSp, &
               CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, OBC=CS%OBC, &
               BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
               taux_bot=taux_bot, tauy_bot=tauy_bot, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
   do j=js,je ; do i=is,ie ; eta(i,j) = eta_pred(i,j) ; enddo ; enddo
+
+  if (associated(u_ptr)) deallocate(u_ptr)
+  if (associated(v_ptr)) deallocate(v_ptr)
+
   call cpu_clock_end(id_clock_btstep)
   if (showCallTree) call callTree_leave("btstep()")
 
@@ -1157,7 +1168,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
+  call barotropic_init(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, CS%eta, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%tides_CSp)
 

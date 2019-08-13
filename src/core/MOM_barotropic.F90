@@ -241,7 +241,7 @@ type, public :: barotropic_CS ; private
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
                              !! are set to 0 [L T-1 ~> m s-1].
   real    :: maxvel          !< Velocity components greater than maxvel are
-                             !! truncated to maxvel [m s-1].
+                             !! truncated to maxvel [L T-1 ~> m s-1].
   real    :: CFL_trunc       !< If clip_velocity is true, velocity components will
                              !! be truncated when they are large enough that the
                              !! corresponding CFL number exceeds this value, nondim.
@@ -389,8 +389,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   type(ocean_grid_type),                   intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US      !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in    !< The initial (3-D) zonal velocity [m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in    !< The initial (3-D) meridional velocity [m s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in    !< The initial (3-D) zonal
+                                                                    !! velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in    !< The initial (3-D) meridional
+                                                                    !! velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
                                                          !! anomaly or column mass anomaly [H ~> m or kg m-2].
   real,                                      intent(in)  :: dt      !< The time increment to integrate over.
@@ -407,9 +409,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! eta_PF_start is provided [H ~> m or kg m-2].
                                                          !! Note: eta_in, pbce, and eta_PF_in must have up-to-date
                                                          !! values in the first point of their halos.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor      !< The (3-D) zonal-velocities used to
-                                                         !! calculate the Coriolis terms in bc_accel_u [m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor      !< Ditto for meridonal bc_accel_v.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor      !< The (3-D) zonal velocities used to
+                                                         !! calculate the Coriolis terms in bc_accel_u [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor      !< The (3-D) meridional velocities used to
+                                                         !! calculate the Coriolis terms in bc_accel_u [L T-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: accel_layer_u !< The zonal acceleration of each layer due
                                                          !! to the barotropic calculation [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v !< The meridional acceleration of each layer
@@ -446,10 +449,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! from ocean to the seafloor [Pa].
   real, dimension(:,:,:),              optional, pointer :: uh0     !< The zonal layer transports at reference
                                                                     !! velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(:,:,:),              optional, pointer :: u_uh0   !< The velocities used to calculate uh0 [m s-1]
+  real, dimension(:,:,:),              optional, pointer :: u_uh0   !< The velocities used to calculate
+                                                                    !! uh0 [L T-1 ~> m s-1]
   real, dimension(:,:,:),              optional, pointer :: vh0     !< The zonal layer transports at reference
                                                                     !! velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(:,:,:),              optional, pointer :: v_vh0   !< The velocities used to calculate vh0 [m s-1]
+  real, dimension(:,:,:),              optional, pointer :: v_vh0   !< The velocities used to calculate
+                                                                    !! vh0 [L T-1 ~> m s-1]
 
   ! Local variables
   real :: ubt_Cor(SZIB_(G),SZJ_(G)) ! The barotropic velocities that had been
@@ -615,7 +620,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                       ! dynamic surface pressure for stability [H ~> m or kg m-2].
   real :: H_eff_dx2   ! The effective total thickness divided by the grid spacing
                       ! squared [H L-2 ~> m-1 or kg m-4].
-  real :: vel_tmp     ! A temporary velocity [m s-1].
   real :: u_max_cor, v_max_cor ! The maximum corrective velocities [L T-1 ~> m s-1].
   real :: Htot        ! The total thickness [H ~> m or kg m-2].
   real :: eta_cor_max ! The maximum fluid that can be added as a correction to eta [H ~> m or kg m-2].
@@ -914,11 +918,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do J=js-1,je ; do i=is-1,ie+1 ; vbt_Cor(i,J) = 0.0 ; enddo ; enddo
   !$OMP parallel do default(shared)
   do j=js,je ; do k=1,nz ; do I=is-1,ie
-    ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * US%m_s_to_L_T*U_Cor(I,j,k)
+    ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
   enddo ; enddo ; enddo
   !$OMP parallel do default(shared)
   do J=js-1,je ; do k=1,nz ; do i=is,ie
-    vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * US%m_s_to_L_T*V_Cor(i,J,k)
+    vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
   enddo ; enddo ; enddo
 
   ! The gtot arrays are the effective layer-weighted reduced gravities for
@@ -1026,23 +1030,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       !$OMP parallel do default(shared)
       do j=js,je ; do k=1,nz ; do I=is-1,ie
         uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
-        ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * US%m_s_to_L_T*u_uh0(I,j,k)
+        ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * u_uh0(I,j,k)
       enddo ; enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do k=1,nz ; do i=is,ie
         vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
-        vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * US%m_s_to_L_T*v_vh0(i,J,k)
+        vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * v_vh0(i,J,k)
       enddo ; enddo ; enddo
     else
       !$OMP parallel do default(shared)
       do j=js,je ; do k=1,nz ; do I=is-1,ie
         uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
-        ubt(I,j) = ubt(I,j) + CS%frhatu(I,j,k) * US%m_s_to_L_T*u_uh0(I,j,k)
+        ubt(I,j) = ubt(I,j) + CS%frhatu(I,j,k) * u_uh0(I,j,k)
       enddo ; enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do k=1,nz ; do i=is,ie
         vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
-        vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * US%m_s_to_L_T*v_vh0(i,J,k)
+        vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * v_vh0(i,J,k)
       enddo ; enddo ; enddo
     endif
     if (use_BT_cont) then
@@ -1104,11 +1108,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo ; enddo
   !$OMP parallel do default(shared)
   do j=js,je ; do k=1,nz ; do I=is-1,ie
-    ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * US%m_s_to_L_T*U_in(I,j,k)
+    ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
   enddo ; enddo ; enddo
   !$OMP parallel do default(shared)
   do J=js-1,je ; do k=1,nz ; do i=is,ie
-    vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * US%m_s_to_L_T*V_in(i,J,k)
+    vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
   enddo ; enddo ;  enddo
   !$OMP parallel do default(shared)
   do j=js,je ; do I=is-1,ie
@@ -2377,16 +2381,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   type(ocean_grid_type),                 intent(inout) :: G       !< The ocean's grid structure.
   type(memory_size_type),                intent(in)    :: MS      !< A type that describes the memory sizes of
                                                                   !! the argument arrays.
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt     !< the zonal barotropic velocity [m s-1].
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt     !< the zonal barotropic velocity [L T-1 ~> m s-1].
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: uhbt    !< the zonal barotropic transport
                                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt_trans !< the zonal barotropic velocity used in
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt_trans !< The zonal barotropic velocity used in
                                                                   !! transport [L T-1 ~> m s-1].
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt     !< the meridional barotropic velocity [m s-1].
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt     !< The meridional barotropic velocity
+                                                                  !! [L T-1 ~> m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vhbt    !< the meridional barotropic transport
                                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt_trans !< the meridional BT velocity used in
-                                                                  !! transports [m s-1].
+                                                                  !! transports [L T-1 ~> m s-1].
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta     !< The barotropic free surface height anomaly or
                                                                   !! column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic
@@ -3055,7 +3060,7 @@ function uhbt_to_ubt(uhbt, BTC, US, guess) result(ubt)
   type(unit_scale_type),      intent(in) :: US  !< A dimensional unit scaling type
   real, optional, intent(in) :: guess           !< A guess at what ubt will be [L T-1 ~> m s-1].  The result
                                                 !! is not allowed to be dramatically larger than guess.
-  real :: ubt                                   !< The result - The velocity that gives uhbt transport [m s-1].
+  real :: ubt                                   !< The result - The velocity that gives uhbt transport [L T-1 ~> m s-1].
 
   ! Local variables
   real :: ubt_min, ubt_max, uhbt_err, derr_du
@@ -3391,12 +3396,12 @@ subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
                                       G, US, MS, halo)
   type(memory_size_type), intent(in)  :: MS   !< A type that describes the memory sizes of the argument arrays.
   real, dimension(SZIBW_(MS),SZJW_(MS)), &
-                          intent(in)  :: ubt  !< The linearization zonal barotropic velocity [m s-1].
+                          intent(in)  :: ubt  !< The linearization zonal barotropic velocity [L T-1 ~> m s-1].
   real, dimension(SZIBW_(MS),SZJW_(MS)), &
                           intent(in)  :: uhbt !< The linearization zonal barotropic transport
                                               !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), &
-                          intent(in)  :: vbt  !< The linearization meridional barotropic velocity [m s-1].
+                          intent(in)  :: vbt  !< The linearization meridional barotropic velocity [L T-1 ~> m s-1].
   real, dimension(SZIW_(MS),SZJBW_(MS)), &
                           intent(in)  :: vhbt !< The linearization meridional barotropic transport
                                               !! [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -3701,9 +3706,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity [m s-1].
+                           intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity [m s-1].
+                           intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -4290,10 +4295,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     call btcalc(h, G, GV, CS, may_use_default=.true.)
     CS%ubtav(:,:) = 0.0 ; CS%vbtav(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
-      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * US%m_s_to_L_T*u(I,j,k)
+      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * u(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=js-1,je ; do i=is,ie
-      CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * US%m_s_to_L_T*v(i,J,k)
+      CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
   elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
           (US%m_to_L*US%s_to_T_restart) /= (US%m_to_L_restart*US%s_to_T)) then
