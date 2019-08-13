@@ -940,7 +940,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
               Time_local + real_to_time(bbl_time_int-dt), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, &
+    call set_viscous_BBL(US%m_s_to_L_T*CS%u(:,:,:), US%m_s_to_L_T*CS%v(:,:,:), CS%h, CS%tv, CS%visc, G, GV, US, &
                          CS%set_visc_CSp, symmetrize=.true.)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
@@ -1155,6 +1155,14 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   use_ice_shelf = .false.
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
 
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+    enddo ; enddo ; enddo
+
   call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
@@ -1186,26 +1194,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     endif
 
     call cpu_clock_begin(id_clock_diabatic)
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
                   dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
-
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
-    call cpu_clock_end(id_clock_diabatic)
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
 
@@ -1225,7 +1217,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call preAle_tracer_diagnostics(CS%tracer_Reg, G, GV)
 
       if (CS%debug) then
-        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
+        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
         call hchksum(tv%T,"Pre-ALE T", G%HI, haloshift=1)
         call hchksum(tv%S,"Pre-ALE S", G%HI, haloshift=1)
         call check_redundant("Pre-ALE ", u, v, G)
@@ -1252,7 +1244,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
     if (CS%debug .and. CS%use_ALE_algorithm) then
-      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
+      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
       call hchksum(tv%T, "Post-ALE T", G%HI, haloshift=1)
       call hchksum(tv%S, "Post-ALE S", G%HI, haloshift=1)
       call check_redundant("Post-ALE ", u, v, G)
@@ -1267,12 +1259,12 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, dtdia)
 
     if (CS%debug) then
-      call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
+      call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2, scale=US%L_T_to_m_s)
       call hchksum(h, "Post-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
       call uvchksum("Post-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
                     haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     ! call MOM_state_chksum("Post-diabatic ", u, v, &
-    !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1, vel_scale=1.0)
+    !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
       if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
       if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
       if (associated(tv%frazil)) call hchksum(tv%frazil, &
@@ -1283,6 +1275,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call check_redundant("Post-diabatic ", u, v, G)
     endif
     call disable_averaging(CS%diag)
+
+    call cpu_clock_end(id_clock_diabatic)
   else   ! complement of "if (.not.CS%adiabatic)"
 
     call cpu_clock_begin(id_clock_diabatic)
@@ -1304,6 +1298,14 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call cpu_clock_end(id_clock_thermo)
 
   call disable_averaging(CS%diag)
+
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+    enddo ; enddo ; enddo
 
   if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
 

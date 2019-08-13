@@ -111,9 +111,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u    !< The zonal velocity [m s-1].
+                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v    !< The meridional velocity [m s-1].
+                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),    intent(in)    :: tv   !< A structure containing pointers to any
@@ -191,12 +191,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot            ! Running sum of thicknesses times the
-                           ! velocity magnitudes [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+                           ! velocity magnitudes [H T T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: Thtot            ! Running sum of thickness times temperature [degC H ~> degC m or degC kg m-2].
   real :: Shtot            ! Running sum of thickness times salinity [ppt H ~> ppt m or ppt kg m-2].
   real :: hweight          ! The thickness of a layer that is within Hbbl
                            ! of the bottom [H ~> m or kg m-2].
-  real :: v_at_u, u_at_v   ! v at a u point or vice versa [m s-1].
+  real :: v_at_u, u_at_v   ! v at a u point or vice versa [L T-1 ~> m s-1].
   real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors
                            ! [kg T2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                            ! The 400 is a constant proposed by Killworth and Edwards, 1999.
@@ -282,7 +282,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   endif ; endif
 
   if (CS%debug) then
-    call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
+    call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
     call hchksum(h,"Start set_viscous_BBL h", G%HI, haloshift=1, scale=GV%H_to_m)
     if (associated(tv%T)) call hchksum(tv%T, "Start set_viscous_BBL T", G%HI, haloshift=1)
     if (associated(tv%S)) call hchksum(tv%S, "Start set_viscous_BBL S", G%HI, haloshift=1)
@@ -291,7 +291,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   use_BBL_EOS = associated(tv%eqn_of_state) .and. CS%BBL_use_EOS
   OBC => CS%OBC
 
-  U_bg_sq = US%L_T_to_m_s**2*CS%drag_bg_vel * CS%drag_bg_vel
+  U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_Z = US%L_to_Z * sqrt(CS%cdrag)
   K2 = max(nkmb+1, 2)
@@ -521,7 +521,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         enddo ! end of k loop
 
         if (.not.CS%linear_drag .and. (hwtot > 0.0)) then
-          ustar(i) = cdrag_sqrt_Z*US%m_s_to_L_T*hutot/hwtot
+          ustar(i) = cdrag_sqrt_Z*hutot/hwtot
         else
           ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel
         endif
@@ -844,13 +844,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           if (m==1) then
             if (Rayleigh > 0.0) then
               v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
-              visc%Ray_u(I,j,k) = Rayleigh*US%m_s_to_L_T*sqrt(u(I,j,k)*u(I,j,k) + &
+              visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
               u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
-              visc%Ray_v(i,J,k) = Rayleigh*US%m_s_to_L_T*sqrt(v(i,J,k)*v(i,J,k) + &
+              visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
           endif
