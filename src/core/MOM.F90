@@ -1186,9 +1186,25 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     endif
 
     call cpu_clock_begin(id_clock_diabatic)
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+    enddo ; enddo ; enddo
+
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
                   dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
+
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+    enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_diabatic)
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
