@@ -644,10 +644,26 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         end_time_thermo = Time_local + real_to_time(dtdia-dt)
       endif
 
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+    enddo ; enddo ; enddo
+
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            end_time_thermo, .true., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
+
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+    enddo ; enddo ; enddo
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -743,10 +759,26 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       ! by the call to step_MOM_thermo, noting that they end at the same time.
       if (dtdia > dt) CS%Time = CS%Time - real_to_time(0.5*(dtdia-dt))
 
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+    enddo ; enddo ; enddo
+
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
+
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+    enddo ; enddo ; enddo
 
       if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) then
         ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -1127,9 +1159,9 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(inout) :: u      !< zonal velocity [m s-1]
+                            intent(inout) :: u      !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(inout) :: v      !< meridional velocity [m s-1]
+                            intent(inout) :: v      !< meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                             intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
@@ -1154,14 +1186,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
   use_ice_shelf = .false.
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
-
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
 
   call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 
@@ -1298,14 +1322,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call cpu_clock_end(id_clock_thermo)
 
   call disable_averaging(CS%diag)
-
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
 
   if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
 
