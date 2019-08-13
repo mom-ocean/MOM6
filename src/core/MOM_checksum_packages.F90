@@ -39,15 +39,15 @@ contains
 ! =============================================================================
 
 !> Write out chksums for the model's basic state variables, including transports.
-subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, symmetric)
+subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, symmetric, vel_scale)
   character(len=*),                          &
                            intent(in) :: mesg !< A message that appears on the chksum lines.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: u    !< The zonal velocity [m s-1].
+                           intent(in) :: u    !< The zonal velocity [L T-1 ~> m s-1] or other units.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in) :: v    !< The meridional velocity [m s-1].
+                           intent(in) :: v    !< The meridional velocity [L T-1 ~> m s-1] or other units.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -60,17 +60,21 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, sy
   integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                    !! computational domain.
+  real,          optional, intent(in) :: vel_scale !< The scaling factor to convert velocities to [m s-1]
 
-  integer :: is, ie, js, je, nz, hs
+  real :: scale_vel ! The scaling factor to convert velocities to [m s-1]
   logical :: sym
+  integer :: is, ie, js, je, nz, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  hs=1; if (present(haloshift)) hs=haloshift
-  sym=.false.; if (present(symmetric)) sym=symmetric
-  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym)
+  hs = 1 ; if (present(haloshift)) hs=haloshift
+  sym = .false. ; if (present(symmetric)) sym=symmetric
+  scale_vel = US%L_T_to_m_s ; if (present(vel_scale)) scale_vel = vel_scale
+
+  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym, scale=scale_vel)
   call hchksum(h, mesg//" h", G%HI, haloshift=hs, scale=GV%H_to_m)
   call uvchksum(mesg//" [uv]h", uh, vh, G%HI, haloshift=hs, &
                 symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)

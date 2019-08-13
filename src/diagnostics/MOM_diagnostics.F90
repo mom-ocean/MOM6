@@ -1061,10 +1061,10 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_dia)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
+        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
+        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k) * &

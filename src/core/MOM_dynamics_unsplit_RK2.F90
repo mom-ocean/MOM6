@@ -260,7 +260,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! all of the fields except h.  h is stepped separately.
 
   if (CS%debug) then
-    call MOM_state_chksum("Start Predictor ", u_in, v_in, h_in, uh, vh, G, GV, US)
+    call MOM_state_chksum("Start Predictor ", u_in, v_in, h_in, uh, vh, G, GV, US, vel_scale=1.0)
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
@@ -361,7 +361,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   enddo ; enddo ; enddo
 
   if (CS%debug) &
-    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US)
+    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US, vel_scale=1.0)
 
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)  (function of up[n-1/2], h[n-1/2])
   call cpu_clock_begin(id_clock_Cor)
@@ -423,7 +423,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   enddo
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector", u_in, v_in, h_in, uh, vh, G, GV, US)
+    call MOM_state_chksum("Corrector", u_in, v_in, h_in, uh, vh, G, GV, US, vel_scale=1.0)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif

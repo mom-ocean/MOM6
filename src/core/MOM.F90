@@ -492,7 +492,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   call cpu_clock_begin(id_clock_other)
 
   if (CS%debug) then
-    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US)
+    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
   endif
 
   showCallTree = callTree_showQuery()
@@ -598,7 +598,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (CS%debug) then
     if (cycle_start) &
-      call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US)
+      call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
     if (cycle_start) call check_redundant("Before steps ", u, v, G)
     if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, US, haloshift=0)
     if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
@@ -1179,7 +1179,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
       call uvchksum("Pre-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
                     haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
-    ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G, GV)
+    ! call MOM_state_chksum("Pre-diabatic ", u, v, h, CS%uhtr, CS%vhtr, G, GV, vel_scale=1.0)
       call MOM_thermo_chksum("Pre-diabatic ", tv, G,haloshift=0)
       call check_redundant("Pre-diabatic ", u, v, G)
       call MOM_forcing_chksum("Pre-diabatic", fluxes, G, US, haloshift=0)
@@ -1225,7 +1225,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call preAle_tracer_diagnostics(CS%tracer_Reg, G, GV)
 
       if (CS%debug) then
-        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
+        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
         call hchksum(tv%T,"Pre-ALE T", G%HI, haloshift=1)
         call hchksum(tv%S,"Pre-ALE S", G%HI, haloshift=1)
         call check_redundant("Pre-ALE ", u, v, G)
@@ -1252,7 +1252,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
     if (CS%debug .and. CS%use_ALE_algorithm) then
-      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
+      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
       call hchksum(tv%T, "Post-ALE T", G%HI, haloshift=1)
       call hchksum(tv%S, "Post-ALE S", G%HI, haloshift=1)
       call check_redundant("Post-ALE ", u, v, G)
@@ -1272,7 +1272,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call uvchksum("Post-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
                     haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     ! call MOM_state_chksum("Post-diabatic ", u, v, &
-    !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
+    !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1, vel_scale=1.0)
       if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
       if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
       if (associated(tv%frazil)) call hchksum(tv%frazil, &

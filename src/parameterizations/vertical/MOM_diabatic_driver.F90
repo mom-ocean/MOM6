@@ -2012,7 +2012,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: dt_mix  ! The amount of time over which to apply mixing [T ~> s]
   real :: Idt     ! The inverse time step [s-1]
-  real :: Idt_accel  ! The inverse time step times rescaling factors [m T L-1 s-2 ~> s-1]
+  real :: Idt_accel  ! The inverse time step times rescaling factors [T-1 ~> s-1]
   real :: dt_in_T ! The time step converted to T units [T ~> s]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
@@ -2768,7 +2768,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call hchksum(hold, "before u/v tridiag hold",G%HI, scale=GV%H_to_m)
   endif
   call cpu_clock_begin(id_clock_tridiag)
-  Idt_accel = US%L_T_to_m_s / dt
+  Idt_accel = 1.0 / dt_in_T
   !$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
   do j=js,je
     do I=Isq,Ieq
@@ -3375,9 +3375,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
-      'Zonal Acceleration from Diapycnal Mixing', 'm s-2')
+      'Zonal Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',diag%axesCvL,Time, &
-      'Meridional Acceleration from Diapycnal Mixing', 'm s-2')
+      'Meridional Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model','cn1', diag%axesT1, &
