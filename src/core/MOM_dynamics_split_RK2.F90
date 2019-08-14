@@ -310,7 +310,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_old_rad_OBC
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_old_rad_OBC
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
-    ! saved for use in the Flather open boundary condition code [m s-1].
+    ! saved for use in the Flather open boundary condition code [L T-1 ~> m s-1].
 
   real :: Pa_to_eta ! A factor that converts pressures to the units of eta.
   real, pointer, dimension(:,:) :: &
@@ -388,10 +388,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, CS%OBC, h)
 
     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u_old_rad_OBC(I,j,k) = US%L_T_to_m_s*u_av(I,j,k)
+      u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v_old_rad_OBC(i,J,k) = US%L_T_to_m_s*v_av(i,J,k)
+      v_old_rad_OBC(i,J,k) = v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -639,21 +639,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     if (CS%debug) &
       call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
 
-    !### Remove this later.
-    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u_av(I,j,k) = US%L_T_to_m_s * u_av(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v_av(i,J,k) = US%L_T_to_m_s * v_av(i,J,k)
-    enddo ; enddo ; enddo
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, US, dt_pred)
-    !### Remove this later.
-    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u_av(I,j,k) = US%m_s_to_L_T * u_av(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v_av(i,J,k) = US%m_s_to_L_T * v_av(i,J,k)
-    enddo ; enddo ; enddo
 
     if (CS%debug) &
       call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
@@ -866,21 +852,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then
-    !### This is temporary and will be deleted when the units of the input velocities have changed.
-    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
     call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, v_old_rad_OBC, G, US, dt)
-    !### This is temporary and will be deleted when the units of the input velocities have changed.
-    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.

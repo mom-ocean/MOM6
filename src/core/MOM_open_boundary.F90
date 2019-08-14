@@ -1524,17 +1524,18 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< On exit, new u values on open boundaries
-                                                                    !! On entry, the old time-level v but
-                                                                    !! including barotropic accelerations.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u
+                                                                    !! On entry, the old time-level v but including
+                                                                    !! barotropic accelerations [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< On exit, new v values on open boundaries.
-                                                                    !! On entry, the old time-level v but
-                                                                    !! including barotropic accelerations.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
+                                                                    !! On entry, the old time-level v but including
+                                                                    !! barotropic accelerations [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v  [L T-1 ~> m s-1]
   type(unit_scale_type),                     intent(in)    :: US    !< A dimensional unit scaling type
-  real,                                      intent(in)    :: dt    !< Appropriate timestep
+  real,                                      intent(in)    :: dt    !< Appropriate timestep [s]
   ! Local variables
-  real :: dhdt, dhdx, dhdy, gamma_u, gamma_v, gamma_2
+  real :: dhdt, dhdx, dhdy  ! One-point differences in time or space [m s-1]
+  real :: gamma_u, gamma_v, gamma_2
   real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
@@ -1602,14 +1603,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   do n=1,OBC%number_of_segments
      segment=>OBC%segment(n)
      if (.not. segment%on_pe) cycle
-     if (segment%oblique) call gradient_at_q_points(G,segment,u_new,v_new)
+     if (segment%oblique) call gradient_at_q_points(G,segment,US%L_T_to_m_s*u_new(:,:,:),US%L_T_to_m_s*v_new(:,:,:))
      if (segment%direction == OBC_DIRECTION_E) then
        I=segment%HI%IsdB
        if (I<G%HI%IscB) cycle
        do k=1,nz ;  do j=segment%HI%jsd,segment%HI%jed
          if (segment%radiation) then
-           dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
-           dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+           dhdt = US%L_T_to_m_s*(u_old(I-1,j,k) - u_new(I-1,j,k)) !old-new
+           dhdx = US%L_T_to_m_s*(u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sasha for I-1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
@@ -1617,13 +1618,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! The new boundary value is interpolated between future interior
            ! value, u_new(I-1) and past boundary value but with barotropic
            ! accelerations, u_new(I).
-           segment%normal_vel(I,j,k) = US%m_s_to_L_T*(u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
+           segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
            OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
          elseif (segment%oblique) then
-           dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
-           dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+           dhdt = US%L_T_to_m_s*(u_old(I-1,j,k) - u_new(I-1,j,k)) !old-new
+           dhdx = US%L_T_to_m_s*(u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sasha for I-1
            if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
              dhdy = segment%grad_normal(J-1,1,k)
            elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
@@ -1641,8 +1642,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            segment%rx_normal(I,j,k) = rx_avg
            segment%ry_normal(i,J,k) = ry_avg
            segment%cff_normal(i,J,k) = cff_avg
-           segment%normal_vel(I,j,k) = US%m_s_to_L_T*((cff_avg*u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) - &
-              (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
+           segment%normal_vel(I,j,k) = ((cff_avg*u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) - &
+                US%m_s_to_L_T*(max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
+                               min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
                             (cff_avg + rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
@@ -1650,7 +1652,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
            OBC%cff_normal(I,j,k) = segment%cff_normal(I,j,k)
          elseif (segment%gradient) then
-           segment%normal_vel(I,j,k) = US%m_s_to_L_T*u_new(I-1,j,k)
+           segment%normal_vel(I,j,k) = u_new(I-1,j,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            ! dhdt gets set to 0 on inflow in oblique case
@@ -1677,7 +1679,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          if (segment%radiation_tan) then
            do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
              rx_avg = rx_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(v_new(I,J,k) + rx_avg*v_new(I-1,J,k)) / (1.0+rx_avg)
+             segment%tangential_vel(I,J,k) = (v_new(I,J,k) + rx_avg*v_new(I-1,J,k)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_tan) then
@@ -1699,15 +1701,15 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            do k=1,nz ; do J=Js_obc,Je_obc
              rx_avg = rx_tangential(I,J,k)
 !            if (G%mask2dCu(I-1,j) > 0.0 .and. G%mask2dCu(I-1,j+1) > 0.0) then
-!              rx_avg = 0.5*US%m_s_to_L_T*(u_new(I-1,j,k) + u_new(I-1,j+1,k)) * US%s_to_T*dt * G%IdxBu(I-1,J)
+!              rx_avg = 0.5*(u_new(I-1,j,k) + u_new(I-1,j+1,k)) * US%s_to_T*dt * G%IdxBu(I-1,J)
 !            elseif (G%mask2dCu(I-1,j) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*u_new(I-1,j,k) * US%s_to_T*dt * G%IdxBu(I-1,J)
+!              rx_avg = u_new(I-1,j,k) * US%s_to_T*dt * G%IdxBu(I-1,J)
 !            elseif (G%mask2dCu(I-1,j+1) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*u_new(I-1,j+1,k) * US%s_to_T*dt * G%IdxBu(I-1,J)
+!              rx_avg = u_new(I-1,j+1,k) * US%s_to_T*dt * G%IdxBu(I-1,J)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((v_new(i,J,k) - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
+             segment%tangential_grad(I,J,k) = ((v_new(i,J,k) - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
                                rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%IdxBu(I-2,J)) / (1.0+rx_avg)
            enddo ; enddo
          endif
@@ -1749,8 +1751,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T*((cff_avg*v_new(i,J,k) + rx_avg*v_new(i-1,J,k)) - &
-              (max(ry_avg,0.0)*segment%grad_tan(j,2,k) + min(ry_avg,0.0)*segment%grad_tan(j+1,2,k))) / &
+             segment%tangential_vel(I,J,k) = ((cff_avg*v_new(i,J,k) + rx_avg*v_new(i-1,J,k)) - &
+                  US%m_s_to_L_T * (max(ry_avg,0.0)*segment%grad_tan(j,2,k) + &
+                                   min(ry_avg,0.0)*segment%grad_tan(j+1,2,k))) / &
                             (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -1774,10 +1777,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_grad(I,J,k) =  &
                  ((cff_avg*(v_new(i,J,k)  - v_new(i-1,J,k))*G%IdxBu(I-1,J) + &
                    rx_avg*(v_new(i-1,J,k) - v_new(i-2,J,k))*G%IdxBu(I-2,J)) - &
-                  (max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + &
+                  US%m_s_to_L_T*(max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + &
                    min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k)) ) / &
                  (cff_avg + rx_avg)
            enddo ; enddo
@@ -1806,8 +1809,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
        if (I>G%HI%IecB) cycle
        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
          if (segment%radiation) then
-           dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
-           dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
+           dhdt = US%L_T_to_m_s*(u_old(I+1,j,k) - u_new(I+1,j,k)) !old-new
+           dhdx = US%L_T_to_m_s*(u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sasha for I+1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
@@ -1815,13 +1818,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! The new boundary value is interpolated between future interior
            ! value, u_new(I+1) and past boundary value but with barotropic
            ! accelerations, u_new(I).
-           segment%normal_vel(I,j,k) = US%m_s_to_L_T*(u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
+           segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
            OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
          elseif (segment%oblique) then
-           dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
-           dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
+           dhdt = US%L_T_to_m_s*(u_old(I+1,j,k) - u_new(I+1,j,k)) !old-new
+           dhdx = US%L_T_to_m_s*(u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sasha for I+1
            if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
              dhdy = segment%grad_normal(J-1,1,k)
            elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
@@ -1839,8 +1842,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            segment%rx_normal(I,j,k) = rx_avg
            segment%ry_normal(i,J,k) = ry_avg
            segment%cff_normal(i,J,k) = cff_avg
-           segment%normal_vel(I,j,k) = US%m_s_to_L_T*((cff_avg*u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) - &
-             (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
+           segment%normal_vel(I,j,k) = ((cff_avg*u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) - &
+                 US%m_s_to_L_T*(max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
+                                min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
                            (cff_avg + rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
@@ -1848,7 +1852,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
            OBC%cff_normal(I,j,k) = segment%cff_normal(I,j,k)
          elseif (segment%gradient) then
-           segment%normal_vel(I,j,k) = US%m_s_to_L_T*u_new(I+1,j,k)
+           segment%normal_vel(I,j,k) = u_new(I+1,j,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            ! dhdt gets set to 0. on inflow in oblique case
@@ -1875,7 +1879,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          if (segment%radiation_tan) then
            do k=1,nz ;  do J=segment%HI%JsdB,segment%HI%JedB
              rx_avg = rx_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(v_new(i+1,J,k) + rx_avg*v_new(i+2,J,k)) / (1.0+rx_avg)
+             segment%tangential_vel(I,J,k) = (v_new(i+1,J,k) + rx_avg*v_new(i+2,J,k)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_tan) then
@@ -1897,15 +1901,15 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            do k=1,nz ;  do J=Js_obc,Je_obc
              rx_avg = rx_tangential(I,J,k)
 !            if (G%mask2dCu(I+1,j) > 0.0 .and. G%mask2dCu(I+1,j+1) > 0.0) then
-!              rx_avg = 0.5*US%m_s_to_L_T*(u_new(I+1,j,k) + u_new(I+1,j+1,k)) * US%s_to_T*dt * G%IdxBu(I+1,J)
+!              rx_avg = 0.5*(u_new(I+1,j,k) + u_new(I+1,j+1,k)) * US%s_to_T*dt * G%IdxBu(I+1,J)
 !            elseif (G%mask2dCu(I+1,j) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*u_new(I+1,j,k) * US%s_to_T*dt * G%IdxBu(I+1,J)
+!              rx_avg = u_new(I+1,j,k) * US%s_to_T*dt * G%IdxBu(I+1,J)
 !            elseif (G%mask2dCu(I+1,j+1) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*u_new(I+1,j+1,k) * US%s_to_T*dt * G%IdxBu(I+1,J)
+!              rx_avg = u_new(I+1,j+1,k) * US%s_to_T*dt * G%IdxBu(I+1,J)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
+             segment%tangential_grad(I,J,k) = ((v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
                                rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%IdxBu(I+2,J)) / (1.0+rx_avg)
            enddo ; enddo
          endif
@@ -1947,8 +1951,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T*((cff_avg*v_new(i+1,J,k) + rx_avg*v_new(i+2,J,k)) - &
-              (max(ry_avg,0.0)*segment%grad_tan(j,2,k) + min(ry_avg,0.0)*segment%grad_tan(j+1,2,k))) / &
+             segment%tangential_vel(I,J,k) = ((cff_avg*v_new(i+1,J,k) + rx_avg*v_new(i+2,J,k)) - &
+                 US%m_s_to_L_T*(max(ry_avg,0.0)*segment%grad_tan(j,2,k) + &
+                                min(ry_avg,0.0)*segment%grad_tan(j+1,2,k))) / &
                             (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -1972,11 +1977,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_grad(I,J,k) = &
                  ((cff_avg*(v_new(i+2,J,k) - v_new(i+1,J,k))*G%IdxBu(I+1,J) + &
                     rx_avg*(v_new(i+3,J,k) - v_new(i+2,J,k))*G%IdxBu(I+2,J)) - &
-                  (max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + &
-                   min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k))) / &
+                  US%m_s_to_L_T*(max(ry_avg,0.0)*segment%grad_gradient(J,2,k) + &
+                                 min(ry_avg,0.0)*segment%grad_gradient(J+1,2,k))) / &
                  (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2004,8 +2009,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
        if (J<G%HI%JscB) cycle
        do k=1,nz ;  do i=segment%HI%isd,segment%HI%ied
          if (segment%radiation) then
-           dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-           dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+           dhdt = US%L_T_to_m_s*(v_old(i,J-1,k) - v_new(i,J-1,k)) !old-new
+           dhdy = US%L_T_to_m_s*(v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
            ry_avg = (1.0-gamma_v)*segment%ry_normal(I,j,k) + gamma_v*ry_new
@@ -2013,13 +2018,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! The new boundary value is interpolated between future interior
            ! value, v_new(J-1) and past boundary value but with barotropic
            ! accelerations, v_new(J).
-           segment%normal_vel(i,J,k) = US%m_s_to_L_T*(v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
+           segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
            OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
          elseif (segment%oblique) then
-           dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-           dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+           dhdt = US%L_T_to_m_s*(v_old(i,J-1,k) - v_new(i,J-1,k)) !old-new
+           dhdy = US%L_T_to_m_s*(v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sasha for J-1
            segment%ry_normal(i,J,k) = ry_avg
            if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
              dhdx = segment%grad_normal(I-1,1,k)
@@ -2038,10 +2043,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            segment%rx_normal(I,j,k) = rx_avg
            segment%ry_normal(i,J,k) = ry_avg
            segment%cff_normal(i,J,k) = cff_avg
-           segment%normal_vel(i,J,k) = US%m_s_to_L_T * &
+           segment%normal_vel(i,J,k) =  &
                ((cff_avg*v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) - &
-                (max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) +&
-                 min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
+                US%m_s_to_L_T*(max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) +&
+                               min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
                (cff_avg + ry_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
@@ -2049,7 +2054,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
            OBC%cff_normal(i,J,k) = segment%cff_normal(i,J,k)
          elseif (segment%gradient) then
-           segment%normal_vel(i,J,k) = US%m_s_to_L_T*v_new(i,J-1,k)
+           segment%normal_vel(i,J,k) = v_new(i,J-1,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            ! dhdt gets set to 0 on inflow in oblique case
@@ -2076,7 +2081,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          if (segment%radiation_tan) then
            do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
              rx_avg = rx_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(u_new(I,j,k) + rx_avg*u_new(I,j-1,k)) / (1.0+rx_avg)
+             segment%tangential_vel(I,J,k) = (u_new(I,j,k) + rx_avg*u_new(I,j-1,k)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_tan) then
@@ -2098,15 +2103,15 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            do k=1,nz ;  do I=Is_obc,Ie_obc
              rx_avg = rx_tangential(I,J,k)
 !            if (G%mask2dCv(i,J-1) > 0.0 .and. G%mask2dCv(i+1,J-1) > 0.0) then
-!              rx_avg = 0.5*US%m_s_to_L_T*(v_new(i,J-1,k) + v_new(i+1,J-1,k) * US%s_to_T*dt * G%IdyBu(I,J-1))
+!              rx_avg = 0.5*(v_new(i,J-1,k) + v_new(i+1,J-1,k) * US%s_to_T*dt * G%IdyBu(I,J-1))
 !            elseif (G%mask2dCv(i,J-1) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*v_new(i,J-1,k) * US%s_to_T*dt *G%IdyBu(I,J-1)
+!              rx_avg = v_new(i,J-1,k) * US%s_to_T*dt *G%IdyBu(I,J-1)
 !            elseif (G%mask2dCv(i+1,J-1) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*v_new(i+1,J-1,k) * US%s_to_T*dt *G%IdyBu(I,J-1)
+!              rx_avg = v_new(i+1,J-1,k) * US%s_to_T*dt *G%IdyBu(I,J-1)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_grad(I,J,k) =  &
                               ((u_new(I,j,k) - u_new(I,j-1,k))*G%IdyBu(I,J-1) + &
                                rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) / (1.0+rx_avg)
            enddo ; enddo
@@ -2149,10 +2154,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_vel(I,J,k) = &
                  ((cff_avg*u_new(I,j,k) + rx_avg*u_new(I,j-1,k)) - &
-                  (max(ry_avg,0.0)*segment%grad_tan(i,2,k) + &
-                   min(ry_avg,0.0)*segment%grad_tan(i+1,2,k))) / &
+                  US%m_s_to_L_T * (max(ry_avg,0.0)*segment%grad_tan(i,2,k) + &
+                                   min(ry_avg,0.0)*segment%grad_tan(i+1,2,k))) / &
                  (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2176,11 +2181,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_grad(I,J,k) =  &
                  ((cff_avg*(u_new(I,j,k)   - u_new(I,j-1,k))*G%IdyBu(I,J-1) + &
                     rx_avg*(u_new(I,j-1,k) - u_new(I,j-2,k))*G%IdyBu(I,J-2)) - &
-                  (max(ry_avg,0.0)*segment%grad_gradient(I,2,k) + &
-                   min(ry_avg,0.0)*segment%grad_gradient(I+1,2,k))) / &
+                  US%m_s_to_L_T * (max(ry_avg,0.0)*segment%grad_gradient(I,2,k) + &
+                                   min(ry_avg,0.0)*segment%grad_gradient(I+1,2,k))) / &
                  (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2208,8 +2213,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
        if (J>G%HI%JecB) cycle
        do k=1,nz ;  do i=segment%HI%isd,segment%HI%ied
          if (segment%radiation) then
-           dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-           dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
+           dhdt = US%L_T_to_m_s*(v_old(i,J+1,k) - v_new(i,J+1,k)) !old-new
+           dhdy = US%L_T_to_m_s*(v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
            ry_avg = (1.0-gamma_v)*segment%ry_normal(I,j,k) + gamma_v*ry_new
@@ -2217,13 +2222,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! The new boundary value is interpolated between future interior
            ! value, v_new(J+1) and past boundary value but with barotropic
            ! accelerations, v_new(J).
-           segment%normal_vel(i,J,k) = US%m_s_to_L_T*(v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
+           segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
            OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
          elseif (segment%oblique) then
-           dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-           dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
+           dhdt = US%L_T_to_m_s*(v_old(i,J+1,k) - v_new(i,J+1,k)) !old-new
+           dhdy = US%L_T_to_m_s*(v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sasha for J-1
            if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
              dhdx = segment%grad_normal(I-1,1,k)
            elseif (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) == 0.0) then
@@ -2241,8 +2246,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            segment%rx_normal(I,j,k) = rx_avg
            segment%ry_normal(i,J,k) = ry_avg
            segment%cff_normal(i,J,k) = cff_avg
-           segment%normal_vel(i,J,k) = US%m_s_to_L_T*((cff_avg*v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) - &
-              (max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) + min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
+           segment%normal_vel(i,J,k) = ((cff_avg*v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) - &
+               US%m_s_to_L_T*(max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) + &
+                              min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
                               (cff_avg + ry_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
@@ -2250,7 +2256,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
            OBC%cff_normal(i,J,k) = segment%cff_normal(i,J,k)
          elseif (segment%gradient) then
-           segment%normal_vel(i,J,k) = US%m_s_to_L_T*v_new(i,J+1,k)
+           segment%normal_vel(i,J,k) = v_new(i,J+1,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            ! dhdt gets set to 0 on inflow in oblique case
@@ -2277,7 +2283,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          if (segment%radiation_tan) then
            do k=1,nz ;  do I=segment%HI%IsdB,segment%HI%IedB
              rx_avg = rx_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T*(u_new(I,j+1,k) + rx_avg*u_new(I,j+2,k)) / (1.0+rx_avg)
+             segment%tangential_vel(I,J,k) = (u_new(I,j+1,k) + rx_avg*u_new(I,j+2,k)) / (1.0+rx_avg)
            enddo ; enddo
          endif
          if (segment%nudged_tan) then
@@ -2299,15 +2305,15 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            do k=1,nz ;  do I=Is_obc,Ie_obc
              rx_avg = rx_tangential(I,J,k)
 !            if (G%mask2dCv(i,J+1) > 0.0 .and. G%mask2dCv(i+1,J+1) > 0.0) then
-!              rx_avg = 0.5*US%m_s_to_L_T*(v_new(i,J+1,k) + v_new(i+1,J+1,k)) * US%s_to_T*dt * G%IdyBu(I,J+1)
+!              rx_avg = 0.5*(v_new(i,J+1,k) + v_new(i+1,J+1,k)) * US%s_to_T*dt * G%IdyBu(I,J+1)
 !            elseif (G%mask2dCv(i,J+1) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*v_new(i,J+1,k) * US%s_to_T*dt * G%IdyBu(I,J+1)
+!              rx_avg = v_new(i,J+1,k) * US%s_to_T*dt * G%IdyBu(I,J+1)
 !            elseif (G%mask2dCv(i+1,J+1) > 0.0) then
-!              rx_avg = US%m_s_to_L_T*v_new(i+1,J+1,k) * US%s_to_T*dt * G%IdyBu(I,J+1)
+!              rx_avg = v_new(i+1,J+1,k) * US%s_to_T*dt * G%IdyBu(I,J+1)
 !            else
 !              rx_avg = 0.0
 !            endif
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T*((u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
+             segment%tangential_grad(I,J,k) = ((u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
                                rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) / (1.0+rx_avg)
            enddo ; enddo
          endif
@@ -2349,10 +2355,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_vel(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_vel(I,J,k) =  &
                  ((cff_avg*u_new(I,j+1,k) + rx_avg*u_new(I,j+2,k)) - &
-                  (max(ry_avg,0.0)*segment%grad_tan(i,2,k) + &
-                   min(ry_avg,0.0)*segment%grad_tan(i+1,2,k)) ) / &
+                  US%m_s_to_L_T * (max(ry_avg,0.0)*segment%grad_tan(i,2,k) + &
+                                   min(ry_avg,0.0)*segment%grad_tan(i+1,2,k)) ) / &
                  (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2376,11 +2382,11 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
              rx_avg = rx_tangential(I,J,k)
              ry_avg = ry_tangential(I,J,k)
              cff_avg = cff_tangential(I,J,k)
-             segment%tangential_grad(I,J,k) = US%m_s_to_L_T * &
+             segment%tangential_grad(I,J,k) = &
                  ((cff_avg*(u_new(I,j+2,k) - u_new(I,j+1,k))*G%IdyBu(I,J+1) + &
                     rx_avg*(u_new(I,j+3,k) - u_new(I,j+2,k))*G%IdyBu(I,J+2)) - &
-                  (max(ry_avg,0.0)*segment%grad_gradient(i,2,k) + &
-                   min(ry_avg,0.0)*segment%grad_gradient(i+1,2,k))) / &
+                  US%m_s_to_L_T * (max(ry_avg,0.0)*segment%grad_gradient(i,2,k) + &
+                                   min(ry_avg,0.0)*segment%grad_gradient(i+1,2,k))) / &
                  (cff_avg + rx_avg)
            enddo ; enddo
          endif
@@ -2416,8 +2422,10 @@ subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
   ! Arguments
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   type(ocean_grid_type),                     intent(inout) :: G   !< Ocean grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< u field to update on open boundaries
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< u field to update on open
+                                                                  !! boundaries [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open
+                                                                  !! boundaries [L T-1 ~> m s-1]
   ! Local variables
   integer :: i, j, k, n
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -2432,12 +2440,12 @@ subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
       if (segment%is_E_or_W) then
         I=segment%HI%IsdB
         do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-          u(I,j,k) = G%US%L_T_to_m_s*segment%normal_vel(I,j,k)
+          u(I,j,k) = segment%normal_vel(I,j,k)
         enddo ; enddo
       elseif (segment%is_N_or_S) then
         J=segment%HI%JsdB
         do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-          v(i,J,k) = G%US%L_T_to_m_s*segment%normal_vel(i,J,k)
+          v(i,J,k) = segment%normal_vel(i,J,k)
         enddo ; enddo
       endif
     endif
@@ -2481,8 +2489,8 @@ end subroutine open_boundary_zero_normal_flow
 subroutine gradient_at_q_points(G, segment, uvel, vvel)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(OBC_segment_type), pointer :: segment !< OBC segment structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vvel !< meridional velocity
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vvel !< meridional velocity [m s-1]
   integer :: i,j,k
 
   if (.not. segment%on_pe) return
