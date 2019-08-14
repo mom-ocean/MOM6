@@ -343,8 +343,22 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call disable_averaging(CS%diag)
   call vertvisc_coef(US%m_s_to_L_T*up, US%m_s_to_L_T*vp, h_av, forces, visc, dt_pred, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    up(I,j,k) = US%m_s_to_L_T*up(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    vp(i,J,k) = US%m_s_to_L_T*vp(i,J,k)
+  enddo ; enddo ; enddo
   call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp)
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    up(I,j,k) = US%L_T_to_m_s*up(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    vp(i,J,k) = US%L_T_to_m_s*vp(i,J,k)
+  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
 
@@ -395,12 +409,40 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(US%m_s_to_L_T*up, US%m_s_to_L_T*vp, h_av, forces, visc, dt, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    up(I,j,k) = US%m_s_to_L_T*up(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    vp(i,J,k) = US%m_s_to_L_T*vp(i,J,k)
+  enddo ; enddo ; enddo
   call vertvisc(up, vp, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    up(I,j,k) = US%L_T_to_m_s*up(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    vp(i,J,k) = US%L_T_to_m_s*vp(i,J,k)
+  enddo ; enddo ; enddo
   call vertvisc_coef(US%m_s_to_L_T*u_in, US%m_s_to_L_T*v_in, h_av, forces, visc, dt, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    u_in(I,j,k) = US%m_s_to_L_T*u_in(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    v_in(i,J,k) = US%m_s_to_L_T*v_in(i,J,k)
+  enddo ; enddo ; enddo
   call vertvisc(u_in, v_in, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    u_in(I,j,k) = US%L_T_to_m_s*u_in(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    v_in(i,J,k) = US%L_T_to_m_s*v_in(i,J,k)
+  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
   call pass_vector(u_in, v_in, G%Domain, clock=id_clock_pass)

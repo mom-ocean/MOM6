@@ -148,9 +148,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: u      !< Zonal velocity [m s-1]
+                           intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(inout) :: v      !< Meridional velocity [m s-1]
+                           intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(mech_forcing),    intent(in)      :: forces !< A structure with the driving mechanical forces
@@ -207,15 +207,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
-
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-  enddo ; enddo ; enddo
-
 
   if (CS%direct_stress) then
     Hmix = CS%Hmix_stress
@@ -449,15 +440,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       endif
     enddo
   endif
-
-
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-  enddo ; enddo ; enddo
 
 ! Offer diagnostic fields for averaging.
   if (CS%id_du_dt_visc > 0) &
