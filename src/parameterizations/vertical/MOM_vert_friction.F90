@@ -46,9 +46,9 @@ type, public :: vertvisc_CS ; private
   real    :: Kvbbl           !< The vertical viscosity in the bottom boundary
                              !! layer [Z2 T-1 ~> m2 s-1].
 
-  real    :: maxvel          !< Velocity components greater than maxvel are truncated [m s-1].
+  real    :: maxvel          !< Velocity components greater than maxvel are truncated [L T-1 ~> m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0 [m s-1].
+                             !! are set to 0 [L T-1 ~> m s-1].
   logical :: CFL_based_trunc !< If true, base truncations on CFL numbers, not
                              !! absolute velocities.
   real    :: CFL_trunc       !< Velocity components will be truncated when they
@@ -183,8 +183,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress [H ~> m or kg m-2].
   real :: I_Hmix           ! The inverse of Hmix [H-1 ~> m-1 or m2 kg-1].
-  real :: Idt              ! The inverse of the time step [s-1].
-  real :: dt_Rho0          ! The time step divided by the mean density [s m3 kg-1].
+  real :: dt_in_T          ! The timestep [T ~> s]
+  real :: Idt              ! The inverse of the time step [T-1 ~> s-1].
+  real :: dt_Rho0          ! The time step divided by the mean density [L s2 H m T-1 kg-1 ~> s m3 kg-1 or s].
   real :: Rho0             ! A density used to convert drag laws into stress in Pa [kg m-3].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness - [T H Z-1 ~> s or s kg m-3].
@@ -192,10 +193,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                            ! in roundoff and can be neglected [H ~> m or kg m-2].
 
   real :: stress           !   The surface stress times the time step, divided
-                           ! by the density [m2 s-1].
+                           ! by the density [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: zDS, hfr, h_a    ! Temporary variables used with direct_stress.
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
-                           ! stress is applied as a body force [m2 s-1].
+                           ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -207,15 +208,25 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+  enddo ; enddo ; enddo
+
+
   if (CS%direct_stress) then
     Hmix = CS%Hmix_stress
     I_Hmix = 1.0 / Hmix
   endif
-  dt_Rho0 = dt/GV%H_to_kg_m2
-  dt_Z_to_H = US%s_to_T*dt*GV%Z_to_H
+  dt_in_T = US%s_to_T*dt
+  dt_Rho0 = US%m_s_to_L_T*US%T_to_s * dt_in_T / GV%H_to_kg_m2
+  dt_Z_to_H = dt_in_T*GV%Z_to_H
   Rho0 = GV%Rho0
   h_neglect = GV%H_subroundoff
-  Idt = 1.0 / dt
+  Idt = 1.0 / dt_in_T
 
   !Check if Stokes mixing allowed if requested (present and associated)
   DoStokesMixing=.false.
@@ -239,7 +250,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
-      if (do_i(I)) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+      if (do_i(I)) u(I,j,k) = u(I,j,k) + US%m_s_to_L_T*Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
@@ -314,25 +325,25 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     endif ; enddo ; enddo ! i and k loops
 
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
-      ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
+      ADp%du_dt_visc(I,j,k) = US%L_T2_to_m_s2*(u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
     enddo ; enddo ; endif
 
     if (associated(visc%taux_shelf)) then ; do I=Isq,Ieq
-      visc%taux_shelf(I,j) = -Rho0*US%s_to_T*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
+      visc%taux_shelf(I,j) = -Rho0*US%L_T2_to_m_s2*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
 
     if (PRESENT(taux_bot)) then
       do I=Isq,Ieq
-        taux_bot(I,j) = Rho0 * (u(I,j,nz)*US%s_to_T*CS%a_u(I,j,nz+1))
+        taux_bot(I,j) = US%L_T2_to_m_s2*Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-        taux_bot(I,j) = taux_bot(I,j) + Rho0 * (US%s_to_T*Ray(I,k)*u(I,j,k))
+        taux_bot(I,j) = taux_bot(I,j) + US%L_T2_to_m_s2*Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
 
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
-      if (do_i(I)) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
+      if (do_i(I)) u(I,j,k) = u(I,j,k) - US%m_s_to_L_T*Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
   enddo ! end u-component j loop
@@ -347,7 +358,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
-      if (do_i(i)) v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+      if (do_i(i)) v(i,j,k) = v(i,j,k) + US%m_s_to_L_T*Waves%Us_y(i,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
@@ -395,25 +406,25 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     endif ; enddo ; enddo ! i and k loops
 
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
-      ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
+      ADp%dv_dt_visc(i,J,k) = US%L_T2_to_m_s2*(v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
     enddo ; enddo ; endif
 
     if (associated(visc%tauy_shelf)) then ; do i=is,ie
-      visc%tauy_shelf(i,J) = -Rho0*US%s_to_T*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
+      visc%tauy_shelf(i,J) = -Rho0*US%L_T2_to_m_s2*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
     enddo ; endif
 
     if (present(tauy_bot)) then
       do i=is,ie
-        tauy_bot(i,J) = Rho0 * (v(i,J,nz)*US%s_to_T*CS%a_v(i,J,nz+1))
+        tauy_bot(i,J) = Rho0 * (US%L_T2_to_m_s2*v(i,J,nz)*CS%a_v(i,J,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-        tauy_bot(i,J) = tauy_bot(i,J) + Rho0 * (US%s_to_T*Ray(i,k)*v(i,J,k))
+        tauy_bot(i,J) = tauy_bot(i,J) + Rho0 * (US%L_T2_to_m_s2*Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
 
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
-      if (do_i(i)) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
+      if (do_i(i)) v(i,J,k) = v(i,J,k) - US%m_s_to_L_T*Waves%Us_y(i,J,k)
     enddo ; enddo ; endif
 
   enddo ! end of v-component J loop
@@ -427,17 +438,26 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
         if (OBC%segment(n)%is_N_or_S) then
           J = OBC%segment(n)%HI%JsdB
           do k=1,nz ; do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
-            v(i,J,k) = US%L_T_to_m_s*OBC%segment(n)%normal_vel(i,J,k)
+            v(i,J,k) = OBC%segment(n)%normal_vel(i,J,k)
           enddo ; enddo
         elseif (OBC%segment(n)%is_E_or_W) then
           I = OBC%segment(n)%HI%IsdB
           do k=1,nz ; do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
-            u(I,j,k) = US%L_T_to_m_s*OBC%segment(n)%normal_vel(I,j,k)
+            u(I,j,k) = OBC%segment(n)%normal_vel(I,j,k)
           enddo ; enddo
         endif
       endif
     enddo
   endif
+
+
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
+    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+  enddo ; enddo ; enddo
+  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+  enddo ; enddo ; enddo
 
 ! Offer diagnostic fields for averaging.
   if (CS%id_du_dt_visc > 0) &
@@ -1353,9 +1373,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: u      !< Zonal velocity [m s-1]
+                           intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(inout) :: v      !< Meridional velocity [m s-1]
+                           intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   type(accel_diag_ptrs),   intent(in)    :: ADp    !< Acceleration diagnostic pointers
@@ -1368,13 +1388,14 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   ! Local variables
 
   real :: maxvel           ! Velocities components greater than maxvel
-  real :: truncvel         ! are truncated to truncvel, both [m s-1].
+  real :: truncvel         ! are truncated to truncvel, both [L T-1 ~> m s-1].
+  real :: dt_in_T          ! The timestep [T ~> s]
   real :: CFL              ! The local CFL number.
   real :: H_report         ! A thickness below which not to report truncations.
   real :: dt_Rho0          ! The timestep divided by the Boussinesq density [s m3 kg-1].
-  real :: vel_report(SZIB_(G),SZJB_(G))
-  real :: u_old(SZIB_(G),SZJ_(G),SZK_(G))
-  real :: v_old(SZI_(G),SZJB_(G),SZK_(G))
+  real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
+  real :: u_old(SZIB_(G),SZJ_(G),SZK_(G)) ! The previous u-velocity [L T-1 ~> m s-1]
+  real :: v_old(SZI_(G),SZJB_(G),SZK_(G)) ! The previous v-velocity [L T-1 ~> m s-1]
   logical :: trunc_any, dowrite(SZIB_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1383,6 +1404,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
   H_report = 6.0 * GV%Angstrom_H
+  dt_in_T = US%s_to_T*dt
   dt_Rho0 = dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then
@@ -1391,13 +1413,13 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       trunc_any = .false.
       do I=Isq,Ieq ; dowrite(I,j) = .false. ; enddo
       if (CS%CFL_based_trunc) then
-        do I=Isq,Ieq ; vel_report(i,j) = 3.0e8 ; enddo ! Speed of light default.
+        do I=Isq,Ieq ; vel_report(i,j) = 3.0e8*US%m_s_to_L_T ; enddo ! Speed of light default.
         do k=1,nz ; do I=Isq,Ieq
           if (abs(u(I,j,k)) < CS%vel_underflow) u(I,j,k) = 0.0
           if (u(I,j,k) < 0.0) then
-            CFL = (-US%m_s_to_L_T*u(I,j,k) * US%s_to_T*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
+            CFL = (-u(I,j,k) * dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
           else
-            CFL = (US%m_s_to_L_T*u(I,j,k) * US%s_to_T*dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
+            CFL = (u(I,j,k) * dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1421,11 +1443,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq
-          if ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
-            u(I,j,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
+          if ((u(I,j,k) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+            u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt_in_T * G%dy_Cu(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-          elseif ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
-            u(I,j,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
+          elseif ((u(I,j,k) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dy_Cu(I,j)))
             if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1441,11 +1463,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 !$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
-        elseif ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
-          u(I,j,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
+        elseif ((u(I,j,k) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+          u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt_in_T * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        elseif ((US%m_s_to_L_T*u(I,j,k) * (US%s_to_T*dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
-          u(I,j,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dy_Cu(I,j)))
+        elseif ((u(I,j,k) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
@@ -1476,13 +1498,13 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       trunc_any = .false.
       do i=is,ie ; dowrite(i,J) = .false. ; enddo
       if (CS%CFL_based_trunc) then
-        do i=is,ie ; vel_report(i,J) = 3.0e8 ; enddo ! Speed of light default.
+        do i=is,ie ; vel_report(i,J) = 3.0e8*US%m_s_to_L_T ; enddo ! Speed of light default.
         do k=1,nz ; do i=is,ie
           if (abs(v(i,J,k)) < CS%vel_underflow) v(i,J,k) = 0.0
           if (v(i,J,k) < 0.0) then
-            CFL = (-US%m_s_to_L_T*v(i,J,k) * US%s_to_T*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
+            CFL = (-v(i,J,k) * dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
           else
-            CFL = (US%m_s_to_L_T*v(i,J,k) * US%s_to_T*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
+            CFL = (v(i,J,k) * dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j))
           endif
           if (CFL > CS%CFL_trunc) trunc_any = .true.
           if (CFL > CS%CFL_report) then
@@ -1506,11 +1528,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz; do i=is,ie
-          if ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
-            v(i,J,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (US%s_to_T*dt * G%dx_Cv(i,J)))
+          if ((v(i,J,k) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+            v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt_in_T * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-          elseif ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
-            v(i,J,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dx_Cv(i,J)))
+          elseif ((v(i,J,k) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+            v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
@@ -1526,11 +1548,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       !$OMP parallel do default(shared)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if (abs(v(i,J,k)) < CS%vel_underflow) then ; v(i,J,k) = 0.0
-        elseif ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
-          v(i,J,k) = US%L_T_to_m_s*(-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (US%s_to_T*dt * G%dx_Cv(i,J)))
+        elseif ((v(i,J,k) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+          v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt_in_T * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-        elseif ((US%m_s_to_L_T*v(i,J,k) * (US%s_to_T*dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
-          v(i,J,k) = US%L_T_to_m_s*(0.9*CS%CFL_trunc) * (G%areaT(i,j) / (US%s_to_T*dt * G%dx_Cv(i,J)))
+        elseif ((v(i,J,k) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
@@ -1684,7 +1706,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true., scale=GV%m_to_H)
   call get_param(param_file, mdl, "MAXVEL", CS%maxvel, &
                  "The maximum velocity allowed before the velocity "//&
-                 "components are truncated.", units="m s-1", default=3.0e8)
+                 "components are truncated.", units="m s-1", default=3.0e8, scale=US%m_s_to_L_T)
   call get_param(param_file, mdl, "CFL_BASED_TRUNCATIONS", CS%CFL_based_trunc, &
                  "If true, base truncations on the CFL number, and not an "//&
                  "absolute speed.", default=.true.)
@@ -1728,7 +1750,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "A negligibly small velocity magnitude below which velocity "//&
                  "components are set to 0.  A reasonable value might be "//&
                  "1e-30 m/s, which is less than an Angstrom divided by "//&
-                 "the age of the universe.", units="m s-1", default=0.0)
+                 "the age of the universe.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
 
   ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
   ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
