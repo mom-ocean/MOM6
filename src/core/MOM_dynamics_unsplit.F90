@@ -222,9 +222,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                  !! fields related to the surface wave conditions
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp ! Prediced or averaged layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp ! Predicted zonal velocities [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping.
@@ -233,6 +233,14 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   dt_pred = dt / 3.0
+
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+  enddo ; enddo ; enddo
 
   h_av(:,:,:) = 0; hp(:,:,:) = 0
   up(:,:,:) = 0; upp(:,:,:) = 0
@@ -249,13 +257,13 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! all of the fields except h.  h is stepped separately.
 
   if (CS%debug) then
-    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV, US, vel_scale=1.0)
+    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV, US, vel_scale=US%L_T_to_m_s)
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averaging(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, CS%diffu, CS%diffv, MEKE, Varmix, &
+  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, &
                             G, GV, US, CS%hor_visc_CSp)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
@@ -263,7 +271,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = u*h
 ! hp = h + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, hp, uh, vh, dt*0.5, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -282,10 +290,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       h_av(i,j,k) = (h(i,j,k) + hp(i,j,k)) * 0.5
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      u(I,j,k) = u(I,j,k) + US%s_to_T*dt * US%L_T_to_m_s*CS%diffu(I,j,k) * G%mask2dCu(I,j)
+      u(I,j,k) = u(I,j,k) + US%s_to_T*dt * CS%diffu(I,j,k) * G%mask2dCu(I,j)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,J,k) = v(i,J,k) + US%s_to_T*dt * US%L_T_to_m_s*CS%diffv(i,J,k) * G%mask2dCv(i,J)
+      v(i,J,k) = v(i,J,k) + US%s_to_T*dt * CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
       uhtr(i,j,k) = uhtr(i,j,k) + 0.5*US%s_to_T*dt*uh(i,j,k)
@@ -299,7 +307,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+  call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -323,17 +331,17 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_pred * &
-                               US%L_T2_to_m_s2*(CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + US%s_to_T*dt_pred * &
+                               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_pred * &
-                               US%L_T2_to_m_s2*(CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + US%s_to_T*dt_pred * &
+                               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US, vel_scale=1.0)
+    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US, vel_scale=US%L_T_to_m_s)
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -341,34 +349,20 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
  ! up <- up + dt/2 d/dz visc d/dz up
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h_av, tv, forces, visc, dt*0.5, G, GV, US, &
+  call set_viscous_ML(u, v, h_av, tv, forces, visc, dt*0.5, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(US%m_s_to_L_T*up, US%m_s_to_L_T*vp, h_av, forces, visc, dt*0.5, G, GV, US, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt*0.5, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    up(I,j,k) = US%m_s_to_L_T*up(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    vp(i,J,k) = US%m_s_to_L_T*vp(i,J,k)
-  enddo ; enddo ; enddo
   call vertvisc(up, vp, h_av, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, Waves=Waves)
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    up(I,j,k) = US%L_T_to_m_s*up(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    vp(i,J,k) = US%L_T_to_m_s*vp(i,J,k)
-  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
 
 ! uh = up * hp
 ! h_av = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(US%m_s_to_L_T*up, US%m_s_to_L_T*vp, hp, h_av, uh, vh, (0.5*dt), G, GV, US, &
+  call continuity(up, vp, hp, h_av, uh, vh, (0.5*dt), G, GV, US, &
                   CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h_av, G%Domain, clock=id_clock_pass)
@@ -381,7 +375,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(US%m_s_to_L_T*up, US%m_s_to_L_T*vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+  call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -405,48 +399,34 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * &
-            US%L_T2_to_m_s2*(CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + US%s_to_T*dt * 0.5 * &
+                (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * &
-            US%L_T2_to_m_s2*(CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + US%s_to_T*dt * 0.5 * &
+                 (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV, US, vel_scale=1.0)
+    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV, US, vel_scale=US%L_T_to_m_s)
     call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV, US)
   endif
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(US%m_s_to_L_T*upp, US%m_s_to_L_T*vpp, hp, forces, visc, dt*0.5, G, GV, US, &
+  call vertvisc_coef(upp, vpp, hp, forces, visc, dt*0.5, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    upp(I,j,k) = US%m_s_to_L_T*upp(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    vpp(i,J,k) = US%m_s_to_L_T*vpp(i,J,k)
-  enddo ; enddo ; enddo
   call vertvisc(upp, vpp, hp, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, Waves=Waves)
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    upp(I,j,k) = US%L_T_to_m_s*upp(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    vpp(i,J,k) = US%L_T_to_m_s*vpp(i,J,k)
-  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(upp, vpp, G%Domain, clock=id_clock_pass)
 
 ! uh = upp * hp
 ! h = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(US%m_s_to_L_T*upp, US%m_s_to_L_T*vpp, hp, h, uh, vh, (dt*0.5), G, GV, US, &
+  call continuity(upp, vpp, hp, h, uh, vh, (dt*0.5), G, GV, US, &
                   CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h, G%Domain, clock=id_clock_pass)
@@ -477,7 +457,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
 ! CAu = -(f+zeta(upp))/h_av vh + d/dx KE(upp)
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(US%m_s_to_L_T*upp, US%m_s_to_L_T*vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+  call CorAdCalc(upp, vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, US, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -497,38 +477,24 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
   endif
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
-            US%L_T2_to_m_s2*(CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + US%s_to_T*dt * &
+               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
-            US%L_T2_to_m_s2*(CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + US%s_to_T*dt * &
+               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-  enddo ; enddo ; enddo
+  call vertvisc_coef(u, v, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, Waves=Waves)
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do j=G%jsc,G%jec ; do k=1,nz ; do I=Isq,Ieq
-    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-  enddo ; enddo ; enddo
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
-    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-  enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_vertvisc)
   call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV, US, vel_scale=1.0)
+    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV, US, vel_scale=US%L_T_to_m_s)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -543,6 +509,14 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   enddo ; enddo ; enddo
 
   if (dyn_p_surf) deallocate(p_surf)
+
+  !### This is temporary and will be deleted when the units of the input velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+  enddo ; enddo ; enddo
 
 !   Here various terms used in to update the momentum equations are
 ! offered for averaging.
