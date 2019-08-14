@@ -207,10 +207,10 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (associated(ADp%du_dt_visc)) then
       write(file,'(/,"ubv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-          (US%L_T_to_m_s*um(I,j,k)-dt*ADp%du_dt_visc(I,j,k)); enddo
+          US%L_T_to_m_s*(um(I,j,k) - US%s_to_T*dt*ADp%du_dt_visc(I,j,k)); enddo
       write(file,'(/,"duv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*ADp%du_dt_visc(I,j,k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%du_dt_visc(I,j,k)); enddo
     endif
     if (associated(ADp%du_other)) then
       write(file,'(/,"du_other: ",$)')
@@ -373,7 +373,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       if (associated(ADp%du_dt_visc)) then
         write(file,'(/,"duv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (dt*ADp%du_dt_visc(I,j,k))*Inorm(k); enddo
+            (dt*US%L_T2_to_m_s2*ADp%du_dt_visc(I,j,k))*Inorm(k); enddo
       endif
       if (associated(ADp%du_other)) then
         write(file,'(/,"du_other: ",$)')
@@ -541,11 +541,11 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (associated(ADp%dv_dt_visc)) then
       write(file,'(/,"vbv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-          (US%L_T_to_m_s*vm(i,J,k)-dt*ADp%dv_dt_visc(i,J,k)); enddo
+          US%L_T_to_m_s*(vm(i,J,k) - US%s_to_T*dt*ADp%dv_dt_visc(i,J,k)); enddo
 
       write(file,'(/,"dvv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*ADp%dv_dt_visc(i,J,k)); enddo
+                                      (dt*US%L_T2_to_m_s2*ADp%dv_dt_visc(i,J,k)); enddo
     endif
     if (associated(ADp%dv_other)) then
       write(file,'(/,"dv_other: ",$)')
@@ -703,7 +703,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       if (associated(ADp%dv_dt_visc)) then
         write(file,'(/,"dvv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (dt*ADp%dv_dt_visc(i,J,k)*Inorm(k)); enddo
+            (dt*US%L_T2_to_m_s2*ADp%dv_dt_visc(i,J,k)*Inorm(k)); enddo
       endif
       if (associated(ADp%dv_other)) then
         write(file,'(/,"dv_other: ",$)')
