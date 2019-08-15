@@ -49,8 +49,8 @@ type, public :: PointAccel_CS ; private
   real, pointer, dimension(:,:,:) :: &
     u_av => NULL(), &       !< Time average u-velocity [L T-1 ~> m s-1].
     v_av => NULL(), &       !< Time average velocity [L T-1 ~> m s-1].
-    u_prev => NULL(), &     !< Previous u-velocity [m s-1].
-    v_prev => NULL(), &     !< Previous v-velocity [m s-1].
+    u_prev => NULL(), &     !< Previous u-velocity [L T-1 ~> m s-1].
+    v_prev => NULL(), &     !< Previous v-velocity [L T-1 ~> m s-1].
     T => NULL(), &          !< Temperature [degC].
     S => NULL(), &          !< Salinity [ppt].
     u_accel_bt => NULL(), & !< Barotropic u-acclerations [L T-2 ~> m s-2]
@@ -166,7 +166,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*um(I,j,k)); enddo
     if (prev_avail) then
       write(file,'(/,"u(mp): ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%u_prev(I,j,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*CS%u_prev(I,j,k)); enddo
     endif
     write(file,'(/,"u(3):  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%u_av_scale*CS%u_av(I,j,k)); enddo
@@ -185,7 +185,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (prev_avail) then
       write(file,'(/,"du:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      ((US%L_T_to_m_s*um(I,j,k)-CS%u_prev(I,j,k))); enddo
+                                      (US%L_T_to_m_s*(um(I,j,k)-CS%u_prev(I,j,k))); enddo
     endif
     write(file,'(/,"CAu:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAu(I,j,k)); enddo
@@ -336,7 +336,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
       do k=ks,ke
-        du = US%L_T_to_m_s*um(I,j,k)-CS%u_prev(I,j,k)
+        du = US%L_T_to_m_s*(um(I,j,k) - CS%u_prev(I,j,k))
         if (abs(du) < 1.0e-6) du = 1.0e-6
         Inorm(k) = 1.0 / du
       enddo
@@ -346,7 +346,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
       write(file,'(/,"du:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                        ((US%L_T_to_m_s*um(I,j,k)-CS%u_prev(I,j,k))*Inorm(k)); enddo
+                        (US%L_T_to_m_s*(um(I,j,k)-CS%u_prev(I,j,k))*Inorm(k)); enddo
 
       write(file,'(/,"CAu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
@@ -497,7 +497,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     if (prev_avail) then
       write(file,'(/,"v(mp): ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%v_prev(i,J,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*CS%v_prev(i,J,k)); enddo
     endif
 
     write(file,'(/,"v(3):  ",$)')
@@ -516,7 +516,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     if (prev_avail) then
       write(file,'(/,"dv:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      ((US%L_T_to_m_s*vm(i,J,k)-CS%v_prev(i,J,k))); enddo
+                                      (US%L_T_to_m_s*(vm(i,J,k)-CS%v_prev(i,J,k))); enddo
     endif
 
     write(file,'(/,"CAv:   ",$)')
@@ -670,7 +670,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
       do k=ks,ke
-        dv = US%L_T_to_m_s*vm(i,J,k)-CS%v_prev(i,J,k)
+        dv = US%L_T_to_m_s*(vm(i,J,k)-CS%v_prev(i,J,k))
         if (abs(dv) < 1.0e-6) dv = 1.0e-6
         Inorm(k) = 1.0 / dv
       enddo
@@ -679,7 +679,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') (1.0/Inorm(k)); enddo
       write(file,'(/,"dv:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      ((US%L_T_to_m_s*vm(i,J,k)-CS%v_prev(i,J,k))*Inorm(k)); enddo
+                                      (US%L_T_to_m_s*(vm(i,J,k)-CS%v_prev(i,J,k))*Inorm(k)); enddo
       write(file,'(/,"CAv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
                                       (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)*Inorm(k)); enddo

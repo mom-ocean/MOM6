@@ -134,21 +134,21 @@ type, public :: ocean_internal_state
     uh => NULL(), & !<  Pointer to zonal transports [H L2 T-1 ~> m3 s-1 or kg s-1]
     vh => NULL()    !<  Pointer to meridional transports [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: &
-    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration [m s-2]
-    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [m s-2]
+    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration [L T-2 ~> m s-2]
+    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [L T-2 ~> m s-2]
     PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration [L T-2 ~> m s-2]
     PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration [L T-2 ~> m s-2]
-    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
-    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-1 T-1 ~> m s-2]
+    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [L T-2 ~> m s-2]
+    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [L T-2 ~> m s-2]
     pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
                        !! [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2]
     u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
     v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep [m s-1]
-    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep [m s-1]
-    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep [m s-1]
-    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep [m s-1]
+    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep [L T-1 ~> m s-1]
+    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep [L T-1 ~> m s-1]
+    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep [L T-1 ~> m s-1]
+    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep [L T-1 ~> m s-1]
 end type ocean_internal_state
 
 !> Pointers to arrays with accelerations, which can later be used for derived diagnostics, like energy balances.

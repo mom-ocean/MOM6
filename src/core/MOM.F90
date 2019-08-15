@@ -251,8 +251,8 @@ type, public :: MOM_control_struct ; private
   type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
                                 !! terms, for derived diagnostics (e.g., energy budgets)
   real, dimension(:,:,:), pointer :: &
-    u_prev => NULL(), &         !< previous value of u stored for diagnostics [m s-1]
-    v_prev => NULL()            !< previous value of v stored for diagnostics [m s-1]
+    u_prev => NULL(), &         !< previous value of u stored for diagnostics [L T-1 ~> m s-1]
+    v_prev => NULL()            !< previous value of v stored for diagnostics [L T-1 ~> m s-1]
 
   logical :: interp_p_surf      !< If true, linearly interpolate surface pressure
                                 !! over the coupling time step, using specified value
@@ -615,6 +615,14 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+    enddo ; enddo ; enddo
+
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
     if (CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0) .and. do_thermo) then ! do thermodynamics.
@@ -644,26 +652,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         end_time_thermo = Time_local + real_to_time(dtdia-dt)
       endif
 
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
-
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            end_time_thermo, .true., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
-
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -759,26 +751,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       ! by the call to step_MOM_thermo, noting that they end at the same time.
       if (dtdia > dt) CS%Time = CS%Time - real_to_time(0.5*(dtdia-dt))
 
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
-
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
-
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
 
       if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) then
         ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -803,6 +779,14 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       if (CS%IDs%id_ssh_inst > 0) call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
       call cpu_clock_end(id_clock_dynamics)
     endif
+
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+    enddo ; enddo ; enddo
 
     !===========================================================================
     ! Calculate diagnostics at the end of the time step if the state is self-consistent.
@@ -972,21 +956,13 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
               Time_local + real_to_time(bbl_time_int-dt), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(US%m_s_to_L_T*CS%u(:,:,:), US%m_s_to_L_T*CS%v(:,:,:), CS%h, CS%tv, CS%visc, G, GV, US, &
+    call set_viscous_BBL(CS%u(:,:,:), CS%v(:,:,:), CS%h, CS%tv, CS%visc, G, GV, US, &
                          CS%set_visc_CSp, symmetrize=.true.)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     call disable_averaging(CS%diag)
   endif
 
-
-  !### This is temporary and will be deleted when the units of the velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-  enddo ; enddo ; enddo
 
   if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
     ! This section uses a split time stepping scheme for the dynamic equations,
@@ -1027,14 +1003,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
-
-  !### This is temporary and will be deleted when the units of the velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-  enddo ; enddo ; enddo
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -2100,6 +2068,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
     allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%v_prev(:,:,:) = 0.0
+    MOM_internal_state%u_prev => CS%u_prev
+    MOM_internal_state%v_prev => CS%v_prev
     call safe_alloc_ptr(CS%ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(CS%ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     if (.not.CS%adiabatic) then
@@ -2429,7 +2399,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! now register some diagnostics since the tracer registry is now locked
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%tv)
-  call register_diags(Time, G, GV, CS%IDs, CS%diag)
+  call register_diags(Time, G, GV, US, CS%IDs, CS%diag)
   call register_transport_diags(Time, G, GV, US, CS%transport_IDs, CS%diag)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm)
@@ -2575,10 +2545,11 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
 end subroutine finish_MOM_initialization
 
 !> Register certain diagnostics
-subroutine register_diags(Time, G, GV, IDs, diag)
+subroutine register_diags(Time, G, GV, US, IDs, diag)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  type(unit_scale_type),   intent(inout) :: US    !< A dimensional unit scaling type
   type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
 
@@ -2594,9 +2565,9 @@ subroutine register_diags(Time, G, GV, IDs, diag)
 
   ! Diagnostics of the rapidly varying dynamic state
   IDs%id_u = register_diag_field('ocean_model', 'u_dyn', diag%axesCuL, Time, &
-      'Zonal velocity after the dynamics update', 'm s-1')
+      'Zonal velocity after the dynamics update', 'm s-1', conversion=US%L_T_to_m_s)
   IDs%id_v = register_diag_field('ocean_model', 'v_dyn', diag%axesCvL, Time, &
-      'Meridional velocity after the dynamics update', 'm s-1')
+      'Meridional velocity after the dynamics update', 'm s-1', conversion=US%L_T_to_m_s)
   IDs%id_h = register_diag_field('ocean_model', 'h_dyn', diag%axesTL, Time, &
       'Layer Thickness after the dynamics update', thickness_units, &
       v_extensive=.true., conversion=H_convert)
