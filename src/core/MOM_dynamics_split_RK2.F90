@@ -87,7 +87,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_accel_bt
               !< The zonal layer accelerations due to the difference between
               !! the barotropic accelerations and the baroclinic accelerations
-              !! that were fed into the barotopic calculation [m s-2]
+              !! that were fed into the barotopic calculation [L T-2 ~> m s-2]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: visc_rem_v
               !< Both the fraction of the meridional momentum originally in
               !! a layer that remains after a time-step of viscosity, and the
@@ -97,7 +97,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_accel_bt
               !< The meridional layer accelerations due to the difference between
               !! the barotropic accelerations and the baroclinic accelerations
-              !! that were fed into the barotopic calculation [m s-2]
+              !! that were fed into the barotopic calculation [L T-2 ~> m s-2]
 
   ! The following variables are only used with the split time stepping scheme.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta    !< Instantaneous free surface height (in Boussinesq
@@ -105,10 +105,10 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                                                   !! mode) [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av   !< layer x-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
-                                                                  !! timestep [m s-1]
+                                                                  !! timestep [L T-1 ~> m s-1]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av   !< layer y-velocity with vertical mean replaced by
                                                                   !! time-mean barotropic velocity over a baroclinic
-                                                                  !! timestep [m s-1]
+                                                                  !! timestep [L T-1 ~> m s-1]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: h_av   !< arithmetic mean of two successive layer
                                                                   !! thicknesses [H ~> m or kg m-2]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta_PF !< instantaneous SSH used in calculating PFu and
@@ -301,12 +301,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     ! eta_pred is the predictor value of the free surface height or column mass,
     ! [H ~> m or kg m-2].
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: u_adj
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: v_adj
-    ! u_adj and v_adj are the zonal or meridional velocities after u and v
-    ! have been barotropically adjusted so the resulting transports match
-    ! uhbt_out and vhbt_out [m s-1].
-
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_old_rad_OBC
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_old_rad_OBC
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
@@ -320,9 +314,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   real, pointer, dimension(:,:,:) :: &
     uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
-    u_init => NULL(), v_init => NULL(), & ! Pointers to u and v or u_adj and v_adj.
-    u_av, & ! The zonal velocity time-averaged over a time step [m s-1].
-    v_av, & ! The meridional velocity time-averaged over a time step [m s-1].
+    u_av, & ! The zonal velocity time-averaged over a time step [L T-1 ~> m s-1].
+    v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
   real :: Idt
   logical :: dyn_p_surf
@@ -351,13 +344,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
   enddo ; enddo ; enddo
-  !### Remove this later.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u_av(I,j,k) = US%m_s_to_L_T * u_av(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v_av(i,J,k) = US%m_s_to_L_T * v_av(i,J,k)
-  enddo ; enddo ; enddo
 
   !$OMP parallel do default(shared)
   do k=1,nz
@@ -370,7 +356,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
 
   if (CS%debug) then
-    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, US, symmetric=sym, vel_scale=US%L_T_to_m_s)
+    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
     call check_redundant("Start predictor u ", u, v, G)
     call check_redundant("Start predictor uh ", uh, vh, G)
   endif
@@ -544,15 +530,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (CS%BT_use_layer_fluxes) then
-    ! uh_ptr => uh_in; vh_ptr => vh_in; u_ptr => u; v_ptr => v
-    uh_ptr => uh_in; vh_ptr => vh_in
-    call safe_alloc_ptr(u_ptr, G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-    call safe_alloc_ptr(v_ptr, G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-    u_ptr(:,:,:) = u(:,:,:)
-    v_ptr(:,:,:) = v(:,:,:)
+    uh_ptr => uh_in ; vh_ptr => vh_in; u_ptr => u ; v_ptr => v
   endif
 
-  u_init => u ; v_init => v
   call cpu_clock_begin(id_clock_btstep)
   if (calc_dtbt) call set_dtbt(G, GV, US, CS%barotropic_CSp, eta, CS%pbce)
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
@@ -573,11 +553,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do J=Jsq,Jeq ; do i=is,ie
-      vp(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + US%s_to_T*dt_pred * &
+      vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + US%s_to_T*dt_pred * &
                       (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      up(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + US%s_to_T*dt_pred  * &
+      up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + US%s_to_T*dt_pred  * &
                       (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
     enddo ; enddo
   enddo
@@ -588,11 +568,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, scale=GV%H_to_m)
     call uvchksum("Predictor 1 [uv]h", uh, vh, G%HI,haloshift=2, &
                   symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
-!   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1, vel_scale=1.0)
+!   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
-    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, US, haloshift=2, &
-                          symmetric=sym, vel_scale=US%L_T_to_m_s)
+    call MOM_state_chksum("Predictor 1 init", u, v, h, uh, vh, G, GV, US, haloshift=2, &
+                          symmetric=sym)
     call check_redundant("Predictor 1 up", up, vp, G)
     call check_redundant("Predictor 1 uh", uh, vh, G)
   endif
@@ -697,10 +677,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, US, symmetric=sym, vel_scale=US%L_T_to_m_s)
+    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, US, symmetric=sym)
     call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
     call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_m)
-  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US, vel_scale=1.0)
+  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
   endif
@@ -752,9 +732,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! pbce = dM/deta
   call cpu_clock_begin(id_clock_btstep)
   if (CS%BT_use_layer_fluxes) then
-    uh_ptr => uh ; vh_ptr => vh ! ; u_ptr => u_av ; v_ptr => v_av
-    u_ptr(:,:,:) = u_av(:,:,:)
-    v_ptr(:,:,:) = v_av(:,:,:)
+    uh_ptr => uh ; vh_ptr => vh ; u_ptr => u_av ; v_ptr => v_av
   endif
 
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
@@ -768,9 +746,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
               uh0=uh_ptr, vh0=vh_ptr, u_uh0=u_ptr, v_vh0=v_ptr)
   do j=js,je ; do i=is,ie ; eta(i,j) = eta_pred(i,j) ; enddo ; enddo
 
-  if (associated(u_ptr)) deallocate(u_ptr)
-  if (associated(v_ptr)) deallocate(v_ptr)
-
   call cpu_clock_end(id_clock_btstep)
   if (showCallTree) call callTree_leave("btstep()")
 
@@ -783,11 +758,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + US%s_to_T*dt * &
+      u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + US%s_to_T*dt * &
                       (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + US%s_to_T*dt * &
+      v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + US%s_to_T*dt * &
                       (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
     enddo ; enddo
   enddo
@@ -798,7 +773,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call hchksum(h, "Corrector 1 h", G%HI, haloshift=2, scale=GV%H_to_m)
     call uvchksum("Corrector 1 [uv]h", uh, vh, G%HI, haloshift=2, &
                   symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
-  ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, US, haloshift=1, vel_scale=1.0)
+  ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
                           symmetric=sym)
@@ -882,12 +857,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
   enddo ; enddo ; enddo
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u_av(I,j,k) = US%L_T_to_m_s * u_av(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v_av(i,J,k) = US%L_T_to_m_s * v_av(i,J,k)
-  enddo ; enddo ; enddo
 
   !   The time-averaged free surface height has already been set by the last
   !  call to btstep.
@@ -909,9 +878,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, US, symmetric=sym, vel_scale=1.0)
-    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
     call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, scale=GV%H_to_m)
- !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US, vel_scale=1.0)
+ !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
   endif
 
   if (showCallTree) call callTree_leave("step_MOM_dyn_split_RK2()")
@@ -1049,6 +1018,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units, eta_rest_name
   real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
+                     ! a restart file to the internal representation in this run.
+  real :: vel_rescale  ! A rescaling factor for velocities from the representation in
                      ! a restart file to the internal representation in this run.
   real :: uH_rescale ! A rescaling factor for thickness transports from the representation in
                      ! a restart file to the internal representation in this run.
@@ -1208,8 +1179,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
-    CS%u_av(:,:,:) = u(:,:,:)
-    CS%v_av(:,:,:) = v(:,:,:)
+    CS%u_av(:,:,:) = US%m_s_to_L_T*u(:,:,:)
+    CS%v_av(:,:,:) = US%m_s_to_L_T*v(:,:,:)
+  elseif ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+         ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
+    vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
+    do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB ; CS%u_av(I,j,k) = vel_rescale * CS%u_av(I,j,k) ; enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie ; CS%v_av(i,J,k) = vel_rescale * CS%v_av(i,J,k) ; enddo ; enddo ; enddo
   endif
 
   ! This call is just here to initialize uh and vh.
@@ -1262,9 +1238,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
-      'Barotropic-step Averaged Zonal Velocity', 'm s-1')
+      'Barotropic-step Averaged Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_vav = register_diag_field('ocean_model', 'vav', diag%axesCvL, Time, &
-      'Barotropic-step Averaged Meridional Velocity', 'm s-1')
+      'Barotropic-step Averaged Meridional Velocity', 'm s-1', conversion=US%L_T_to_m_s)
 
   CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', diag%axesCuL, Time, &
     'Barotropic Anomaly Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
