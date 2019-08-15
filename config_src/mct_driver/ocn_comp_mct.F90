@@ -111,6 +111,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   !  local variables
   type(time_type)         :: time0                !< Model start time
+  type(time_type)         :: timenow              !< Model current time
   type(ESMF_time)         :: time_var             !< ESMF_time variable to query time
   type(ESMF_time)         :: time_in_ESMF         !< Initial time for ocean
   type(ESMF_timeInterval) :: ocn_cpl_interval     !< Ocean coupling interval
@@ -202,10 +203,15 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
-  ! Get the initial time
-  call ESMF_ClockGet(EClock, currTime=time_var, rc=rc)
+  ! Get start time
+  call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
   call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time0 = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Get current time
+  call ESMF_ClockGet(EClock, currTime=time_var, rc=rc)
+  call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  timenow = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
@@ -279,7 +285,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   runtype = get_runtype()
   if (runtype == "initial") then
     ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, timenow, input_restart_file = 'n')
   else  ! hybrid or branch or continuos runs
     ! get output path root
     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
@@ -295,7 +301,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
       write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
     end if
     call shr_file_freeUnit(nu)
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, timenow, input_restart_file=trim(restartfile))
   endif
   if (is_root_pe()) then
     write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
