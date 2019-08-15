@@ -66,8 +66,8 @@ type, public :: diagnostics_CS ; private
 
   ! following fields have nz layers.
   real, pointer, dimension(:,:,:) :: &
-    du_dt => NULL(), & !< net i-acceleration [m s-2]
-    dv_dt => NULL(), & !< net j-acceleration [m s-2]
+    du_dt => NULL(), & !< net i-acceleration [L T-1 s-1 ~> m s-2]
+    dv_dt => NULL(), & !< net j-acceleration [L T-1 s-1 ~> m s-2]
     dh_dt => NULL(), & !< thickness rate of change [H s-1 ~> m s-1 or kg m-2 s-1]
     p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
 
@@ -188,9 +188,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity [m s-1].
+                           intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity [m s-1].
+                           intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -251,6 +251,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz  = G%ke   ; nkmb = GV%nk_rho_varies
 
+  if (loc(CS)==0) call MOM_error(FATAL, &
+         "calculate_diagnostic_fields: Module must be initialized before used.")
+
+  call calculate_derivs(dt, G, CS)
+
   if (dt > 0.0) then
     call diag_save_grids(CS%diag)
     call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
@@ -276,11 +281,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! This behavior is ANSI F77 but some compiler options can force at least
   ! one iteration that would break the following one-line workaround!
   if (nkmb==0 .and. nz > 1) nkmb = nz
-
-  if (loc(CS)==0) call MOM_error(FATAL, &
-         "calculate_diagnostic_fields: Module must be initialized before used.")
-
-  call calculate_derivs(dt, G, CS)
 
   if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
 
@@ -629,7 +629,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         f2_h = absurdly_small_freq2 + 0.25 * US%s_to_T**2 * &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        mag_beta = sqrt(0.5 * US%s_to_T**2*US%m_to_L**2 * ( &
+        mag_beta = US%s_to_T*US%m_to_L * sqrt(0.5 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -678,7 +678,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         f2_h = absurdly_small_freq2 + 0.25 * US%s_to_T**2 * &
             ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
              (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
-        mag_beta = sqrt(0.5 * US%s_to_T**2*US%m_to_L**2 * ( &
+        mag_beta = US%s_to_T*US%m_to_L * sqrt(0.5 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -882,9 +882,9 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity [m s-1].
+                           intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity [m s-1].
+                           intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -916,7 +916,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
 
   if (associated(CS%KE)) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%KE(i,j,k) = ((u(I,j,k)*u(I,j,k) + u(I-1,j,k)*u(I-1,j,k)) + &
+      CS%KE(i,j,k) = US%L_T_to_m_s**2*((u(I,j,k)*u(I,j,k) + u(I-1,j,k)*u(I-1,j,k)) + &
           (v(i,J,k)*v(i,J,k) + v(i,J-1,k)*v(i,J-1,k)))*0.25
       ! DELETE THE FOLLOWING...  Make this 0 to test the momentum balance,
       ! or a huge number to test the continuity balance.
@@ -936,13 +936,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*CS%du_dt(I,j,k)
+        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*CS%dv_dt(i,J,k)
+        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k)*CS%dh_dt(i,j,k)
+        KE_h(i,j) = CS%KE(i,j,k)*US%s_to_T*CS%dh_dt(i,j,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1123,14 +1123,14 @@ end subroutine register_time_deriv
 
 !> This subroutine calculates all registered time derivatives.
 subroutine calculate_derivs(dt, G, CS)
-  real,                  intent(in)    :: dt   !< The time interval over which differences occur [s].
+  real,                  intent(in)    :: dt   !< The time interval over which differences occur [T ~> s].
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   type(diagnostics_CS),  intent(inout) :: CS   !< Control structure returned by previous call to
                                                !! diagnostics_init.
 
 ! This subroutine calculates all registered time derivatives.
-  integer i, j, k, m
-  real Idt
+  real :: Idt  ! The inverse timestep [T-1 ~> s-1]
+  integer :: i, j, k, m
 
   if (dt > 0.0) then ; Idt = 1.0/dt
   else ; return ; endif
@@ -1544,10 +1544,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
-      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
+      'Zonal velocity', 'm s-1', conversion=US%L_T_to_m_s, cmor_field_name='uo', &
       cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
-      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
+      'Meridional velocity', 'm s-1', conversion=US%L_T_to_m_s, cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
@@ -1574,21 +1574,21 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'In situ density', 'kg m-3')
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
-      'Zonal Acceleration', 'm s-2')
+      'Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_du_dt>0) .and. .not.associated(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
     call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', diag%axesCvL, Time, &
-      'Meridional Acceleration', 'm s-2')
+      'Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_dv_dt>0) .and. .not.associated(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
     call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', diag%axesTL, Time, &
-      'Thickness tendency', trim(thickness_units)//" s-1", v_extensive = .true.)
+      'Thickness tendency', trim(thickness_units)//" s-1", conversion=convert_H*US%s_to_T, v_extensive=.true.)
   if ((CS%id_dh_dt>0) .and. .not.associated(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(lbound(MIS%h), MIS%h, CS%dh_dt, CS)

@@ -780,14 +780,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call cpu_clock_end(id_clock_dynamics)
     endif
 
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
-
     !===========================================================================
     ! Calculate diagnostics at the end of the time step if the state is self-consistent.
     if (MOM_state_is_synchronized(CS)) then
@@ -807,6 +799,14 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
       call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
     endif
+
+    !### This will be removed later.
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+    enddo ; enddo ; enddo
 
     if (do_dyn .and. .not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
@@ -2351,14 +2351,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
             CS%ntrunc)
   endif
 
-  !### This is temporary and will be deleted when the units of the velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    CS%u(I,j,k) = US%L_T_to_m_s*CS%u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    CS%v(i,J,k) = US%L_T_to_m_s*CS%v(i,J,k)
-  enddo ; enddo ; enddo
-
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, &
@@ -2374,6 +2366,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, US, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
+
+  !### This is temporary and will be deleted when the units of the velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    CS%u(I,j,k) = US%L_T_to_m_s*CS%u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    CS%v(i,J,k) = US%L_T_to_m_s*CS%v(i,J,k)
+  enddo ; enddo ; enddo
 
   if (associated(CS%sponge_CSp)) &
     call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
