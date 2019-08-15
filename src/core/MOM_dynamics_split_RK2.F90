@@ -238,9 +238,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             target, intent(inout) :: u            !< zonal velocity [m s-1]
+                             target, intent(inout) :: u            !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             target, intent(inout) :: v            !< merid velocity [m s-1]
+                             target, intent(inout) :: v            !< merid velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                                      intent(inout) :: h            !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
@@ -336,14 +336,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
-
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-  enddo ; enddo ; enddo
 
   !$OMP parallel do default(shared)
   do k=1,nz
@@ -849,15 +841,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     enddo ; enddo
   enddo
 
-  !### Remove this later.
-  !### This is temporary and will be deleted when the units of the input velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-  enddo ; enddo ; enddo
-
   !   The time-averaged free surface height has already been set by the last
   !  call to btstep.
 
@@ -976,9 +959,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
   type(unit_scale_type),            intent(in)    :: US         !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(inout) :: u          !< zonal velocity [m s-1]
+                                    intent(inout) :: u          !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(inout) :: v          !< merid velocity [m s-1]
+                                    intent(inout) :: v          !< merid velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             target, intent(inout) :: uh    !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -1155,13 +1138,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  call barotropic_init(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, CS%eta, Time, G, GV, US, param_file, diag, &
+  call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%tides_CSp)
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
-    call horizontal_viscosity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
+    call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
                               G, GV, US, CS%hor_visc_CSp, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp)
   else
@@ -1179,22 +1162,24 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
-    CS%u_av(:,:,:) = US%m_s_to_L_T*u(:,:,:)
-    CS%v_av(:,:,:) = US%m_s_to_L_T*v(:,:,:)
+    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB ; CS%u_av(I,j,k) = u(I,j,k) ; enddo ; enddo ; enddo
+    do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; CS%v_av(i,J,k) = v(i,J,k) ; enddo ; enddo ; enddo
   elseif ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
          ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
     vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
-    do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB ; CS%u_av(I,j,k) = vel_rescale * CS%u_av(I,j,k) ; enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie ; CS%v_av(i,J,k) = vel_rescale * CS%v_av(i,J,k) ; enddo ; enddo ; enddo
+    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IeDB ; CS%u_av(I,j,k) = vel_rescale * CS%u_av(I,j,k) ; enddo ; enddo ; enddo
+    do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; CS%v_av(i,J,k) = vel_rescale * CS%v_av(i,J,k) ; enddo ; enddo ; enddo
   endif
 
   ! This call is just here to initialize uh and vh.
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
-    h_tmp(:,:,:) = h(:,:,:)
-    call continuity(US%m_s_to_L_T*u, US%m_s_to_L_T*v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+    do k=1,nz ; do j=jsd,jed ; do i=isd,ied ; h_tmp(i,j,k) = h(i,j,k) ; enddo ; enddo ; enddo
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
-    CS%h_av(:,:,:) = 0.5*(h(:,:,:) + h_tmp(:,:,:))
+    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+      CS%h_av(i,j,k) = 0.5*(h(i,j,k) + h_tmp(i,j,k))
+    enddo ; enddo ; enddo
   else
     if (.not. query_initialized(CS%h_av,"h2",restart_CS)) then
       CS%h_av(:,:,:) = h(:,:,:)

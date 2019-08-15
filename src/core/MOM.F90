@@ -979,6 +979,15 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call disable_averaging(CS%diag)
   endif
 
+
+  !### This is temporary and will be deleted when the units of the velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+  enddo ; enddo ; enddo
+
   if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
     ! This section uses a split time stepping scheme for the dynamic equations,
     ! basically the stacked shallow water equations with viscosity.
@@ -1018,6 +1027,14 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
+
+  !### This is temporary and will be deleted when the units of the velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
+  enddo ; enddo ; enddo
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -2321,6 +2338,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call VarMix_init(Time, G, GV, US, param_file, diag, CS%VarMix)
   call set_visc_init(Time, G, GV, US, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
   call thickness_diffuse_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
+
+  !### This is temporary and will be deleted when the units of the velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    CS%u(I,j,k) = US%m_s_to_L_T*CS%u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    CS%v(i,J,k) = US%m_s_to_L_T*CS%v(i,J,k)
+  enddo ; enddo ; enddo
+
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
@@ -2354,6 +2380,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc)
   endif
+
+  !### This is temporary and will be deleted when the units of the velocities have changed.
+  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    CS%u(I,j,k) = US%L_T_to_m_s*CS%u(I,j,k)
+  enddo ; enddo ; enddo
+  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    CS%v(i,J,k) = US%L_T_to_m_s*CS%v(i,J,k)
+  enddo ; enddo ; enddo
+
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, &
