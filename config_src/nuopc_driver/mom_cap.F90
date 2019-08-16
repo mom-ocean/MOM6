@@ -738,8 +738,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   type(ocean_internalstate_wrapper)      :: ocean_internalstate
   type(ocean_grid_type),         pointer :: ocean_grid => NULL()
   type(time_type)                        :: Run_len      !< length of experiment
-  type(time_type)                        :: time0        !< Model start time
-  type(time_type)                        :: timenow      !< Model current time
+  type(time_type)                        :: time0        !< Start time of coupled model's calendar.
+  type(time_type)                        :: time_start   !< The time at which to initialize the ocean model
   type(time_type)                        :: Time_restart
   type(time_type)                        :: DT
   integer                                :: DT_OCEAN
@@ -843,7 +843,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   ! this ocean connector will be driven at set interval
   DT = set_time (DT_OCEAN, 0)
   ! get current time
-  timenow = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+  time_start = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
   if (is_root_pe()) then
     write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
@@ -995,7 +995,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  call ocean_model_init(ocean_public, ocean_state, time0, timenow, input_restart_file=trim(restartfile))
+  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfile))
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
