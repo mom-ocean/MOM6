@@ -57,7 +57,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
                                                 !! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real,                    intent(in)    :: dt  !< Time increment [s].
+  real,                    intent(in)    :: dt  !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
   real, dimension(SZIB_(G),SZJ_(G)), &

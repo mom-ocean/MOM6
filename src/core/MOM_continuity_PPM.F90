@@ -73,7 +73,7 @@ contains
 
 !> Time steps the layer thicknesses, using a monotonically limit, directionally split PPM scheme,
 !! based on Lin (1994).
-subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
+subroutine continuity_PPM(u, v, hin, h, uh, vh, dt_in_T, G, GV, US, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure.
   type(continuity_PPM_CS), pointer       :: CS  !< Module's control structure.
@@ -89,7 +89,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
                            intent(out)   :: uh  !< Zonal volume flux, u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out)   :: vh  !< Meridional volume flux, v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real,                    intent(in)    :: dt  !< Time increment [s].
+  real,                    intent(in)    :: dt_in_T  !< Time increment [T ~> s].
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G)), &
@@ -149,12 +149,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
   !    First, advect zonally.
     LB%ish = G%isc ; LB%ieh = G%iec
     LB%jsh = G%jsc-stencil ; LB%jeh = G%jec+stencil
-    call zonal_mass_flux(u, hin, uh, US%s_to_T*dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, u_cor, BT_cont)
+    call zonal_mass_flux(u, hin, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, u_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
+      h(i,j,k) = hin(i,j,k) - dt_in_T * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   Uncomment this line to prevent underflow.
   !   if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -164,12 +164,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
 
     !    Now advect meridionally, using the updated thicknesses to determine
     !  the fluxes.
-    call meridional_mass_flux(v, h, vh, US%s_to_T*dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, v_cor, BT_cont)
+    call meridional_mass_flux(v, h, vh, dt_in_T, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, v_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
+      h(i,j,k) = h(i,j,k) - dt_in_T * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
       if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
@@ -180,24 +180,24 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, O
     LB%ish = G%isc-stencil ; LB%ieh = G%iec+stencil
     LB%jsh = G%jsc ; LB%jeh = G%jec
 
-    call meridional_mass_flux(v, hin, vh, US%s_to_T*dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, v_cor, BT_cont)
+    call meridional_mass_flux(v, hin, vh, dt_in_T, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, v_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - US%s_to_T*dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
+      h(i,j,k) = hin(i,j,k) - dt_in_T * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
   !    Now advect zonally, using the updated thicknesses to determine
   !  the fluxes.
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
-    call zonal_mass_flux(u, h, uh, US%s_to_T*dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, u_cor, BT_cont)
+    call zonal_mass_flux(u, h, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, u_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - US%s_to_T*dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
+      h(i,j,k) = h(i,j,k) - dt_in_T * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
       ! This line prevents underflow.
       if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
