@@ -320,7 +320,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   call get_param(param_file, mdl, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
 
-  if (config1 /= "none") OBC%user_BCs_set_globally = .true.
+  if (config1 /= "none" .and. config1 /= "dyed_obcs") OBC%user_BCs_set_globally = .true.
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mdl, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
