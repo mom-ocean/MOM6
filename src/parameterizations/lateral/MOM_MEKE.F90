@@ -168,7 +168,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   if (.not.associated(MEKE)) call MOM_error(FATAL, &
          "MOM_MEKE: MEKE must be initialized before it is used.")
 
-  if ((US%s_to_T*CS%MEKE_damping + CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) &
+  if ((CS%MEKE_damping > 0.0) .or. (CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) &
       .or. CS%visc_drag) then
     use_drag_rate = .true.
   else
