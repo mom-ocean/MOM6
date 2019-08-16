@@ -854,7 +854,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
                               G, CS%sum_output_CSp)
 
   if (MOM_state_is_synchronized(CS)) &
-    call write_energy(US%L_T_to_m_s*CS%u, US%L_T_to_m_s*CS%v, CS%h, CS%tv, Time_local, CS%nstep_tot, &
+    call write_energy(CS%u, CS%v, CS%h, CS%tv, Time_local, CS%nstep_tot, &
                       G, GV, US, CS%sum_output_CSp, CS%tracer_flow_CSp, &
                       dt_forcing=real_to_time(time_interval) )
 
@@ -2503,7 +2503,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     deallocate(restart_CSp_tmp)
   endif
 
-  call write_energy(US%L_T_to_m_s*CS%u, US%L_T_to_m_s*CS%v, CS%h, CS%tv, Time, 0, G, GV, US, &
+  call write_energy(CS%u, CS%v, CS%h, CS%tv, Time, 0, G, GV, US, &
                     CS%sum_output_CSp, CS%tracer_flow_CSp)
 
   call callTree_leave("finish_MOM_initialization()")

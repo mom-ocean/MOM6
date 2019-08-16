@@ -305,9 +305,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u   !< The zonal velocity [m s-1].
+                           intent(in)    :: u   !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v   !< The meridional velocity [m s-1].
+                           intent(in)    :: v   !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
@@ -387,6 +387,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
   real :: H_to_kg_m2   ! Local copy of a unit conversion factor.
+  real :: KE_scale_factor   ! The combination of unit rescaling factors in the kinetic energy
+                            ! calculation [kg T2 L-2 s-2 H-1 ~> kg m-3 or nondim]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq
@@ -687,9 +689,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
 ! Calculate the Kinetic Energy integrated over each layer.
+  KE_scale_factor = GV%H_to_kg_m2*US%L_T_to_m_s**2
   tmp1(:,:,:) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    tmp1(i,j,k) = (0.25 * H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
+    tmp1(i,j,k) = (0.25 * KE_scale_factor * (areaTm(i,j) * h(i,j,k))) * &
             (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
   enddo ; enddo ; enddo
   KE_tot = reproducing_sum(tmp1, sums=KE)
@@ -713,21 +716,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   max_CFL(1:2) = 0.0
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     if (u(I,j,k) < 0.0) then
-      CFL_trans = (-US%m_s_to_L_T*u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
+      CFL_trans = (-u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
     else
-      CFL_trans = (US%m_s_to_L_T*u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
+      CFL_trans = (u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
     endif
-    CFL_lin = abs(US%m_s_to_L_T*u(I,j,k) * US%s_to_T*CS%dt) * G%IdxCu(I,j)
+    CFL_lin = abs(u(I,j,k) * US%s_to_T*CS%dt) * G%IdxCu(I,j)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     if (v(i,J,k) < 0.0) then
-      CFL_trans = (-US%m_s_to_L_T*v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
+      CFL_trans = (-v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
     else
-      CFL_trans = (US%m_s_to_L_T*v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
+      CFL_trans = (v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
     endif
-    CFL_lin = abs(US%m_s_to_L_T*v(i,J,k) * US%s_to_T*CS%dt) * G%IdyCv(i,J)
+    CFL_lin = abs(v(i,J,k) * US%s_to_T*CS%dt) * G%IdyCv(i,J)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
