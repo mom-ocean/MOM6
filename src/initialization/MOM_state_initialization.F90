@@ -407,34 +407,24 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        " \t USER - call a user modified routine.", default="zero", &
        do_not_log=just_read)
   select case (trim(config))
-     case ("file"); call initialize_velocity_from_file(u, v, G, PF, &
+     case ("file"); call initialize_velocity_from_file(u, v, G, US, PF, &
                              just_read_params=just_read)
      case ("zero"); call initialize_velocity_zero(u, v, G, PF, &
                              just_read_params=just_read)
-     case ("uniform"); call initialize_velocity_uniform(u, v, G, PF, &
+     case ("uniform"); call initialize_velocity_uniform(u, v, G, US, PF, &
                                 just_read_params=just_read)
-     case ("circular"); call initialize_velocity_circular(u, v, G, PF, &
+     case ("circular"); call initialize_velocity_circular(u, v, G, US, PF, &
                                  just_read_params=just_read)
      case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, US, PF, &
                                  just_read_params=just_read)
      case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
                                      G, GV, US, PF, just_read_params=just_read)
-     case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
-     case ("USER"); call user_initialize_velocity(u, v, G, PF, &
+     case ("soliton"); call soliton_initialize_velocity(u, v, h, G, US)
+     case ("USER"); call user_initialize_velocity(u, v, G, US, PF, &
                              just_read_params=just_read)
      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
           "Unrecognized velocity configuration "//trim(config))
   end select
-
-  ! This rescaling should be incorporated into the calls above.
-  if (new_sim) then
-    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
-  endif
 
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
@@ -553,7 +543,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
-      case("RGC"); call RGC_initialize_sponges(G, GV, tv, US%L_T_to_m_s*u(:,:,:), US%L_T_to_m_s*v(:,:,:), PF, useALE, &
+      case("RGC"); call RGC_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
                                                      sponge_CSp, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, GV, use_temperature, tv, PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, PF, &
@@ -1256,12 +1246,13 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
 end subroutine cut_off_column_top
 
 !> Initialize horizontal velocity components from file
-subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
+subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1290,7 +1281,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
          " initialize_velocity_from_file: Unable to open "//trim(filename))
 
   !  Read the velocities from a netcdf file.
-  call MOM_read_vector(filename, "u", "v", u(:,:,:), v(:,:,:),G%Domain)
+  call MOM_read_vector(filename, "u", "v", u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file
@@ -1299,9 +1290,9 @@ end subroutine initialize_velocity_from_file
 subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1330,12 +1321,13 @@ subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
 end subroutine initialize_velocity_zero
 
 !> Sets the initial velocity components to uniform
-subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
+subroutine initialize_velocity_uniform(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1352,10 +1344,10 @@ subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
 
   call get_param(param_file, mdl, "INITIAL_U_CONST", initial_u_const, &
                  "A initial uniform value for the zonal flow.", &
-                 units="m s-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m s-1", scale=US%m_s_to_L_T, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "INITIAL_V_CONST", initial_v_const, &
                  "A initial uniform value for the meridional flow.", &
-                 units="m s-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m s-1", scale=US%m_s_to_L_T, fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1370,12 +1362,13 @@ end subroutine initialize_velocity_uniform
 
 !> Sets the initial velocity components to be circular with
 !! no flow at edges of domain and center.
-subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
+subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1394,7 +1387,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   call get_param(param_file, mdl, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the "// &
                  "circular stream function [m s-1].", &
-                 units="m s-1", default=0., do_not_log=just_read)
+                 units="m s-1", default=0., scale=US%L_T_to_m_s, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

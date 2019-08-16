@@ -106,10 +106,11 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
 end subroutine USER_initialize_thickness
 
 !> initialize velocities.
-subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
+subroutine USER_initialize_velocity(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m s-1]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [m/s]
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [L T-1 ~> m s-1]
+  type(unit_scale_type),                       intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.

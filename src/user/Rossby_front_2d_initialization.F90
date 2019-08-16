@@ -163,13 +163,13 @@ end subroutine Rossby_front_initialize_temperature_salinity
 subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
-  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                              intent(out) :: u  !< i-component of velocity [m s-1]
+                              intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                              intent(out) :: v  !< j-component of velocity [m s-1]
+                              intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
                               intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
+  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)  :: param_file !< A structure indicating the open file
                                                 !! to parse for model parameter values.
   logical,          optional, intent(in)  :: just_read_params !< If present and true, this call
@@ -214,7 +214,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
       zi = zi - hAtU              ! Bottom interface position
       zc = zi - 0.5*hAtU          ! Position of middle of cell
       zm = max( zc + Dml, 0. )    ! Height above bottom of mixed layer
-      u(I,j,k) = US%L_T_to_m_s * dUdT * Ty * zm   ! Thermal wind starting at base of ML
+      u(I,j,k) = dUdT * Ty * zm   ! Thermal wind starting at base of ML
     enddo
   enddo ; enddo
 
