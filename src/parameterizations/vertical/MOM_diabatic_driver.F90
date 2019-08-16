@@ -2928,6 +2928,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   real :: Idt  ! The inverse of the timestep [s-1]
   real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
+  logical :: do_saln_tend   ! Calculate salinity-based tendency diagnosics
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Idt = 0.0 ; if (dt > 0.0) Idt = 1. / dt
@@ -2963,29 +2964,35 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   endif
 
   ! salinity tendency
-  if (CS%id_diabatic_diff_saln_tend > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = (tv%S(i,j,k)-saln_old(i,j,k))*Idt
-    enddo ; enddo ; enddo
-    call post_data(CS%id_diabatic_diff_saln_tend, work_3d, CS%diag, alt_h = h)
-  endif
+  do_saln_tend = CS%id_diabatic_diff_saln_tend > 0 &
+    .or. CS%id_diabatic_diff_salt_tend > 0 &
+    .or. CS%id_diabatic_diff_salt_tend_2d > 0
 
-  ! salt tendency
-  if (CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
+  if (do_saln_tend) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * ppt2mks * work_3d(i,j,k)
+      work_3d(i,j,k) = (tv%S(i,j,k) - saln_old(i,j,k)) * Idt
     enddo ; enddo ; enddo
-    if (CS%id_diabatic_diff_salt_tend > 0) then
-      call post_data(CS%id_diabatic_diff_salt_tend, work_3d, CS%diag, alt_h = h)
-    endif
-    if (CS%id_diabatic_diff_salt_tend_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work_2d(i,j) = 0.0
-        do k=1,nz
-          work_2d(i,j) = work_2d(i,j) + work_3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_diabatic_diff_salt_tend_2d, work_2d, CS%diag)
+
+    if (CS%id_diabatic_diff_saln_tend > 0) &
+      call post_data(CS%id_diabatic_diff_saln_tend, work_3d, CS%diag, alt_h=h)
+
+    ! salt tendency
+    if (CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work_3d(i,j,k) = h(i,j,k) * GV%H_to_kg_m2 * ppt2mks * work_3d(i,j,k)
+      enddo ; enddo ; enddo
+      if (CS%id_diabatic_diff_salt_tend > 0) then
+        call post_data(CS%id_diabatic_diff_salt_tend, work_3d, CS%diag, alt_h=h)
+      endif
+      if (CS%id_diabatic_diff_salt_tend_2d > 0) then
+        do j=js,je ; do i=is,ie
+          work_2d(i,j) = 0.0
+          do k=1,nz
+            work_2d(i,j) = work_2d(i,j) + work_3d(i,j,k)
+          enddo
+        enddo ; enddo
+        call post_data(CS%id_diabatic_diff_salt_tend_2d, work_2d, CS%diag)
+      endif
     endif
   endif
 
