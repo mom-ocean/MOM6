@@ -155,11 +155,11 @@ type, public :: MOM_control_struct ; private
     T, &            !< potential temperature [degC]
     S               !< salinity [ppt]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    u,  &           !< zonal velocity component [m s-1]
+    u,  &           !< zonal velocity component [L T-1 ~> m s-1]
     uh, &           !< uh = u * h * dy at u grid points [H L2 T-1 ~> m3 s-1 or kg s-1]
     uhtr            !< accumulated zonal thickness fluxes to advect tracers [H L2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    v,  &           !< meridional velocity [m s-1]
+    v,  &           !< meridional velocity [L T-1 ~> m s-1]
     vh, &           !< vh = v * h * dx at v grid points [H L2 T-1 ~> m3 s-1 or kg s-1]
     vhtr            !< accumulated meridional thickness fluxes to advect tracers [H L2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ssh_rint
@@ -461,8 +461,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     ssh         ! sea surface height, which may be based on eta_av [m]
 
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component [m s-1]
-    v => NULL(), & ! v : meridional velocity component [m s-1]
+    u => NULL(), & ! u : zonal velocity component [L T-1 ~> m s-1]
+    v => NULL(), & ! v : meridional velocity component [L T-1 ~> m s-1]
     h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
   real, dimension(:,:), pointer :: &
     p_surf => NULL() ! A pointer to the ocean surface pressure [Pa].
@@ -492,7 +492,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   call cpu_clock_begin(id_clock_other)
 
   if (CS%debug) then
-    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
+    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US)
   endif
 
   showCallTree = callTree_showQuery()
@@ -598,7 +598,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   if (CS%debug) then
     if (cycle_start) &
-      call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US, vel_scale=1.0)
+      call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US)
     if (cycle_start) call check_redundant("Before steps ", u, v, G)
     if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, US, haloshift=0)
     if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
@@ -614,14 +614,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     Time_local = Time_start + real_to_time(rel_time)
 
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
-
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
-    enddo ; enddo ; enddo
 
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
@@ -800,14 +792,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
     endif
 
-    !### This will be removed later.
-    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      u(I,j,k) = US%L_T_to_m_s*u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      v(i,J,k) = US%L_T_to_m_s*v(i,J,k)
-    enddo ; enddo ; enddo
-
     if (do_dyn .and. .not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
 
@@ -837,12 +821,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   enddo ; enddo ; endif
 
   if (CS%ensemble_ocean) then
-      ! update the time for the next analysis step if needed
-      call set_analysis_time(CS%Time,CS%odaCS)
-      ! store ensemble vector in odaCS
-      call set_prior_tracer(CS%Time, G, GV, CS%h, CS%tv, CS%odaCS)
-      ! call DA interface
-      call oda(CS%Time,CS%odaCS)
+    ! update the time for the next analysis step if needed
+    call set_analysis_time(CS%Time,CS%odaCS)
+    ! store ensemble vector in odaCS
+    call set_prior_tracer(CS%Time, G, GV, CS%h, CS%tv, CS%odaCS)
+    ! call DA interface
+    call oda(CS%Time,CS%odaCS)
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
@@ -870,7 +854,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
                               G, CS%sum_output_CSp)
 
   if (MOM_state_is_synchronized(CS)) &
-    call write_energy(CS%u, CS%v, CS%h, CS%tv, Time_local, CS%nstep_tot, &
+    call write_energy(US%L_T_to_m_s*CS%u, US%L_T_to_m_s*CS%v, CS%h, CS%tv, Time_local, CS%nstep_tot, &
                       G, GV, US, CS%sum_output_CSp, CS%tracer_flow_CSp, &
                       dt_forcing=real_to_time(time_interval) )
 
@@ -2199,7 +2183,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     G%ke = GV%ke ; G%g_Earth = GV%mks_g_Earth
   endif
 
-
   ! At this point, all user-modified initialization code has been called.  The
   ! remainder of this subroutine is controlled by the parameters that have
   ! have already been set.
@@ -2309,14 +2292,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call set_visc_init(Time, G, GV, US, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
   call thickness_diffuse_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
 
-  !### This is temporary and will be deleted when the units of the velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    CS%u(I,j,k) = US%m_s_to_L_T*CS%u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    CS%v(i,J,k) = US%m_s_to_L_T*CS%v(i,J,k)
-  enddo ; enddo ; enddo
-
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
@@ -2366,14 +2341,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, US, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
-
-  !### This is temporary and will be deleted when the units of the velocities have changed.
-  do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    CS%u(I,j,k) = US%L_T_to_m_s*CS%u(I,j,k)
-  enddo ; enddo ; enddo
-  do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    CS%v(i,J,k) = US%L_T_to_m_s*CS%v(i,J,k)
-  enddo ; enddo ; enddo
 
   if (associated(CS%sponge_CSp)) &
     call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
@@ -2536,7 +2503,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     deallocate(restart_CSp_tmp)
   endif
 
-  call write_energy(CS%u, CS%v, CS%h, CS%tv, Time, 0, G, GV, US, &
+  call write_energy(US%L_T_to_m_s*CS%u, US%L_T_to_m_s*CS%v, CS%h, CS%tv, Time, 0, G, GV, US, &
                     CS%sum_output_CSp, CS%tracer_flow_CSp)
 
   call callTree_leave("finish_MOM_initialization()")
@@ -2726,12 +2693,13 @@ subroutine extract_surface_state(CS, sfc_state)
 
   ! local
   real :: hu, hv  ! Thicknesses interpolated to velocity points [H ~> m or kg m-2]
-  type(ocean_grid_type), pointer :: G => NULL() !< pointer to a structure containing
+  type(ocean_grid_type),   pointer :: G => NULL() !< pointer to a structure containing
                                       !! metrics and related information
-  type(verticalGrid_type), pointer :: GV => NULL()
-  real, dimension(:,:,:), pointer :: &
-    u => NULL(), & !< u : zonal velocity component [m s-1]
-    v => NULL(), & !< v : meridional velocity component [m s-1]
+  type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
+  type(unit_scale_type),   pointer :: US => NULL() !< structure containing various unit conversion factors
+  real, dimension(:,:,:),  pointer :: &
+!   u => NULL(), & !< u : zonal velocity component [m s-1]
+!   v => NULL(), & !< v : meridional velocity component [m s-1]
     h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
   real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m]
   real :: depth_ml           !< Depth over which to average to determine mixed
@@ -2749,12 +2717,12 @@ subroutine extract_surface_state(CS, sfc_state)
   character(240) :: msg
 
   call callTree_enter("extract_surface_state(), MOM.F90")
-  G => CS%G ; GV => CS%GV
+  G => CS%G ; GV => CS%GV ; US => CS%US
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
   isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
-  u => CS%u ; v => CS%v ; h => CS%h
+  h => CS%h
 
   use_temperature = associated(CS%tv%T)
 
@@ -2788,10 +2756,10 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%SSS(i,j) = CS%tv%S(i,j,1)
     enddo ; enddo ; endif
     do j=js,je ; do I=is-1,ie
-      sfc_state%u(I,j) = u(I,j,1)
+      sfc_state%u(I,j) = US%L_T_to_m_s * CS%u(I,j,1)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      sfc_state%v(i,J) = v(i,J,1)
+      sfc_state%v(i,J) = US%L_T_to_m_s * CS%v(i,J,1)
     enddo ; enddo
 
   else  ! (CS%Hmix >= 0.0)
@@ -2864,7 +2832,7 @@ subroutine extract_surface_state(CS, sfc_state)
           else
             dh = 0.0
           endif
-          sfc_state%v(i,J) = sfc_state%v(i,J) + dh * v(i,J,k)
+          sfc_state%v(i,J) = sfc_state%v(i,J) + dh * US%L_T_to_m_s * CS%v(i,J,k)
           depth(i) = depth(i) + dh
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
@@ -2890,7 +2858,7 @@ subroutine extract_surface_state(CS, sfc_state)
           else
             dh = 0.0
           endif
-          sfc_state%u(I,j) = sfc_state%u(I,j) + dh * u(I,j,k)
+          sfc_state%u(I,j) = sfc_state%u(I,j) + dh * US%L_T_to_m_s * CS%u(I,j,k)
           depth(I) = depth(I) + dh
         enddo ; enddo
         ! Calculate the average properties of the mixed layer depth.
@@ -2902,10 +2870,10 @@ subroutine extract_surface_state(CS, sfc_state)
       enddo ! end of j loop
     else ! Hmix_UV<=0.
       do j=js,je ; do I=is-1,ie
-        sfc_state%u(I,j) = u(I,j,1)
+        sfc_state%u(I,j) = US%L_T_to_m_s * CS%u(I,j,1)
       enddo ; enddo
       do J=js-1,je ; do i=is,ie
-        sfc_state%v(i,J) = v(i,J,1)
+        sfc_state%v(i,J) = US%L_T_to_m_s * CS%v(i,J,1)
       enddo ; enddo
     endif
   endif  ! (CS%Hmix >= 0.0)

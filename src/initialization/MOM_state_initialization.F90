@@ -126,10 +126,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                               intent(out)   :: u    !< The zonal velocity that is being
-                                                    !! initialized [m s-1]
+                                                    !! initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                               intent(out)   :: v    !< The meridional velocity that is being
-                                                    !! initialized [m s-1]
+                                                    !! initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                               intent(out)   :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),      intent(inout) :: tv   !< A structure pointing to various thermodynamic
@@ -153,9 +153,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   character(len=200) :: filename2  ! The name of an input files.
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
-  real :: H_rescale ! A rescaling factor for thicknesses from the representation in
-                    ! a restart file to the internal representation in this run.
-  real :: dt        ! The baroclinic dynamics timestep for this run [s].
+  real :: H_rescale   ! A rescaling factor for thicknesses from the representation in
+                      ! a restart file to the internal representation in this run.
+  real :: vel_rescale ! A rescaling factor for velocities from the representation in
+                      ! a restart file to the internal representation in this run.
+  real :: dt          ! The baroclinic dynamics timestep for this run [s].
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -424,9 +426,19 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
           "Unrecognized velocity configuration "//trim(config))
   end select
 
+  ! This rescaling should be incorporated into the calls above.
+  if (new_sim) then
+    do k=1,GV%ke ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      u(I,j,k) = US%m_s_to_L_T*u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,GV%ke ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      v(i,J,k) = US%m_s_to_L_T*v(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
-    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
+    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%m_s_to_L_T)
   endif
 
   ! Optionally convert the thicknesses from m to kg m-2.  This is particularly
@@ -493,6 +505,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       H_rescale = GV%m_to_H / GV%m_to_H_restart
       do k=1,nz ; do j=js,je ; do i=is,ie ; h(i,j,k) = H_rescale * h(i,j,k) ; enddo ; enddo ; enddo
     endif
+    if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+         ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
+      vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
+      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IeDB ; u(I,j,k) = vel_rescale * u(I,j,k) ; enddo ; enddo ; enddo
+      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; v(i,J,k) = vel_rescale * v(i,J,k) ; enddo ; enddo ; enddo
+    endif
   endif
 
   if ( use_temperature ) then
@@ -535,7 +553,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
-      case("RGC"); call RGC_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
+      case("RGC"); call RGC_initialize_sponges(G, GV, tv, US%L_T_to_m_s*u(:,:,:), US%L_T_to_m_s*v(:,:,:), PF, useALE, &
                                                      sponge_CSp, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, GV, use_temperature, tv, PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, PF, &
