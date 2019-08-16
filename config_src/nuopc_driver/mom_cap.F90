@@ -995,7 +995,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  
   call ocean_model_init(ocean_public, ocean_state, time0, timenow, input_restart_file=trim(restartfile))
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
