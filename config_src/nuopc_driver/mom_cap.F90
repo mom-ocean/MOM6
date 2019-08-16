@@ -845,6 +845,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   ! get current time
   timenow = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
+  if (is_root_pe()) then
+    write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+  endif
+
   ! get start/reference time
   call ESMF_ClockGet(CLOCK, refTime=MyTime, RC=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -859,6 +863,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     return  ! bail out
 
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+
+  if (is_root_pe()) then
+    write(logunit,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+  endif
 
   ! rsd need to figure out how to get this without share code
   !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
@@ -987,11 +995,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  if (len_trim(restartfile) > 0) then
-     call ocean_model_init(ocean_public, ocean_state, time0, timenow, input_restart_file=trim(restartfile))
-  else
-     call ocean_model_init(ocean_public, ocean_state, time0, timenow)
-  endif
+  
+  call ocean_model_init(ocean_public, ocean_state, time0, timenow, input_restart_file=trim(restartfile))
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
