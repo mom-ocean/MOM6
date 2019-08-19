@@ -41,7 +41,6 @@ type, public :: MEKE_CS ; private
   real :: MEKE_min_gamma!< Minimum value of gamma_b^2 allowed [nondim]
   real :: MEKE_Ct       !< Coefficient in the \f$\gamma_{bt}\f$ expression [nondim]
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
-  logical :: Jansen15_drag  !< If true use the bottom drag formulation from Jansen et al. (2015)
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
@@ -319,37 +318,22 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     if (use_drag_rate) then
       ! Calculate a viscous drag rate (includes BBL contributions from mean flow and eddies)
 !$OMP do
-      if (CS%Jansen15_drag) then
-        do j=js,je ; do i=is,ie
-          drag_rate(i,j) = (cdrag2/MAX(1.0,G%bathyT(i,j))) * sqrt(CS%MEKE_Uscale**2 + drag_rate_visc(i,j)**2 + &
-             2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) * 2.0 * bottomFac2(i,j)*MEKE%MEKE(i,j)
-        enddo ; enddo
-      else
-        do j=js,je ; do i=is,ie
-          drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 &
-             + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
-        enddo ; enddo
-      endif
+      do j=js,je ; do i=is,ie
+        drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 &
+           + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+      enddo ; enddo
     endif
 
     ! First stage of Strang splitting
 !$OMP do
-    if (CS%Jansen15_drag) then
-      do j=js,je ; do i=is,ie
-        ldamping = CS%MEKE_damping + drag_rate(i,j)
-        MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) - MIN(MEKE%MEKE(i,j),sdt_damp*drag_rate(i,j))
-        MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
-      enddo ; enddo
-    else
-      do j=js,je ; do i=is,ie
-        ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
-        if (MEKE%MEKE(i,j)<0.) ldamping = 0.
-        ! notice that the above line ensures a damping only if MEKE is positive,
-        ! while leaving MEKE unchanged if it is negative
-        MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
-        MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
-      enddo ; enddo
-    endif
+    do j=js,je ; do i=is,ie
+      ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
+      if (MEKE%MEKE(i,j)<0.) ldamping = 0.
+      ! notice that the above line ensures a damping only if MEKE is positive,
+      ! while leaving MEKE unchanged if it is negative
+      MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
+      MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
+    enddo ; enddo
 !$OMP end parallel
 
     if (CS%kh_flux_enabled .or. CS%MEKE_K4 >= 0.0) then
@@ -495,26 +479,18 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         ! Recalculate the drag rate, since MEKE has changed.
         if (use_drag_rate) then
 !$OMP do
-          if (CS%Jansen15_drag) then
-            do j=js,je ; do i=is,ie
-              ldamping = CS%MEKE_damping + drag_rate(i,j)
-              MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) -sdt_damp*drag_rate(i,j)
-              MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
-            enddo ; enddo
-          else
-            do j=js,je ; do i=is,ie
-              drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 &
-              + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
-            enddo ; enddo
-            do j=js,je ; do i=is,ie
-              ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
-              if (MEKE%MEKE(i,j)<0.) ldamping = 0.
-              ! notice that the above line ensures a damping only if MEKE is positive,
-              ! while leaving MEKE unchanged if it is negative
-              MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
-              MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
-            enddo ; enddo
-          endif
+          do j=js,je ; do i=is,ie
+            drag_rate(i,j) = (Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 &
+            + cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+          enddo ; enddo
+          do j=js,je ; do i=is,ie
+            ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
+            if (MEKE%MEKE(i,j)<0.) ldamping = 0.
+            ! notice that the above line ensures a damping only if MEKE is positive,
+            ! while leaving MEKE unchanged if it is negative
+            MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
+            MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
+          enddo ; enddo
         endif
 !$OMP do
       endif
@@ -1008,9 +984,6 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_USCALE", CS%MEKE_Uscale, &
                  "The background velocity that is combined with MEKE to "//&
                  "calculate the bottom drag.", units="m s-1", default=0.0)
-  call get_param(param_file, mdl, "MEKE_JANSEN15_DRAG", CS%Jansen15_drag, &
-                 "If true, use the bottom drag formulation from Jansen et al. (2015) "//&
-                 "to calculate the drag acting on MEKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_GM_SRC_ALT", CS%GM_src_alt, &
                  "If true, use the GM energy conversion form S^2*N^2*kappa rather "//&
                  "than the streamfunction for the MEKE GM source term.", default=.false.)

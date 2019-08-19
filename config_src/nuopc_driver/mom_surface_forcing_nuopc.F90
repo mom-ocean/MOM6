@@ -1,5 +1,5 @@
 !> Converts the input ESMF data (import data) to a MOM-specific data type (surface_forcing_CS).
-module MOM_surface_forcing
+module MOM_surface_forcing_nuopc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -219,7 +219,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
   logical,       optional, intent(in)    :: restore_salt !< If true, salinity is restored to a target value.
   logical,       optional, intent(in)    :: restore_temp !< If true, temperature is restored to a target value.
 
-  ! local varibles
+  ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     data_restore,  & !< The surface value toward which to restore [g/kg or degC]
     SST_anom,      & !< Instantaneous sea surface temperature anomalies from a target value [deg C]
@@ -531,17 +531,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
                       (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
 
-      !   The following contribution appears to be calculating the volume flux of sea-ice
-      ! melt. This calculation is clearly WRONG if either sea-ice has variable
-      ! salinity or the sea-ice is completely fresh.
-      !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
-      ! is constant.
-      !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      ! GMM: as stated above, the following is wrong. CIME deals with volume/mass and
-      ! heat from sea ice/snow via seaice_melt and seaice_melt_heat, respectively.
-      if (associated(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
-                     (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
     enddo ; enddo
 
@@ -684,9 +673,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   endif
   forces%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
 
+  ! TODO: this does not seem correct for NEMS
+#ifdef CESMCOUPLED
+  wind_stagger = AGRID
+#else
   wind_stagger = CS%wind_stagger
-  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
-      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
+#endif
+
   if (wind_stagger == BGRID_NE) then
     ! This is necessary to fill in the halo points.
     taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
@@ -761,8 +754,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     enddo ; enddo
 
   elseif (wind_stagger == AGRID) then
-    call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, &
-                     stagger=AGRID, halo=1)
+    call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, stagger=AGRID, halo=1)
 
     do j=js,je ; do I=Isq,Ieq
       forces%taux(I,j) = 0.0
@@ -1006,7 +998,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "MOM_surface_forcing"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_surface_forcing_nuopc"  ! This module's name.
   character(len=48)  :: stagger
   character(len=48)  :: flnam
   character(len=240) :: basin_file
@@ -1375,4 +1367,4 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
 
 end subroutine ice_ocn_bnd_type_chksum
 
-end module MOM_surface_forcing
+end module MOM_surface_forcing_nuopc
