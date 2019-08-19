@@ -737,8 +737,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
   type(ocean_internalstate_wrapper)      :: ocean_internalstate
   type(ocean_grid_type),         pointer :: ocean_grid => NULL()
-  type(time_type)                        :: Run_len      ! length of experiment
-  type(time_type)                        :: Time
+  type(time_type)                        :: Run_len      !< length of experiment
+  type(time_type)                        :: time0        !< Start time of coupled model's calendar.
+  type(time_type)                        :: time_start   !< The time at which to initialize the ocean model
   type(time_type)                        :: Time_restart
   type(time_type)                        :: DT
   integer                                :: DT_OCEAN
@@ -841,7 +842,31 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   ! this ocean connector will be driven at set interval
   DT = set_time (DT_OCEAN, 0)
-  Time = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+  ! get current time
+  time_start = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+
+  if (is_root_pe()) then
+    write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+  endif
+
+  ! get start/reference time
+  call ESMF_ClockGet(CLOCK, refTime=MyTime, RC=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+
+  call ESMF_TimeGet (MyTime, YY=YEAR, MM=MONTH, DD=DAY, H=HOUR, M=MINUTE, S=SECOND, RC=rc )
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+
+  time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+
+  if (is_root_pe()) then
+    write(logunit,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+  endif
 
   ! rsd need to figure out how to get this without share code
   !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
@@ -970,11 +995,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  if (len_trim(restartfile) > 0) then
-     call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file=trim(restartfile))
-  else
-     call ocean_model_init(ocean_public, ocean_state, Time, Time)
-  endif
+  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfile))
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
