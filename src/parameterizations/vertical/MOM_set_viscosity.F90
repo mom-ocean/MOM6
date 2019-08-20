@@ -1735,11 +1735,10 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                   "Turbulent kinetic energy per unit mass at interfaces", "m2 s-2", z_grid='i')
   endif
 
-  ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
-  call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
-  call register_restart_field(visc%Kv_slow, "Kv_slow", .false., restart_CS, &
-                "Vertical turbulent viscosity at interfaces due to slow processes", &
-                "m2 s-1", z_grid='i')
+  if (useKPP) then
+    ! MOM_bkgnd_mixing uses Kv_slow when KPP is defined.
+    call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
+  endif
 
   ! visc%MLD is used to communicate the state of the (e)PBL or KPP to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
@@ -1939,23 +1938,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
-  call get_param(param_file, mdl, "ADD_KV_SLOW", visc%add_Kv_slow, &
-                 "If true, the background vertical viscosity in the interior "//&
-                 "(i.e., tidal + background + shear + convection) is added "//&
-                 "when computing the coupling coefficient. The purpose of this "//&
-                 "flag is to be able to recover previous answers and it will likely "//&
-                 "be removed in the future since this option should always be true.", &
-                  default=.false.)
-
   call get_param(param_file, mdl, "USE_KPP", use_KPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  do_not_log=.true., default=.false.)
-
-  if (use_KPP .and. visc%add_Kv_slow) call MOM_error(FATAL,"set_visc_init: "//&
-         "When USE_KPP=True, ADD_KV_SLOW must be false. Otherwise vertical "//&
-         "viscosity due to slow processes will be double counted. Please set "//&
-         "ADD_KV_SLOW=False.")
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
@@ -2049,11 +2035,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       enddo ; enddo ; enddo
     endif ; endif
 
-    if (associated(visc%Kv_slow)) then ; if (query_initialized(visc%Kv_slow, "Kv_slow", restart_CS)) then
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        visc%Kv_slow(i,j,k) = Z_rescale**2 * visc%Kv_slow(i,j,k)
-      enddo ; enddo ; enddo
-    endif ; endif
   endif
 
 end subroutine set_visc_init
