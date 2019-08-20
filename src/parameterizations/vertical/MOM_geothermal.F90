@@ -35,6 +35,8 @@ type, public :: geothermal_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                              !! regulate the timing of diagnostic output.
+  integer :: id_internal_heat_tend_3d = -1 ! ID for 3D diagnostic of internal heat
+
 end type geothermal_CS
 
 contains
@@ -100,6 +102,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   real :: Irho_cp       ! inverse of heat capacity per unit layer volume
                         ! [degC H m2 J-1 ~> degC m3 J-1 or degC kg J-1]
 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: temp_old  ! Temperature of each layer before any heat is added, for diagnostics [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_old     ! Thickness of each layer before any heat is added, for diagnostics [m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d   ! Scratch variable used to calculate change in heat due to geothermal
+  real :: Idt           ! inverse of the timestep [s-1]
+
   logical :: do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
   integer :: isj, iej, num_start, num_left, nkmb, k_tgt
@@ -119,6 +126,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
+  Idt       = 1/dt
 
   if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
@@ -135,6 +143,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 !$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
 !$OMP                                  wt_in_place,dTemp,dRcv,h_transfer,heating, &
 !$OMP                                  I_h)
+
+! Save temperature and thickness before any changes are made (for diagnostic)
+temp_old = tv%T
+h_old = h
 
   do j=js,je
     ! 1. Only work on columns that are being heated.
@@ -304,6 +316,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
     enddo ; endif
   enddo ! j-loop
 
+! Calculate heat tendency due to addition and transfer of internal heat
+if (CS%id_internal_heat_tend_3d > 0) then
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    work_3d(i,j,k) = GV%H_to_kg_m2 * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
+  enddo ; enddo ; enddo
+  call post_data(CS%id_internal_heat_tend_3d, work_3d, CS%diag, alt_h = h_old)
+endif
+
 !  do i=is,ie ; do j=js,je
 !    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_kg_m2 * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
@@ -392,6 +412,12 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
 
+  ! Diagnostic for tendency due to internal heat (in 3d)
+  CS%id_internal_heat_tend_3d = register_diag_field('ocean_model',&
+        'internal_heat_tend_3d', diag%axesTL, Time,             &
+        'Internal heat tendency in 3D, reveals layer(s) that heat is added to','W m-2',&
+        v_extensive = .true.)
+  
 end subroutine geothermal_init
 
 !> Clean up and deallocate memory associated with the geothermal heating module.
