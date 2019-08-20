@@ -991,49 +991,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       endif
     endif; endif
 
-    !   if (OBC%open_v_BCs_exist_globally) then
-    !     do n=1,OBC%number_of_segments
-    !       segment=>OBC%segment(n)
-    !       if (segment%specified) cycle
-    !       if (.not. associated(segment%tr_Reg)) cycle
-    !       if (segment%is_N_or_S .and. &
-    !          (J >= segment%HI%JsdB .and. J<= segment%HI%JedB)) then
-    !         jshift=0
-    !         jdir=1
-    !         if (segment%direction == OBC_DIRECTION_S) then
-    !             jshift=1
-    !             jdir=-1
-    !         endif
-    !         do i=segment%HI%isd,segment%HI%ied
-    !         ! update the reservoir tracer concentration implicitly
-    !         ! using Backward-Euler timestep
-    !           do m=1,ntr
-    !             if (associated(segment%tr_Reg%Tr(m)%tres)) then
-    !               vhh(i,J)=vhr(i,J,k)
-    !               v_L_in=max(jdir*vhh(i,J)*segment%Tr_InvLscale3_in,0.)
-    !               v_L_out=min(jdir*vhh(i,J)*segment%Tr_InvLscale3_out,0.)
-    !               fac1=1.0+dt*(v_L_in-v_L_out)
-    !               segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-    !                    dt*v_L_in*Tr(m)%t(i,j+jshift,k) - &
-    !                    dt*v_L_out*segment%tr_Reg%Tr(m)%t(i,j,k))
-    !             endif
-    !           enddo
-    !           ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
-    !           if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
-    !               (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
-    !             vhh(i,J) = vhr(i,J,k)
-    !             do m=1,ntr
-    !               if (associated(segment%tr_Reg%Tr(m)%t)) then
-    !                 flux_y(i,m,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
-    !               else ; flux_y(i,m,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
-    !             enddo
-    !           endif
-    !         enddo
-    !       endif
-    !     enddo
-    !   endif
-    !endif; endif
-
   else ! not domore_v.
     do i=is,ie ; vhh(i,J) = 0.0 ; enddo
     do m=1,ntr ; do i=is,ie ; flux_y(i,m,J) = 0.0 ; enddo ; enddo
