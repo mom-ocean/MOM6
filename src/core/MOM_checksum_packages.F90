@@ -10,6 +10,7 @@ use MOM_debugging, only : hchksum, uvchksum
 use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -158,7 +159,7 @@ end subroutine MOM_surface_chksum
 ! =============================================================================
 
 !> Write out chksums for the model's accelerations
-subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce, &
+subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, pbce, &
                             u_accel_bt, v_accel_bt, symmetric)
   character(len=*),         intent(in) :: mesg !< A message that appears on the chksum lines.
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure.
@@ -177,10 +178,11 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
                                                !! (equal to -dM/dy) [m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: diffu !< Zonal acceleration due to convergence of the
-                                                !! along-isopycnal stress tensor [m s-2].
+                                                !! along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: diffv !< Meridional acceleration due to convergence of
-                                                !! the along-isopycnal stress tensor [m s-2].
+                                                !! the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
+  type(unit_scale_type),    intent(in) :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
                                                !! due to free surface height anomalies
@@ -205,9 +207,9 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   ! and js...je as their extent.
   call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym)
   call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym)
-  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym)
+  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, scale=US%s_to_T)
   if (present(pbce)) &
-    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H)
+    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H*US%L_T_to_m_s**2)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
     call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym)
 end subroutine MOM_accel_chksum

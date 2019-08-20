@@ -13,6 +13,7 @@ use MOM_EOS,                   only : calculate_density, calculate_density_deriv
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_interface_heights,     only : find_eta
+use MOM_isopycnal_slopes,      only : vert_fill_TS
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_unit_scaling,          only : unit_scale_type
@@ -24,7 +25,8 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public thickness_diffuse, thickness_diffuse_init, thickness_diffuse_end
-public vert_fill_TS, thickness_diffuse_get_KH
+! public vert_fill_TS
+public thickness_diffuse_get_KH
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -354,8 +356,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
 !$OMP do
   if (CS%use_GME_thickness_diffuse) then
-    do k=1,nz+1 ; do j=js-1,je ; do I=is,ie
-      CS%KH_v_GME(I,j,k) = KH_v(I,j,k)
+    do k=1,nz+1 ; do J=js-1,je ; do i=is,ie
+      CS%KH_v_GME(i,J,k) = KH_v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -640,10 +642,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = GV%g_Earth * GV%H_to_m
+  G_scale = GV%g_Earth*US%L_to_m**2*US%s_to_T**2 * GV%H_to_m
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
-  G_rho0 = GV%g_Earth / GV%Rho0
+  G_rho0 = GV%g_Earth*US%L_to_m**2*US%s_to_T**2 / GV%Rho0
   N2_floor = CS%N2_floor*US%Z_to_m**2
 
   use_EOS = associated(tv%eqn_of_state)
@@ -664,7 +666,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   find_work = (associated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, GV, 1)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, 1, larger_h_denom=.true.)
   endif
 
   if (CS%use_FGNV_streamfn .and. .not. associated(cg1)) call MOM_error(FATAL, &
@@ -859,7 +861,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
             Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*US%m_to_Z*Slope)
-            hN2_u(I,K) = GV%g_prime(K)
+            hN2_u(I,K) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
           hN2_u(I,K) = N2_floor * dz_neglect
@@ -1108,7 +1110,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
             Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*US%m_to_Z*Slope)
-            hN2_v(i,K) = GV%g_prime(K)
+            hN2_v(i,K) = US%L_to_m**2*US%s_to_T**2*GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
           hN2_v(i,K) = N2_floor * dz_neglect
@@ -1744,84 +1746,6 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   enddo  ! n-loop over u- and v- directions.
 
 end subroutine add_detangling_Kh
-
-!> Fills tracer values in massless layers with sensible values by diffusing
-!! vertically with a (small) constant diffusivity.
-subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
-  type(ocean_grid_type),                    intent(in)  :: G     !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV    !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_in  !< Input temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_in  !< Input salinity [ppt]
-  real,                                     intent(in)  :: kappa !< Constant diffusivity to use [Z2 T-1 ~> m2 s-1]
-  real,                                     intent(in)  :: dt    !< Time increment [T ~> s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T_f   !< Filled temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S_f   !< Filled salinity [ppt]
-  integer,                        optional, intent(in)  :: halo_here !< Number of halo points to work on,
-                                                                 !! 0 by default
-  ! Local variables
-  real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
-                                   ! between layers in a timestep [H ~> m or kg m-2].
-  real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
-  real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
-  real :: h0                       ! A negligible thickness to allow for zero
-                                   ! thicknesses [H ~> m or kg m-2].
-  real :: h_neglect                ! A thickness that is so small it is usually lost in roundoff
-                                   ! and can be neglected [H ~> m or kg m-2]. 0 < h_neglect << h0.
-  real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
-                                   ! added to ensure positive definiteness [H ~> m or kg m-2].
-  integer :: i, j, k, is, ie, js, je, nz, halo
-
-  halo=0 ; if (present(halo_here)) halo = max(halo_here,0)
-
-  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  nz = G%ke
-  h_neglect = GV%H_subroundoff
-  kap_dt_x2 = (2.0*kappa*dt)*GV%Z_to_H**2
-  h0 = 1.0e-16*sqrt(kappa*dt)*GV%Z_to_H
-
-  if (kap_dt_x2 <= 0.0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
-    enddo ; enddo ; enddo
-  else
-!$OMP parallel do default(none) private(ent,b1,d1,c1,h_tr)   &
-!$OMP             shared(is,ie,js,je,nz,kap_dt_x2,h,h0,h_neglect,T_f,S_f,T_in,S_in)
-    do j=js,je
-      do i=is,ie
-        ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
-        h_tr = h(i,j,1) + h_neglect
-        b1(i) = 1.0 / (h_tr + ent(i,2))
-        d1(i) = b1(i) * h(i,j,1)
-        T_f(i,j,1) = (b1(i)*h_tr)*T_in(i,j,1)
-        S_f(i,j,1) = (b1(i)*h_tr)*S_in(i,j,1)
-      enddo
-      do k=2,nz-1 ; do i=is,ie
-        ent(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h0)
-        h_tr = h(i,j,k) + h_neglect
-        c1(i,k) = ent(i,K) * b1(i)
-        b1(i) = 1.0 / ((h_tr + d1(i)*ent(i,K)) + ent(i,K+1))
-        d1(i) = b1(i) * (h_tr + d1(i)*ent(i,K))
-        T_f(i,j,k) = b1(i) * (h_tr*T_in(i,j,k) + ent(i,K)*T_f(i,j,k-1))
-        S_f(i,j,k) = b1(i) * (h_tr*S_in(i,j,k) + ent(i,K)*S_f(i,j,k-1))
-      enddo ; enddo
-      do i=is,ie
-        c1(i,nz) = ent(i,nz) * b1(i)
-        h_tr = h(i,j,nz) + h_neglect
-        b1(i) = 1.0 / (h_tr + d1(i)*ent(i,nz))
-        T_f(i,j,nz) = b1(i) * (h_tr*T_in(i,j,nz) + ent(i,nz)*T_f(i,j,nz-1))
-        S_f(i,j,nz) = b1(i) * (h_tr*S_in(i,j,nz) + ent(i,nz)*S_f(i,j,nz-1))
-      enddo
-      do k=nz-1,1,-1 ; do i=is,ie
-        T_f(i,j,k) = T_f(i,j,k) + c1(i,k+1)*T_f(i,j,k+1)
-        S_f(i,j,k) = S_f(i,j,k) + c1(i,k+1)*S_f(i,j,k+1)
-      enddo ; enddo
-    enddo
-  endif
-
-end subroutine vert_fill_TS
 
 !> Initialize the thickness diffusion module/structure
 subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
