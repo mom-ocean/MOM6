@@ -44,7 +44,7 @@ jobs:
         - make \
             MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk \
             MOM_TARGET_SLUG=${TRAVIS_REPO_SLUG} \
-            MOM_TARGET_LOCAL_BRANCH=${TRAVIS_PULL_REQUEST_BRANCH} \
+            MOM_TARGET_LOCAL_BRANCH=${TRAVIS_BRANCH} \
             DO_REGRESSION_TESTS=${TRAVIS_PULL_REQUEST}
         - echo -en 'travis_fold:end:script.1\\r'
         - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
