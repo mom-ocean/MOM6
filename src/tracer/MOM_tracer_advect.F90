@@ -826,21 +826,21 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
               do m = 1,ntr ! replace tracers with OBC values
                 if (associated(segment%tr_Reg%Tr(m)%tres)) then
                    if (segment%direction == OBC_DIRECTION_S) then
-                      T_tmp(i,j,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                      T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                    else
-                      T_tmp(i,j+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                      T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                    endif
                 else
                    if (segment%direction == OBC_DIRECTION_S) then
-                      T_tmp(i,j,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                      T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
                    else
-                      T_tmp(i,j+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                      T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
                    endif
                 endif
               enddo
               do m = 1,ntr ! Apply update tracer values for slope calculation
                 do j=segment%HI%JsdB-1,segment%HI%JsdB+1
-                  Tp = T_tmp(i,j+1,m) ; Tc = T_tmp(i,j,m) ; Tm = T_tmp(i,j-1,m)
+                  Tp = T_tmp(i,m,j+1) ; Tc = T_tmp(i,m,j) ; Tm = T_tmp(i,m,j-1)
                   dMx = max( Tp, Tc, Tm ) - Tc
                   dMn= Tc - min( Tp, Tc, Tm )
                   slope_y(i,m,j) = G%mask2dCv(i,J)*G%mask2dCv(i,J-1) * &
