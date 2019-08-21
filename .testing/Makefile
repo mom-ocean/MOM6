@@ -84,9 +84,6 @@ build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 COVERAGE=1
 build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 build/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
 
-build/target/path_names: REMOTE=$(GIT_TARGET_REMOTE)
-build/%/path_names: REMOTE=.git/refs/heads/$(MOM_MERGED_BRANCH)
-
 build/asymmetric/path_names: GRID_SRC=config_src/dynamic
 build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
@@ -107,7 +104,19 @@ build/%/Makefile: build/%/path_names
 		path_names
 	git checkout @{-1}
 
-build/%/path_names: $(LIST_PATHS) $(REMOTE)
+# TODO: Merge the target and generic path_names rules
+# (Only dependency differs at the moment)
+
+build/target/path_names: $(LIST_PATHS) $(GIT_TARGET_REMOTE)
+	git checkout $(BRANCH)
+	mkdir -p $(@D)
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../src \
+		../../config_src/solo_driver \
+		../../$(GRID_SRC)
+	git checkout @{-1}
+
+build/%/path_names: $(LIST_PATHS) .git/refs/heads/$(MOM_MERGED_BRANCH)
 	git checkout $(BRANCH)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
