@@ -54,7 +54,7 @@ use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
 use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
-use mpp_domains_mod, only : mpp_define_io_domain
+use mpp_domains_mod, only : mpp_define_io_domain, mpp_get_io_domain_layout
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
@@ -775,7 +775,8 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes.
 
-  integer :: xsz, ysz, layout(2)
+  integer :: xsz, ysz, layout(2), io_layout(2)
+  !type(domain2d), pointer :: io_domain_ptr
   ! ice-ocean-boundary fields are always allocated using absolute indicies
   ! and have no halos.
   integer :: isc, iec, jsc, jec
@@ -788,7 +789,9 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
   endif
   call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
-  call mpp_define_io_domain(Ocean_sfc%Domain, Ocean_sfc%Domain%io_layout)
+  io_layout = mpp_get_io_domain_layout(input_domain)
+  call mpp_define_io_domain(Ocean_sfc%Domain, io_layout)
+  !io_domain_ptr=mpp_get_io_domain(input_domain)
 
   allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
              Ocean_sfc%s_surf (isc:iec,jsc:jec), &
