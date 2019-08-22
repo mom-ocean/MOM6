@@ -1574,7 +1574,7 @@ subroutine check_mask_val_consistency(val, mask, i, j)
 
   real, intent(in) :: val  !< value of flux/variable passed by IOB
   real, intent(in) :: mask !< value of ocean mask
-  real, intent(in) :: i, j !< model grid cell indices
+  integer, intent(in) :: i, j !< model grid cell indices
   ! Local variables
   character(len=48) :: ci, cj !< model grid cell indices as strings
   character(len=256) :: error_message !< error message to be displayed
