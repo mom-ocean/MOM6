@@ -29,25 +29,6 @@ MKMF_TEMPLATE ?= ncrc-gnu.mk
 #MKMF_TEMPLATE ?= ncrc-intel.mk
 
 #---
-# Repository configuration
-
-# NOTE: MOM_TARGET_REMOTE_NAME and MOM_MERGED_BRANCH are arbitrary
-# TODO: check for conflicts with existing branchs and remotes?
-# TODO: Define them appropriately (if at all) when DO_REGRESSION_TESTS is false
-
-# URL-friendly target repo name (TRAVIS_REPO_SLUG)
-MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
-MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
-
-# Target branch name (TRAVIS_BRANCH)
-MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
-
-MOM_TARGET_REMOTE_NAME ?= target
-MOM_TARGET_BRANCH := $(MOM_TARGET_REMOTE_NAME)/$(MOM_TARGET_LOCAL_BRANCH)
-
-MOM_MERGED_BRANCH ?= mergetest
-
-#---
 # Test configuration
 
 # Executables
@@ -55,14 +36,33 @@ BUILDS = symmetric asymmetric repro
 CONFIGS := $(foreach n,$(shell seq 0 3),tc$(n))
 TESTS = grids layouts restarts repros nans dims
 
-# DO_REGRESSION_TESTS obtained from $(TRAVIS_PULL_REQUEST)
-DO_REGRESSION_TESTS ?= "true"
-ifneq ($(DO_REGRESSION_TESTS), false)
+# The following variables are configured by Travis:
+#   DO_REGRESSION_TESTS: true if $(TRAVIS_PULL_REQUEST) is a PR number
+#   MOM_TARGET_SLUG: TRAVIS_REPO_SLUG
+#   MOM_TARGET_LOCAL_BRANCH: TRAVIS_BRANCH
+
+DO_REGRESSION_TESTS ?=
+ifeq ($(DO_REGRESSION_TESTS), true)
 	BUILDS += target
 	TEST += regressions
+
+	MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
+	MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
+
+	MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
+	MOM_TARGET_REMOTE_NAME ?= target
+	MOM_TARGET_BRANCH := $(MOM_TARGET_REMOTE_NAME)/$(MOM_TARGET_LOCAL_BRANCH)
 	GIT_TARGET_REMOTE = .git/refs/remotes/$(MOM_TARGET_BRANCH)
+
+	MOM_MERGED_BRANCH ?= mergetest
 else
+	MOM_TARGET_URL =
+	MOM_TARGET_LOCAL_BRANCH =
+	MOM_TARGET_BRANCH =
 	GIT_TARGET_REMOTE =
+
+	# Inert self-checkout of current branch
+	MOM_MERGED_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 endif
 
 
@@ -132,7 +132,7 @@ build/%/path_names: $(LIST_PATHS) .git/refs/heads/$(MOM_MERGED_BRANCH)
 # WARNING: Implicit dependency of GIT_TARGET_REMOTE and DO_REGRESSION_TESTS
 .git/refs/heads/$(MOM_MERGED_BRANCH): $(GIT_TARGET_REMOTE)
 	git checkout -b $(MOM_MERGED_BRANCH)
-	if [ $(DO_REGRESSION_TESTS) != "false" ]; then \
+	if [ $(DO_REGRESSION_TESTS) ]; then \
 		git merge --no-edit $(MOM_TARGET_BRANCH); \
 	fi
 	git checkout @{-1}
