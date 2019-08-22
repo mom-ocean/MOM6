@@ -4036,17 +4036,17 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
     allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
     OBC_CS%rx_normal(:,:,:) = 0.0
     vd = var_desc("rx_normal","m s-1", "Normal Phase Speed for EW OBCs",'u','L')
-    call register_restart_field(OBC_CS%rx_normal, vd, .true., restart_CSp)
+    call register_restart_field(OBC_CS%rx_normal, vd, .false., restart_CSp)
     allocate(OBC_CS%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
     OBC_CS%ry_normal(:,:,:) = 0.0
     vd = var_desc("ry_normal","m s-1", "Normal Phase Speed for NS OBCs",'v','L')
-    call register_restart_field(OBC_CS%ry_normal, vd, .true., restart_CSp)
+    call register_restart_field(OBC_CS%ry_normal, vd, .false., restart_CSp)
   endif
   if (OBC_CS%oblique_BCs_exist_globally) then
     allocate(OBC_CS%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke))
     OBC_CS%cff_normal(:,:,:) = 0.0
     vd = var_desc("cff_normal","m s-1", "denominator for oblique OBCs",'q','L')
-    call register_restart_field(OBC_CS%cff_normal, vd, .true., restart_CSp)
+    call register_restart_field(OBC_CS%cff_normal, vd, .false., restart_CSp)
   endif
 
 end subroutine open_boundary_register_restarts
