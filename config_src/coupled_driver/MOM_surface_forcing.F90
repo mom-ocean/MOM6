@@ -1579,7 +1579,7 @@ subroutine check_mask_val_consistency(val, mask, i, j)
   character(len=48) :: ci, cj !< model grid cell indices as strings
   character(len=256) :: error_message !< error message to be displayed
 
-  if (mask == 0.) .and. (val /= 0.) then
+  if ((mask == 0.) .and. (val /= 0.)) then
     write(ci, '(I8)') i
     write(cj, '(I8)') j
     error_message = "MOM_surface_forcing: found non-zero value over land "//&
