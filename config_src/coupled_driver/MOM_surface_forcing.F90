@@ -408,39 +408,51 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
 
     if (associated(IOB%lprec)) &
       fluxes%lprec(i,j) =  IOB%lprec(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%lprec(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%fprec)) &
       fluxes%fprec(i,j) = IOB%fprec(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%fprec(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%q_flux)) &
       fluxes%evap(i,j) = - IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%q_flux(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%runoff)) &
       fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%runoff(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%calving)) &
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%calving(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%ustar_berg)) &
       fluxes%ustar_berg(i,j) = US%m_to_Z*US%T_to_s * IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%ustar_berg(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%area_berg)) &
       fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%area_berg(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%mass_berg)) &
       fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%mass_berg(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%runoff_hflx)) &
       fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%runoff_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%calving_hflx)) &
       fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%calving_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%lw_flux)) &
       fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%lw_flux(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     if (associated(IOB%t_flux)) &
       fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    call check_mask_val_consistency(IOB%t_flux(i-i0,j-j0), G%mask2dT(i,j), i, j)
 
     fluxes%latent(i,j) = 0.0
     if (associated(IOB%fprec)) then
@@ -460,12 +472,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
 
     if (associated(IOB%sw_flux_vis_dir)) &
       fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
+    call check_mask_val_consistency(IOB%sw_flux_vis_dir(i-i0,j-j0), G%mask2dT(i,j), i, j)
     if (associated(IOB%sw_flux_vis_dif)) &
       fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
+    call check_mask_val_consistency(IOB%sw_flux_vis_dif(i-i0,j-j0), G%mask2dT(i,j), i, j)
     if (associated(IOB%sw_flux_nir_dir)) &
       fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
+    call check_mask_val_consistency(IOB%sw_flux_nir_dir(i-i0,j-j0), G%mask2dT(i,j), i, j)
     if (associated(IOB%sw_flux_nir_dif)) &
       fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
+    call check_mask_val_consistency(IOB%sw_flux_nir_dif(i-i0,j-j0), G%mask2dT(i,j), i, j)
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
@@ -476,11 +492,13 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
     if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
         fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        call check_mask_val_consistency(IOB%p(i-i0,j-j0), G%mask2dT(i,j), i, j)
         fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
         fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        call check_mask_val_consistency(IOB%p(i-i0,j-j0), G%mask2dT(i,j), i, j)
         fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
       enddo ; enddo
     endif
@@ -492,6 +510,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
     do j=js,je ; do i=is,ie
       fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
       fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -IOB%salt_flux(i-i0,j-j0) )
+      call check_mask_val_consistency(IOB%salt_flux(i-i0,j-j0), G%mask2dT(i,j), i, j)
     enddo ; enddo
   endif
 
@@ -1549,5 +1568,25 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
 
 end subroutine ice_ocn_bnd_type_chksum
+
+!> Check the values passed by IOB over land are zero
+subroutine check_mask_val_consistency(val, mask, i, j)
+
+  real, intent(in) :: val  !< value of flux/variable passed by IOB
+  real, intent(in) :: mask !< value of ocean mask
+  real, intent(in) :: i, j !< model grid cell indices
+  ! Local variables
+  character(len=48) :: ci, cj !< model grid cell indices as strings
+  character(len=256) :: error_message !< error message to be displayed
+
+  if (mask == 0.) .and. (val /= 0.) then
+    write(ci, '(I8)') i
+    write(cj, '(I8)') j
+    error_message = "MOM_surface_forcing: found non-zero value over land "//&
+                    "at point (i, j) = ("//trim(ci)//", "//trim(cj)//")"
+    call MOM_error(FATAL, error_message)
+  endif
+
+end subroutine
 
 end module MOM_surface_forcing
