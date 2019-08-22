@@ -102,15 +102,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   real :: Irho_cp       ! inverse of heat capacity per unit layer volume
                         ! [degC H m2 J-1 ~> degC m3 J-1 or degC kg J-1]
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: temp_old  ! Temperature of each layer
-                                                        ! before any heat is added,
-                                                        ! for diagnostics [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_old     ! Thickness of each layer
-                                                        ! before any heat is added,
-                                                        ! for diagnostics [m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d   ! Scratch variable used to
-                                                        ! calculate change in heat
-                                                        ! due to geothermal
+  real :: T_old         ! Temperature of each layer before any heat is added,
+                        ! for diagnostics [degC]
+  real, allocatable, dimension(:,:,:) :: h_old     ! Thickness of each layer before any heat is added,
+                                      ! for diagnostics [m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: work_3d   ! Scratch variable used to calculate change in heat
+                                      ! due to geothermal
   real :: Idt           ! inverse of the timestep [s-1]
 
   logical :: do_i(SZI_(G))
@@ -150,9 +147,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 !$OMP                                  wt_in_place,dTemp,dRcv,h_transfer,heating, &
 !$OMP                                  I_h)
 
-  ! Save temperature and thickness before any changes are made (for diagnostic)
-  temp_old = tv%T
-  h_old = h
+  ! Allocate diagnostic arrays if required
+  if (CS%id_internal_heat_tend_3d > 0) then
+    allocate(h_old(is:ie,js:je,nz)) ; h_old(:,:,:) = 0.0
+    allocate(work_3d(is:ie,js:je,nz)) ; work_3d(:,:,:) = 0.0
+  endif
 
   do j=js,je
     ! 1. Only work on columns that are being heated.
@@ -192,6 +191,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 
     do k=nz,1,-1
       do i=isj,iej ; if (do_i(i)) then
+
+        ! Save temperature and thickness before any changes are made (for diagnostic)
+        if (CS%id_internal_heat_tend_3d > 0) then
+          T_old = tv%T(i,j,k)
+          h_old(i,j,k) = h(i,j,k)
+        endif
 
         if (h(i,j,k) > Angstrom) then
           if ((h(i,j,k)-Angstrom) >= h_geo_rem(i)) then
@@ -312,6 +317,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
             ! endif
           endif
         endif
+
+        ! Calculate heat tendency due to addition and transfer of internal heat
+        if (CS%id_internal_heat_tend_3d > 0) then
+          work_3d(i,j,k) = ((GV%H_to_kg_m2 * tv%C_p) * Idt) * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * T_old)
+        endif
+
       endif ; enddo
       if (num_left <= 0) exit
     enddo ! k-loop
@@ -322,12 +333,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
     enddo ; endif
   enddo ! j-loop
 
-  ! Calculate heat tendency due to addition and transfer of internal heat
+  ! Post diagnostic of internal heat tendency in 3D
   if (CS%id_internal_heat_tend_3d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = GV%H_to_kg_m2 * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
-    enddo ; enddo ; enddo
     call post_data(CS%id_internal_heat_tend_3d, work_3d, CS%diag, alt_h = h_old)
+    deallocate(h_old)
+    deallocate(work_3d)
   endif
 
 !  do i=is,ie ; do j=js,je
@@ -421,7 +431,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   ! Diagnostic for tendency due to internal heat (in 3d)
   CS%id_internal_heat_tend_3d=register_diag_field('ocean_model', &
         'internal_heat_tend_3d', diag%axesTL, Time,              &
-        'Internal heat tendency in 3D, reveals layer(s) that heat is added to', &
+        '3D heat tendency due to internal (geothermal) sources', &
         'W m-2', v_extensive = .true.)
   
 end subroutine geothermal_init
