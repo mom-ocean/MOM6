@@ -8,5 +8,6 @@ dependencies:
   - python=3.6
   - sphinx
   - doxygen
+  - doxyrest
   - lua=5.3.4
   - ragel=6.9
