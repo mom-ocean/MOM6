@@ -339,16 +339,16 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 
   ! Post diagnostic of 3D tendencies (heat, temperature, and thickness) due to internal heat
   if (CS%id_internal_heat_heat_tendency > 0) then
-    call post_data(CS%id_internal_heat_heat_tendemcy, work_3d, CS%diag, alt_h = h_old)
+    call post_data(CS%id_internal_heat_heat_tendency, work_3d, CS%diag, alt_h = h_old)
   endif
   if (CS%id_internal_heat_temp_tendency > 0) then
-    do j=js,je; do i=is,ie; do k=ks,ke
+    do j=js,je; do i=is,ie; do k=nz,1,-1
       work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
     enddo; enddo; enddo
-    call post_data(CS%id_T_internal_heat_temp_tendency, work_3d, CS%diag, alt_h = h_old)
+    call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h = h_old)
   endif
   if (CS%id_internal_heat_h_tendency > 0) then
-    do j=js,je; do i=is,ie; do k=ks,ke
+    do j=js,je; do i=is,ie; do k=nz,1,-1
       work_3d(i,j,k) = Idt * (h(i,j,k) - h_old(i,j,k))
     enddo; enddo; enddo
     call post_data(CS%id_internal_heat_h_tendency, work_3d, CS%diag, alt_h = h_old)
@@ -455,7 +455,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
         'm OR kg m-2', v_extensive = .true.)
-  
+ 
 end subroutine geothermal_init
 
 !> Clean up and deallocate memory associated with the geothermal heating module.
