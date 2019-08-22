@@ -26,6 +26,7 @@ use MOM_open_boundary, only : open_boundary_query
 use MOM_open_boundary, only : set_tracer_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments
+use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
@@ -557,6 +558,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
+    ! Call this once to fill boundary arrays from fixed values
+    if (.not. OBC%needs_IO_for_data)  &
+      call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
+
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&

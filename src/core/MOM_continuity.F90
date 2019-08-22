@@ -12,6 +12,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -38,7 +39,7 @@ contains
 
 !> Time steps the layer thicknesses, using a monotonically limited, directionally split PPM scheme,
 !! based on Lin (1994).
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
@@ -58,6 +59,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
                                                 !! v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment [s].
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
@@ -117,7 +119,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
       " or neither.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS%PPM_CSp, uhbt, vhbt, OBC, &
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, uhbt, vhbt, OBC, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, &
                         uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   else

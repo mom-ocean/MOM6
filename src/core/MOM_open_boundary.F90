@@ -124,7 +124,13 @@ type, public :: OBC_segment_type
   logical :: specified_tan  !< Boundary tangential velocity fixed to external value.
   logical :: open           !< Boundary is open for continuity solver.
   logical :: gradient       !< Zero gradient at boundary.
-  logical :: values_needed  !< Whether or not external OBC fields are needed.
+  logical :: values_needed  !< Whether or not any external OBC fields are needed.
+  logical :: u_values_needed!< Whether or not external u OBC fields are needed.
+  logical :: v_values_needed!< Whether or not external v OBC fields are needed.
+  logical :: t_values_needed!< Whether or not external T OBC fields are needed.
+  logical :: s_values_needed!< Whether or not external S OBC fields are needed.
+  logical :: z_values_needed!< Whether or not external zeta OBC fields are needed.
+  logical :: g_values_needed!< Whether or not external gradient OBC fields are needed.
   integer :: direction      !< Boundary faces one of the four directions.
   logical :: is_N_or_S      !< True is the OB is facing North or South and exists on this PE.
   logical :: is_E_or_W      !< True is the OB is facing East or West and exists on this PE.
@@ -320,7 +326,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   call get_param(param_file, mdl, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
 
-  if (config1 /= "none") OBC%user_BCs_set_globally = .true.
+  if (config1 /= "none" .and. config1 /= "dyed_obcs") OBC%user_BCs_set_globally = .true.
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mdl, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
@@ -418,12 +424,18 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%segment(l)%open = .false.
       OBC%segment(l)%gradient = .false.
       OBC%segment(l)%values_needed = .false.
+      OBC%segment(l)%u_values_needed = .false.
+      OBC%segment(l)%v_values_needed = .false.
+      OBC%segment(l)%t_values_needed = .false.
+      OBC%segment(l)%s_values_needed = .false.
+      OBC%segment(l)%z_values_needed = .false.
+      OBC%segment(l)%g_values_needed = .false.
       OBC%segment(l)%direction = OBC_NONE
       OBC%segment(l)%is_N_or_S = .false.
       OBC%segment(l)%is_E_or_W = .false.
       OBC%segment(l)%Velocity_nudging_timescale_in = 0.0
       OBC%segment(l)%Velocity_nudging_timescale_out = 0.0
-      OBC%segment(l)%num_fields = 0.0
+      OBC%segment(l)%num_fields = 0
     enddo
     allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%segnum_u(:,:) = OBC_NONE
     allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%segnum_v(:,:) = OBC_NONE
@@ -526,6 +538,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=128) :: inputdir
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   character(len=32)  :: remappingScheme
+  character(len=256) :: mesg    ! Message for error messages.
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   integer, dimension(4) :: siz,siz2
   integer :: is, ie, js, je
@@ -591,6 +604,7 @@ subroutine initialize_segment_data(G, OBC, PF)
 
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
+    if (.not. segment%values_needed) cycle
 
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
@@ -607,12 +621,13 @@ subroutine initialize_segment_data(G, OBC, PF)
 
     allocate(segment%field(num_fields))
 
-    if (segment%Flather) then
-      if (num_fields < 3) call MOM_error(FATAL, &
-           "MOM_open_boundary, initialize_segment_data: "//&
-           "Need at least three inputs for Flather")
-    endif
-    segment%num_fields = num_fields  ! these are at least three input fields required for the Flather option
+! This should be happening with the x_values_needed.
+!   if (segment%Flather) then
+!     if (num_fields < 3) call MOM_error(FATAL, &
+!          "MOM_open_boundary, initialize_segment_data: "//&
+!          "Need at least three inputs for Flather")
+!   endif
+    segment%num_fields = num_fields
 
     segment%temp_segment_data_exists=.false.
     segment%salt_segment_data_exists=.false.
@@ -630,16 +645,20 @@ subroutine initialize_segment_data(G, OBC, PF)
       if (trim(filename) /= 'none') then
         OBC%update_OBC = .true. ! Data is assumed to be time-dependent if we are reading from file
         OBC%needs_IO_for_data = .true. ! At least one segment is using I/O for OBC data
-        segment%values_needed = .true. ! Indicates that i/o will be needed for this segment
+!       segment%values_needed = .true. ! Indicates that i/o will be needed for this segment
         segment%field(m)%name = trim(fields(m))
-        if (segment%field(m)%name == 'TEMP') &
+        if (segment%field(m)%name == 'TEMP') then
            segment%temp_segment_data_exists=.true.
-        if (segment%field(m)%name == 'SALT') &
+           segment%t_values_needed = .false.
+        endif
+        if (segment%field(m)%name == 'SALT') then
            segment%salt_segment_data_exists=.true.
+           segment%s_values_needed = .false.
+        endif
         filename = trim(inputdir)//trim(filename)
         fieldname = trim(fieldname)//trim(suffix)
         call field_size(filename,fieldname,siz,no_domain=.true.)
-        if (siz(4) == 1) segment%values_needed = .false.
+!       if (siz(4) == 1) segment%values_needed = .false.
         if (segment%on_pe) then
           if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
             call MOM_error(FATAL,'segment data are not on the supergrid')
@@ -664,16 +683,42 @@ subroutine initialize_segment_data(G, OBC, PF)
           siz2(3)=siz(3)
 
           if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
+            if (segment%field(m)%name == 'V') then
               allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
+              segment%v_values_needed = .false.
+            else if (segment%field(m)%name == 'DVDX') then
+              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
+              segment%g_values_needed = .false.
             else
               allocate(segment%field(m)%buffer_src(IsdB:IedB,jsd:jed,siz2(3)))
+              if (segment%field(m)%name == 'U') then
+                segment%u_values_needed = .false.
+              else if (segment%field(m)%name == 'SSH') then
+                segment%z_values_needed = .false.
+              else if (segment%field(m)%name == 'TEMP') then
+                segment%t_values_needed = .false.
+              else if (segment%field(m)%name == 'SALT') then
+                segment%s_values_needed = .false.
+              endif
             endif
           else
-            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
+            if (segment%field(m)%name == 'U') then
               allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
+              segment%u_values_needed = .false.
+            else if (segment%field(m)%name == 'DUDY') then
+              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
+              segment%g_values_needed = .false.
             else
               allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz2(3)))
+              if (segment%field(m)%name == 'V') then
+                segment%v_values_needed = .false.
+              else if (segment%field(m)%name == 'SSH') then
+                segment%z_values_needed = .false.
+              else if (segment%field(m)%name == 'TEMP') then
+                segment%t_values_needed = .false.
+              else if (segment%field(m)%name == 'SALT') then
+                segment%s_values_needed = .false.
+              endif
             endif
           endif
           segment%field(m)%buffer_src(:,:,:)=0.0
@@ -706,8 +751,29 @@ subroutine initialize_segment_data(G, OBC, PF)
       else
         segment%field(m)%fid = -1
         segment%field(m)%value = value
+        segment%field(m)%name = trim(fields(m))
+        if (segment%field(m)%name == 'U') then
+          segment%u_values_needed = .false.
+        elseif (segment%field(m)%name == 'V') then
+          segment%v_values_needed = .false.
+        elseif (segment%field(m)%name == 'SSH') then
+          segment%z_values_needed = .false.
+        elseif (segment%field(m)%name == 'TEMP') then
+          segment%t_values_needed = .false.
+        elseif (segment%field(m)%name == 'SALT') then
+          segment%s_values_needed = .false.
+        elseif (segment%field(m)%name == 'DVDX' .or. segment%field(m)%name == 'DUDY') then
+          segment%g_values_needed = .false.
+        endif
       endif
     enddo
+    if (segment%u_values_needed .or. segment%v_values_needed .or. &
+        segment%t_values_needed .or. segment%s_values_needed .or. &
+        segment%z_values_needed .or. segment%g_values_needed) then
+      write(mesg,'("Values needed for OBC segment ",I3)') n
+!     call MOM_error(FATAL, mesg)
+      call MOM_error(WARNING, mesg)
+    endif
   enddo
 
   call mpp_set_current_pelist(saved_pelist)
@@ -814,6 +880,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
       OBC%segment(l_seg)%open = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
+      OBC%segment%z_values_needed = .true.
+      OBC%segment%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
@@ -841,11 +909,14 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
       OBC%nudged_u_BCs_exist_globally = .true.
+      OBC%segment%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_TAN') then
       OBC%segment(l_seg)%nudged_tan = .true.
       OBC%nudged_u_BCs_exist_globally = .true.
+      OBC%segment%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_GRAD') then
       OBC%segment(l_seg)%nudged_grad = .true.
+      OBC%segment%g_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%open = .true.
@@ -853,6 +924,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
+      OBC%segment%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
     else
@@ -895,6 +967,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
          call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: \n"//&
          "Orlanski and Oblique OBC options cannot be used together on one segment.")
 
+  if (OBC%segment(l_seg)%u_values_needed .or. OBC%segment(l_seg)%v_values_needed .or. &
+      OBC%segment(l_seg)%t_values_needed .or. OBC%segment(l_seg)%s_values_needed .or. &
+      OBC%segment(l_seg)%z_values_needed .or. OBC%segment(l_seg)%g_values_needed) &
+    OBC%segment(l_seg)%values_needed = .true.
 end subroutine setup_u_point_obc
 
 !> Parse an OBC_SEGMENT_%%% string starting with "J=" and configure placement and type of OBC accordingly
@@ -938,6 +1014,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
       OBC%segment(l_seg)%open = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
+      OBC%segment%z_values_needed = .true.
+      OBC%segment%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
@@ -965,11 +1043,14 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
       OBC%nudged_v_BCs_exist_globally = .true.
+      OBC%segment%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_TAN') then
       OBC%segment(l_seg)%nudged_tan = .true.
       OBC%nudged_v_BCs_exist_globally = .true.
+      OBC%segment%u_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED_GRAD') then
       OBC%segment(l_seg)%nudged_grad = .true.
+      OBC%segment%g_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%open = .true.
@@ -977,6 +1058,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
+      OBC%segment%v_values_needed = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE_TAN') then
       OBC%segment(l_seg)%specified_tan = .true.
     else
@@ -1019,6 +1101,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_x)
          call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: \n"//&
          "Orlanski and Oblique OBC options cannot be used together on one segment.")
 
+  if (OBC%segment(l_seg)%u_values_needed .or. OBC%segment(l_seg)%v_values_needed .or. &
+      OBC%segment(l_seg)%t_values_needed .or. OBC%segment(l_seg)%s_values_needed .or. &
+      OBC%segment(l_seg)%z_values_needed .or. OBC%segment(l_seg)%g_values_needed) &
+    OBC%segment(l_seg)%values_needed = .true.
 end subroutine setup_v_point_obc
 
 !> Parse an OBC_SEGMENT_%%% string
@@ -1533,7 +1619,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_v, gamma_2
-  real :: cff, Cx, Cy, tau
+  real :: Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
   real :: ry_new, ry_avg ! coefficients for radiation
@@ -1632,7 +1718,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            rx_new = dhdt*dhdx
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           ry_new = min(cff,max(dhdt*dhdy,-cff))
+           ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
            cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -1828,7 +1914,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            rx_new = dhdt*dhdx
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           ry_new = min(cff,max(dhdt*dhdy,-cff))
+           ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
            cff_avg = (1.0-gamma_u)*segment%cff_normal(I,j,k) + gamma_u*cff_new
@@ -2014,7 +2100,6 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
          elseif (segment%oblique) then
            dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
            dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
-           segment%ry_normal(i,J,k) = ry_avg
            if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
              dhdx = segment%grad_normal(I-1,1,k)
            elseif (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) == 0.0) then
@@ -2025,7 +2110,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdy < 0.0) dhdt = 0.0
            ry_new = dhdt*dhdy
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           rx_new = min(cff,max(dhdt*dhdx,-cff))
+           rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
            cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -2221,7 +2306,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdy < 0.0) dhdt = 0.0
            ry_new = dhdt*dhdy
            cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
-           rx_new = min(cff,max(dhdt*dhdx,-cff))
+           rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
            cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -2920,7 +3005,7 @@ end subroutine open_boundary_test_extern_h
 subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   type(ocean_grid_type),                     intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !<  Ocean vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
   type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness [m]
@@ -3252,6 +3337,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc+1:je_obc))
             elseif (segment%field(m)%name == 'DVDX') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
+            elseif (segment%field(m)%name == 'SSH') then
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             else
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
             endif
@@ -3264,6 +3351,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               allocate(segment%field(m)%bt_vel(is_obc+1:ie_obc,js_obc:je_obc))
             elseif (segment%field(m)%name == 'DUDY') then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
+            elseif (segment%field(m)%name == 'SSH') then
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             else
               allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
             endif
@@ -3390,12 +3479,12 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo ; enddo ; enddo
-          if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
+          if (.not. segment%tr_Reg%Tr(2)%is_initialized) then
             !if the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
             enddo ; enddo ; enddo
-            segment%tr_Reg%Tr(1)%is_initialized=.true.
+            segment%tr_Reg%Tr(2)%is_initialized=.true.
           endif
         else
           segment%tr_Reg%Tr(2)%OBC_inflow_conc = segment%field(m)%value

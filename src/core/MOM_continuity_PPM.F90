@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -72,7 +73,7 @@ contains
 
 !> Time steps the layer thicknesses, using a monotonically limit, directionally split PPM scheme,
 !! based on Lin (1994).
-subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
+subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, &
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure.
@@ -91,6 +92,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
                            intent(out)   :: vh  !< Meridional volume flux, v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment [s].
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
                                                  !! [H m2 s-1 ~> m3 s-1 or kg s-1].
@@ -163,7 +165,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   !    First, advect zonally.
     LB%ish = G%isc ; LB%ieh = G%iec
     LB%jsh = G%jsc-stencil ; LB%jeh = G%jec+stencil
-    call zonal_mass_flux(u, hin, uh, dt, G, GV, CS, LB, uhbt, OBC, visc_rem_u, &
+    call zonal_mass_flux(u, hin, uh, dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, &
                          u_cor, uhbt_aux, u_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
@@ -179,7 +181,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 
     !    Now advect meridionally, using the updated thicknesses to determine
     !  the fluxes.
-    call meridional_mass_flux(v, h, vh, dt, G, GV, CS, LB, vhbt, OBC, visc_rem_v, &
+    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, &
                               v_cor, vhbt_aux, v_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
@@ -196,7 +198,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     LB%ish = G%isc-stencil ; LB%ieh = G%iec+stencil
     LB%jsh = G%jsc ; LB%jeh = G%jec
 
-    call meridional_mass_flux(v, hin, vh, dt, G, GV, CS, LB, vhbt, OBC, visc_rem_v, &
+    call meridional_mass_flux(v, hin, vh, dt, G, GV, US, CS, LB, vhbt, OBC, visc_rem_v, &
                               v_cor, vhbt_aux, v_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
@@ -209,7 +211,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   !    Now advect zonally, using the updated thicknesses to determine
   !  the fluxes.
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
-    call zonal_mass_flux(u, h, uh, dt, G, GV, CS, LB, uhbt, OBC, visc_rem_u, &
+    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, LB, uhbt, OBC, visc_rem_u, &
                          u_cor, uhbt_aux, u_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
@@ -226,7 +228,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 end subroutine continuity_PPM
 
 !> Calculates the mass or volume fluxes through the zonal faces, and other related quantities.
-subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
+subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
                            visc_rem_u, u_cor, uhbt_aux, u_cor_aux, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
@@ -238,6 +240,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                            intent(out)   :: uh   !< Volume flux through zonal faces = u*h*dy
                                                  !! [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt   !< Time increment [s].
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS), pointer       :: CS   !< This module's control structure.
   type(loop_bounds_type),  intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type), &
@@ -475,7 +478,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
       if (set_BT_cont) then
         call set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0,&
-                               du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
+                               du_max_CFL, du_min_CFL, dt, G, US, CS, visc_rem, &
                                visc_rem_max, j, ish, ieh, do_I)
         if (any_simple_OBC) then
           do I=ish-1,ieh
@@ -489,8 +492,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                                   OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (do_I(I)) then
-            BT_cont%Fa_u_W0(I,j) = FAuI(I) ; BT_cont%Fa_u_E0(I,j) = FAuI(I)
-            BT_cont%Fa_u_WW(I,j) = FAuI(I) ; BT_cont%Fa_u_EE(I,j) = FAuI(I)
+            BT_cont%FA_u_W0(I,j) = US%m_to_L*FAuI(I) ; BT_cont%FA_u_E0(I,j) = US%m_to_L*FAuI(I)
+            BT_cont%FA_u_WW(I,j) = US%m_to_L*FAuI(I) ; BT_cont%FA_u_EE(I,j) = US%m_to_L*FAuI(I)
             BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           endif ; enddo
         endif
@@ -505,17 +508,17 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           do J = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
             FA_u = 0.0
-            do k=1,nz ; FA_u = FA_u + h_in(i,j,k)*G%dy_Cu(I,j) ; enddo
-            BT_cont%Fa_u_W0(I,j) = FA_u ; BT_cont%Fa_u_E0(I,j) = FA_u
-            BT_cont%Fa_u_WW(I,j) = FA_u ; BT_cont%Fa_u_EE(I,j) = FA_u
+            do k=1,nz ; FA_u = FA_u + h_in(i,j,k)*US%m_to_L*G%dy_Cu(I,j) ; enddo
+            BT_cont%FA_u_W0(I,j) = FA_u ; BT_cont%FA_u_E0(I,j) = FA_u
+            BT_cont%FA_u_WW(I,j) = FA_u ; BT_cont%FA_u_EE(I,j) = FA_u
             BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           enddo
         else
           do J = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
             FA_u = 0.0
-            do k=1,nz ; FA_u = FA_u + h_in(i+1,j,k)*G%dy_Cu(I,j) ; enddo
-            BT_cont%Fa_u_W0(I,j) = FA_u ; BT_cont%Fa_u_E0(I,j) = FA_u
-            BT_cont%Fa_u_WW(I,j) = FA_u ; BT_cont%Fa_u_EE(I,j) = FA_u
+            do k=1,nz ; FA_u = FA_u + h_in(i+1,j,k)*US%m_to_L*G%dy_Cu(I,j) ; enddo
+            BT_cont%FA_u_W0(I,j) = FA_u ; BT_cont%FA_u_E0(I,j) = FA_u
+            BT_cont%FA_u_WW(I,j) = FA_u ; BT_cont%FA_u_EE(I,j) = FA_u
             BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           enddo
         endif
@@ -883,7 +886,7 @@ end subroutine zonal_flux_adjust
 !> Sets a structure that describes the zonal barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
 subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, &
-                             du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
+                             du_max_CFL, du_min_CFL, dt, G, US, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_I)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< Zonal velocity [m s-1].
@@ -904,6 +907,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
   real, dimension(SZIB_(G)),                 intent(in)    :: du_min_CFL  !< Minimum acceptable
                        !! value of du [m s-1].
   real,                                      intent(in)    :: dt   !< Time increment [s].
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   real, dimension(SZIB_(G),SZK_(G)),         intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step of viscosity, and
@@ -1021,9 +1025,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     if (FA_avg > max(FA_0, FAmt_L(I))) then ; FA_avg = max(FA_0, FAmt_L(I))
     elseif (FA_avg < min(FA_0, FAmt_L(I))) then ; FA_0 = FA_avg ; endif
 
-    BT_cont%FA_u_W0(I,j) = FA_0 ; BT_cont%FA_u_WW(I,j) = FAmt_L(I)
+    BT_cont%FA_u_W0(I,j) = US%m_to_L*FA_0 ; BT_cont%FA_u_WW(I,j) = US%m_to_L*FAmt_L(I)
     if (abs(FA_0-FAmt_L(I)) <= 1e-12*FA_0) then ; BT_cont%uBT_WW(I,j) = 0.0 ; else
-      BT_cont%uBT_WW(I,j) = (1.5 * (duL(I) - du0(I))) * &
+      BT_cont%uBT_WW(I,j) = US%m_s_to_L_T*(1.5 * (duL(I) - du0(I))) * &
                             ((FAmt_L(I) - FA_avg) / (FAmt_L(I) - FA_0))
     endif
 
@@ -1033,9 +1037,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     if (FA_avg > max(FA_0, FAmt_R(I))) then ; FA_avg = max(FA_0, FAmt_R(I))
     elseif (FA_avg < min(FA_0, FAmt_R(I))) then ; FA_0 = FA_avg ; endif
 
-    BT_cont%FA_u_E0(I,j) = FA_0 ; BT_cont%FA_u_EE(I,j) = FAmt_R(I)
+    BT_cont%FA_u_E0(I,j) = US%m_to_L*FA_0 ; BT_cont%FA_u_EE(I,j) = US%m_to_L*FAmt_R(I)
     if (abs(FAmt_R(I) - FA_0) <= 1e-12*FA_0) then ; BT_cont%uBT_EE(I,j) = 0.0 ; else
-      BT_cont%uBT_EE(I,j) = (1.5 * (duR(I) - du0(I))) * &
+      BT_cont%uBT_EE(I,j) = US%m_s_to_L_T*(1.5 * (duR(I) - du0(I))) * &
                             ((FAmt_R(I) - FA_avg) / (FAmt_R(I) - FA_0))
     endif
   else
@@ -1047,7 +1051,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
 end subroutine set_zonal_BT_cont
 
 !> Calculates the mass or volume fluxes through the meridional faces, and other related quantities.
-subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
+subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
                                 visc_rem_v, v_cor, vhbt_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
@@ -1057,6 +1061,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh   !< Volume flux through meridional
                                                                    !! faces = v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
   real,                                      intent(in)    :: dt   !< Time increment [s].
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   type(loop_bounds_type),                    intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),            optional, pointer       :: OBC  !< Open boundary condition type
@@ -1290,7 +1295,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
       if (set_BT_cont) then
         call set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0,&
-                               dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
+                               dv_max_CFL, dv_min_CFL, dt, G, US, CS, visc_rem, &
                                visc_rem_max, J, ish, ieh, do_I)
         if (any_simple_OBC) then
           do i=ish,ieh
@@ -1305,8 +1310,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                    OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo
           do i=ish,ieh ; if (do_I(i)) then
-            BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)
-            BT_cont%FA_v_SS(i,J) = FAvi(i) ; BT_cont%FA_v_NN(i,J) = FAvi(i)
+            BT_cont%FA_v_S0(i,J) = US%m_to_L*FAvi(i) ; BT_cont%FA_v_N0(i,J) = US%m_to_L*FAvi(i)
+            BT_cont%FA_v_SS(i,J) = US%m_to_L*FAvi(i) ; BT_cont%FA_v_NN(i,J) = US%m_to_L*FAvi(i)
             BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
           endif ; enddo
         endif
@@ -1322,17 +1327,17 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
           do i = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
             FA_v = 0.0
-            do k=1,nz ; FA_v = FA_v + h_in(i,j,k)*G%dx_Cv(i,J) ; enddo
-            BT_cont%Fa_v_S0(i,J) = FA_v ; BT_cont%Fa_v_N0(i,J) = FA_v
-            BT_cont%Fa_v_SS(i,J) = FA_v ; BT_cont%Fa_v_NN(i,J) = FA_v
+            do k=1,nz ; FA_v = FA_v + h_in(i,j,k)*US%m_to_L*G%dx_Cv(i,J) ; enddo
+            BT_cont%FA_v_S0(i,J) = FA_v ; BT_cont%FA_v_N0(i,J) = FA_v
+            BT_cont%FA_v_SS(i,J) = FA_v ; BT_cont%FA_v_NN(i,J) = FA_v
             BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
           enddo
         else
           do i = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
             FA_v = 0.0
-            do k=1,nz ; FA_v = FA_v + h_in(i,j+1,k)*G%dx_Cv(i,J) ; enddo
-            BT_cont%Fa_v_S0(i,J) = FA_v ; BT_cont%Fa_v_N0(i,J) = FA_v
-            BT_cont%Fa_v_SS(i,J) = FA_v ; BT_cont%Fa_v_NN(i,J) = FA_v
+            do k=1,nz ; FA_v = FA_v + h_in(i,j+1,k)*US%m_to_L*G%dx_Cv(i,J) ; enddo
+            BT_cont%FA_v_S0(i,J) = FA_v ; BT_cont%FA_v_N0(i,J) = FA_v
+            BT_cont%FA_v_SS(i,J) = FA_v ; BT_cont%FA_v_NN(i,J) = FA_v
             BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
           enddo
         endif
@@ -1704,7 +1709,7 @@ end subroutine meridional_flux_adjust
 !> Sets of a structure that describes the meridional barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
 subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, &
-                             dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
+                             dv_max_CFL, dv_min_CFL, dt, G, US, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_I)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< Meridional velocity [m s-1].
@@ -1723,6 +1728,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
   real, dimension(SZI_(G)),                  intent(in)    :: dv_max_CFL !< Maximum acceptable value of dv [m s-1].
   real, dimension(SZI_(G)),                  intent(in)    :: dv_min_CFL !< Minimum acceptable value of dv [m s-1].
   real,                                      intent(in)    :: dt   !< Time increment [s].
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   real, dimension(SZI_(G),SZK_(G)),          intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step
@@ -1839,9 +1845,9 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
       FA_avg = vhtot_L(i) / (dvL(i) - dv0(i))
     if (FA_avg > max(FA_0, FAmt_L(i))) then ; FA_avg = max(FA_0, FAmt_L(i))
     elseif (FA_avg < min(FA_0, FAmt_L(i))) then ; FA_0 = FA_avg ; endif
-    BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i)
+    BT_cont%FA_v_S0(i,J) = US%m_to_L*FA_0 ; BT_cont%FA_v_SS(i,J) = US%m_to_L*FAmt_L(i)
     if (abs(FA_0-FAmt_L(i)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
-      BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i) - dv0(i))) * &
+      BT_cont%vBT_SS(i,J) = US%m_s_to_L_T*(1.5 * (dvL(i) - dv0(i))) * &
                    ((FAmt_L(i) - FA_avg) / (FAmt_L(i) - FA_0))
     endif
 
@@ -1850,9 +1856,9 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
       FA_avg = vhtot_R(i) / (dvR(i) - dv0(i))
     if (FA_avg > max(FA_0, FAmt_R(i))) then ; FA_avg = max(FA_0, FAmt_R(i))
     elseif (FA_avg < min(FA_0, FAmt_R(i))) then ; FA_0 = FA_avg ; endif
-    BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i)
+    BT_cont%FA_v_N0(i,J) = US%m_to_L*FA_0 ; BT_cont%FA_v_NN(i,J) = US%m_to_L*FAmt_R(i)
     if (abs(FAmt_R(i) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
-      BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i) - dv0(i))) * &
+      BT_cont%vBT_NN(i,J) = US%m_s_to_L_T*(1.5 * (dvR(i) - dv0(i))) * &
                    ((FAmt_R(i) - FA_avg) / (FAmt_R(i) - FA_0))
     endif
   else
