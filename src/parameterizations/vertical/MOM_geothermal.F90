@@ -35,7 +35,7 @@ type, public :: geothermal_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                              !! regulate the timing of diagnostic output.
-  integer :: id_internal_heat_tend_3d = -1   !< test ID for 3D diagnostic of internal heat
+  integer :: id_internal_heat_tend_3d = -1   !< ID for 3D diagnostic of internal heat
 
 end type geothermal_CS
 
