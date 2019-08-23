@@ -1584,9 +1584,9 @@ subroutine check_mask_val_consistency(val, mask, i, j, varname)
   if ((mask == 0.) .and. (val /= 0.)) then
     write(ci, '(I8)') i
     write(cj, '(I8)') j
-    write(cval, '(F8.2)') val
+    write(cval, '(E22.16)') val
     error_message = "MOM_surface_forcing: found non-zero value (="//trim(cval)//") over land "//&
-                    "for variable"//trim(varname)//"at point (i, j) = ("//trim(ci)//", "//trim(cj)//")"
+                    "for variable "//trim(varname)//" at point (i, j) = ("//trim(ci)//", "//trim(cj)//")"
     call MOM_error(FATAL, error_message)
   endif
 
