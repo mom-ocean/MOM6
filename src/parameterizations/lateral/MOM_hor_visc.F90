@@ -5,7 +5,7 @@ module MOM_hor_visc
 
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
-use MOM_domains,               only : pass_var, CORNER, pass_vector
+use MOM_domains,               only : pass_var, CORNER, pass_vector, AGRID, BGRID_NE
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
@@ -411,8 +411,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                      G%IdxCv(i,J-1) * vbtav(i,J-1))
     enddo; enddo
 
-    call pass_var(dudx_bt, G%Domain, complete=.true.)
-    call pass_var(dvdy_bt, G%Domain, complete=.true.)
+    call pass_vector(dudx_bt, dvdy_bt, G%Domain, stagger=BGRID_NE)
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       sh_xx_bt(i,j) = dudx_bt(i,j) - dvdy_bt(i,j)
@@ -426,8 +425,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
 
-    call pass_var(dvdx_bt, G%Domain, position=CORNER, complete=.true.)
-    call pass_var(dudy_bt, G%Domain, position=CORNER, complete=.true.)
+    call pass_vector(dvdx_bt, dudy_bt, G%Domain, stagger=AGRID)
 
     if (CS%no_slip) then
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -710,8 +708,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                         (h(i,j,k) + GV%H_subroundoff)
         enddo ; enddo
 
-        call pass_var(div_xx, G%Domain, complete=.true.)
-
         ! Divergence gradient
         do j=Jsq,Jeq+1 ; do I=Isq-1,Ieq+1
           div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
@@ -719,8 +715,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         do J=Jsq-1,Jeq+1 ; do i=Isq,Ieq+1
           div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
         enddo ; enddo
-
-        call pass_vector(div_xx_dx, div_xx_dy, G%Domain)
 
         ! Magnitude of divergence gradient
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
