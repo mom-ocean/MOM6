@@ -44,9 +44,8 @@ public RGC_initialize_sponges
 
 contains
 
-!> Sets up the the inverse restoration time (Idamp), and
-! the values towards which the interface heights and an arbitrary
-! number of tracers should be restored within each sponge.
+!> Sets up the the inverse restoration time, and the values towards which the interface heights,
+!! velocities and tracers should be restored within the sponges for the RGC test case.
 subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
@@ -55,8 +54,10 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
                                             !! fields, potential temperature and
                                             !! salinity or mixed layer density.
                                             !! Absent fields have NULL ptrs.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: u !< u velocity.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: v !< v velocity.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                 target, intent(in) :: u    !< Array with the u velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                 target, intent(in) :: v    !< Array with the v velocity [L T-1 ~> m s-1]
   type(param_file_type), intent(in) :: PF   !< A structure indicating the
                                             !! open file to parse for model
                                             !! parameter values.
@@ -67,12 +68,12 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 ! Local variables
   real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp
   real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
-  real :: U1(SZIB_(G), SZJ_(G), SZK_(G))  ! A temporary array for u
-  real :: V1(SZI_(G), SZJB_(G), SZK_(G))  ! A temporary array for v
+  real :: U1(SZIB_(G),SZJ_(G),SZK_(G))  ! A temporary array for u [L T-1 ~> m s-1]
+  real :: V1(SZI_(G),SZJB_(G),SZK_(G))  ! A temporary array for v [L T-1 ~> m s-1]
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
   real :: tmp(SZI_(G),SZJ_(G))        ! A temporary array for tracers.
   real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness at h points
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points, in s-1.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [s-1].
   real :: TNUDG                     ! Nudging time scale, days
   real :: pres(SZI_(G))             ! An array of the reference pressure, in Pa
   real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
@@ -118,9 +119,9 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
-   if (associated(CSp)) call MOM_error(FATAL, &
+  if (associated(CSp)) call MOM_error(FATAL, &
           "RGC_initialize_sponges called with an associated control structure.")
-   if (associated(ACSp)) call MOM_error(FATAL, &
+  if (associated(ACSp)) call MOM_error(FATAL, &
           "RGC_initialize_sponges called with an associated ALE-sponge control structure.")
 
   !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
@@ -128,61 +129,61 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   !  will automatically set up the sponges only where Idamp is positive!
   !  and mask2dT is 1.
 
-   do i=is,ie; do j=js,je
-      if (G%geoLonT(i,j) <= lensponge) then
-        dummy1 = -(G%geoLonT(i,j))/lensponge + 1.0
-        !damp = 1.0/TNUDG * max(0.0,dummy1)
-        damp = 0.0
-        !write(*,*)'1st, G%geoLonT(i,j), damp',G%geoLonT(i,j), damp
+  do i=is,ie ; do j=js,je
+    if (G%geoLonT(i,j) <= lensponge) then
+      dummy1 = -(G%geoLonT(i,j))/lensponge + 1.0
+      !damp = 1.0/TNUDG * max(0.0,dummy1)
+      damp = 0.0
+      !write(*,*)'1st, G%geoLonT(i,j), damp',G%geoLonT(i,j), damp
 
-      elseif (G%geoLonT(i,j) >= (lenlon - lensponge) .AND. G%geoLonT(i,j) <= lenlon) then
+    elseif (G%geoLonT(i,j) >= (lenlon - lensponge) .AND. G%geoLonT(i,j) <= lenlon) then
 
-  ! 1 / day
-        dummy1=(G%geoLonT(i,j)-(lenlon - lensponge))/(lensponge)
-        damp = (1.0/TNUDG) * max(0.0,dummy1)
+! 1 / day
+      dummy1=(G%geoLonT(i,j)-(lenlon - lensponge))/(lensponge)
+      damp = (1.0/TNUDG) * max(0.0,dummy1)
 
-      else ; damp=0.0
-      endif
+    else ; damp=0.0
+    endif
 
-  ! convert to 1 / seconds
-      if (G%bathyT(i,j) > min_depth) then
-          Idamp(i,j) = damp/86400.0
-      else ; Idamp(i,j) = 0.0 ; endif
-   enddo ; enddo
+! convert to 1 / seconds
+    if (G%bathyT(i,j) > min_depth) then
+        Idamp(i,j) = damp/86400.0
+    else ; Idamp(i,j) = 0.0 ; endif
+  enddo ; enddo
 
 
-   ! 1) Read eta, salt and temp from IC file
-   call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
-   inputdir = slasher(inputdir)
+  ! 1) Read eta, salt and temp from IC file
+  call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
    ! GM: get two different files, one with temp and one with salt values
    ! this is work around to avoid having wrong values near the surface
    ! because of the FIT_SALINITY option. To get salt values right in the
    ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
    ! combined the *correct* temp and salt values in one file instead.
-   call get_param(PF, mod, "RGC_SPONGE_FILE", state_file, &
+  call get_param(PF, mod, "RGC_SPONGE_FILE", state_file, &
               "The name of the file with temps., salts. and interfaces to \n"// &
               " damp toward.", fail_if_missing=.true.)
-   call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
+  call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
               "The name of the potential temperature variable in \n"//&
               "SPONGE_STATE_FILE.", default="Temp")
-   call get_param(PF, mod, "SPONGE_SALT_VAR", salt_var, &
+  call get_param(PF, mod, "SPONGE_SALT_VAR", salt_var, &
               "The name of the salinity variable in \n"//&
               "SPONGE_STATE_FILE.", default="Salt")
-   call get_param(PF, mod, "SPONGE_ETA_VAR", eta_var, &
+  call get_param(PF, mod, "SPONGE_ETA_VAR", eta_var, &
               "The name of the interface height variable in \n"//&
               "SPONGE_STATE_FILE.", default="eta")
-    call get_param(PF, mod, "SPONGE_H_VAR", h_var, &
+  call get_param(PF, mod, "SPONGE_H_VAR", h_var, &
               "The name of the layer thickness variable in \n"//&
               "SPONGE_STATE_FILE.", default="h")
 
-   !read temp and eta
-   filename = trim(inputdir)//trim(state_file)
-   if (.not.file_exists(filename, G%Domain)) &
-       call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
-   call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-   call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+  !read temp and eta
+  filename = trim(inputdir)//trim(state_file)
+  if (.not.file_exists(filename, G%Domain)) &
+      call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
+  call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
+  call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
 
-   if (use_ALE) then
+  if (use_ALE) then
 
     call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
     call pass_var(h, G%domain)
@@ -199,37 +200,37 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
     endif
 
     if (sponge_uv) then
-       U1(:,:,:) = 0.0; V1(:,:,:) = 0.0
-       call set_up_ALE_sponge_vel_field(U1,V1,G,u,v,ACSp)
+      U1(:,:,:) = 0.0; V1(:,:,:) = 0.0
+      call set_up_ALE_sponge_vel_field(U1,V1,G,u,v,ACSp)
     endif
 
 
-   else ! layer mode
+  else ! layer mode
 
-       !read eta
-       call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+    !read eta
+    call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
 
-       ! Set the inverse damping rates so that the model will know where to
-       ! apply the sponges, along with the interface heights.
-       call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
+    ! Set the inverse damping rates so that the model will know where to
+    ! apply the sponges, along with the interface heights.
+    call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
 
-       if ( GV%nkml>0 ) then
-       !   This call to set_up_sponge_ML_density registers the target values of the
-       ! mixed layer density, which is used in determining which layers can be
-       ! inflated without causing static instabilities.
-         do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+    if ( GV%nkml>0 ) then
+    !   This call to set_up_sponge_ML_density registers the target values of the
+    ! mixed layer density, which is used in determining which layers can be
+    ! inflated without causing static instabilities.
+      do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
-          do j=js,je
-            call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), &
-                             is, ie-is+1, tv%eqn_of_state)
-          enddo
+      do j=js,je
+        call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), &
+                          is, ie-is+1, tv%eqn_of_state)
+      enddo
 
-          call set_up_sponge_ML_density(tmp, G, CSp)
-       endif
+      call set_up_sponge_ML_density(tmp, G, CSp)
+    endif
 
-       ! Apply sponge in tracer fields
-       call set_up_sponge_field(T, tv%T, G, nz, CSp)
-       call set_up_sponge_field(S, tv%S, G, nz, CSp)
+    ! Apply sponge in tracer fields
+    call set_up_sponge_field(T, tv%T, G, nz, CSp)
+    call set_up_sponge_field(S, tv%S, G, nz, CSp)
 
   endif
 
