@@ -193,11 +193,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 
         ! Save temperature and thickness before any changes are made (for diagnostic)
         if (CS%id_internal_heat_h_tendency > 0 &
-             .or. CS%id_internal_heat_heat_tendency &
-             .or. CS%id_internal_heat_temp_tendency ) then
+             .or. CS%id_internal_heat_heat_tendency > 0 &
+             .or. CS%id_internal_heat_temp_tendency > 0 ) then
           h_old(i,j,k) = h(i,j,k)
         endif
-        if (CS%id_internal_heat_heat_tendency > 0 .or. CS%id_internal_heat_temp_tendency) then
+        if (CS%id_internal_heat_heat_tendency > 0 &
+             .or. CS%id_internal_heat_temp_tendency > 0) then
           T_old(i,j,k) = tv%T(i,j,k)
         endif
 
