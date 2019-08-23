@@ -890,8 +890,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity [ppt]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [L T-1 ~> m s-1]
   type(EOS_type),                             pointer       :: EOS   !< Equation of state
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
@@ -965,8 +965,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
       if (G%mask2dT(i,j)==0.) cycle
 
       do k=1,G%ke
-        U_H(k) = 0.5 * (U(i,j,k)+U(i-1,j,k))
-        V_H(k) = 0.5 * (V(i,j,k)+V(i,j-1,k))
+        U_H(k) = 0.5 * US%L_T_to_m_s*(u(i,j,k)+u(i-1,j,k))
+        V_H(k) = 0.5 * US%L_T_to_m_s*(v(i,j,k)+v(i,j-1,k))
       enddo
 
       ! things independent of position within the column
@@ -1023,8 +1023,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
           ! surface averaged fields
           surfHtemp = surfHtemp + Temp(i,j,ktmp) * delH
           surfHsalt = surfHsalt + Salt(i,j,ktmp) * delH
-          surfHu    = surfHu + 0.5*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
-          surfHv    = surfHv + 0.5*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
+          surfHu    = surfHu + 0.5*US%L_T_to_m_s*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
+          surfHv    = surfHv + 0.5*US%L_T_to_m_s*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
           if (CS%Stokes_Mixing) then
             surfHus = surfHus + 0.5*(WAVES%US_x(i,j,ktmp)+WAVES%US_x(i-1,j,ktmp)) * delH
             surfHvs = surfHvs + 0.5*(WAVES%US_y(i,j,ktmp)+WAVES%US_y(i,j-1,ktmp)) * delH
@@ -1041,8 +1041,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
         ! vertical shear between present layer and
         ! surface layer averaged surfU,surfV.
         ! C-grid average to get Uk and Vk on T-points.
-        Uk         = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
-        Vk         = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
+        Uk         = 0.5*US%L_T_to_m_s*(u(i,j,k)+u(i-1,j,k)) - surfU
+        Vk         = 0.5*US%L_T_to_m_s*(v(i,j,k)+v(i,j-1,k)) - surfV
 
         if (CS%Stokes_Mixing) then
           ! If momentum is mixed down the Stokes drift gradient, then
@@ -1217,15 +1217,15 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
        !   hTot      = h(i,j,1)
        !   surfTemp  = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
        !   surfSalt  = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
-       !   surfU     = 0.5*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
-       !   surfV     = 0.5*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
+       !   surfU     = 0.5*US%L_T_to_m_s*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
+       !   surfV     = 0.5*US%L_T_to_m_s*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
        !   pRef      = 0.0
 
        !   do k = 2, G%ke
 
        !     ! Recalculate differences with surface layer
-       !     Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
-       !     Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
+       !     Uk = 0.5*US%L_T_to_m_s*(u(i,j,k)+u(i-1,j,k)) - surfU
+       !     Vk = 0.5*US%L_T_to_m_s*(v(i,j,k)+v(i,j-1,k)) - surfV
        !     deltaU2(k) = Uk**2 + Vk**2
        !     pRef = pRef + GV%H_to_Pa * h(i,j,k)
        !     call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
@@ -1238,8 +1238,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyF
        !       hTot = hTot + delH
        !       surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
        !       surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
-       !       surfHu = surfHu + 0.5*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
-       !       surfHv = surfHv + 0.5*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
+       !       surfHu = surfHu + 0.5*US%L_T_to_m_s*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
+       !       surfHv = surfHv + 0.5*US%L_T_to_m_s*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
        !     endif
 
        !   enddo
