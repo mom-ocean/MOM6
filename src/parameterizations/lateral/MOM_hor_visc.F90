@@ -251,7 +251,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_vel_mag_h, & ! Magnitude of the velocity gradient tensor squared at h-points [s-2]
     grad_vel_mag_bt_h, & ! Magnitude of the barotropic velocity gradient tensor squared at h-points [s-2]
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [m-2 s-2]
-    max_diss_rate_bt, & ! maximum possible energy dissipated by barotropic lateral friction [m2 s-3]
     boundary_mask ! A mask that zeroes out cells with at least one land edge
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -401,8 +400,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     str_xx_GME(:,:) = 0.0
     str_xy_GME(:,:) = 0.0
 
-!    call pass_var(boundary_mask, G%Domain, complete=.true.)
-
     ! Get barotropic velocities and their gradients
     call barotropic_get_tav(BT, ubtav, vbtav, G)
     call pass_vector(ubtav, vbtav, G%Domain)
@@ -450,12 +447,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
             (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
             (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2)
     enddo ; enddo
-
-    if (associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        max_diss_rate_bt(i,j) = 2.0*MEKE%MEKE(i,j) * grad_vel_mag_bt_h(i,j)
-      enddo ; enddo
-    endif ; endif
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
       grad_vel_mag_bt_q(I,J) = boundary_mask(i,j) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
