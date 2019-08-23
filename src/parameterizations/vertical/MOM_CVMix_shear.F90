@@ -59,17 +59,18 @@ contains
 subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
-  type(unit_scale_type),                      intent(in)  :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points [m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points [m s-1].
+  type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T
+                                                                 !! points [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd  !< The vertical diffusivity at each interface
                                                                  !! (not layer!) [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The vertical viscosity at each interface
                                                                  !! (not layer!) [Z2 T-1 ~> m2 s-1].
-  type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous call to
-                                                                 !! CVMix_shear_init.
+  type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous
+                                                                 !! call to CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
   real :: GoRho  ! Gravitational acceleration divided by density in MKS units [m4 s-2]
@@ -118,8 +119,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       do k = 1, G%ke
         km1 = max(1, k-1)
         kk = 2*(k-1)
-        DU = (u_h(i,j,k))-(u_h(i,j,km1))
-        DV = (v_h(i,j,k))-(v_h(i,j,km1))
+        DU = US%L_T_to_m_s*(u_h(i,j,k) - u_h(i,j,km1))
+        DV = US%L_T_to_m_s*(v_h(i,j,k) - v_h(i,j,km1))
         DRHO = (GoRho * (rho_1D(kk+1) - rho_1D(kk+2)) )
         DZ = ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
         N2 = DRHO/DZ

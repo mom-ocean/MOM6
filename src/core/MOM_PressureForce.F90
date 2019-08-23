@@ -52,9 +52,9 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                            intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: PFu  !< Zonal pressure force acceleration [m s-2]
+                           intent(out) :: PFu  !< Zonal pressure force acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: PFv  !< Meridional pressure force acceleration [m s-2]
+                           intent(out) :: PFv  !< Meridional pressure force acceleration [L T-2 ~> m s-2]
   type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:), &
