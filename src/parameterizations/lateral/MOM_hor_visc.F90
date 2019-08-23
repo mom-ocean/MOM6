@@ -243,7 +243,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [W m-2]
     Leith_Kh_h, & ! Leith Laplacian viscosity at h-points [m2 s-1]
     Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points [m4 s-1]
-    beta_h,     & ! Gradient of planetary vorticity at h-points [m-1 s-1]
     grad_vort_mag_h, & ! Magnitude of vorticity gradient at h-points [m-1 s-1]
     grad_vort_mag_h_2d, & ! Magnitude of 2d vorticity gradient at h-points [m-1 s-1]
     grad_div_mag_h, &     ! Magnitude of divergence gradient at h-points [m-1 s-1]
@@ -264,7 +263,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     vort_xy, & ! Vertical vorticity (dv/dx - du/dy) including metric terms [s-1]
     Leith_Kh_q, & ! Leith Laplacian viscosity at q-points [m2 s-1]
     Leith_Ah_q, & ! Leith bi-harmonic viscosity at q-points [m4 s-1]
-    beta_q,     & ! Gradient of planetary vorticity at q-points [m-1 s-1]
     grad_vort_mag_q, & ! Magnitude of vorticity gradient at q-points [m-1 s-1]
     grad_vort_mag_q_2d, & ! Magnitude of 2d vorticity gradient at q-points [m-1 s-1]
     grad_div_mag_q, &  ! Magnitude of divergence gradient at q-points [m-1 s-1]
@@ -442,14 +440,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       grad_vel_mag_bt_h(i,j) = boundary_mask(i,j) * (dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
-            (0.25*(dvdx_bt(I,J)+dvdx_bt(I-1,J)+dvdx_bt(I,J-1)+dvdx_bt(I-1,J-1)) )**2 + &
-            (0.25*(dudy_bt(I,J)+dudy_bt(I-1,J)+dudy_bt(I,J-1)+dudy_bt(I-1,J-1)) )**2)
+            (0.25*((dvdx_bt(I,J)+dvdx_bt(I-1,J-1))+(dvdx_bt(I,J-1)+dvdx_bt(I-1,J)) )**2 + &
+            (0.25*((dudy_bt(I,J)+dudy_bt(I-1,J-1))+(dudy_bt(I,J-1)+dudy_bt(I-1,J)) )**2)
     enddo ; enddo
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
       grad_vel_mag_bt_q(I,J) = boundary_mask(i,j) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
-            (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j)+dudx_bt(i,j+1)+dudx_bt(i+1,j+1)))**2 + &
-            (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j)+dvdy_bt(i,j+1)+dvdy_bt(i+1,j+1)) )**2)
+            (0.25*(dudx_bt(i,j)+dudx_bt(i+1,j+1))+(dudx_bt(i,j+1)+dudx_bt(i+1,j)))**2 + &
+            (0.25*(dvdy_bt(i,j)+dvdy_bt(i+1,j+1))+(dvdy_bt(i,j+1)+dvdy_bt(i+1,j)))**2)
     enddo ; enddo
 
   endif ! use_GME
@@ -745,13 +743,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       ! Add in beta for the Leith viscosity
       if (CS%use_beta_in_Leith) then
-        do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-          beta_h(i,j) = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
-        enddo; enddo
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-          beta_q(I,J) = sqrt( (0.25*(G%dF_dx(i,j)+G%dF_dx(i+1,j)+G%dF_dx(i,j+1)+G%dF_dx(i+1,j+1))**2) + &
-                       (0.25*(G%dF_dy(i,j)+G%dF_dy(i+1,j)+G%dF_dy(i,j+1)+G%dF_dy(i+1,j+1))**2) )
-        enddo ; enddo
 
         do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
             vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1))
