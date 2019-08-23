@@ -66,7 +66,6 @@ else
 	GIT_TARGET_REMOTE =
 
 	# Inert self-checkout of current branch
-	#MOM_MERGED_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 	MOM_MERGED_BRANCH =
 	GIT_MERGED_HEAD =
 endif
@@ -191,7 +190,7 @@ test: $(foreach t,$(TESTS),test.$(t))
 # NOTE: We remove tc3 (OBC) from grid test
 
 .PHONY: $(foreach t,$(TESTS),test.$(t))
-test.regressions: $(foreach c,$(CONFIGS),$(c).regreession $(c).regression.diag)
+test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
 test.grids: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
 test.layouts: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
 test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
