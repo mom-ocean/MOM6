@@ -40,6 +40,9 @@ TESTS = grids layouts restarts repros nans dims
 #   DO_REGRESSION_TESTS: true if $(TRAVIS_PULL_REQUEST) is a PR number
 #   MOM_TARGET_SLUG: TRAVIS_REPO_SLUG
 #   MOM_TARGET_LOCAL_BRANCH: TRAVIS_BRANCH
+#
+# MOM_TARGET_REMOTE_NAME and MOM_MERGED_BRANCH are arbitrary labels which may
+# cause namespace conflicts, and should probably be renamed or phased out.
 
 DO_REGRESSION_TESTS ?=
 ifeq ($(DO_REGRESSION_TESTS), true)
@@ -55,6 +58,7 @@ ifeq ($(DO_REGRESSION_TESTS), true)
 	GIT_TARGET_REMOTE = .git/refs/remotes/$(MOM_TARGET_BRANCH)
 
 	MOM_MERGED_BRANCH ?= mergetest
+	GIT_MERGED_HEAD = .git/refs/heads/$(MOM_MERGED_BRANCH)
 else
 	MOM_TARGET_URL =
 	MOM_TARGET_LOCAL_BRANCH =
@@ -62,7 +66,9 @@ else
 	GIT_TARGET_REMOTE =
 
 	# Inert self-checkout of current branch
-	MOM_MERGED_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+	#MOM_MERGED_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+	MOM_MERGED_BRANCH =
+	GIT_MERGED_HEAD =
 endif
 
 
@@ -116,7 +122,7 @@ build/target/path_names: $(LIST_PATHS) $(GIT_TARGET_REMOTE)
 		../../$(GRID_SRC)
 	git checkout @{-1}
 
-build/%/path_names: $(LIST_PATHS) .git/refs/heads/$(MOM_MERGED_BRANCH)
+build/%/path_names: $(LIST_PATHS) $(GIT_MERGED_HEAD)
 	git checkout $(BRANCH)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
@@ -130,7 +136,7 @@ build/%/path_names: $(LIST_PATHS) .git/refs/heads/$(MOM_MERGED_BRANCH)
 # Repository management
 
 # WARNING: Implicit dependency of GIT_TARGET_REMOTE and DO_REGRESSION_TESTS
-.git/refs/heads/$(MOM_MERGED_BRANCH): $(GIT_TARGET_REMOTE)
+$(GIT_MERGED_HEAD): $(GIT_TARGET_REMOTE)
 	git checkout -b $(MOM_MERGED_BRANCH)
 	if [ $(DO_REGRESSION_TESTS) ]; then \
 		git merge --no-edit $(MOM_TARGET_BRANCH); \
