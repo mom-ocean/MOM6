@@ -713,21 +713,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         call pass_var(div_xx, G%Domain, complete=.true.)
 
         ! Divergence gradient
-        do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+        do j=Jsq,Jeq+1 ; do I=Isq-1,Ieq+1
           div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
         enddo ; enddo
-        do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+        do J=Jsq-1,Jeq+1 ; do i=Isq,Ieq+1
           div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
         enddo ; enddo
 
         call pass_vector(div_xx_dx, div_xx_dy, G%Domain)
 
         ! Magnitude of divergence gradient
-        do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           grad_div_mag_h(i,j) =sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I-1,j)))**2 + &
           (0.5 * (div_xx_dy(i,J) + div_xx_dy(i,J-1)))**2)
         enddo ; enddo
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+        do J=js-1,Jeq ; do I=is-1,Ieq
           grad_div_mag_q(I,J) =sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I,j+1)))**2 + &
           (0.5 * (div_xx_dy(i,J) + div_xx_dy(i+1,J)))**2)
         enddo ; enddo
@@ -740,10 +740,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
           div_xx_dy(i,J) = 0.0
         enddo ; enddo
-        do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           grad_div_mag_h(i,j) = 0.0
         enddo ; enddo
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+        do J=js-1,Jeq ; do I=is-1,Ieq
           grad_div_mag_q(I,J) = 0.0
         enddo ; enddo
 
