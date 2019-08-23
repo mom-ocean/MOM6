@@ -455,7 +455,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
         'm OR kg m-2', v_extensive = .true.)
- 
+
 end subroutine geothermal_init
 
 !> Clean up and deallocate memory associated with the geothermal heating module.
