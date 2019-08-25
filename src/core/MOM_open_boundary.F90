@@ -4069,34 +4069,23 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
   integer,                                    intent(in)    :: fld
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
-  integer :: n, ishift,jshift
+  integer :: n
   real, allocatable, dimension(:,:,:) :: eta ! Segment source data interface heights, [Z -> m]
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
   real :: hTmp, eTmp, dilate
   character(len=100) :: mesg
 
-  nz = G%ke
   hTolerance = 0.1*US%m_to_Z
 
-  ishift=0;jshift=0
+  nz = size(segment%field(fld)%dz_src,3)
+
   if (segment%is_E_or_W) then
-     if (segment%field(fld)%name == 'V' .or. segment%field(fld)%name == 'DVDX') then
-        is = segment%HI%isdB ; ie = segment%HI%iedB
-        js = segment%HI%jsdB ; je = segment%HI%jedB
-     else
-        is = segment%HI%isd ; ie = segment%HI%ied
-        js = segment%HI%jsd ; je = segment%HI%jed
-     endif
-     if (segment%direction == OBC_DIRECTION_W) ishift=1
+     ! segment thicknesses are defined at cell face centers.
+     is = segment%HI%isdB ; ie = segment%HI%iedB
+     js = segment%HI%jsd ; je = segment%HI%jed
   else
-     if (segment%field(fld)%name == 'U' .or. segment%field(fld)%name == 'DUDY') then
-        is = segment%HI%isdB ; ie = segment%HI%iedB
-        js = segment%HI%jsdB ; je = segment%HI%jedB
-     else
-        is = segment%HI%isd ; ie = segment%HI%ied
-        js = segment%HI%jsd ; je = segment%HI%jed
-     endif
-     if (segment%direction == OBC_DIRECTION_S) jshift=1
+     is = segment%HI%isd ; ie = segment%HI%ied
+     js = segment%HI%jsdB ; je = segment%HI%jedB
   endif
   allocate(eta(is:ie,js:je,nz+1))
   contractions=0; dilations=0
@@ -4108,13 +4097,13 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
     ! an issue to be addressed, for instance if we are placing open boundaries
     ! under ice shelf cavities.
     do k=2,nz+1
-      eta(i,j,k)=eta(i,j,k-1)-segment%field(fld)%dz_src(i,j,k)
+      eta(i,j,k)=eta(i,j,k-1)-segment%field(fld)%dz_src(i,j,k-1)
     enddo
     ! The normal slope at the boundary is zero by a
     ! previous call to open_boundary_impose_normal_slope
     do k=nz+1,1,-1
-      if (-eta(i,j,k) > segment%htot(i,j) + hTolerance) then
-         eta(i,j,k) = -segment%htot(i,j)
+      if (-eta(i,j,k) > segment%Htot(i,j) + hTolerance) then
+         eta(i,j,k) = -segment%Htot(i,j)
          contractions = contractions + 1
       endif
     enddo
@@ -4132,15 +4121,18 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
 
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
-    if (-eta(i,j,nz+1) < segment%htot(i,j) - hTolerance) then
+    if (-eta(i,j,nz+1) < segment%Htot(i,j) - hTolerance) then
        dilations = dilations + 1
-       if (eta(i,j,1) <= eta(i,j,nz+1)) then
-         do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + segment%htot(i,j)) / real(nz) ; enddo
-       else
-         dilate = (eta(i,j,1) + segment%htot(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
-         do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k) * dilate ; enddo
-       endif
-       do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + segment%field(fld)%dz_src(i,j,k) ; enddo
+       ! expand bottom-most cell only
+       eta(i,j,nz+1) = -segment%Htot(i,j)
+       segment%field(fld)%dz_src(i,k,nz)= eta(i,j,nz)-eta(i,j,nz+1)
+       ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
+       !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
+       ! else
+       !   dilate = (eta(i,j,1) + G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
+       !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k) * dilate ; enddo
+       ! endif
+       !do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + segment%field(fld)%dz_src(i,j,k) ; enddo
     endif
     ! Now convert thicknesses to units of H.
     do k=1,nz
