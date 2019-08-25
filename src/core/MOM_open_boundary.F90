@@ -4125,7 +4125,7 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
        dilations = dilations + 1
        ! expand bottom-most cell only
        eta(i,j,nz+1) = -segment%Htot(i,j)
-       segment%field(fld)%dz_src(i,k,nz)= eta(i,j,nz)-eta(i,j,nz+1)
+       segment%field(fld)%dz_src(i,j,nz)= eta(i,j,nz)-eta(i,j,nz+1)
        ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
        !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
        ! else
