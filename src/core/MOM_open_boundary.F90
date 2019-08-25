@@ -3229,6 +3229,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             endif
           endif
 
+          call adjustSegmentEtaToFitBathymetry(G,GV,US,segment,m)
+
           if (segment%is_E_or_W) then
             ishift=1
             if (segment%direction == OBC_DIRECTION_E) ishift=0
@@ -4050,6 +4052,113 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
   endif
 
 end subroutine open_boundary_register_restarts
+
+!> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
+!!
+!! If the bottom most interface is below the topography then the bottom-most
+!! layers are contracted to GV%Angstrom_m.
+!! If the bottom most interface is above the topography then the entire column
+!! is dilated (expanded) to fill the void.
+!!   @remark{There is a (hard-wired) "tolerance" parameter such that the
+!! criteria for adjustment must equal or exceed 10cm.}
+subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
+  type(ocean_grid_type),                      intent(in)    :: G   !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV  !< The ocean's vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
+  type(OBC_segment_type),                       intent(inout) :: segment !< pointer to segment type
+  integer,                                    intent(in)    :: fld
+  ! Local variables
+  integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
+  integer :: n
+  real, allocatable, dimension(:,:,:) :: eta ! Segment source data interface heights, [Z -> m]
+  real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
+  real :: hTmp, eTmp, dilate
+  character(len=100) :: mesg
+
+  hTolerance = 0.1*US%m_to_Z
+
+  nz = size(segment%field(fld)%dz_src,3)
+
+  if (segment%is_E_or_W) then
+     ! segment thicknesses are defined at cell face centers.
+     is = segment%HI%isdB ; ie = segment%HI%iedB
+     js = segment%HI%jsd ; je = segment%HI%jed
+  else
+     is = segment%HI%isd ; ie = segment%HI%ied
+     js = segment%HI%jsdB ; je = segment%HI%jedB
+  endif
+  allocate(eta(is:ie,js:je,nz+1))
+  contractions=0; dilations=0
+  do j=js,je ; do i=is,ie
+    eta(i,j,1)=0.0   ! segment data are assumed to be located on a static grid
+    ! For remapping calls, the entire column will be dilated
+    ! by a factor equal to the ratio of the sum of the geopotential referenced
+    ! source data thicknesses, and the current model thicknesses. This could be
+    ! an issue to be addressed, for instance if we are placing open boundaries
+    ! under ice shelf cavities.
+    do k=2,nz+1
+      eta(i,j,k)=eta(i,j,k-1)-segment%field(fld)%dz_src(i,j,k-1)
+    enddo
+    ! The normal slope at the boundary is zero by a
+    ! previous call to open_boundary_impose_normal_slope
+    do k=nz+1,1,-1
+      if (-eta(i,j,k) > segment%Htot(i,j) + hTolerance) then
+         eta(i,j,k) = -segment%Htot(i,j)
+         contractions = contractions + 1
+      endif
+    enddo
+
+    do k=1,nz
+      ! Collapse layers to thinnest possible if the thickness less than
+      ! the thinnest possible (or negative).
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
+         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
+         segment%field(fld)%dz_src(i,j,k) = GV%Angstrom_Z
+      else
+         segment%field(fld)%dz_src(i,j,k) = (eta(i,j,K) - eta(i,j,K+1))
+      endif
+    enddo
+
+    !   The whole column is dilated to accommodate deeper topography than
+    ! the bathymetry would indicate.
+    if (-eta(i,j,nz+1) < segment%Htot(i,j) - hTolerance) then
+       dilations = dilations + 1
+       ! expand bottom-most cell only
+       eta(i,j,nz+1) = -segment%Htot(i,j)
+       segment%field(fld)%dz_src(i,j,nz)= eta(i,j,nz)-eta(i,j,nz+1)
+       ! if (eta(i,j,1) <= eta(i,j,nz+1)) then
+       !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
+       ! else
+       !   dilate = (eta(i,j,1) + G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
+       !   do k=1,nz ; segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k) * dilate ; enddo
+       ! endif
+       !do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + segment%field(fld)%dz_src(i,j,k) ; enddo
+    endif
+    ! Now convert thicknesses to units of H.
+    do k=1,nz
+      segment%field(fld)%dz_src(i,j,k) = segment%field(fld)%dz_src(i,j,k)*GV%Z_to_H
+    enddo
+  enddo; enddo
+
+  ! can not do communication call here since only PEs on the current segment are here
+
+  ! call sum_across_PEs(contractions)
+  ! if ((contractions > 0) .and. (is_root_pe())) then
+  !    write(mesg,'("Thickness OBCs were contracted ",'// &
+  !         '"to fit topography in ",I8," places.")') contractions
+  !    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
+  ! endif
+  ! call sum_across_PEs(dilations)
+  ! if ((dilations > 0) .and. (is_root_pe())) then
+  !    write(mesg,'("Thickness OBCs were dilated ",'// &
+  !         '"to fit topography in ",I8," places.")') dilations
+  !    call MOM_error(WARNING, 'adjustEtaToFitBathymetry: '//mesg)
+  ! endif
+  deallocate(eta)
+
+
+
+end subroutine adjustSegmentEtaToFitBathymetry
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
