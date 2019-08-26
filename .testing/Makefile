@@ -116,7 +116,7 @@ build/%/path_names: $(LIST_PATHS)
 # Target repository for regression tests
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
-	cd $@ && git checkout -b $(MOM_TARGET_BRANCH)
+	cd $@ && git checkout $(MOM_TARGET_BRANCH)
 
 
 #----
