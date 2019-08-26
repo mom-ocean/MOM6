@@ -561,34 +561,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
       endif
 
-!      if (CS%use_GME) then
-!        call pass_var(dudx, G%Domain, complete=.true.)
-!        call pass_var(dvdy, G%Domain, complete=.true.)
-!        call pass_var(dvdx, G%Domain, position=CORNER, complete=.true.)
-!        call pass_var(dudy, G%Domain, position=CORNER, complete=.true.)
-!!        call pass_var(MEKE%MEKE, G%Domain, complete=.true.)
-!
-
-!    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-!        do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-!        do j = js, je ; do i = is, ie
-!          grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
-!            (0.25*((dvdx(I,J)+dvdx(I-1,J-1))+(dvdx(I,J-1)+dvdx(I-1,J))))**2 + &
-!            (0.25*((dudy(I,J)+dudy(I-1,J-1))+(dudy(I,J-1)+dudy(I-1,J))))**2)
-!
-!          max_diss_rate_h(i,j,k) = 2.0 !*MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
-!        enddo ; enddo
-!
-!        do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
-!          grad_vel_mag_q(I,J) = boundary_mask_h(I,J) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
-!            (0.25*((dvdx(I,J)+dvdx(I-1,J-1))+(dvdx(I,J-1)+dvdx(I-1,J))))**2 + &
-!            (0.25*((dudy(I,J)+dudy(I-1,J-1))+(dudy(I,J-1)+dudy(I-1,J))))**2)
-!
-!          max_diss_rate_q(I,J,k) = 0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)+ &
-!            MEKE%MEKE(i,j+1)+MEKE%MEKE(i+1,j+1)) * sqrt(grad_vel_mag_q(I,J))
-!        enddo ; enddo
-!      endif
-
 
       if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
         ! There are extra wide halos here to accommodate the cross-corner-point
@@ -690,29 +662,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
 
-      ! Components for the vertical vorticity
-      ! Note this a simple re-calculation of shearing components using the same discretization.
-      ! We will consider using a circulation based calculation of vorticity later.
-      ! Also note this will need OBC boundary conditions re-applied...
-!      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-!        DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
-!        dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
-!        DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
-!        dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
-!      enddo ; enddo
-
       ! Vorticity
       if (CS%no_slip) then
         do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
           vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-!          dudy(I,J) = (2.0-G%mask2dBu(I,J)) * dudy(I,J)
-!          dvdx(I,J) = (2.0-G%mask2dBu(I,J)) * dvdx(I,J)
         enddo ; enddo
       else
         do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
           vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-!          dudy(I,J) = G%mask2dBu(I,J) * dudy(I,J)
-!          dvdx(I,J) = G%mask2dBu(I,J) * dvdx(I,J)
         enddo ; enddo
       endif
 
@@ -1085,11 +1042,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
 
       if (CS%use_GME) then
-!        call pass_var(dudx, G%Domain, complete=.true.)
-!        call pass_var(dvdy, G%Domain, complete=.true.)
-!        call pass_var(dvdx, G%Domain, position=CORNER, complete=.true.)
-!        call pass_var(dudy, G%Domain, position=CORNER, complete=.true.)
-
 
         do j = js, je ; do i = is, ie
           grad_vel_mag_h(i,j) = boundary_mask_h(i,j) * (dudx(i,j)**2 + dvdy(i,j)**2 + &
@@ -1295,16 +1247,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         enddo ; enddo
       endif ! MEKE%backscatter
 
-!      if (CS%use_GME) then
-!        do j=js,je ; do i=is,ie
-!          ! MEKE%mom_src now is sign definite because it only uses the dissipation
-!          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
-!        enddo ; enddo
-!      else
       do j=js,je ; do i=is,ie
         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
       enddo ; enddo
-!      endif ! CS%use_GME
 
       if (CS%use_GME .and. associated(MEKE)) then
         if (associated(MEKE%GME_snk)) then
