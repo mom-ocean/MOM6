@@ -24,9 +24,9 @@ MKMF_CPP = "-Duse_libMPI -Duse_netCDF -DSPMD"
 
 # Environment
 # TODO: This info ought to be determined by CMake, automake, etc.
-#MKMF_TEMPLATE ?= linux-ubuntu-xenial-gnu.mk
-MKMF_TEMPLATE ?= ncrc-gnu.mk
-#MKMF_TEMPLATE ?= ncrc-intel.mk
+#MKMF_TEMPLATE ?= .testing/linux-ubuntu-xenial-gnu.mk
+MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-gnu.mk
+#MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-intel.mk
 
 #---
 # Test configuration
@@ -70,6 +70,8 @@ else
 	GIT_MERGED_HEAD =
 endif
 
+REPORT_COVERAGE ?=
+
 
 #---
 # Rules
@@ -99,9 +101,9 @@ build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
 
 build/%/Makefile: build/%/path_names
 	git checkout $(BRANCH)
-	cp .testing/$(MKMF_TEMPLATE) $(@D)
+	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
-		-t $(MKMF_TEMPLATE) \
+		-t $(notdir $(MKMF_TEMPLATE)) \
 		-o '-I ../../$(FMS)/build' \
 		-p MOM6 \
 		-l '../../$(FMS)/lib/libfms.a' \
@@ -157,9 +159,9 @@ $(FMS)/lib/libfms.a: $(FMS)/build/Makefile
 	cd $(FMS)/build && make NETCDF=3 DEBUG=1 ../lib/libfms.a
 
 $(FMS)/build/Makefile: $(FMS)/build/path_names
-	cp .testing/$(MKMF_TEMPLATE) $(@D)
+	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
-		-t $(MKMF_TEMPLATE) \
+		-t $(notdir $(MKMF_TEMPLATE)) \
 		-p ../lib/libfms.a \
 		-c $(MKMF_CPP) \
 		path_names
@@ -248,7 +250,7 @@ endef
 # Define $(,) as comma escape character
 , := ,
 
-$(eval $(call STAT_RULE,symmetric,symmetric,true,,,1))
+$(eval $(call STAT_RULE,symmetric,symmetric,$(REPORT_COVERAGE),,,1))
 $(eval $(call STAT_RULE,asymmetric,asymmetric,,,,1))
 $(eval $(call STAT_RULE,target,target,,,,1))
 $(eval $(call STAT_RULE,repro,repro,,,,1))
