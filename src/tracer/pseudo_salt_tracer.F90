@@ -286,7 +286,7 @@ function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
   stocks(1) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
     stocks(1) = stocks(1) + CS%diff(i,j,k) * &
-                         (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+                         (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
   enddo ; enddo ; enddo
   stocks(1) = GV%H_to_kg_m2 * stocks(1)
 

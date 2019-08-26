@@ -127,10 +127,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                               intent(out)   :: u    !< The zonal velocity that is being
-                                                    !! initialized [m s-1]
+                                                    !! initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                               intent(out)   :: v    !< The meridional velocity that is being
-                                                    !! initialized [m s-1]
+                                                    !! initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                               intent(out)   :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),      intent(inout) :: tv   !< A structure pointing to various thermodynamic
@@ -154,9 +154,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   character(len=200) :: filename2  ! The name of an input files.
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
-  real :: H_rescale ! A rescaling factor for thicknesses from the representation in
-                    ! a restart file to the internal representation in this run.
-  real :: dt        ! The baroclinic dynamics timestep for this run [s].
+  real :: H_rescale   ! A rescaling factor for thicknesses from the representation in
+                      ! a restart file to the internal representation in this run.
+  real :: vel_rescale ! A rescaling factor for velocities from the representation in
+                      ! a restart file to the internal representation in this run.
+  real :: dt          ! The baroclinic dynamics timestep for this run [s].
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -406,20 +408,20 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        " \t USER - call a user modified routine.", default="zero", &
        do_not_log=just_read)
   select case (trim(config))
-     case ("file"); call initialize_velocity_from_file(u, v, G, PF, &
+     case ("file"); call initialize_velocity_from_file(u, v, G, US, PF, &
                              just_read_params=just_read)
      case ("zero"); call initialize_velocity_zero(u, v, G, PF, &
                              just_read_params=just_read)
-     case ("uniform"); call initialize_velocity_uniform(u, v, G, PF, &
+     case ("uniform"); call initialize_velocity_uniform(u, v, G, US, PF, &
                                 just_read_params=just_read)
-     case ("circular"); call initialize_velocity_circular(u, v, G, PF, &
+     case ("circular"); call initialize_velocity_circular(u, v, G, US, PF, &
                                  just_read_params=just_read)
      case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, US, PF, &
                                  just_read_params=just_read)
      case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
                                      G, GV, US, PF, just_read_params=just_read)
-     case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
-     case ("USER"); call user_initialize_velocity(u, v, G, PF, &
+     case ("soliton"); call soliton_initialize_velocity(u, v, h, G, US)
+     case ("USER"); call user_initialize_velocity(u, v, G, US, PF, &
                              just_read_params=just_read)
      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
           "Unrecognized velocity configuration "//trim(config))
@@ -427,7 +429,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
-    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
+    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%m_s_to_L_T)
   endif
 
   ! Optionally convert the thicknesses from m to kg m-2.  This is particularly
@@ -493,6 +495,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
       H_rescale = GV%m_to_H / GV%m_to_H_restart
       do k=1,nz ; do j=js,je ; do i=is,ie ; h(i,j,k) = H_rescale * h(i,j,k) ; enddo ; enddo ; enddo
+    endif
+    if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
+         ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
+      vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
+      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IeDB ; u(I,j,k) = vel_rescale * u(I,j,k) ; enddo ; enddo ; enddo
+      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; v(i,J,k) = vel_rescale * v(i,J,k) ; enddo ; enddo ; enddo
     endif
   endif
 
@@ -1243,12 +1251,13 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
 end subroutine cut_off_column_top
 
 !> Initialize horizontal velocity components from file
-subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
+subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1277,7 +1286,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
          " initialize_velocity_from_file: Unable to open "//trim(filename))
 
   !  Read the velocities from a netcdf file.
-  call MOM_read_vector(filename, "u", "v", u(:,:,:), v(:,:,:),G%Domain)
+  call MOM_read_vector(filename, "u", "v", u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file
@@ -1286,9 +1295,9 @@ end subroutine initialize_velocity_from_file
 subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1317,12 +1326,13 @@ subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
 end subroutine initialize_velocity_zero
 
 !> Sets the initial velocity components to uniform
-subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
+subroutine initialize_velocity_uniform(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1339,10 +1349,10 @@ subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
 
   call get_param(param_file, mdl, "INITIAL_U_CONST", initial_u_const, &
                  "A initial uniform value for the zonal flow.", &
-                 units="m s-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m s-1", scale=US%m_s_to_L_T, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "INITIAL_V_CONST", initial_v_const, &
                  "A initial uniform value for the meridional flow.", &
-                 units="m s-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="m s-1", scale=US%m_s_to_L_T, fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1357,12 +1367,13 @@ end subroutine initialize_velocity_uniform
 
 !> Sets the initial velocity components to be circular with
 !! no flow at edges of domain and center.
-subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
+subroutine initialize_velocity_circular(u, v, G, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< The zonal velocity that is being initialized [m s-1]
+                           intent(out) :: u  !< The zonal velocity that is being initialized [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< The meridional velocity that is being initialized [m s-1]
+                           intent(out) :: v  !< The meridional velocity that is being initialized [L T-1 ~> m s-1]
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
                                                       !! parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -1381,7 +1392,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   call get_param(param_file, mdl, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the "// &
                  "circular stream function [m s-1].", &
-                 units="m s-1", default=0., do_not_log=just_read)
+                 units="m s-1", default=0., scale=US%L_T_to_m_s, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1390,12 +1401,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
     psi2 = my_psi(I,j-1)
-    u(I,j,k) = (psi1-psi2)/G%dy_Cu(I,j)! *(circular_max_u*G%len_lon/(2.0*dpi))
+    u(I,j,k) = (psi1-psi2) / (G%US%L_to_m*G%dy_Cu(I,j)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     psi1 = my_psi(i,J)
     psi2 = my_psi(i-1,J)
-    v(i,J,k) = (psi2-psi1)/G%dx_Cv(i,J)! *(circular_max_u*G%len_lon/(2.0*dpi))
+    v(i,J,k) = (psi2-psi1) / (G%US%L_to_m*G%dx_Cv(i,J)) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
   contains
@@ -1407,12 +1418,12 @@ subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
     ! Local variables
     real :: x, y, r
 
-    x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon)/G%len_lon-1.0  ! -1<x<1
-    y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat)/G%len_lat-1.0 ! -1<y<1
-    r = sqrt( x**2 + y**2 ) ! Circulat stream fn nis fn of radius only
-    r = min(1.0,r) ! Flatten stream function in corners of box
+    x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon) / G%len_lon - 1.0  ! -1<x<1
+    y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat) / G%len_lat - 1.0 ! -1<y<1
+    r = sqrt( x**2 + y**2 ) ! Circular stream function is a function of radius only
+    r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u*G%len_lon*1e3/dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u*G%len_lon*1e3 / dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular
@@ -1887,10 +1898,10 @@ subroutine compute_global_grid_integrals(G)
   tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
+    tmpForSumming(i,j) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
   G%areaT_global = reproducing_sum(tmpForSumming)
-  G%IareaT_global = 1. / G%areaT_global
+  G%IareaT_global = 1. / (G%areaT_global)
 end subroutine compute_global_grid_integrals
 
 !> This subroutine sets the 4 bottom depths at velocity points to be the
@@ -2161,7 +2172,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     ! Compute fractional ice shelf coverage of h
     do j=jsd,jed ; do i=isd,ied
       if (G%areaT(i,j) > 0.0) &
-        frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+        frac_shelf_h(i,j) = area_shelf_h(i,j) / (US%L_to_m**2*G%areaT(i,j))
     enddo ; enddo
     ! Pass to the pointer for use as an argument to regridding_main
     shelf_area => frac_shelf_h

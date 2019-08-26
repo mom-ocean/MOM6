@@ -909,12 +909,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_read_data(CS%runoff_file, CS%lrunoff_var, temp(:,:), &
                      G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%lrunoff(i,j) = temp(i,j)*G%IareaT(i,j)
+        fluxes%lrunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
       enddo ; enddo
       call MOM_read_data(CS%runoff_file, CS%frunoff_var, temp(:,:), &
                      G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
-        fluxes%frunoff(i,j) = temp(i,j)*G%IareaT(i,j)
+        fluxes%frunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
       enddo ; enddo
     else
       call MOM_read_data(CS%runoff_file, CS%lrunoff_var, fluxes%lrunoff(:,:), &
