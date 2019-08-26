@@ -44,7 +44,10 @@ TESTS = grids layouts restarts repros nans dims
 # MOM_TARGET_REMOTE_NAME and MOM_MERGED_BRANCH are arbitrary labels which may
 # cause namespace conflicts, and should probably be renamed or phased out.
 
+# These are set to true by Travis if testing a pull request
 DO_REGRESSION_TESTS ?=
+REPORT_COVERAGE ?=
+
 ifeq ($(DO_REGRESSION_TESTS), true)
 	BUILDS += target
 	TEST += regressions
@@ -53,24 +56,14 @@ ifeq ($(DO_REGRESSION_TESTS), true)
 	MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
 
 	MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
-	MOM_TARGET_REMOTE_NAME ?= target
-	MOM_TARGET_BRANCH := $(MOM_TARGET_REMOTE_NAME)/$(MOM_TARGET_LOCAL_BRANCH)
-	GIT_TARGET_REMOTE = .git/refs/remotes/$(MOM_TARGET_BRANCH)
+	MOM_TARGET_BRANCH := origin/$(MOM_TARGET_LOCAL_BRANCH)
 
-	MOM_MERGED_BRANCH ?= mergetest
-	GIT_MERGED_HEAD = .git/refs/heads/$(MOM_MERGED_BRANCH)
+	TARGET_CODEBASE = build/target_codebase
 else
 	MOM_TARGET_URL =
-	MOM_TARGET_LOCAL_BRANCH =
 	MOM_TARGET_BRANCH =
-	GIT_TARGET_REMOTE =
-
-	# Inert self-checkout of current branch
-	MOM_MERGED_BRANCH =
-	GIT_MERGED_HEAD =
+	TARGET_CODEBASE =
 endif
-
-REPORT_COVERAGE ?=
 
 
 #---
@@ -83,9 +76,6 @@ all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
 BUILD_TARGETS = MOM6 Makefile path_names
 .PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),build/$(b)/$(f)))
 
-$(foreach f,$(BUILD_TARGETS),build/target/$(f)): BRANCH=$(MOM_TARGET_BRANCH)
-$(foreach f,$(BUILD_TARGETS),build/%/$(f)): BRANCH=$(MOM_MERGED_BRANCH)
-
 build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 COVERAGE=1
 build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
@@ -95,12 +85,9 @@ build/asymmetric/path_names: GRID_SRC=config_src/dynamic
 build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
 build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
-	git checkout $(BRANCH)
 	make -C $(@D) $(MOMFLAGS) $(@F)
-	git checkout @{-1}
 
 build/%/Makefile: build/%/path_names
-	git checkout $(BRANCH)
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(notdir $(MKMF_TEMPLATE)) \
@@ -109,46 +96,27 @@ build/%/Makefile: build/%/path_names
 		-l '../../$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		path_names
-	git checkout @{-1}
 
-# TODO: Merge the target and generic path_names rules
-# (Only dependency differs at the moment)
+# NOTE: These path_names rules could be merged
 
-build/target/path_names: $(LIST_PATHS) $(GIT_TARGET_REMOTE)
-	git checkout $(BRANCH)
+build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
+	mkdir -p $(@D)
+	cd $(@D) && $(LIST_PATHS) -l \
+		../../$(TARGET_CODEBASE)/src \
+		../../$(TARGET_CODEBASE)/config_src/solo_driver \
+		../../$(TARGET_CODEBASE)/$(GRID_SRC)
+
+build/%/path_names: $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		../../src \
 		../../config_src/solo_driver \
 		../../$(GRID_SRC)
-	git checkout @{-1}
 
-build/%/path_names: $(LIST_PATHS) $(GIT_MERGED_HEAD)
-	git checkout $(BRANCH)
-	mkdir -p $(@D)
-	cd $(@D) && $(LIST_PATHS) -l \
-		../../src \
-		../../config_src/solo_driver \
-		../../$(GRID_SRC)
-	git checkout @{-1}
-
-
-#----
-# Repository management
-
-# WARNING: Implicit dependency of GIT_TARGET_REMOTE and DO_REGRESSION_TESTS
-$(GIT_MERGED_HEAD): $(GIT_TARGET_REMOTE)
-	git checkout -b $(MOM_MERGED_BRANCH)
-	if [ $(DO_REGRESSION_TESTS) ]; then \
-		git merge --no-edit $(MOM_TARGET_BRANCH); \
-	fi
-	git checkout @{-1}
-
-# GIT_TARGET_REMOTE conditional rule
-.git/refs/remotes/$(MOM_TARGET_BRANCH):
-	git ls-remote $(MOM_TARGET_REMOTE_NAME) \
-		|| git remote add $(MOM_TARGET_REMOTE_NAME) $(MOM_TARGET_URL)
-	git fetch --no-recurse-submodules $(MOM_TARGET_REMOTE_NAME)
+# Target repository for regression tests
+$(TARGET_CODEBASE):
+	git clone --recursive $(MOM_TARGET_URL) $@
+	cd $@ && git checkout -b $(MOM_TARGET_BRANCH)
 
 
 #----
