@@ -424,7 +424,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     ! make a copy of the tracers in case values need to be overridden for OBCs
     do m = 1,ntr
-      do i=is-stencil,ie+stencil
+      do i=G%isd,G%ied
         T_tmp(i,m) = Tr(m)%t(i,j,k)
       enddo
     enddo
@@ -790,9 +790,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   ! make a copy of the tracers in case values need to be overridden for OBCs
 
-  do j=js-stencil,je+stencil ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
+  do j=G%jsd,G%jed; do m=1,ntr; do i=G%isd,G%ied
     T_tmp(i,m,j) = Tr(m)%t(i,j,k)
-  enddo ; enddo ; endif ; enddo
+  enddo ; enddo ; enddo
 
   ! loop through open boundaries and recalculate flux terms
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
