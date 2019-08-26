@@ -354,10 +354,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real, dimension(SZI_(G),ntr) :: &
     slope_x             ! The concentration slope per grid point [conc].
   real, dimension(SZIB_(G),ntr) :: &
-    flux_x              ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
+    flux_x              ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
   real, dimension(SZI_(G),ntr) :: &
     T_tmp               ! The copy of the tracer concentration at constant i,k [H m2 conc ~> m3 conc or kg conc].
-    flux_x              ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
 
   real :: maxslope      ! The maximum concentration slope per grid point
                         ! consistent with monotonicity [conc].
