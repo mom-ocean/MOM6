@@ -636,7 +636,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   integer, pointer                :: idata(:)
   integer                         :: i,j,k
   real(kind=SHR_REAL_R8), pointer :: data(:)
-  real(kind=SHR_REAL_R8)          :: m2_to_rad2
+  real(kind=SHR_REAL_R8)          :: L2_to_rad2
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
 
   grid => glb%grid ! for convenience
@@ -681,11 +681,11 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   call mct_gGrid_importRattr(dom_ocn,"lat",data,lsize)
 
   k = 0
-  m2_to_rad2 = 1./grid%Rad_Earth**2
+  L2_to_rad2 = grid%US%L_to_m**2 / grid%Rad_Earth**2
   do j = grid%jsc, grid%jec
     do i = grid%isc, grid%iec
       k = k + 1 ! Increment position within gindex
-      data(k) = grid%AreaT(i,j) * m2_to_rad2
+      data(k) = grid%AreaT(i,j) * L2_to_rad2
     enddo
   enddo
   call mct_gGrid_importRattr(dom_ocn,"area",data,lsize)
@@ -743,7 +743,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 
 end subroutine ocean_model_init_sfc
 

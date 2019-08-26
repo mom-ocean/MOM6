@@ -3868,7 +3868,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1 !This seems to be faster!!!!
-           weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
+           weight = mask(ii,jj,k)*diag_cs%G%US%L_to_m**2*diag_cs%G%areaT(ii,jj)*diag_cs%h(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo; enddo
@@ -3896,7 +3896,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj,k)*diag_cs%G%areaT(ii,jj)
+           weight = mask(ii,jj,k)*diag_cs%G%US%L_to_m**2*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo; enddo
@@ -3910,7 +3910,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k)*diag_cs%G%dyCu(ii,jj)*diag_cs%h(ii,jj,k)
+           weight =mask(ii,jj,k)*diag_cs%G%US%L_to_m*diag_cs%G%dyCu(ii,jj) * diag_cs%h(ii,jj,k)
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
@@ -3966,7 +3966,7 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight = mask(ii,jj,k)*diag_cs%G%dxCv(ii,jj)*diag_cs%h(ii,jj,k)
+           weight = mask(ii,jj,k)*diag_cs%G%US%L_to_m*diag_cs%G%dxCv(ii,jj)*diag_cs%h(ii,jj,k)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
@@ -4037,7 +4037,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
-           weight = mask(ii,jj)*diag_cs%G%areaT(ii,jj)
+           weight = mask(ii,jj)*diag_cs%G%US%L_to_m**2*diag_cs%G%areaT(ii,jj)
            total_weight = total_weight + weight
            ave=ave+field_in(ii,jj)*weight
         enddo; enddo
@@ -4093,7 +4093,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
-           weight =mask(ii,jj)*diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+           weight = mask(ii,jj)*diag_cs%G%US%L_to_m*diag_cs%G%dyCu(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo
@@ -4107,7 +4107,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
         total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
-           weight =mask(ii,jj)*diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
+           weight = mask(ii,jj)*diag_cs%G%US%L_to_m*diag_cs%G%dxCv(ii,jj)!*diag_cs%h(ii,jj,1) !Niki?
            total_weight = total_weight +weight
            ave=ave+field_in(ii,jj)*weight
         enddo

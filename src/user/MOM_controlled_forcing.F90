@@ -20,6 +20,7 @@ use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_date, set_date
 use MOM_time_manager, only : time_type_to_real, real_to_time
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -78,7 +79,7 @@ contains
 !> This subroutine calls any of the other subroutines in this file
 !! that are needed to specify the current surface forcing fields.
 subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_precip, &
-                              day_start, dt, G, CS)
+                              day_start, dt, G, US, CS)
   type(ocean_grid_type), intent(inout) :: G                    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
                                                                !! anomalies [degC].
@@ -96,6 +97,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
   real,                  intent(in)    :: dt             !< Length of time over which these
                                                          !! fluxes will be applied [s].
+  type(unit_scale_type), intent(in)    :: US             !< A dimensional unit scaling type
   type(ctrl_forcing_CS), pointer       :: CS             !< A pointer to the control structure
                                                          !! returned by a previous call to
                                                          !! ctrl_forcing_init.
@@ -146,12 +148,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     do j=js,je ; do i=is,ie
       CS%heat_0(i,j) = CS%heat_0(i,j) + dt_heat_rate * ( &
          -CS%lam_heat*G%mask2dT(i,j)*SST_anom(i,j) + &
-        (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+        (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                           (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
       CS%precip_0(i,j) = CS%precip_0(i,j) + dt_prec_rate * ( &
          CS%lam_prec * G%mask2dT(i,j)*(SSS_anom(i,j) / SSS_mean(i,j)) + &
-        (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+        (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                           (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
 
       virt_heat(i,j) = virt_heat(i,j) + CS%heat_0(i,j)
@@ -330,13 +332,13 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       do j=js,je ; do i=is,ie
         CS%heat_cyc(i,j,m_u1) = CS%heat_cyc(i,j,m_u1) + dt1_heat_rate * ( &
            -CS%lam_cyc_heat*(CS%avg_SST_anom(i,j,m_u2) - CS%avg_SST_anom(i,j,m_u1)) + &
-          (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                             (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
         CS%precip_cyc(i,j,m_u1) = CS%precip_cyc(i,j,m_u1) + dt1_prec_rate * ( &
           CS%lam_cyc_prec * (CS%avg_SSS_anom(i,j,m_u2) - CS%avg_SSS_anom(i,j,m_u1)) / &
                             (0.5*(CS%avg_SSS(i,j,m_u2) + CS%avg_SSS(i,j,m_u1))) + &
-          (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                             (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
       enddo ; enddo
     endif
@@ -355,13 +357,13 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       do j=js,je ; do i=is,ie
         CS%heat_cyc(i,j,m_u2) = CS%heat_cyc(i,j,m_u2) + dt1_heat_rate * ( &
          -CS%lam_cyc_heat*(CS%avg_SST_anom(i,j,m_u3) - CS%avg_SST_anom(i,j,m_u2)) + &
-          (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                             (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
         CS%precip_cyc(i,j,m_u2) = CS%precip_cyc(i,j,m_u2) + dt1_prec_rate * ( &
           CS%lam_cyc_prec * (CS%avg_SSS_anom(i,j,m_u3) - CS%avg_SSS_anom(i,j,m_u2)) / &
                              (0.5*(CS%avg_SSS(i,j,m_u3) + CS%avg_SSS(i,j,m_u2))) + &
-          (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                             (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
       enddo ; enddo
     endif

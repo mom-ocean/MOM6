@@ -168,11 +168,11 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
         h_shelf (i,j) = 0.0
       else
         if (G%geoLonCu(i,j) > edge_pos) then
-          area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+          area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                               (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
           hmask (i,j) = 2.0
         else
-          area_shelf_h(i,j) = G%areaT(i,j)
+          area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j)
           hmask (i,j) = 1.0
         endif
 
