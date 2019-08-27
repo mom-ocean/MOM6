@@ -39,10 +39,10 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction [nondim]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), &
                                      optional, intent(inout) :: N2_u !< Brunt-Vaisala frequency squared at
-                                                                     !! interfaces between u-points [s-2]
+                                                                     !! interfaces between u-points [T-2 ~> s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), &
                                      optional, intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at
-                                                                     !! interfaces between u-points [s-2]
+                                                                     !! interfaces between u-points [[T-2 ~> s-2]
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
 
   ! real,                              optional, intent(in)    :: eta_to_m !< The conversion factor from the units
@@ -79,19 +79,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: haA, haB, haL, haR  ! Arithmetic mean thicknesses [H ~> m or kg m-2].
   real :: dzaL, dzaR    ! Temporary thicknesses in eta units [Z ~> m].
   real :: wtA, wtB, wtL, wtR  ! Unscaled weights, with various units.
-  real :: drdx, drdy    ! Zonal and meridional density gradients [kg m-4].
+  real :: drdx, drdy    ! Zonal and meridional density gradients [kg m-3 L-1 ~> kg m-4].
   real :: drdz          ! Vertical density gradient [kg m-3 Z-1 ~> kg m-4].
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1.
-  real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [kg2 m-8].
+  real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [kg2 m-6 L-2 ~> kg2 m-8].
   real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
   real :: dz_neglect    ! A change in interface heighs that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
+  logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
   real :: Z_to_L        ! A conversion factor between from units for e to the
                         ! units for lateral distances.
@@ -111,9 +110,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   nz = G%ke ; IsdB = G%IsdB
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  Z_to_L = US%Z_to_m ; H_to_Z = GV%H_to_Z
+  Z_to_L = US%Z_to_L ; H_to_Z = GV%H_to_Z
   ! if (present(eta_to_m)) then
-  !   Z_to_L = eta_to_m ; H_to_Z = GV%H_to_m / eta_to_m
+  !   Z_to_L = eta_to_m*US%m_to_L ; H_to_Z = GV%H_to_m / eta_to_m
   ! endif
   L_to_Z = 1.0 / Z_to_L
   dz_neglect = GV%H_subroundoff * H_to_Z
@@ -122,7 +121,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = (US%L_to_Z*US%L_to_m*L_to_z*US%s_to_T**2*GV%g_Earth) / GV%Rho0
+  G_Rho0 = (US%L_to_Z*L_to_Z*GV%g_Earth) / GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.
@@ -157,7 +156,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
     enddo ; enddo
   enddo
 
-  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,pres,T,S,tv, &
+  !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
   !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
   !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u,slope_x) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &

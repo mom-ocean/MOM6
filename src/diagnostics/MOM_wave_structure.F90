@@ -96,9 +96,9 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   type(thermo_var_ptrs),                    intent(in)  :: tv !< A structure pointing to various
                                                               !! thermodynamic variables.
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn !< The (non-rotational) mode internal
-                                                              !! gravity wave speed [m s-1].
+                                                              !! gravity wave speed [L T-1 ~> m s-1].
   integer,                                  intent(in)  :: ModeNum !< Mode number
-  real,                                     intent(in)  :: freq !< Intrinsic wave frequency [s-1].
+  real,                                     intent(in)  :: freq !< Intrinsic wave frequency [T-1 ~> s-1].
   type(wave_structure_CS),                  pointer     :: CS !< The control structure returned by a
                                                               !! previous call to wave_structure_init.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -130,14 +130,14 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real :: I_Hnew, drxh_sum
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in m5 Z-1 s-2 kg-1.
-  real :: rescale, I_rescale
+  real :: g_Rho0  ! G_Earth/Rho0 in [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
+  ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 1 ! number of times to iterate in solving for eigenvector
-  real, parameter    :: cg_subRO = 1e-100 ! a very small number
+  real :: cg_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
   real, parameter    :: a_int = 0.5 ! value of normalized integral: \int(w_strct^2)dz = a_int
   real               :: I_a_int     ! inverse of a_int
-  real               :: f2          ! squared Coriolis frequency
+  real               :: f2          ! squared Coriolis frequency [T-2 ~> s-2]
   real               :: Kmag2       ! magnitude of horizontal wave number squared
   logical            :: use_EOS     ! If true, density is calculated from T & S using an
                                     ! equation of state.
@@ -179,10 +179,11 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
   S => tv%S ; T => tv%T
   g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth /GV%Rho0
+  cg_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   use_EOS = associated(tv%eqn_of_state)
 
   H_to_pres = GV%Z_to_H*GV%H_to_Pa
-  rescale = 1024.0**4 ; I_rescale = 1.0/rescale
+  ! rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
 
@@ -248,7 +249,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
-        lam = 1/(cn(i,j)**2)
+        lam = 1/(US%L_T_to_m_s**2 * cn(i,j)**2)
 
         ! Calculate drxh_sum
         if (use_EOS) then
@@ -421,7 +422,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             do itt=1,max_itt
               call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
                                   -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_H",e_itt)
-              e_guess(1:kc-1) = e_itt(1:kc-1)/sqrt(sum(e_itt(1:kc-1)**2))
+              e_guess(1:kc-1) = e_itt(1:kc-1) / sqrt(sum(e_itt(1:kc-1)**2))
             enddo ! itt-loop
             w_strct(2:kc) = e_guess(1:kc-1)
             w_strct(1)    = 0.0 ! rigid lid at surface
@@ -448,26 +449,26 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             enddo
             !### Some mathematical cancellations could occur in the next two lines.
             w2avg = w2avg / htot(i,j)
-            w_strct = w_strct / sqrt(htot(i,j)*w2avg*I_a_int)
+            w_strct(:) = w_strct(:) / sqrt(htot(i,j)*w2avg*I_a_int)
 
             ! Calculate vertical structure function of u (i.e. dw/dz)
             do K=2,nzm-1
               u_strct(K) = 0.5*((w_strct(K-1) - w_strct(K)  )/dz(k-1) + &
-                           (w_strct(K)   - w_strct(K+1))/dz(k))
+                                (w_strct(K)   - w_strct(K+1))/dz(k))
             enddo
             u_strct(1)   = (w_strct(1)   -  w_strct(2) )/dz(1)
-            u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
+            u_strct(nzm) = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
 
             ! Calculate wavenumber magnitude
-            f2 = US%s_to_T**2 * G%CoriolisBu(I,J)**2
+            f2 = G%CoriolisBu(I,J)**2
             !f2 = 0.25*US%s_to_T**2 *((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
             !    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-            Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
+            Kmag2 = US%m_to_L**2 * (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
 
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
-            u_strct2 = u_strct(1:nzm)**2
-            w_strct2 = w_strct(1:nzm)**2
+            u_strct2(:) = u_strct(1:nzm)**2
+            w_strct2(:) = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
               int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1))*dz(k)
@@ -477,8 +478,9 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
             ! Back-calculate amplitude from energy equation
             if (Kmag2 > 0.0) then
-              KE_term = 0.25*GV%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
-              PE_term = 0.25*GV%Rho0*( int_N2w2/freq**2 )
+              !### This should be simpified to use a single division.
+              KE_term = 0.25*GV%Rho0*( ((1.0 + f2/freq**2) / Kmag2)*int_dwdz2 + int_w2 )
+              PE_term = 0.25*GV%Rho0*( int_N2w2/(US%s_to_T*freq)**2 )
               if (En(i,j) >= 0.0) then
                 W0 = sqrt( En(i,j)/(KE_term + PE_term) )
               else
@@ -487,14 +489,15 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                 W0 = 0.0
               endif
               ! Calculate actual vertical velocity profile and derivative
-              W_profile    = W0*w_strct
-              dWdz_profile = W0*u_strct
+              W_profile(:)    = W0*w_strct(:)
+              dWdz_profile(:) = W0*u_strct(:)
               ! Calculate average magnitude of actual horizontal velocity over a period
-              Uavg_profile = abs(dWdz_profile) * sqrt((1+f2/freq**2)/(2.0*Kmag2))
+              !### This should be simpified to use a single division.
+              Uavg_profile(:) = abs(dWdz_profile(:)) * sqrt((1.0 + f2/freq**2) / (2.0*Kmag2))
             else
-              W_profile    = 0.0
-              dWdz_profile = 0.0
-              Uavg_profile = 0.0
+              W_profile(:)    = 0.0
+              dWdz_profile(:) = 0.0
+              Uavg_profile(:) = 0.0
             endif
 
             ! Store values in control structure

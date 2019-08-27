@@ -488,7 +488,7 @@ program MOM_main
 
     if (use_ice_shelf) then
       call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
-      call add_shelf_forces(grid, Ice_shelf_CSp, forces)
+      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
