@@ -201,12 +201,20 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 #(5): Environment variables
 #(6): Number of MPI ranks
 
+# Simple environment variable support for Slurm and OpenMPI
+# This will probably need to be generalized in the future.
+ifeq ($(MPIRUN), srun)
+MPIRUN_CMD=$(1) $(MPIRUN)
+else
+MPIRUN_CMD=$(MPIRUN) -x $(1)
+endif
+
 define STAT_RULE
 .testing/%/ocean.stats.$(1): build/$(2)/MOM6
 	if [ $(3) ]; then find build -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)/RESTART
 	echo $(4) > $$(@D)/MOM_override
-	cd $$(@D) && $(5) $$(MPIRUN) -n $(6) ../../$$< 2> debug.out
+	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../$$< 2> debug.out
 	cp $$(@D)/ocean.stats $$@
 	> $$(@D)/MOM_override
 	if [ $(3) ]; then bash <(curl -s https://codecov.io/bash) -n $$@; fi
