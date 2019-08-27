@@ -206,7 +206,7 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 ifeq ($(MPIRUN), srun)
 MPIRUN_CMD=$(1) $(MPIRUN)
 else
-MPIRUN_CMD=$(MPIRUN) -x $(1)
+MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
 endif
 
 define STAT_RULE
