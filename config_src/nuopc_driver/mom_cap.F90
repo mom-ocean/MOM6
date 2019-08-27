@@ -1391,12 +1391,12 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
        diff_lat = abs(latMesh(n) - lat(n))
        if (diff_lat > 1.e-2) then
          write(6,101)n,latMesh(n),lat(n), diff_lat
-101      format('ERROR: CICE n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)
+101      format('ERROR: MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)
          !call shr_sys_abort()
         end if
         if (abs(maskMesh(n) - mask(n)) > 0) then
           write(6,102)n,maskMesh(n),mask(n)
-102       format('ERROR: CICE n, maskMesh(n), mask(n) = ',3(i8,2x))
+102       format('ERROR: MOM n, maskMesh(n), mask(n) = ',3(i8,2x))
           !call shr_sys_abort()
         end if
      end do
