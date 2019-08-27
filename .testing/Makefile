@@ -3,7 +3,9 @@ MPIRUN ?= mpirun
 
 #---
 # Dependencies
-DEPS = deps
+BASE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/..
+DEPS = $(BASE)/deps
+BUILD = $(BASE)/build
 
 # mkmf, list_paths (GFDL build toolchain)
 MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
@@ -58,7 +60,7 @@ ifeq ($(DO_REGRESSION_TESTS), true)
 	MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
 	MOM_TARGET_BRANCH := origin/$(MOM_TARGET_LOCAL_BRANCH)
 
-	TARGET_CODEBASE = build/target_codebase
+	TARGET_CODEBASE = $(BUILD)/target_codebase
 else
 	MOM_TARGET_URL =
 	MOM_TARGET_BRANCH =
@@ -70,48 +72,48 @@ endif
 # Rules
 
 .PHONY: all
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+all: $(foreach b,$(BUILDS),$(BUILD)/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
-.PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),build/$(b)/$(f)))
+.PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),$(BUILD)/$(b)/$(f)))
 
-build/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-build/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 COVERAGE=1
-build/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-build/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
+$(BUILD)/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
+$(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 COVERAGE=1
+$(BUILD)/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
+$(BUILD)/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
 
-build/asymmetric/path_names: GRID_SRC=config_src/dynamic
-build/%/path_names: GRID_SRC=config_src/dynamic_symmetric
+$(BUILD)/asymmetric/path_names: GRID_SRC=config_src/dynamic
+$(BUILD)/%/path_names: GRID_SRC=config_src/dynamic_symmetric
 
-build/%/MOM6: build/%/Makefile $(FMS)/lib/libfms.a
+$(BUILD)/%/MOM6: $(BUILD)/%/Makefile $(FMS)/lib/libfms.a
 	make -C $(@D) $(MOMFLAGS) $(@F)
 
-build/%/Makefile: build/%/path_names
+$(BUILD)/%/Makefile: $(BUILD)/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(notdir $(MKMF_TEMPLATE)) \
-		-o '-I ../../$(FMS)/build' \
+		-o '-I $(FMS)/build' \
 		-p MOM6 \
-		-l '../../$(FMS)/lib/libfms.a' \
+		-l '$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
 		path_names
 
 # NOTE: These path_names rules could be merged
 
-build/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
+$(BUILD)/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		../../$(TARGET_CODEBASE)/src \
-		../../$(TARGET_CODEBASE)/config_src/solo_driver \
-		../../$(TARGET_CODEBASE)/$(GRID_SRC)
+		$(TARGET_CODEBASE)/src \
+		$(TARGET_CODEBASE)/config_src/solo_driver \
+		$(TARGET_CODEBASE)/$(GRID_SRC)
 
-build/%/path_names: $(LIST_PATHS)
+$(BUILD)/%/path_names: $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
-		../../src \
-		../../config_src/solo_driver \
-		../../$(GRID_SRC)
+		$(BASE)/src \
+		$(BASE)/config_src/solo_driver \
+		$(BASE)/$(GRID_SRC)
 
 # Target repository for regression tests
 $(TARGET_CODEBASE):
@@ -170,10 +172,10 @@ test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d
 
 # NOTE: chksum_diag return code of cmp is currently ignored since many fail!
 define CMP_RULE
-%.$(1): $(foreach b,$(2),.testing/%/ocean.stats.$(b))
+%.$(1): $(foreach b,$(2),$(BASE)/.testing/%/ocean.stats.$(b))
 	cmp $$^
 
-%.$(1).diag: $(foreach b,$(2),.testing/%/chksum_diag.$(b))
+%.$(1).diag: $(foreach b,$(2),$(BASE)/.testing/%/chksum_diag.$(b))
 	-cmp $$^
 endef
 
@@ -185,7 +187,7 @@ $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # Restart tests only compare the final stat record
-%.restart: $(foreach b,symmetric restart,.testing/%/ocean.stats.$(b))
+%.restart: $(foreach b,symmetric restart,$(BASE)/.testing/%/ocean.stats.$(b))
 	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1))
 
 # TODO: chksum_diag parsing of restart files
@@ -201,8 +203,9 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 #(5): Environment variables
 #(6): Number of MPI ranks
 
-# Simple environment variable support for Slurm and OpenMPI
-# This will probably need to be generalized in the future.
+# Simple function for generalised Slurm (srun) and OpenMPI (mpirun) support
+# (1): Environment variables
+
 ifeq ($(MPIRUN), srun)
 MPIRUN_CMD=$(1) $(MPIRUN)
 else
@@ -210,16 +213,16 @@ MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
 endif
 
 define STAT_RULE
-.testing/%/ocean.stats.$(1): build/$(2)/MOM6
+$$(BASE)/.testing/%/ocean.stats.$(1): $$(BUILD)/$(2)/MOM6
 	if [ $(3) ]; then find build -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)/RESTART
 	echo $(4) > $$(@D)/MOM_override
-	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../$$< 2> debug.out
+	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) $$< 2> debug.out
 	cp $$(@D)/ocean.stats $$@
 	> $$(@D)/MOM_override
 	if [ $(3) ]; then bash <(curl -s https://codecov.io/bash) -n $$@; fi
 
-.testing/%/chksum_diag.$(1): .testing/%/ocean.stats.$(1)
+$$(BASE)/.testing/%/chksum_diag.$(1): $$(BASE)/.testing/%/ocean.stats.$(1)
 	cp $$(@D)/chksum_diag $$@
 endef
 
@@ -238,7 +241,7 @@ $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 
 # Restart tests require signicant preprocessing, and are handled separately.
-.testing/%/ocean.stats.restart: build/symmetric/MOM6
+$(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
 	# Cleanup
 	mkdir -p $(@D)/RESTART
 	git checkout $(@D)/input.nml
@@ -255,14 +258,14 @@ $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 		&& mv tmp.nml input.nml \
 		&& echo $${daymax} $${timeunit}
 	# Run the first half-period
-	cd $(@D) && $(MPIRUN) -n 1 ../../$< 2> debug.out
+	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
 	# Setup the next inputs
 	rm -rf $(@D)/INPUT && mv $(@D)/RESTART $(@D)/INPUT
 	mkdir $(@D)/RESTART
 	cd $(@D) && f90nml -g mom_input_nml -v input_filename='r' input.nml > tmp.nml
 	mv $(@D)/tmp.nml $(@D)/input.nml
 	# Run the second half-period
-	cd $(@D) && $(MPIRUN) -n 1 ../../$< 2> debug.out
+	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
 	# Archive the results and cleanup
 	cp $(@D)/ocean.stats $@
 	rm -rf $(@D)/INPUT
@@ -274,9 +277,9 @@ $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 #----
 .PHONY: clean
 clean: clean.stats
-	rm -rf build
+	rm -rf $(BUILD)
 
 .PHONY: clean.stats
 clean.stats:
-	find .testing -name ocean.stats* -exec rm {} \;
-	find .testing -name chksum_diag* -exec rm {} \;
+	find $(BASE)/.testing -name ocean.stats* -exec rm {} \;
+	find $(BASE)/.testing -name chksum_diag* -exec rm {} \;

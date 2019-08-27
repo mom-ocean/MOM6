@@ -21,13 +21,6 @@ addons:
 before_install:
     - pip install --user f90nml
 
-# Compilation and testing is controlled by the "configure" and "Makefile" in
-# .testing/ but they operate from the root directory. We copy them into place
-# so that they can remain hidden from users.
-install:
-  - echo "Install step"
-  - cp .testing/{configure,Makefile} .
-
 jobs:
   include:
     - env: JOB="Code style compliance"
@@ -42,6 +35,7 @@ jobs:
       script:
         - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
         - TRAVIS_IS_PR=$( [ ${TRAVIS_PULL_REQUEST} = "false" ] || echo "true" )
+        - cd .testing
         - make \
             MKMF_TEMPLATE=.testing/linux-ubuntu-xenial-gnu.mk \
             MOM_TARGET_SLUG=${TRAVIS_REPO_SLUG} \
