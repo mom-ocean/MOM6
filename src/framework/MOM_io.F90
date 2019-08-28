@@ -37,19 +37,19 @@ use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
-                                fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
+                                get_global_io_domain_indices, &
                                 fms2_get_num_variables => get_num_variables, &
                                 read_data, &
                                 fms2_register_restart_field => register_restart_field, &
                                 fms2_register_axis => register_axis, &
-                                fms2_register_field => register_field, &
+                                register_field, &
                                 register_variable_attribute, &
                                 open_file, &
                                 close_file, &
                                 write_data, &
-                                fms2_attribute_exists => variable_att_exists, &
-                                fms2_variable_exists => variable_exists, &
-                                fms2_dimension_exists => dimension_exists, &
+                                attribute_exists => variable_att_exists, &
+                                variable_exists, &
+                                dimension_exists, &
                                 file_exists, &
                                 FmsNetcdfDomainFile_t, unlimited
 
@@ -72,6 +72,8 @@ public :: close_file
 public :: FmsNetcdfDomainFile_t
 public :: get_var_dimension_features
 public :: get_variable_byte_size
+public :: get_global_io_domain_indices
+public :: register_field
 public :: get_horizontal_grid_position
 public :: get_time_units
 public :: MOM_get_axis_data
