@@ -522,7 +522,6 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   ! Local variables
   character(len=240) :: filepath
   character(len=200) :: dim_names(4)
-  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
   type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
@@ -534,7 +533,6 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
   logical :: axis_found, variable_found ! If true, the axis or variable is registered to the file
-  real, dimension(:), allocatable :: time_vals
 
   filepath = trim(directory) // trim("Vertical_coordinate")
 
