@@ -80,7 +80,10 @@ public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_axis
 public :: register_variable_attribute
-public :: MOM_write_data
+public :: write_data
+public :: variable_exists
+public :: attribute_exists
+public :: dimension_exists
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -142,15 +145,6 @@ end interface
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
-end interface
-
-!> Write a data field to a netCDF file
-interface MOM_write_data
-  module procedure MOM_write_data_4d
-  module procedure MOM_write_data_3d
-  module procedure MOM_write_data_2d
-  module procedure MOM_write_data_1d
-  module procedure MOM_write_data_0d
 end interface
 
 contains
@@ -539,54 +533,6 @@ subroutine MOM_register_axis(fileObj, axis_name, axis_length)
             call fms2_register_axis(fileObj,'Period',axis_length)
    end select
 end subroutine MOM_register_axis
-
-!> write 4d data to a netcdf file
-subroutine MOM_write_data_4d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
-  character(len=*),           intent(in) :: field_name        !< Name of the field
-  real, dimension(:,:,:,:),   intent(in) :: field_data        !< data to write to the file
- 
-  call fms2_write_data(fileObjWrite, field_name, field_data)
-
-end subroutine MOM_write_data_4d
-
-!> write 3d data to a netcdf file
-subroutine MOM_write_data_3d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
-  character(len=*),           intent(in) :: field_name        !< Name of the field
-  real, dimension(:,:,:),     intent(in) :: field_data        !< data to write to the file
-
-  call fms2_write_data(fileObjWrite, field_name, field_data)
-
-end subroutine MOM_write_data_3d
-
-!> write 2d data to a netcdf file
-subroutine MOM_write_data_2d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
-  character(len=*),           intent(in) :: field_name        !< Name of the field
-  real, dimension(:,:),       intent(in) :: field_data        !< data to write to the file
- 
-  call fms2_write_data(fileObjWrite, field_name, field_data)
-
-end subroutine MOM_write_data_2d
-
-!> write 1d data to a netcdf file
-subroutine MOM_write_data_1d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
-  character(len=*),           intent(in) :: field_name        !< Name of the field
-  real, dimension(:),         intent(in) :: field_data        !< data to write to the file
- 
-  call fms2_write_data(fileObjWrite, field_name, field_data)
-end subroutine MOM_write_data_1d
-
-!> write 0d data to a netcdf file
-subroutine MOM_write_data_0d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
-  character(len=*),           intent(in) :: field_name        !< Name of the field
-  real,                        intent(in) :: field_data        !< data to write to the file
-  call fms2_write_data(fileObjWrite, field_name, field_data)
-
-end subroutine MOM_write_data_0d
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
