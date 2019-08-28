@@ -12,6 +12,10 @@ use MOM_file_parser, only : log_version
 use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
 use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : register_variable_attribute, get_var_dimension_features
+use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
+use MOM_io, only : register_field, variable_exists, get_global_io_domain_indices
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -36,8 +40,9 @@ contains
 
 !> MOM_initialize_coord sets up time-invariant quantities related to MOM6's
 !!   vertical coordinate.
-subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_depth)
+subroutine MOM_initialize_coord(GV, G, US, PF, write_geom, output_dir, tv, max_depth)
   type(verticalGrid_type), intent(inout) :: GV         !< Ocean vertical grid structure.
+  type(ocean_grid_type),   intent(in)    :: G          !< Ocean horizontal grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: PF         !< A structure indicating the open file
                                                        !! to parse for model parameter values.
@@ -113,7 +118,7 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
   GV%max_depth = max_depth
 
 ! Write out all of the grid data used by this run.
-  if (write_geom) call write_vertgrid_file(GV, US, PF, output_dir)
+  if (write_geom) call write_vertgrid_file(GV, G, US, PF, output_dir)
 
   call callTree_leave('MOM_initialize_coord()')
 
@@ -507,28 +512,115 @@ end subroutine set_coord_to_none
 
 !> Writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model.
-subroutine write_vertgrid_file(GV, US, param_file, directory)
+subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure
+  type(ocean_grid_type),   intent(in)  :: G          !< Ocean horizontal grid structure
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   character(len=*),      intent(in)    :: directory  !< The directory into which to place the file.
   ! Local variables
   character(len=240) :: filepath
+  character(len=200) :: dim_names(4)
+  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  integer :: unit
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
+  !integer :: unit
+  integer :: i, is, ie
+  integer :: num_dims ! counter for variable dimensions
+  integer :: total_axes ! counter for all coordinate axes in file
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: axis_found, variable_found ! If true, the axis or variable is registered to the file
+  real, dimension(:), allocatable :: time_vals
 
   filepath = trim(directory) // trim("Vertical_coordinate")
 
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
-  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  !call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  call write_field(unit, fields(1), GV%Rlay)
-  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+  !call write_field(unit, fields(1), GV%Rlay)
+  !call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
 
-  call mpp_close_file(unit)
+  !call mpp_close_file(unit)
+                       
+  ! note: 4d variables are lon x lat x vertical level x time
+  ! allocate the axis data and attribute types for the vertical grid file
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+
+  ! loop through the variables, and get the dimension names and lengths for the vertical grid file         
+  total_axes=0 
+  file_open_success = MOM_open_file(fileObjWrite, filename, "write", &
+                                     G, is_restart=.false.)
+  do i=1,size(vars)
+     t_grid=''
+     z_grid=''
+     hor_grid=''   
+     call query_vardesc(fields(i), hor_grid=hor_grid, &
+                        z_grid=z_grid, t_grid=t_grid, caller="MOM_coord_initialization:write_vertgrid_file")
+
+     num_dims=0
+    
+     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                     dim_names, dim_lengths, num_dims,G=G,GV=GV)
+     if (num_dims <= 0) then
+         call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
+     endif
+
+     ! register the variable dimensions to the file if the corresponding global axes are not registered
+     do i=1,num_dims
+        axis_found = dimension_exists(fileObjWrite, dim_names(i))
+        if (.not.(axis_found)) then
+            total_axes=total_axes+1
+            call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+                                   time_val=time_vals, time_units=time_units)
+            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
+        endif
+     enddo
+  enddo
+
+  ! register and write the coordinate variables (axes) to the file
+  do i=1,total_axes
+     variable_found = variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
+     if (.not.(variable_found)) then 
+        if (associated(axis_data_CS%data(i)%p)) then
+           call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+           if (axis_data_CS%axis(i)%is_domain_decomposed) then
+              call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
+
+           else
+              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+           endif
+
+           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                            'long_name',axis_data_CS%axis(i)%longname)
+
+           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                            'units',trim(axis_data_CS%axis(i)%units))
+
+        endif
+     endif
+  enddo
+  
+  ! write the variables and register their attributes
+  
+  call write_data(fileObjWrite, fields(1), GV%Rlay)
+  call write_data(fileObjWrite, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+  call register_variable_attribute(fileObjWrite, fields(1), 'units', 'kilogram meter-3')
+  call register_variable_attribute(fileObjWrite, fields(1), 'long_name', 'Target Potential Density')
+  call register_variable_attribute(fileObjWrite, fields(2), 'units', 'meter second-2"')
+  call register_variable_attribute(fileObjWrite, fields(2), 'long_name', 'Reduced gravity')
+  ! close the file
+  call close_file(fileObjWrite)
 
 end subroutine write_vertgrid_file
 

@@ -218,7 +218,7 @@ subroutine init_oda(Time, G, GV, CS)
   call clone_MOM_domain(CS%Grid%Domain, dG%Domain,symmetric=.false.)
   call set_grid_metrics(dG,PF)
   call MOM_initialize_topography(dg%bathyT,dG%max_depth,dG,PF)
-  call MOM_initialize_coord(CS%GV, CS%US, PF, .false., &
+  call MOM_initialize_coord(CS%GV, G, CS%US, PF, .false., &
            dirs%output_directory, tv_dummy, dG%max_depth)
   call ALE_init(PF, CS%GV, CS%US, dG%max_depth, CS%ALE_CS)
   call MOM_grid_init(CS%Grid, PF, global_indexing=.true.)
