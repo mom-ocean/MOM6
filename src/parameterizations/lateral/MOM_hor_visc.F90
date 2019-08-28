@@ -79,6 +79,10 @@ type, public :: hor_visc_CS ; private
   logical :: res_scale_MEKE  !< If true, the viscosity contribution from MEKE is scaled by
                              !! the resolution function.
   logical :: use_GME         !< If true, use GME backscatter scheme.
+  real    :: GME_h0          !< The strength of GME tapers quadratically to zero when the bathymetric
+                             !! depth is shallower than GME_H0 [m]
+  real    :: GME_efficiency  !< The nondimensional prefactor multiplying the GME coefficient [nondim]
+  real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [m2 s-1].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
                       !< The background Laplacian viscosity at h points [m2 s-1].
@@ -382,23 +386,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   use_MEKE_Ku = associated(MEKE%Ku)
   use_MEKE_Au = associated(MEKE%Au)
 
-  do j = G%jsc, G%jec ; do i = G%isc, G%iec
+  do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
     boundary_mask_h(i,j) = (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
   enddo ; enddo
 
-  do J = G%JscB, G%JecB ; do I = G%IscB, G%IecB
+  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     boundary_mask_q(I,J) = (G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * G%mask2dCu(I,j) * G%mask2dCu(I,j-1))
   enddo; enddo
 
-!  call pass_var(boundary_mask_h, G%Domain, complete=.true.)
-
-
   if (CS%use_GME) then
-    ! GME tapers off above this depth
-    H0 = 1000.0
-    FWfrac = 1.0
-    GME_coeff_limiter = 1e7
-
     ! initialize diag. array with zeros
     GME_coeff_h(:,:,:) = 0.0
     GME_coeff_q(:,:,:) = 0.0
@@ -450,7 +446,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      grad_vel_mag_bt_q(I,J) = boundary_mask_h(I,J) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
             (0.25*((dudx_bt(i,j)+dudx_bt(i+1,j+1))+(dudx_bt(i,j+1)+dudx_bt(i+1,j))))**2 + &
             (0.25*((dvdy_bt(i,j)+dvdy_bt(i+1,j+1))+(dvdy_bt(i,j+1)+dvdy_bt(i+1,j))))**2)
     enddo ; enddo
@@ -1066,14 +1062,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if ((grad_vel_mag_bt_h(i,j)>0) .and. (max_diss_rate_h(i,j,k)>0)) then
-          GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * FWfrac*max_diss_rate_h(i,j,k) / grad_vel_mag_bt_h(i,j)
+          GME_coeff = (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * CS%GME_efficiency*max_diss_rate_h(i,j,k) / grad_vel_mag_bt_h(i,j)
         else
           GME_coeff = 1.0
         endif
 
         ! apply mask
         GME_coeff = GME_coeff * boundary_mask_h(i,j)
-        GME_coeff = MIN(GME_coeff, GME_coeff_limiter)
+        GME_coeff = MIN(GME_coeff, CS%GME_limiter)
 
         if ((CS%id_GME_coeff_h>0) .or. find_FrictWork) GME_coeff_h(i,j,k) = GME_coeff
         str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
@@ -1084,14 +1080,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       do J=js-1,Jeq ; do I=is-1,Ieq
 
         if ((grad_vel_mag_bt_q(I,J)>0) .and. (max_diss_rate_q(I,J,k)>0)) then
-          GME_coeff = (MIN(G%bathyT(i,j)/H0,1.0)**2) * FWfrac*max_diss_rate_q(I,J,k) / grad_vel_mag_bt_q(I,J)
+          GME_coeff = (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * CS%GME_efficiency*max_diss_rate_q(I,J,k) / grad_vel_mag_bt_q(I,J)
         else
           GME_coeff = 0.0
         endif
 
         ! apply mask
         GME_coeff = GME_coeff * boundary_mask_q(I,J)
-        GME_coeff = MIN(GME_coeff, GME_coeff_limiter)
+        GME_coeff = MIN(GME_coeff, CS%GME_limiter)
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
         str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
@@ -1607,6 +1603,20 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS)
 
     if (.not. use_MEKE) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with USE_MEKE=False.")
+
+    call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
+                 "The strength of GME tapers quadratically to zero when the bathymetric "//&
+                 "depth is shallower than GME_H0.", units="m", &
+                 default=1000.0)
+
+    call get_param(param_file, mdl, "GME_EFFICIENCY", CS%GME_efficiency, &
+                 "The nondimensional prefactor multiplying the GME coefficient.", &
+                 units="nondim", default=1.0)
+
+    call get_param(param_file, mdl, "GME_LIMITER", CS%GME_limiter, &
+                 "The absolute maximum value the GME coefficient is allowed to take.", &
+                 units="m2 s-1", default=1.0e7)
+
   endif
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
