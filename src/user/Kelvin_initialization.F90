@@ -256,7 +256,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
           val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
-          segment%normal_vel_bt(I,j) = US%L_T_to_m_s * (val2 * (val1 * cff * cosa / &
+          segment%normal_vel_bt(I,j) = (val2 * (val1 * cff * cosa / &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))) )
         else
           ! Not rotated yet
@@ -264,17 +264,16 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = fac * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(I,j,k) = US%m_s_to_L_T * fac * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = fac * lambda / CS%F_0 * &
+              segment%normal_vel(I,j,k) = US%m_s_to_L_T * fac * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
-              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * &
-                   h(i+1,j,k) * G%dyCu(I,j)
+              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
             enddo
           endif
         endif
@@ -288,14 +287,14 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           if (CS%answers_2018) then
             ! Problem: val2 & cff could be functions of space, but are not set in this loop.
             if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = US%L_T_to_m_s * (val2 * (val1 * cff * sina / &
+              segment%tangential_vel(I,J,k) = (val2 * (val1 * cff * sina / &
                  (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) + G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) ))
             enddo ; endif
           else
             cff =sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
             val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
             if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = US%L_T_to_m_s * (val1 * val2 * cff * sina) / &
+              segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
                  ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +  (G%bathyT(i+1,j) + G%bathyT(i,j+1))) )
 
             enddo ; endif
@@ -322,15 +321,14 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(i,J,k) = fac * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(i,J,k) = US%m_s_to_L_T*fac * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(i,J,k) = fac * lambda / CS%F_0 * &
+              segment%normal_vel(i,J,k) = US%m_s_to_L_T*fac * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
-              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * &
-                   h(i,j+1,k) * G%dxCv(i,J)
+              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
           endif
         endif
@@ -344,14 +342,14 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           if (CS%answers_2018) then
             ! Problem: val2 & cff could be functions of space, but are not set in this loop.
             if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = US%L_T_to_m_s * (val2 * (val1 * cff * sina / &
+              segment%tangential_vel(I,J,k) = (val2 * (val1 * cff * sina / &
                  (0.25*(G%bathyT(i+1,j) + G%bathyT(i,j) +  G%bathyT(i+1,j+1) + G%bathyT(i,j+1)))))
             enddo ; endif
           else
             cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
             val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
             if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = US%L_T_to_m_s * ((val1 * val2 * cff * sina) / &
+              segment%tangential_vel(I,J,k) = ((val1 * val2 * cff * sina) / &
                   ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) + (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ))
             enddo ; endif
           endif

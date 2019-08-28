@@ -107,17 +107,19 @@ implicit none ; private
 !> MOM_dynamics_unsplit module control structure
 type, public :: MOM_dyn_unsplit_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    !< CAu = f*v - u.grad(u) [m s-2].
-    PFu, &    !< PFu = -dM/dx [m s-2].
-    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> mm s-2].
+    CAu, &    !< CAu = f*v - u.grad(u) [L T-2 ~> m s-2].
+    PFu, &    !< PFu = -dM/dx [L T-2 ~> m s-2].
+    diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    !< CAv = -f*u - u.grad(v) [m s-2].
-    PFv, &    !< PFv = -dM/dy [m s-2].
-    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [m s-1 T-1 ~> m s-2].
+    CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2].
+    PFv, &    !< PFv = -dM/dy [L T-2 ~> m s-2].
+    diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2].
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL() !<  frictional x-bottom stress from the ocean to the seafloor (Pa)
-  real, pointer, dimension(:,:) :: tauy_bot => NULL() !<  frictional y-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean
+                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+  real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
+                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
 
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
 
@@ -187,8 +189,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u !< The zonal velocity [m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v !< The meridional velocity [m s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u !< The zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure pointing to various
                                                    !! thermodynamic variables.
@@ -203,13 +205,13 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   real, dimension(:,:),    pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the surface
                                                    !! pressure at the end of this dynamic step [Pa].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh !< The zonal volume or mass transport
-                                                   !! [H m2 s-1 ~> m3 or kg s-1].
+                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh !< The meridional volume or mass
-                                                   !! transport [H m2 s-1 ~> m3 or kg s-1].
+                                                   !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr !< The accumulated zonal volume or mass
-                                                   !! transport since the last tracer advection [H m2 ~> m3 or kg].
+                                                   !! transport since the last tracer advection [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr !< The accumulated meridional volume or mass
-                                                   !! transport since the last tracer advection [H m2 ~> m3 or kg].
+                                                   !! transport since the last tracer advection [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_av !< The time-mean free surface height or
                                                    !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
@@ -222,17 +224,18 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                  !! fields related to the surface wave conditions
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_av, hp ! Prediced or averaged layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp ! Predicted zonal velocities [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
-  real :: dt_pred   ! The time step for the predictor part of the baroclinic
-                    ! time stepping.
+  real :: dt_in_T   ! The dynamics time step [T ~> s]
+  real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  dt_pred = dt / 3.0
+  dt_in_T = US%s_to_T*dt
+  dt_pred = dt_in_T / 3.0
 
   h_av(:,:,:) = 0; hp(:,:,:) = 0
   up(:,:,:) = 0; upp(:,:,:) = 0
@@ -249,7 +252,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! all of the fields except h.  h is stepped separately.
 
   if (CS%debug) then
-    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV)
+    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV, US)
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
@@ -263,8 +266,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = u*h
 ! hp = h + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, US, CS%continuity_CSp, &
-                  OBC=CS%OBC)
+  call continuity(u, v, h, hp, uh, vh, dt_in_T*0.5, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -283,16 +285,16 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       h_av(i,j,k) = (h(i,j,k) + hp(i,j,k)) * 0.5
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      u(I,j,k) = u(I,j,k) + dt * US%s_to_T*CS%diffu(I,j,k) * G%mask2dCu(I,j)
+      u(I,j,k) = u(I,j,k) + dt_in_T * CS%diffu(I,j,k) * G%mask2dCu(I,j)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,J,k) = v(i,J,k) + dt * US%s_to_T*CS%diffv(i,J,k) * G%mask2dCv(i,J)
+      v(i,J,k) = v(i,J,k) + dt_in_T * CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt_in_T*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt_in_T*vh(i,j,k)
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -334,7 +336,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV)
+    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV, US)
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -345,6 +347,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call set_viscous_ML(u, v, h_av, tv, forces, visc, dt*0.5, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
+  !### I think that the time steps in the next two calls should be dt_pred.
   call vertvisc_coef(up, vp, h_av, forces, visc, dt*0.5, G, GV, US, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
@@ -355,8 +358,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = up * hp
 ! h_av = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, hp, h_av, uh, vh, &
-                  (0.5*dt), G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, hp, h_av, uh, vh, (0.5*dt_in_T), G, GV, US, &
+                  CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h_av, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -392,17 +395,17 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * &
-            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_in_T * 0.5 * &
+                (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * &
-            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_in_T * 0.5 * &
+                 (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV)
+    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV, US)
     call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -419,8 +422,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = upp * hp
 ! h = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(upp, vpp, hp, h, uh, vh, &
-                  (dt*0.5), G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(upp, vpp, hp, h, uh, vh, (dt_in_T*0.5), G, GV, US, &
+                  CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -441,10 +444,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
       h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
+      uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt_in_T*uh(i,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt*vh(i,j,k)
+      vhtr(i,j,k) = vhtr(i,j,k) + 0.5*dt_in_T*vh(i,j,k)
     enddo ; enddo
   enddo
 
@@ -470,12 +473,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
     call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
   endif
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
-            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
+    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_in_T * &
+               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
-            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
+    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_in_T * &
+               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! u <- u + dt d/dz visc d/dz u
@@ -487,7 +490,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV)
+    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV, US)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US)
   endif
@@ -566,9 +569,9 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   type(verticalGrid_type),        intent(in)    :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),          intent(in)    :: US         !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                  intent(inout) :: u          !< The zonal velocity [m s-1].
+                                  intent(inout) :: u          !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                  intent(inout) :: v          !< The meridional velocity [m s-1].
+                                  intent(inout) :: v          !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , &
                                   intent(inout) :: h          !< Layer thicknesses [H ~> m or kg m-2]
   type(time_type),        target, intent(in)    :: Time       !< The current model time.
@@ -650,8 +653,8 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
-  call continuity_init(Time, G, GV, param_file, diag, CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
+  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
@@ -670,18 +673,18 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert)
+      conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
-      'Zonal Coriolis and Advective Acceleration', 'meter second-2')
+      'Zonal Coriolis and Advective Acceleration', 'meter second-2, conversion=US%L_T2_to_m_s2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
-      'Meridional Coriolis and Advective Acceleration', 'meter second-2')
+      'Meridional Coriolis and Advective Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration', 'meter second-2')
+      'Zonal Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration', 'meter second-2')
+      'Meridional Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)

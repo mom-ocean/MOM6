@@ -320,7 +320,7 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                           (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+                           (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo
