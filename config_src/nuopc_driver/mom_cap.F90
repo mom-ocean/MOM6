@@ -366,7 +366,7 @@ use ESMF,  only: ESMF_GEOMTYPE_MESH, ESMF_GEOMTYPE_GRID, ESMF_SUCCESS
 use ESMF,  only: ESMF_METHOD_INITIALIZE, ESMF_MethodRemove, ESMF_State
 use ESMF,  only: ESMF_LOGMSG_INFO, ESMF_RC_ARG_BAD, ESMF_VM, ESMF_Time
 use ESMF,  only: ESMF_TimeInterval, ESMF_MAXSTR, ESMF_VMGetCurrent
-use ESMF,  only: ESMF_VMGet, ESMF_TimeGet, ESMF_TimeIntervalGet
+use ESMF,  only: ESMF_VMGet, ESMF_TimeGet, ESMF_TimeIntervalGet, ESMF_MeshGet
 use ESMF,  only: ESMF_MethodExecute, ESMF_Mesh, ESMF_DeLayout, ESMF_Distgrid
 use ESMF,  only: ESMF_DistGridConnection, ESMF_StateItem_Flag, ESMF_KIND_I4
 use ESMF,  only: ESMF_KIND_I8, ESMF_FAILURE, ESMF_DistGridCreate, ESMF_MeshCreate
@@ -378,7 +378,8 @@ use ESMF,  only: ESMF_AlarmIsRinging, ESMF_AlarmRingerOff, ESMF_StateRemove
 use ESMF,  only: ESMF_FieldCreate, ESMF_LOGMSG_ERROR, ESMF_LOGMSG_WARNING
 use ESMF,  only: ESMF_COORDSYS_SPH_DEG, ESMF_GridCreate, ESMF_INDEX_DELOCAL
 use ESMF,  only: ESMF_MESHLOC_ELEMENT, ESMF_RC_VAL_OUTOFRANGE, ESMF_StateGet
-use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet
+use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet, ESMF_Array
+use ESMF,  only: ESMF_ArrayCreate
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
 
 ! TODO ESMF_GridCompGetInternalState does not have an explicit Fortran interface.
@@ -1181,6 +1182,14 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   character(len=128)                         :: fldname
   character(len=256)                         :: cvalue
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
+  integer                         :: spatialDim
+  integer                         :: numOwnedElements
+  type(ESMF_Array)                :: elemMaskArray
+  real(ESMF_KIND_R8)    , pointer :: ownedElemCoords(:)
+  real(ESMF_KIND_R8)    , pointer :: lat(:), latMesh(:)
+  real(ESMF_KIND_R8)    , pointer :: lon(:), lonMesh(:)
+  integer(ESMF_KIND_I4) , pointer :: mask(:), maskMesh(:)
+  real(ESMF_KIND_R8)              :: diff_lon, diff_lat
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -1326,6 +1335,76 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          file=__FILE__)) &
          return
 
+     ! Check for consistency of lat, lon and mask between mesh and mom6 grid
+     call ESMF_MeshGet(Emesh, spatialDim=spatialDim, numOwnedElements=numOwnedElements, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+
+     allocate(ownedElemCoords(spatialDim*numOwnedElements))
+     allocate(lonMesh(numOwnedElements), lon(numOwnedElements))
+     allocate(latMesh(numOwnedElements), lat(numOwnedElements))
+     allocate(maskMesh(numOwnedElements), mask(numOwnedElements))
+
+     call ESMF_MeshGet(Emesh, ownedElemCoords=ownedElemCoords, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+     do n = 1,numOwnedElements
+        lonMesh(n) = ownedElemCoords(2*n-1)
+        latMesh(n) = ownedElemCoords(2*n)
+     end do
+
+     elemMaskArray = ESMF_ArrayCreate(Distgrid, maskMesh, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+     call ESMF_MeshGet(Emesh, elemMaskArray=elemMaskArray, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+
+     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+     n = 0
+     do j = jsc, jec
+       jg = j + ocean_grid%jsc - jsc
+       do i = isc, iec
+         ig = i + ocean_grid%isc - isc
+         n = n+1
+         mask(n) = ocean_grid%mask2dT(ig,jg)
+         lon(n)  = ocean_grid%geolonT(ig,jg)
+         lat(n)  = ocean_grid%geolatT(ig,jg)
+       end do
+     end do
+
+     do n = 1,numOwnedElements
+       diff_lon = abs(lonMesh(n) - lon(n))
+       if (diff_lon > 1.e-2) then
+         write(6,100)n,lonMesh(n),lon(n), diff_lon
+100      format('ERROR: MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)
+         !call shr_sys_abort()
+       end if
+       diff_lat = abs(latMesh(n) - lat(n))
+       if (diff_lat > 1.e-2) then
+         write(6,101)n,latMesh(n),lat(n), diff_lat
+101      format('ERROR: MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)
+         !call shr_sys_abort()
+        end if
+        if (abs(maskMesh(n) - mask(n)) > 0) then
+          write(6,102)n,maskMesh(n),mask(n)
+102       format('ERROR: MOM n, maskMesh(n), mask(n) = ',3(i8,2x))
+          !call shr_sys_abort()
+        end if
+     end do
+
+     deallocate(ownedElemCoords)
+     deallocate(lonMesh , lon )
+     deallocate(latMesh , lat )
+     deallocate(maskMesh, mask)
      ! realize the import and export fields using the mesh
      call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
