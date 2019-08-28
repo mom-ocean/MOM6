@@ -1181,6 +1181,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   integer, allocatable                       :: gindex(:) ! global index space
   character(len=128)                         :: fldname
   character(len=256)                         :: cvalue
+  character(len=256)                         :: frmt ! format specifier for several error msgs
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
   integer                         :: spatialDim
   integer                         :: numOwnedElements
@@ -1384,19 +1385,19 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
      do n = 1,numOwnedElements
        diff_lon = abs(lonMesh(n) - lon(n))
        if (diff_lon > 1.e-2) then
-         write(6,100)n,lonMesh(n),lon(n), diff_lon
-100      format('ERROR: MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)
+         frmt = "('ERROR: MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)"
+         write(6,frmt)n,lonMesh(n),lon(n), diff_lon
          !call shr_sys_abort()
        end if
        diff_lat = abs(latMesh(n) - lat(n))
        if (diff_lat > 1.e-2) then
-         write(6,101)n,latMesh(n),lat(n), diff_lat
-101      format('ERROR: MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)
+         frmt = "('ERROR: MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)"
+         write(6,frmt)n,latMesh(n),lat(n), diff_lat
          !call shr_sys_abort()
         end if
         if (abs(maskMesh(n) - mask(n)) > 0) then
-          write(6,102)n,maskMesh(n),mask(n)
-102       format('ERROR: MOM n, maskMesh(n), mask(n) = ',3(i8,2x))
+          frmt = "('ERROR: MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
+          write(6,frmt)n,maskMesh(n),mask(n)
           !call shr_sys_abort()
         end if
      end do
