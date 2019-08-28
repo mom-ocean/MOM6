@@ -9,13 +9,14 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
+use MOM_grid, only : ocean_grid_type
 use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
 use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
-use MOM_io, only : register_field, variable_exists, get_global_io_domain_indices
+use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -527,7 +528,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   !integer :: unit
-  integer :: i, is, ie
+  integer :: i, is, ie, j
   integer :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
@@ -556,35 +557,42 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
 
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file         
   total_axes=0 
-  file_open_success = MOM_open_file(fileObjWrite, filename, "write", &
+  file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
                                      G, is_restart=.false.)
   do i=1,size(vars)
      t_grid=''
      z_grid=''
      hor_grid=''   
-     call query_vardesc(fields(i), hor_grid=hor_grid, &
-                        z_grid=z_grid, t_grid=t_grid, caller="MOM_coord_initialization:write_vertgrid_file")
-
+ 
      num_dims=0
     
-     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
                                      dim_names, dim_lengths, num_dims,G=G,GV=GV)
      if (num_dims <= 0) then
          call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
      endif
 
      ! register the variable dimensions to the file if the corresponding global axes are not registered
-     do i=1,num_dims
-        axis_found = dimension_exists(fileObjWrite, dim_names(i))
+     do j=1,num_dims
+        axis_found = dimension_exists(fileObjWrite, dim_names(j))
         if (.not.(axis_found)) then
             total_axes=total_axes+1
-            call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                                   time_val=time_vals, time_units=time_units)
-            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
+            call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, G=G, GV=GV)
+            call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
         endif
      enddo
+     ! register the field variable
+     call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
+     ! register the variable attributes
+     call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+     call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+
   enddo
 
+  ! write the variables to the file
+  call write_data(fileObjWrite, vars(1)%name, GV%Rlay)
+  call write_data(fileObjWrite, vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+ 
   ! register and write the coordinate variables (axes) to the file
   do i=1,total_axes
      variable_found = variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
@@ -609,16 +617,8 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
 
         endif
      endif
-  enddo
-  
-  ! write the variables and register their attributes
-  
-  call write_data(fileObjWrite, fields(1), GV%Rlay)
-  call write_data(fileObjWrite, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
-  call register_variable_attribute(fileObjWrite, fields(1), 'units', 'kilogram meter-3')
-  call register_variable_attribute(fileObjWrite, fields(1), 'long_name', 'Target Potential Density')
-  call register_variable_attribute(fileObjWrite, fields(2), 'units', 'meter second-2"')
-  call register_variable_attribute(fileObjWrite, fields(2), 'long_name', 'Reduced gravity')
+  enddo 
+
   ! close the file
   call close_file(fileObjWrite)
 
