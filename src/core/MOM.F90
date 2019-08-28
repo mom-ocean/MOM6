@@ -37,8 +37,8 @@ use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : MOM_read_data
 use MOM_io,                   only : slasher
-use fms2_io_mod,              only : file_exists, FmsNetcdfDomainFile_t
-use fms2_io_mod,              only : close_file, open_file, close_file, read_data            
+use MOM_io,                   only : file_exists, FmsNetcdfDomainFile_t, read_data
+use MOM_io,                   only : MOM_open_file, MOM_close_file
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -2215,11 +2215,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
       !call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain)
-      file_open_success = open_file(fileObjRead, filename, "read", &
-                                     G%Domain%mpp_domain, is_restart=.false.)
+      file_open_success = MOM_open_file(fileObjRead, filename, "read", &
+                                     G, is_restart=.false.)
    
       call read_data(fileObjRead, trim(area_varname), area_shelf_h)
-      call close_file(fileObjRead)
+      call MOM_close_file(fileObjRead)
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
       ! compute fractional ice shelf coverage of h
