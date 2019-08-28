@@ -80,6 +80,7 @@ public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
 public get_ocean_grid
+public get_eps_omesh
 
 !> This interface extracts a named scalar field or array from the ocean surface or public type
 interface ocean_model_data_get
@@ -181,6 +182,9 @@ type, public :: ocean_state_type ; private
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
                               !! processes before time stepping the dynamics.
+
+  real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
+                              !! domain coordinates
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
   type(mech_forcing) :: forces !< A structure with the driving mechanical surface forces
@@ -327,6 +331,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
 
+  call get_param(param_file, mdl, "EPS_OMESH",OS%eps_omesh, &
+                 "Maximum allowable difference between ESMF mesh and "//&
+                 "MOM6 domain coordinates.", default=1.e-2)
   call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
                  "If true, the coupled driver will add a globally-balanced "//&
                  "fresh-water flux that drives sea-surface salinity "//&
@@ -353,7 +360,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
-    call get_param(param_file, mdl, "HFREEZE", HFrz, &
+  call get_param(param_file, mdl, "HFREEZE", HFrz, &
                  "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
                  "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
                  "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
@@ -1173,5 +1180,11 @@ subroutine get_ocean_grid(OS, Gridp)
   Gridp => OS%grid
   return
 end subroutine get_ocean_grid
+
+!> Returns eps_omesh read from param file
+real function get_eps_omesh(OS)
+  type(ocean_state_type) :: OS
+  get_eps_omesh = OS%eps_omesh; return
+end function
 
 end module MOM_ocean_model_nuopc
