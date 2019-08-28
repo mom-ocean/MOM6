@@ -344,7 +344,8 @@ use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
 use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
-use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
+use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
+use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
 #ifdef CESMCOUPLED
@@ -1191,6 +1192,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8)    , pointer :: lon(:), lonMesh(:)
   integer(ESMF_KIND_I4) , pointer :: mask(:), maskMesh(:)
   real(ESMF_KIND_R8)              :: diff_lon, diff_lat
+  real                            :: eps_omesh
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -1382,15 +1384,16 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
        end do
      end do
 
+     eps_omesh = get_eps_omesh(ocean_state)
      do n = 1,numOwnedElements
        diff_lon = abs(lonMesh(n) - lon(n))
-       if (diff_lon > 1.e-2) then
+       if (diff_lon > eps_omesh) then
          frmt = "('ERROR: MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)"
          write(6,frmt)n,lonMesh(n),lon(n), diff_lon
          !call shr_sys_abort()
        end if
        diff_lat = abs(latMesh(n) - lat(n))
-       if (diff_lat > 1.e-2) then
+       if (diff_lat > eps_omesh) then
          frmt = "('ERROR: MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)"
          write(6,frmt)n,latMesh(n),lat(n), diff_lat
          !call shr_sys_abort()
