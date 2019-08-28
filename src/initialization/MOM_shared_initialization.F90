@@ -14,6 +14,10 @@ use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
 use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : register_variable_attribute, get_var_dimension_features
+use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
+use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -1181,22 +1185,32 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   ! Local variables.
   character(len=240) :: filepath
   character(len=40)  :: mdl = "write_ocean_geometry_file"
+  character(len=200) :: dim_names(4)
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   real :: L_to_m_scale ! A unit conversion factor from L to m.
-  integer :: unit
   integer :: file_threading
   integer :: nFlds_used
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  integer :: num_dims ! counter for variable dimensions
+  integer :: total_axes ! counter for all coordinate axes in file
+  integer, dimension(4) :: dim_lengths
   logical :: multiple_files
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: axis_found, variable_found ! If true, the axis or variable is registered to the file
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
+   
+  
+  real, dimension(:), allocatable :: time_vals
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1265,8 +1279,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, dG=G)
+  !call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
+  !                 file_threading, dG=G)
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
