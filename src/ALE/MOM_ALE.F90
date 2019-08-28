@@ -22,7 +22,7 @@ use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,               only : create_file, write_field, close_file
+use MOM_io,               only : create_file, write_field, mpp_close_file
 use MOM_interface_heights,only : find_eta
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution
@@ -1224,7 +1224,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
   call write_field(unit, fields(1), ds)
   call write_field(unit, fields(2), dsi)
-  call close_file(unit)
+  call mpp_close_file(unit)
 
 end subroutine ALE_writeCoordinateFile
 

@@ -9,8 +9,8 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
+use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
@@ -528,7 +528,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   call write_field(unit, fields(1), GV%Rlay)
   call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
 
-  call close_file(unit)
+  call mpp_close_file(unit)
 
 end subroutine write_vertgrid_file
 

@@ -15,6 +15,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -193,6 +194,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
   integer        :: start(4), nread(4)
+  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
@@ -207,6 +210,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(adjustl(inputdir)) // trim(adjustl(grid_file))
+
   call log_param(param_file, mdl, "INPUTDIR/GRID_FILE", filename)
   if (.not.file_exists(filename)) &
     call MOM_error(FATAL," set_grid_metrics_from_mosaic: Unable to open "//&
@@ -255,9 +259,14 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate(exni)
   deallocate(exnj)
 
+  ! open the file
+  file_open_success = MOM_open_file(fileObjRead, filename, "read", &
+                                     SGdom, .false.)
+   
   ! Read X from the supergrid
   tmpZ(:,:) = 999.
-  call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
+  !call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
+  call read_data(fileObjRead, 'x', tmpZ)
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
@@ -282,7 +291,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read Y from the supergrid
   tmpZ(:,:) = 999.
-  call MOM_read_data(filename, 'y', tmpZ, SGdom, position=CORNER)
+  !call MOM_read_data(filename, 'y', tmpZ, SGdom, position=CORNER)
+  call read_data(fileObjRead, 'y', tmpZ)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
@@ -301,8 +311,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
-  call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
+  !call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
+  call read_data(fileObjRead, 'dx', tmpV)
+  !call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
+  call read_data(fileObjRead, 'dy', tmpU)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
   call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
@@ -329,7 +341,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read AREA from the supergrid
   tmpT(:,:) = 0.
-  call MOM_read_data(filename, 'area', tmpT, SGdom)
+  !call MOM_read_data(filename, 'area', tmpT, SGdom)
+  call read_data(fileObjRead, 'area', tmpT)
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
@@ -372,7 +385,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
   if (is_root_PE()) &
-    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+!    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+  call read_data(fileObjRead, 'x', tmpGlbl, corner=start, edge_lengths=nread)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
@@ -390,7 +404,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
   if (is_root_PE()) &
-    call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+    !call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call read_data(fileObjRead, 'y', tmpGlbl, corner=start, edge_lengths=nread)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
   do j=G%jsg,G%jeg
@@ -402,6 +417,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate( tmpGlbl )
 
   call callTree_leave("set_grid_metrics_from_mosaic()")
+  call close_file(fileObjRead)
 end subroutine set_grid_metrics_from_mosaic
 
 

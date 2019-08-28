@@ -11,7 +11,7 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
 use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
@@ -1325,7 +1325,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
     call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
   endif
 
-  call close_file(unit)
+  call mpp_close_file(unit)
 
 end subroutine write_ocean_geometry_file
 

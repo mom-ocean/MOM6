@@ -29,8 +29,8 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
-use MOM_io, only : slasher
+use MOM_io, only : file_exists, read_data, FmsNetcdfDomainFile_t
+use MOM_io, only : slasher, MOM_open_file, close_file
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -81,6 +81,7 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
                                     ! positive upward, in m.
   logical :: sponge_uv              ! Nudge velocities (u and v) towards zero
+  logical :: file_open_success      ! If true, the filename passed to MOM_open_file was opened sucessfully
   real :: min_depth, dummy1, z, delta_h
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
   real :: lenlat, lenlon, lensponge
@@ -89,6 +90,8 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
   character(len=40)  :: mod = "RGC_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
+  
+  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -180,12 +183,19 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
    filename = trim(inputdir)//trim(state_file)
    if (.not.file_exists(filename)) &
        call MOM_error(FATAL, " RGC_initialize_sponges: Unable to open "//trim(filename))
-   call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-   call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+
+   ! open the file
+   file_open_success = MOM_open_file(fileObjRead, filename, "read", &
+                                     G, .false.)
+   !call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
+   call read_data(fileObjRead,temp_var,T(:,:,:))
+   !call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+   call read_data(fileObjRead,salt_var, S(:,:,:))
 
   if (use_ALE) then
 
-    call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
+    !call read_data(filename,h_var,h(:,:,:), domain=G%Domain%mpp_domain)
+    call read_data(fileObjRead,h_var, h(:,:,:))
     call pass_var(h, G%domain)
 
     !call initialize_ALE_sponge(Idamp, h, nz, G, PF, ACSp)
@@ -208,7 +218,8 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
   else ! layer mode
 
     !read eta
-    call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+    !call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+    call read_data(fileObjRead, eta_var, eta(:,:,:))
 
     ! Set the inverse damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
@@ -233,6 +244,8 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
     call set_up_sponge_field(S, tv%S, G, nz, CSp)
 
   endif
+
+  call close_file(fileObjRead)
 
 end subroutine RGC_initialize_sponges
 

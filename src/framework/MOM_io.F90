@@ -17,13 +17,13 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : file_exist, field_size, old_read_data => read_data
+use fms_io_mod,           only : file_exist, field_size, old_fms_read_data => read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
 use mpp_mod,              only : mpp_max 
 use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
-use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
+use mpp_io_mod,           only : mpp_open_file => mpp_open, mpp_close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
 use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, get_axis_data=>mpp_get_axis_data, axistype
 use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
@@ -44,8 +44,8 @@ use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_register_axis => register_axis, &
                                 fms2_register_field => register_field, &
                                 fms2_register_variable_attribute => register_variable_attribute, &
-                                fms2_open_file => open_file, &
-                                fms2_close_file => close_file, &
+                                open_file, &
+                                close_file, &
                                 fms2_write_data => write_data, &
                                 fms2_attribute_exists => variable_att_exists, &
                                 fms2_variable_exists => variable_exists, &
@@ -57,9 +57,9 @@ use netcdf
 
 implicit none ; private
 
-public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
+public :: mpp_close_file, mpp_open_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data
+public :: get_file_times, read_axis_data, read_data
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
@@ -68,6 +68,7 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 
+public :: close_file
 public :: FmsNetcdfDomainFile_t
 public :: get_var_dimension_features
 public :: get_variable_byte_size
@@ -75,7 +76,6 @@ public :: get_horizontal_grid_position
 public :: get_time_units
 public :: MOM_get_axis_data
 public :: MOM_open_file
-public :: MOM_close_file
 public :: MOM_register_axis
 public :: MOM_register_variable_attribute
 public :: MOM_write_data
@@ -124,7 +124,8 @@ end type axis_data_type
 
 !> Open a netCDF file 
 interface MOM_open_file
-  module procedure MOM_open_file_DD
+  module procedure MOM_open_file_DD_ocean_grid
+  module procedure MOM_open_file_DD_supergrid
 end interface
 
 !> Read a data field from a file
@@ -230,9 +231,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
+    call mpp_open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
   else
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=Domain%mpp_domain)
+    call mpp_open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=Domain%mpp_domain)
   endif
 
 ! Define the coordinates.
@@ -472,9 +473,9 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
+      call mpp_open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
     else
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=Domain%mpp_domain)
+      call mpp_open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=Domain%mpp_domain)
     endif
     if (unit < 0) return
 
@@ -507,7 +508,7 @@ end subroutine reopen_file
 
 !> register an axis to a restart file
 subroutine MOM_register_axis(fileObj, axis_name, axis_length)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to fms2_open_file
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
                                                 !! (only needed for Layer, Interface, Time, and Period)
@@ -545,7 +546,7 @@ end subroutine MOM_register_axis
 
 !> register a string variable attribute to a netCDF file
 subroutine register_variable_attribute_string(fileObjWrite, var_name, att_name, att_value)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to open_file
    character(len=*), intent(in) :: var_name  !< Name of the variable
    character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
    character(len=*), intent(in) :: att_value !< The variable attribute value
@@ -555,7 +556,7 @@ end subroutine register_variable_attribute_string
 
 !> register an integer variable attribute to a netCDF file
 subroutine register_variable_attribute_integer(fileObjWrite, var_name, att_name, att_value)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to open_file
    character(len=*), intent(in) :: var_name  !< Name of the variable
    character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
    integer, intent(in) :: att_value !< The variable attribute value
@@ -565,7 +566,7 @@ end subroutine register_variable_attribute_integer
 
 !> register an integer variable attribute to a netCDF file
 subroutine register_variable_attribute_real(fileObjWrite, var_name, att_name, att_value)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to fms2_open_file
+   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to open_file
    character(len=*), intent(in) :: var_name  !< Name of the variable
    character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
    real, intent(in) :: att_value !< The variable attribute value
@@ -575,7 +576,7 @@ end subroutine register_variable_attribute_real
 
 !> write 4d data to a netcdf file
 subroutine MOM_write_data_4d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
   character(len=*),           intent(in) :: field_name        !< Name of the field
   real, dimension(:,:,:,:),   intent(in) :: field_data        !< data to write to the file
  
@@ -585,7 +586,7 @@ end subroutine MOM_write_data_4d
 
 !> write 3d data to a netcdf file
 subroutine MOM_write_data_3d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
   character(len=*),           intent(in) :: field_name        !< Name of the field
   real, dimension(:,:,:),     intent(in) :: field_data        !< data to write to the file
 
@@ -595,7 +596,7 @@ end subroutine MOM_write_data_3d
 
 !> write 2d data to a netcdf file
 subroutine MOM_write_data_2d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
   character(len=*),           intent(in) :: field_name        !< Name of the field
   real, dimension(:,:),       intent(in) :: field_data        !< data to write to the file
  
@@ -605,7 +606,7 @@ end subroutine MOM_write_data_2d
 
 !> write 1d data to a netcdf file
 subroutine MOM_write_data_1d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
   character(len=*),           intent(in) :: field_name        !< Name of the field
   real, dimension(:),         intent(in) :: field_data        !< data to write to the file
  
@@ -614,7 +615,7 @@ end subroutine MOM_write_data_1d
 
 !> write 0d data to a netcdf file
 subroutine MOM_write_data_0d(fileObjWrite, field_name, field_data)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to fms2_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite  !< file object returned by prior call to open_file
   character(len=*),           intent(in) :: field_name        !< Name of the field
   real,                        intent(in) :: field_data        !< data to write to the file
   call fms2_write_data(fileObjWrite, field_name, field_data)
@@ -984,7 +985,7 @@ subroutine read_axis_data(filename, axis_name, var)
   type(axistype) :: time_axis
   character(len=32) :: name, units
 
-  call open_file(unit, trim(filename), action=MPP_RDONLY, form=MPP_NETCDF, &
+  call mpp_open_file(unit, trim(filename), action=MPP_RDONLY, form=MPP_NETCDF, &
                  threading=MPP_MULTI, fileset=SINGLE_FILE)
 
 !Find the number of variables (nvar) in this file
@@ -1355,8 +1356,8 @@ function ensembler(name, ens_no_in) result(en_nm)
 end function ensembler
 
 !> Open domain-decomposed file(s) with the base file name
-!! 'filename' to read from or write/append to
-function MOM_open_file_DD(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+!! 'filename' to read from or write/append to. The domain comes from the ocean_grid_type structure G.
+function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
   type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
@@ -1368,28 +1369,53 @@ function MOM_open_file_DD(MOMfileObj, filename, mode, G, is_restart) result(file
    
   select case (trim(mode))
      case("read")
-        file_open_success=fms2_open_file(MOMfileObj, filename, "read", & 
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
                           G%Domain%mpp_domain, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
-        file_open_success=fms2_open_file(MOMfileObj, filename, "append", & 
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         if (.not.(file_open_success)) then
            ! create and open new file(s) for domain-decomposed write
-           file_open_success=fms2_open_file(MOMfileObj, filename, "write", & 
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
-        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD: "//mesg)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
   end select     
-end function MOM_open_file_DD
+end function MOM_open_file_DD_ocean_grid
 
-!> wrapper for fms2_close_file that closes a netcdf file
-subroutine MOM_close_file(fileObj)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
-   call fms2_close_file(fileObj)
-end subroutine MOM_close_file
+!> Open domain-decomposed file with the base file name
+!! 'filename' to read from or write/append to. The domain comes from the MOM_domain_type structure G.
+function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  type(MOM_domain_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+
+  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg      ! A message for warnings.
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                          G%mpp_domain, is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                   G%mpp_domain, is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                   G%mpp_domain, is_restart = is_restart)
+        endif
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
+  end select     
+end function MOM_open_file_DD_supergrid
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
@@ -1402,7 +1428,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before they are returned.
 
-  call old_read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+  call old_fms_read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 !  call fms2_read_data(fileObj, fieldname, data)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1428,7 +1454,7 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
 
   integer :: is, ie, js, je
 
-  call old_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1456,7 +1482,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
 
   integer :: is, ie, js, je
 
-  call old_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1484,7 +1510,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
 
   integer :: is, ie, js, je
 
-  call old_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1524,9 +1550,9 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call old_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=u_pos)
-  call old_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=v_pos)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1570,9 +1596,9 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call old_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=u_pos)
-  call old_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+  call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=v_pos)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1612,7 +1638,7 @@ end subroutine MOM_io_init
 !!   * reopen_file: reopen an existing file for writing and set up
 !!       structures that are needed for subsequent output.
 !!   * open_input_file: open the indicated file for reading only.
-!!   * close_file: close an open file.
+!!   * mpp_close_file: close an open file.
 !!   * synch_file: flush the buffers, completing all pending output.
 !!
 !!   * write_field: write a field to an open file.

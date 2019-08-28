@@ -9,7 +9,7 @@ module MOM_get_input
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : open_param_file, param_file_type
-use MOM_io, only : file_exists, close_file, slasher, ensembler
+use MOM_io, only : file_exists, mpp_close_file, slasher, ensembler
 use MOM_io, only : open_namelist_file, check_nml_error
 
 implicit none ; private
@@ -74,7 +74,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
     read(unit, nml=MOM_input_nml, iostat=io, end=10)
     ierr = check_nml_error(io, 'MOM_input_nml')
   enddo
-10 call close_file(unit)
+10 call mpp_close_file(unit)
 
   ! Store parameters in container
   if (present(dirs)) then

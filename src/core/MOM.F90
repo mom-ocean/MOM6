@@ -38,7 +38,7 @@ use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : MOM_read_data
 use MOM_io,                   only : slasher
 use MOM_io,                   only : file_exists, FmsNetcdfDomainFile_t, read_data
-use MOM_io,                   only : MOM_open_file, MOM_close_file
+use MOM_io,                   only : MOM_open_file, close_file
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -1526,7 +1526,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(diag_ctrl),        pointer :: diag => NULL()
   type(unit_scale_type),  pointer :: US => NULL()
   character(len=4), parameter :: vers_num = 'v2.0'
-  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1575,7 +1575,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical :: calc_dtbt         ! Indicates whether the dynamically adjusted barotropic
                                ! time step needs to be updated before it is used.
   logical :: debug_truncations ! If true, turn on diagnostics useful for debugging truncations.
-  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.  This can be altered during the course
@@ -2219,7 +2219,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                      G, is_restart=.false.)
    
       call read_data(fileObjRead, trim(area_varname), area_shelf_h)
-      call MOM_close_file(fileObjRead)
+      call close_file(fileObjRead)
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
       ! compute fractional ice shelf coverage of h

@@ -5,7 +5,7 @@ module MOM_write_cputime
 
 use MOM_coms, only : sum_across_PEs, pe_here, num_pes
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
-use MOM_io, only : open_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
+use MOM_io, only : mpp_open_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_time_manager, only : time_type, get_time, operator(>)
 
@@ -155,10 +155,10 @@ subroutine write_cputime(day, n, nmax, CS)
   !  Reopen or create a text output file.
   if ((CS%previous_calls == 0) .and. (is_root_pe())) then
     if (day > CS%Start_time) then
-      call open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
+      call mpp_open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
                      action=APPEND_FILE, form=ASCII_FILE, nohdrs=.true.)
     else
-      call open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
+      call mpp_open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
                      action=WRITEONLY_FILE, form=ASCII_FILE, nohdrs=.true.)
     endif
   endif
