@@ -673,14 +673,14 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         if (is_extensive) then
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
             I1 = I - G%isdB + 1
-            volume(I,j,k) = G%areaCu(I,j) * G%mask2dCu(I,j)
+            volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
             I1 = i - G%isdB + 1
             height = 0.5 * (h(i,j,k) + h(i+1,j,k))
-            volume(I,j,k) = G%areaCu(I,j) * height * G%mask2dCu(I,j)
+            volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * height * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         endif
@@ -689,7 +689,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
       do k=1,nz
         do j=G%jsc, G%jec ; do I=G%isc, G%iec
           I1 = I - G%isdB + 1
-          volume(I,j,k) = G%areaCu(I,j) * G%mask2dCu(I,j)
+          volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * G%mask2dCu(I,j)
           stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
         enddo ; enddo
       enddo
@@ -701,14 +701,14 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         if (is_extensive) then
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
             J1 = J - G%jsdB + 1
-            volume(i,J,k) = G%areaCv(i,J) * G%mask2dCv(i,J)
+            volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         else ! Intensive
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
             J1 = J - G%jsdB + 1
             height = 0.5 * (h(i,j,k) + h(i,j+1,k))
-            volume(i,J,k) = G%areaCv(i,J) * height * G%mask2dCv(i,J)
+            volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * height * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         endif
@@ -717,7 +717,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
       do k=1,nz
         do J=G%jsc, G%jec ; do i=G%isc, G%iec
           J1 = J - G%jsdB + 1
-          volume(i,J,k) = G%areaCv(i,J) * G%mask2dCv(i,J)
+          volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * G%mask2dCv(i,J)
           stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
         enddo ; enddo
       enddo
@@ -729,7 +729,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         if (is_extensive) then
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
             if (h(i,j,k) > 0.) then
-              volume(i,j,k) = G%areaT(i,j) * G%mask2dT(i,j)
+              volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
               stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
             else
               volume(i,j,k) = 0.
@@ -738,7 +738,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            volume(i,j,k) = G%areaT(i,j) * h(i,j,k) * G%mask2dT(i,j)
+            volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k) * G%mask2dT(i,j)
             stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
@@ -746,7 +746,7 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     else ! Interface
       do k=1,nz
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          volume(i,j,k) = G%areaT(i,j) * G%mask2dT(i,j)
+          volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
           stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
         enddo ; enddo
       enddo
