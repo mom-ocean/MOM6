@@ -4,7 +4,7 @@
 !! determine if/how these could be offered more generally in a
 !! shared library.  For now we really want the MOM cap to only
 !! depend on MOM and ESMF/NUOPC.
-module mom_cap_time
+module MOM_cap_time
 
 ! !USES:
 use ESMF                  , only : ESMF_Time, ESMF_Clock, ESMF_Calendar, ESMF_Alarm
@@ -405,4 +405,4 @@ subroutine date2ymd (date, year, month, day)
 
 end subroutine date2ymd
 
-end module
+end module MOM_cap_time

@@ -75,8 +75,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity [m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< A structure containing pointers to the
                                                                  !! thermodynamic fields

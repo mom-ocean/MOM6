@@ -63,14 +63,20 @@ end subroutine soliton_initialize_thickness
 
 
 !> Initialization of u and v in the equatorial Rossby soliton test
-subroutine soliton_initialize_velocity(u, v, h, G)
-  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m s-1]
+subroutine soliton_initialize_velocity(u, v, h, G, US)
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
 
-  real    :: x, y, x0, y0
-  real    :: val1, val2, val3, val4
+  ! Local variables
+  real    :: x, x0 ! Positions in the same units as geoLonT.
+  real    :: y, y0 ! Positions in the same units as geoLatT.
+  real    :: val1  ! A zonal decay scale in the inverse of the units of geoLonT.
+  real    :: val2  ! An overall velocity amplitude [L T-1 ~> m s-1]
+  real    :: val3  ! A decay factor [nondim]
+  real    :: val4  ! The local velocity amplitude [L T-1 ~> m s-1]
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -78,7 +84,7 @@ subroutine soliton_initialize_velocity(u, v, h, G)
   x0 = 2.0*G%len_lon/3.0
   y0 = 0.0
   val1 = 0.395
-  val2 = 0.771*(val1*val1)
+  val2 = US%m_s_to_L_T * 0.771*(val1*val1)
 
   v(:,:,:) = 0.0
   u(:,:,:) = 0.0

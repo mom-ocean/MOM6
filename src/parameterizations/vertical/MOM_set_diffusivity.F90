@@ -208,15 +208,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             intent(in)    :: u    !< The zonal velocity [m s-1].
+                             intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             intent(in)    :: v    !< The meridional velocity [m s-1].
+                             intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                              intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: u_h  !< Zonal velocity interpolated to h points [m s-1].
+                             intent(in)    :: u_h  !< Zonal velocity interpolated to h points [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                             intent(in)    :: v_h  !< Meridional velocity interpolated to h points [m s-1].
+                             intent(in)    :: v_h  !< Meridional velocity interpolated to h points [L T-1 ~> m s-1].
   type(thermo_var_ptrs),     intent(inout) :: tv   !< Structure with pointers to thermodynamic
                                                    !! fields. Out is for tv%TempxPmE.
   type(forcing),             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
@@ -493,7 +493,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
         call add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, GV, US, CS,  &
                                       Kd_lay, Kd_int, dd%Kd_BBL)
       else
-        call add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
+        call add_drag_diffusivity(h, u, v,  tv, fluxes, visc, j, TKE_to_Kd, &
                                   maxTKE, kb, G, GV, US, CS, Kd_lay, Kd_int, dd%Kd_BBL)
       endif
     endif
@@ -530,8 +530,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
   enddo ! j-loop
 
   if (CS%debug) then
-    call hchksum(Kd_lay ,"Kd_lay", G%HI, haloshift=0, &
-                 scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd_lay ,"Kd_lay", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
 
     if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
 
@@ -1106,9 +1105,9 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: u    !< The zonal velocity [m s-1]
+                                    intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                    intent(in)    :: v    !< The meridional velocity [m s-1]
+                                    intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv   !< Structure containing pointers to any available
@@ -1262,8 +1261,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
       else ; TKE_to_layer = 0.0 ; endif
 
       ! TKE_Ray has been initialized to 0 above.
-      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * G%IareaT(i,j) * &
-            US%m_to_Z**2 * US%T_to_s**2 * &
+      if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * US%L_to_Z**2 * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1342,9 +1340,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   type(verticalGrid_type),  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),    intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u  !< u component of flow [m s-1]
+                            intent(in)    :: u  !< u component of flow [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v  !< v component of flow [m s-1]
+                            intent(in)    :: v  !< v component of flow [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(in)    :: tv !< Structure containing pointers to any available
@@ -1443,8 +1441,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
-            US%m_to_Z**2 * US%T_to_s**2 * &
-            0.5*CS%BBL_effic * G%IareaT(i,j) * &
+            0.5*CS%BBL_effic * US%L_to_Z**2 * G%IareaT(i,j) * &
             ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
               G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
              (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
@@ -1643,9 +1640,9 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u    !< The zonal velocity [m s-1]
+                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v    !< The meridional velocity [m s-1]
+                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),            intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
@@ -1661,15 +1658,15 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
                   ! integrated thickness in the BBL [Z ~> m].
 
   real, dimension(SZIB_(G)) :: &
-    uhtot, &      ! running integral of u in the BBL [Z m s-1 ~> m2 s-1]
+    uhtot, &      ! running integral of u in the BBL [Z L T-1 ~> m2 s-1]
     ustar, &      ! bottom boundary layer turbulence speed [Z T-1 ~> m s-1].
-    u2_bbl        ! square of the mean zonal velocity in the BBL [m2 s-2]
+    u2_bbl        ! square of the mean zonal velocity in the BBL [L2 T-2 ~> m2 s-2]
 
-  real :: vhtot(SZI_(G)) ! running integral of v in the BBL [Z m s-1 ~> m2 s-1]
+  real :: vhtot(SZI_(G)) ! running integral of v in the BBL [Z L T-1 ~> m2 s-1]
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
     vstar, & ! ustar at at v-points [Z T-1 ~> m s-1].
-    v2_bbl   ! square of average meridional velocity in BBL [m2 s-2]
+    v2_bbl   ! square of average meridional velocity in BBL [L2 T-2 ~> m2 s-2]
 
   real :: cdrag_sqrt  ! square root of the drag coefficient [nondim]
   real :: hvel        ! thickness at velocity points [Z ~> m].
@@ -1764,7 +1761,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS)
                   G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
                  (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
                   G%areaCv(i,J)*(vstar(i,J)*vstar(i,J))) ) )
-      visc%TKE_BBL(i,j) = US%T_to_s**2 * US%m_to_Z**2 * &
+      visc%TKE_BBL(i,j) = US%L_to_Z**2 * &
                  (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
                     G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
                    (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
