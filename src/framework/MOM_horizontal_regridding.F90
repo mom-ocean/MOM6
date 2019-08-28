@@ -520,7 +520,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
     if (k == 1) then
       call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
-               interp_method='bilinear',src_modulo=reentrant_x)
+               interp_method='bilinear',src_modulo=.true.)
     endif
 
     if (debug) then
@@ -796,7 +796,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
     if (k == 1) then
       call horiz_interp_new(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
-               interp_method='bilinear', src_modulo=reentrant_x)
+               interp_method='bilinear', src_modulo=.true.)
     endif
 
     if (debug) then

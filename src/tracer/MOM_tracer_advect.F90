@@ -355,6 +355,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     slope_x             ! The concentration slope per grid point [conc].
   real, dimension(SZIB_(G),ntr) :: &
     flux_x              ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
+  real, dimension(SZI_(G),ntr) :: &
+    T_tmp               ! The copy of the tracer concentration at constant i,k [H m2 conc ~> m3 conc or kg conc].
+
   real :: maxslope      ! The maximum concentration slope per grid point
                         ! consistent with monotonicity [conc].
   real :: hup, hlos     ! hup is the upwind volume, hlos is the
@@ -422,6 +425,72 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       enddo ; enddo
     endif ! usePLMslope
 
+    ! make a copy of the tracers in case values need to be overridden for OBCs
+    do m = 1,ntr
+      do i=G%isd,G%ied
+        T_tmp(i,m) = Tr(m)%t(i,j,k)
+      enddo
+    enddo
+    ! loop through open boundaries and recalculate flux terms
+    if (associated(OBC)) then ; if (OBC%OBC_pe) then
+       do n=1,OBC%number_of_segments
+         segment=>OBC%segment(n)
+         if (.not. associated(segment%tr_Reg)) cycle
+         if (segment%is_E_or_W) then
+           if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
+              I = segment%HI%IsdB
+
+              ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
+              idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
+              if (segment%direction == OBC_DIRECTION_W) then
+                 ishift=1
+                 idir=-1
+              endif
+              ! update the reservoir tracer concentration implicitly
+              ! using Backward-Euler timestep
+              do m=1,ntr
+                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                   uhh(I)=uhr(I,j,k)
+                   u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale3_in,0.)
+                   u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale3_out,0.)
+                   fac1=1.0+dt*(u_L_in-u_L_out)
+                   segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
+                        dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
+                        u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
+                endif
+              enddo
+
+              do m = 1,ntr ! replace tracers with OBC values
+                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                   if (segment%direction == OBC_DIRECTION_W) then
+                      T_tmp(i,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                   else
+                      T_tmp(I+1,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                   endif
+                else
+                   if (segment%direction == OBC_DIRECTION_W) then
+                      T_tmp(i,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                   else
+                      T_tmp(I+1,m) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                   endif
+                endif
+              enddo
+              do m = 1,ntr ! Apply update tracer values for slope calculation
+                do i=segment%HI%IsdB-1,segment%HI%IsdB+1
+                  Tp = T_tmp(i+1,m) ; Tc = T_tmp(i,m) ; Tm = T_tmp(i-1,m)
+                  dMx = max( Tp, Tc, Tm ) - Tc
+                  dMn= Tc - min( Tp, Tc, Tm )
+                  slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
+                       sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
+                enddo
+              enddo
+
+           endif
+         endif
+       enddo
+    endif; endif
+
+
     ! Calculate the i-direction fluxes of each tracer, using as much
     ! the minimum of the remaining mass flux (uhr) and the half the mass
     ! in the cell plus whatever part of its half of the mass flux that
@@ -468,7 +537,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         endif
 
         ! Implementation of PPM-H3
-        Tp = Tr(m)%t(i_up+1,j,k) ; Tc = Tr(m)%t(i_up,j,k) ; Tm = Tr(m)%t(i_up-1,j,k)
+        Tp = T_tmp(i_up+1,m) ; Tc = T_tmp(i_up,m) ; Tm = T_tmp(i_up-1,m)
 
         if (useHuynh) then
           aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
@@ -510,7 +579,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
          !aR = Tr(m)%t(i,j,k) + 0.5 * slope_x(i,m)
          !flux_x(I,m) = uhh(I)*( aR - 0.5 * slope_x(i,m) * CFL(I) )
           ! Alternative implementation of PLM
-          Tc = Tr(m)%t(i,j,k)
+          Tc = T_tmp(i,m)
           flux_x(I,m) = uhh(I)*( Tc + 0.5 * slope_x(i,m) * ( 1. - CFL(I) ) )
           ! Original implementation of PLM
          !flux_x(I,m) = uhh(I)*(Tr(m)%t(i,j,k) + slope_x(i,m)*ts2(I))
@@ -523,7 +592,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
          !aL = Tr(m)%t(i+1,j,k) - 0.5 * slope_x(i+1,m)
          !flux_x(I,m) = uhh(I)*( aL + 0.5 * slope_x(i+1,m) * CFL(I) )
           ! Alternative implementation of PLM
-          Tc = Tr(m)%t(i+1,j,k)
+          Tc = T_tmp(i+1,m)
           flux_x(I,m) = uhh(I)*( Tc - 0.5 * slope_x(i+1,m) * ( 1. - CFL(I) ) )
           ! Original implementation of PLM
          !flux_x(I,m) = uhh(I)*(Tr(m)%t(i+1,j,k) - slope_x(i+1,m)*ts2(I))
@@ -533,10 +602,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     endif ! usePPM
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then
-      if (OBC%specified_u_BCs_exist_globally) then
+      if (OBC%specified_u_BCs_exist_globally .or. OBC%open_u_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
           segment=>OBC%segment(n)
-          if (.not. segment%specified) cycle
           if (.not. associated(segment%tr_Reg)) cycle
           if (segment%is_E_or_W) then
             if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
@@ -556,7 +624,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             endif
           endif
         enddo
-      endif
+       endif
 
       if (OBC%open_u_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
@@ -684,7 +752,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
     slope_y                     ! The concentration slope per grid point [conc].
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    flux_y                      ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
+       flux_y                      ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
+  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
+    T_tmp               ! The copy of the tracer concentration at constant i,k [H m2 conc ~> m3 conc or kg conc].
   real :: maxslope              ! The maximum concentration slope per grid point
                                 ! consistent with monotonicity [conc].
   real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
@@ -760,6 +830,72 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
            sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
     enddo ; enddo ; endif ; enddo ! End of i-, m-, & j- loops.
   endif ! usePLMslope
+
+
+  ! make a copy of the tracers in case values need to be overridden for OBCs
+
+  do j=G%jsd,G%jed; do m=1,ntr; do i=G%isd,G%ied
+    T_tmp(i,m,j) = Tr(m)%t(i,j,k)
+  enddo ; enddo ; enddo
+
+  ! loop through open boundaries and recalculate flux terms
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+     do n=1,OBC%number_of_segments
+       segment=>OBC%segment(n)
+       if (.not. associated(segment%tr_Reg)) cycle
+       do i=is,ie
+         if (segment%is_N_or_S) then
+           if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
+              J = segment%HI%JsdB
+              jshift=0 ! jshift+J corresponds to the nearest interior tracer cell index
+              jdir=1   ! jdir switches the sign of the flow so that positive is into the reservoir
+              if (segment%direction == OBC_DIRECTION_S) then
+                 jshift=1
+                 jdir=-1
+              endif
+              ! update the reservoir tracer concentration implicitly
+              ! using Backward-Euler timestep
+              do m=1,ntr
+                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                   vhh(i,J)=vhr(i,J,k)
+                   v_L_in=max(jdir*vhh(i,J)*segment%Tr_InvLscale3_in,0.)
+                   v_L_out=min(jdir*vhh(i,J)*segment%Tr_InvLscale3_out,0.)
+                   fac1=1.0+dt*(v_L_in-v_L_out)
+                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
+                        dt*(v_L_in*Tr(m)%t(i,J+jshift,k) - &
+                        v_L_out*segment%tr_Reg%Tr(m)%t(i,J,k)))
+                endif
+              enddo
+
+              do m = 1,ntr ! replace tracers with OBC values
+                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                   if (segment%direction == OBC_DIRECTION_S) then
+                      T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                   else
+                      T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                   endif
+                else
+                   if (segment%direction == OBC_DIRECTION_S) then
+                      T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                   else
+                      T_tmp(i,m,j+1) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
+                   endif
+                endif
+              enddo
+              do m = 1,ntr ! Apply update tracer values for slope calculation
+                do j=segment%HI%JsdB-1,segment%HI%JsdB+1
+                  Tp = T_tmp(i,m,j+1) ; Tc = T_tmp(i,m,j) ; Tm = T_tmp(i,m,j-1)
+                  dMx = max( Tp, Tc, Tm ) - Tc
+                  dMn= Tc - min( Tp, Tc, Tm )
+                  slope_y(i,m,j) = G%mask2dCv(i,J)*G%mask2dCv(i,J-1) * &
+                       sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
+                enddo
+              enddo
+           endif
+         endif ! is_N_S
+       enddo ! i-loop
+     enddo ! segment loop
+  endif; endif
 
   ! Calculate the j-direction fluxes of each tracer, using as much
   ! the minimum of the remaining mass flux (vhr) and the half the mass
@@ -873,7 +1009,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     endif ! usePPM
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then
-      if (OBC%specified_v_BCs_exist_globally) then
+      if (OBC%specified_v_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
           segment=>OBC%segment(n)
           if (.not. segment%specified) cycle
@@ -897,7 +1033,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           endif
         enddo
       endif
-
 
       if (OBC%open_v_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
