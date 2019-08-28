@@ -172,11 +172,13 @@ test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d
 
 # NOTE: chksum_diag return code of cmp is currently ignored since many fail!
 define CMP_RULE
+.PRECIOUS: $(foreach b,$(2),$(BASE)/.testing/%/ocean.stats.$(b))
 %.$(1): $(foreach b,$(2),$(BASE)/.testing/%/ocean.stats.$(b))
 	cmp $$^
 
+.PRECIOUS: $(foreach b,$(2),$(BASE)/.testing/%/chksum_diag.$(b))
 %.$(1).diag: $(foreach b,$(2),$(BASE)/.testing/%/chksum_diag.$(b))
-	-cmp $$^
+	cmp $$^ || true
 endef
 
 $(eval $(call CMP_RULE,regression,symmetric target))
@@ -187,6 +189,7 @@ $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # Restart tests only compare the final stat record
+.PRECIOUS: $(foreach b,symmetric restart,$(BASE)/.testing/%/ocean.stats.$(b))
 %.restart: $(foreach b,symmetric restart,$(BASE)/.testing/%/ocean.stats.$(b))
 	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1))
 
