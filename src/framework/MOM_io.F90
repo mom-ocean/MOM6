@@ -17,7 +17,7 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : file_exist, field_size, read_data
+use fms_io_mod,           only : file_exist, field_size, old_read_data => read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
 use mpp_mod,              only : mpp_max 
@@ -39,7 +39,7 @@ use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
                                 fms2_get_num_variables => get_num_variables, &
-                                fms2_read_data => read_data, &
+                                read_data, &
                                 fms2_register_restart_field => register_restart_field, &
                                 fms2_register_axis => register_axis, &
                                 fms2_register_field => register_field, &
@@ -79,7 +79,6 @@ public :: MOM_close_file
 public :: MOM_register_axis
 public :: MOM_register_variable_attribute
 public :: MOM_write_data
-!public :: MOM_write_IC
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -1403,7 +1402,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before they are returned.
 
-  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+  call old_read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 !  call fms2_read_data(fileObj, fieldname, data)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1429,7 +1428,7 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
 
   integer :: is, ie, js, je
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1457,7 +1456,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
 
   integer :: is, ie, js, je
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1485,7 +1484,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
 
   integer :: is, ie, js, je
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1525,9 +1524,9 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=u_pos)
-  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=v_pos)
 
   if (present(scale)) then ; if (scale /= 1.0) then
@@ -1571,9 +1570,9 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=u_pos)
-  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+  call old_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=v_pos)
 
   if (present(scale)) then ; if (scale /= 1.0) then
