@@ -43,10 +43,10 @@ use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
                                 fms2_register_restart_field => register_restart_field, &
                                 fms2_register_axis => register_axis, &
                                 fms2_register_field => register_field, &
-                                fms2_register_variable_attribute => register_variable_attribute, &
+                                register_variable_attribute, &
                                 open_file, &
                                 close_file, &
-                                fms2_write_data => write_data, &
+                                write_data, &
                                 fms2_attribute_exists => variable_att_exists, &
                                 fms2_variable_exists => variable_exists, &
                                 fms2_dimension_exists => dimension_exists, &
@@ -77,7 +77,7 @@ public :: get_time_units
 public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_axis
-public :: MOM_register_variable_attribute
+public :: register_variable_attribute
 public :: MOM_write_data
 
 !> Type for describing a variable, typically a tracer
@@ -149,12 +149,6 @@ interface MOM_write_data
   module procedure MOM_write_data_2d
   module procedure MOM_write_data_1d
   module procedure MOM_write_data_0d
-end interface
-
-interface MOM_register_variable_attribute
-  module procedure register_variable_attribute_string
-  module procedure register_variable_attribute_integer
-  module procedure register_variable_attribute_real  
 end interface
 
 contains
@@ -543,36 +537,6 @@ subroutine MOM_register_axis(fileObj, axis_name, axis_length)
             call fms2_register_axis(fileObj,'Period',axis_length)
    end select
 end subroutine MOM_register_axis
-
-!> register a string variable attribute to a netCDF file
-subroutine register_variable_attribute_string(fileObjWrite, var_name, att_name, att_value)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to open_file
-   character(len=*), intent(in) :: var_name  !< Name of the variable
-   character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
-   character(len=*), intent(in) :: att_value !< The variable attribute value
-
-   call fms2_register_variable_attribute(fileObjWrite, trim(var_name), trim(att_name), trim(att_value))
-end subroutine register_variable_attribute_string
-
-!> register an integer variable attribute to a netCDF file
-subroutine register_variable_attribute_integer(fileObjWrite, var_name, att_name, att_value)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to open_file
-   character(len=*), intent(in) :: var_name  !< Name of the variable
-   character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
-   integer, intent(in) :: att_value !< The variable attribute value
-
-   call fms2_register_variable_attribute(fileObjWrite, trim(var_name), trim(att_name), att_value)
-end subroutine register_variable_attribute_integer
-
-!> register an integer variable attribute to a netCDF file
-subroutine register_variable_attribute_real(fileObjWrite, var_name, att_name, att_value)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObjWrite !< file object returned by prior call to open_file
-   character(len=*), intent(in) :: var_name  !< Name of the variable
-   character(len=*), intent(in) :: att_name  !< Name of the variable attribute to register to the file
-   real, intent(in) :: att_value !< The variable attribute value
-
-   call fms2_register_variable_attribute(fileObjWrite, trim(var_name), trim(att_name), att_value)
-end subroutine register_variable_attribute_real
 
 !> write 4d data to a netcdf file
 subroutine MOM_write_data_4d(fileObjWrite, field_name, field_data)

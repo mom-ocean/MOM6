@@ -19,7 +19,6 @@ use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
 use MOM_io, only : MOM_register_axis
-use MOM_io, only : MOM_register_variable_attribute
 use MOM_io, only : axis_data_type
 use MOM_io, only : MOM_get_axis_data
 
@@ -30,7 +29,7 @@ use mpp_mod,         only:  mpp_chksum, mpp_pe, mpp_max
 use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
                            fms2_register_field => register_field, &
                            fms2_register_axis => register_axis, &
-                           fms2_register_variable_attribute => register_variable_attribute, &
+                           register_variable_attribute, &
                            fms2_read_data => read_data, &
                            fms2_read_restart => read_restart, &
                            fms2_write_restart => write_restart,&
@@ -1083,13 +1082,13 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))
               endif
 
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                       'long_name',axis_data_CS%axis(i)%longname)
-              call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                       'units',axis_data_CS%axis(i)%units)
 
               if (len_trim(axis_data_CS%axis(i)%positive)>1) then
-                  call MOM_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                        'positive',trim(axis_data_CS%axis(i)%positive))
               endif
            else
@@ -1157,9 +1156,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         !checksum_char = convert_checksum_to_string(check_val(m,1))
         ! register the variable attributes
 
-        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
-        call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
-        !call MOM_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
+        call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
+        call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+        !call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
         
      enddo
     
@@ -1320,10 +1319,10 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
                  call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
               endif
 
-              call fms2_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                'long_name',axis_data_CS%axis(i)%longname)
 
-              call fms2_register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                'units',trim(axis_data_CS%axis(i)%units))
 
            endif
@@ -1376,8 +1375,8 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
      endif
 
      ! register the variable attributes
-     call fms2_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
-     call fms2_register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
+     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
       
   enddo
 
