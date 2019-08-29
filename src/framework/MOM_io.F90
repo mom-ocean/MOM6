@@ -1348,15 +1348,15 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
   select case (trim(mode))
      case("read")
         file_open_success = open_file(MOMfileObj, filename, "read", & 
-                          G%mpp_domain, is_restart = is_restart)
+                          G%Domain%mpp_domain, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
         file_open_success = open_file(MOMfileObj, filename, "append", & 
-                                   G%mpp_domain, is_restart = is_restart)
+                                   G%Domain%mpp_domain, is_restart = is_restart)
         if (.not.(file_open_success)) then
            ! create and open new file(s) for domain-decomposed write
            file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%mpp_domain, is_restart = is_restart)
+                                   G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
