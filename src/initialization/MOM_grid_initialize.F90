@@ -236,11 +236,22 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   SGdom%njglobal = 2*G%domain%njglobal
   SGdom%layout(:) = G%domain%layout(:)
   SGdom%io_layout(:) = G%domain%io_layout(:)
+  ! define extent of the global domain
   global_indices(1) = 1+SGdom%nihalo
   global_indices(2) = SGdom%niglobal+SGdom%nihalo
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
+  ! API mpp_define_domains_2d( global_indices, layout, domain, pelist, xflags, yflags,    &
+  !       xhalo, yhalo, xextent, yextent, maskmap, name, symmetry,  memory_size&
+  !      whalo, ehalo, shalo, nhalo, is_mosaic, tile_count, tile_id, complete, x_cyclic_offset, y_cyclic_offset )
+  !  integer, intent(in) :: global indices(:) !(/ isg, ieg, jsg, jeg /)
+  !  integer, intent(in) :: layout(:) ! domain's processor layout
+  !  type(domain2D), intent(inout) :: domain ! FMS domain with halos
+  !  integer, intent(in), optional :: xflags, yflags, xhalo,yhalo ! flags specifying properties of domain in i and j directions
+  !  default halo sizes
+  !  integer, intent(in), optional ::  xetent(:0), yextent(:0) ! compute domain sizes in x and y directions
+  !  logical, intent(in), optional :: symmetry ! indicates whether symmetric memory is used
   if (associated(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
@@ -262,11 +273,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! open the file
   file_open_success = MOM_open_file(fileObjRead, filename, "read", &
                                      SGdom, .false.)
+  call get_global_io_domain_indices(fileObjRead, trim(axis_data_CS%axis(i)%name), isg, ieg,jsg,jeg)
    
   ! Read X from the supergrid
   tmpZ(:,:) = 999.
   !call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
-  call read_data(fileObjRead, 'x', tmpZ)
+  call read_data(fileObjRead, 'x', tmpZ(global_indices(1):global_indices(2),global_indices(3):global_indices(4)))
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
