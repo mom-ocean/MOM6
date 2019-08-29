@@ -36,12 +36,12 @@ use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
-use fms2_io_mod,          only: fms2_get_dimension_size => get_dimension_size, &
+use fms2_io_mod,          only: get_dimension_size, &
                                 get_global_io_domain_indices, &
-                                fms2_get_num_variables => get_num_variables, &
+                                get_num_variables, &
                                 read_data, &
-                                fms2_register_restart_field => register_restart_field, &
-                                fms2_register_axis => register_axis, &
+                                register_restart_field, &
+                                register_axis, &
                                 register_field, &
                                 register_variable_attribute, &
                                 open_file, &
@@ -58,8 +58,8 @@ use netcdf
 implicit none ; private
 
 public :: mpp_close_file, mpp_open_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
-public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, read_axis_data, read_data
+public :: flush_file, get_file_info, get_file_atts, get_file_fields
+public :: get_file_times, read_axis_data
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
@@ -67,23 +67,26 @@ public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
-
+! new FMS-IO routines and wrappers
+public :: attribute_exists
 public :: close_file
+public :: dimension_exists
+public :: file_exists
 public :: FmsNetcdfDomainFile_t
-public :: get_var_dimension_features
-public :: get_variable_byte_size
+public :: get_dimension_size
 public :: get_global_io_domain_indices
-public :: register_field
 public :: get_horizontal_grid_position
 public :: get_time_units
+public :: get_var_dimension_features
+public :: get_variable_byte_size
 public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_axis
+public :: read_data
+public :: register_field
 public :: register_variable_attribute
-public :: write_data
 public :: variable_exists
-public :: attribute_exists
-public :: dimension_exists
+public :: write_data
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -117,7 +120,7 @@ type axis_atts
   integer            :: horgrid_position        !< Horizontal grid position
   logical            :: is_domain_decomposed    !< if .true. the axis data are domain-decomposed
                                                 !! and need to be indexed by the compute domain
-                                                !! before passing to fms2_write_data
+                                                !! before passing to write_data
 end type axis_atts
 
 !> Type for describing an axis variable (e.g., lath, lonh, Time)
@@ -503,34 +506,34 @@ subroutine MOM_register_axis(fileObj, axis_name, axis_length)
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
                                                 !! (only needed for Layer, Interface, Time, and Period)
    select case (trim(axis_name))
-         case ('latq'); call fms2_register_axis(fileObj,'latq','y')
-         case ('lath'); call fms2_register_axis(fileObj,'lath','y') 
-         case ('lonq'); call fms2_register_axis(fileObj,'lonq','x') 
-         case ('lonh'); call fms2_register_axis(fileObj,'lonh','x')
+         case ('latq'); call register_axis(fileObj,'latq','y')
+         case ('lath'); call register_axis(fileObj,'lath','y') 
+         case ('lonq'); call register_axis(fileObj,'lonq','x') 
+         case ('lonh'); call register_axis(fileObj,'lonh','x')
          case ('Layer')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
                      "axis_length argument required to register the Layer axis")
             endif 
-            call fms2_register_axis(fileObj,'Layer',axis_length)
+            call register_axis(fileObj,'Layer',axis_length)
          case ('Interface')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
                      "axis_length argument required to register the Interface axis")
             endif 
-            call fms2_register_axis(fileObj,'Interface',axis_length)
+            call register_axis(fileObj,'Interface',axis_length)
          case ('Time')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
                      "axis_length argument required to register the Time axis")
             endif 
-            call fms2_register_axis(fileObj,'Time', axis_length)
+            call register_axis(fileObj,'Time', axis_length)
          case ('Period')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
                      "axis_length argument required to register the Period axis")
             endif 
-            call fms2_register_axis(fileObj,'Period',axis_length)
+            call register_axis(fileObj,'Period',axis_length)
    end select
 end subroutine MOM_register_axis
 
@@ -705,8 +708,8 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
      isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
      IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
-
-
+  
+  ! initialize axis_data_CS elements
   axis_data_CS%axis(axis_number)%name = ''
   axis_data_CS%axis(axis_number)%longname = ''
   axis_data_CS%axis(axis_number)%units = ''
@@ -1341,7 +1344,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
                                                      !! by before they are returned.
 
   call old_fms_read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
-!  call fms2_read_data(fileObj, fieldname, data)
+!  call read_data(fileObj, fieldname, data)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     data(:) = scale*data(:)
