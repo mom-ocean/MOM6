@@ -136,7 +136,7 @@ This will run through the following tests:
 - `test.grids`: Symmetric vs nonsymmetric grids
 - `test.layouts`: Domain decomposition, based on parallelization
 - `test.restarts`: Resubmission by restarts
-- `test.repros: Optimized (REPRO) and unoptimized (DEBUG) compilation
+- `test.repros`: Optimized (REPRO) and unoptimized (DEBUG) compilation
 - `test.nans`: NaN initialization of allocated arrays
 - `test.dims`: Dimensional scaling (length, time, thichkness, depth)
 
@@ -206,3 +206,11 @@ When the tests are run on Travis, the following variables are re-defined:
   a PR, this is the name of the branch which is receiving the PR.
 
 - `REPORT_COVERAGE` is set to `true`.
+
+## Running under slurm
+
+By default the executables are invoked using `mpirun`. Under slurm you might need to
+use `srun` (such as on GFDL's gaea HPC):
+```
+make MPIRUN=srun test
+```
