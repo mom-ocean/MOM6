@@ -407,6 +407,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   integer, dimension(4) :: dim_lengths
   real    :: reday, var
   character(len=240) :: energypath_nc
+  character(len=200) :: dim_names(4)
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
@@ -463,8 +464,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       CS%write_energy_time = CS%write_energy_time + CS%energysavedays
     endif
   endif
-
-  
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
@@ -674,7 +673,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
            if (.not.(axis_found)) then
               total_axes=total_axes+1
               call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, G=G, GV=GV, &
-                                     time_val=CS%timeunit, time_units="seconds")
+                                     time_val=(/CS%timeunit/), time_units="seconds")
               call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
            endif
         enddo
