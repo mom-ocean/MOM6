@@ -41,5 +41,8 @@ jobs:
             REPORT_COVERAGE=true
         - echo -en 'travis_fold:end:script.1\\r'
         - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
-        - make DO_REGRESSION_TESTS=${TRAVIS_IS_PR} test
+        - make \
+            DO_REGRESSION_TESTS=${TRAVIS_IS_PR} \
+            REPORT_COVERAGE=true \
+            test
         - echo -en 'travis_fold:end:script.2\\r'

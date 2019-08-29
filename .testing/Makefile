@@ -1,6 +1,8 @@
 SHELL = bash
 MPIRUN ?= mpirun
 
+-include config.mk
+
 #---
 # Dependencies
 BASE = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/..
