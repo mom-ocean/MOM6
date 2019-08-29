@@ -43,9 +43,6 @@ TESTS = grids layouts restarts repros nans dims
 #   MOM_TARGET_SLUG: TRAVIS_REPO_SLUG
 #   MOM_TARGET_LOCAL_BRANCH: TRAVIS_BRANCH
 #
-# MOM_TARGET_REMOTE_NAME and MOM_MERGED_BRANCH are arbitrary labels which may
-# cause namespace conflicts, and should probably be renamed or phased out.
-
 # These are set to true by Travis if testing a pull request
 DO_REGRESSION_TESTS ?=
 REPORT_COVERAGE ?=
@@ -78,8 +75,11 @@ all: $(foreach b,$(BUILDS),$(BUILD)/$(b)/MOM6)
 BUILD_TARGETS = MOM6 Makefile path_names
 .PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),$(BUILD)/$(b)/$(f)))
 
+# Conditionally build symmetric with coverage support
+COVFLAG=$(if $(REPORT_COVERAGE),COVERAGE=1,)
+
 $(BUILD)/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
-$(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 COVERAGE=1
+$(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
 $(BUILD)/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
 
@@ -159,7 +159,7 @@ $(LIST_PATHS) $(MKMF):
 .PHONY: test
 test: $(foreach t,$(TESTS),test.$(t))
 
-# NOTE: We remove tc3 (OBC) from grid test
+# NOTE: We remove tc3 (OBC) from grid test since it cannot run asymmetric grids
 
 .PHONY: $(foreach t,$(TESTS),test.$(t))
 test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
@@ -257,16 +257,14 @@ $(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
 		&& if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
 		&& printf -v timeunit_int "%.f" "$${timeunit}" \
 		&& halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
-		&& f90nml -g ocean_solo_nml -v seconds=$${halfperiod} input.nml > tmp.nml \
-		&& mv tmp.nml input.nml \
+		&& printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml \
 		&& echo $${daymax} $${timeunit}
 	# Run the first half-period
 	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
 	# Setup the next inputs
 	rm -rf $(@D)/INPUT && mv $(@D)/RESTART $(@D)/INPUT
 	mkdir $(@D)/RESTART
-	cd $(@D) && f90nml -g mom_input_nml -v input_filename='r' input.nml > tmp.nml
-	mv $(@D)/tmp.nml $(@D)/input.nml
+	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
 	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
 	# Archive the results and cleanup

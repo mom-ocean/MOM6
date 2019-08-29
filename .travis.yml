@@ -18,9 +18,6 @@ addons:
     - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev openmpi-bin libopenmpi-dev gfortran
     - doxygen graphviz flex bison cmake
 
-before_install:
-    - pip install --user f90nml
-
 jobs:
   include:
     - env: JOB="Code style compliance"
