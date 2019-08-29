@@ -140,6 +140,11 @@ interface MOM_open_file
   module procedure MOM_open_file_DD_dyn_horgrid
   module procedure MOM_open_file_noDD
 end interface
+!> Register axes to a netCDF file
+interface MOM_register_axis
+  module procedure MOM_register_axis_DD
+  module procedure MOM_register_axis_noDD
+end interface 
 
 !> Read a data field from a file
 interface MOM_read_data
@@ -504,8 +509,8 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 
 end subroutine reopen_file
 
-!> register an axis to a restart file
-subroutine MOM_register_axis(fileObj, axis_name, axis_length)
+!> register an axis to a domain-decomposed file
+subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
@@ -517,30 +522,66 @@ subroutine MOM_register_axis(fileObj, axis_name, axis_length)
          case ('lonh'); call register_axis(fileObj,'lonh','x')
          case ('Layer')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
                      "axis_length argument required to register the Layer axis")
             endif 
             call register_axis(fileObj,'Layer',axis_length)
          case ('Interface')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
                      "axis_length argument required to register the Interface axis")
             endif 
             call register_axis(fileObj,'Interface',axis_length)
          case ('Time')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
                      "axis_length argument required to register the Time axis")
             endif 
             call register_axis(fileObj,'Time', axis_length)
          case ('Period')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_restart::register_restart_axis: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_DD:"//&
                      "axis_length argument required to register the Period axis")
             endif 
             call register_axis(fileObj,'Period',axis_length)
    end select
-end subroutine MOM_register_axis
+end subroutine MOM_register_axis_DD
+
+!> register an axis to a non domain-decomposed file
+!! @note non-domain-decomposed files will not contain lat,lon coordinate axes
+!! because MOM does not use an unstructured grid
+subroutine MOM_register_axis_noDD(fileObj, axis_name, axis_length)
+   type(FmsNetcdfFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
+   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
+   integer, optional, intent(in) :: axis_length !< length of axis/dimension
+                                                !! (only needed for Layer, Interface, Time, and Period)
+   select case (trim(axis_name))
+         case ('Layer')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
+                     "axis_length argument required to register the Layer axis")
+            endif 
+            call register_axis(fileObj,'Layer',axis_length)
+         case ('Interface')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
+                     "axis_length argument required to register the Interface axis")
+            endif 
+            call register_axis(fileObj,'Interface',axis_length)
+         case ('Time')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
+                     "axis_length argument required to register the Time axis")
+            endif 
+            call register_axis(fileObj,'Time', axis_length)
+         case ('Period')
+            if (.not.(present(axis_length))) then
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
+                     "axis_length argument required to register the Period axis")
+            endif 
+            call register_axis(fileObj,'Period',axis_length)
+   end select
+end subroutine MOM_register_axis_noDD
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
