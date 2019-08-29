@@ -16,7 +16,7 @@ use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
-use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
+use MOM_io, only : register_field, variable_exists, dimension_exists
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -512,9 +512,8 @@ end subroutine set_coord_to_none
 
 !> Writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model.
-subroutine write_vertgrid_file(GV, G, US, param_file, directory)
+subroutine write_vertgrid_file(GV, US, param_file, directory)
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure
-  type(ocean_grid_type),   intent(in)  :: G          !< Ocean horizontal grid structure
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   character(len=*),      intent(in)    :: directory  !< The directory into which to place the file.
@@ -526,7 +525,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to MOM_open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   !integer :: unit
-  integer :: i, is, ie, j
+  integer :: i, j
   integer :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
@@ -592,13 +591,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
            call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-           if (axis_data_CS%axis(i)%is_domain_decomposed) then
-              call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
-
-           else
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-           endif
+           call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
 
            call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                             'long_name',axis_data_CS%axis(i)%longname)
