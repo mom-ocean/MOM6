@@ -322,7 +322,6 @@ use mpp_domains_mod,          only: domain2d, mpp_get_compute_domain, mpp_get_co
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
 use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR, MPP_APPEND, mpp_close, MPP_SINGLE
-use mpp_mod,                  only: input_nml_file, mpp_error, FATAL, NOTE, mpp_pe, mpp_npes, mpp_set_current_pelist
 use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
 use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
 use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
@@ -339,12 +338,13 @@ use MOM_domains,              only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,            only: Get_MOM_Input, directories
 use MOM_domains,              only: pass_var
-use MOM_error_handler,        only: is_root_pe
+use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
 use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
 use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
-use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
+use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
+use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
 #ifdef CESMCOUPLED
@@ -1181,6 +1181,8 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   integer, allocatable                       :: gindex(:) ! global index space
   character(len=128)                         :: fldname
   character(len=256)                         :: cvalue
+  character(len=256)                         :: frmt    ! format specifier for several error msgs
+  character(len=512)                         :: err_msg ! error messages
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
   integer                         :: spatialDim
   integer                         :: numOwnedElements
@@ -1190,6 +1192,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8)    , pointer :: lon(:), lonMesh(:)
   integer(ESMF_KIND_I4) , pointer :: mask(:), maskMesh(:)
   real(ESMF_KIND_R8)              :: diff_lon, diff_lat
+  real                            :: eps_omesh
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -1381,23 +1384,29 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
        end do
      end do
 
+     eps_omesh = get_eps_omesh(ocean_state)
      do n = 1,numOwnedElements
-       diff_lon = abs(lonMesh(n) - lon(n))
-       if (diff_lon > 1.e-2) then
-         write(6,100)n,lonMesh(n),lon(n), diff_lon
-100      format('ERROR: MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)
-         !call shr_sys_abort()
+       diff_lon = abs(mod(lonMesh(n) - lon(n),360.0))
+       if (diff_lon > eps_omesh) then
+         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is "//&
+                "greater than parameter EPS_OMESH. n, lonMesh(n), lon(n), diff_lon, "//&
+                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
+         write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon, eps_omesh
+         call MOM_error(FATAL, err_msg)
        end if
        diff_lat = abs(latMesh(n) - lat(n))
-       if (diff_lat > 1.e-2) then
-         write(6,101)n,latMesh(n),lat(n), diff_lat
-101      format('ERROR: MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)
-         !call shr_sys_abort()
+       if (diff_lat > eps_omesh) then
+         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is"//&
+                "greater than parameter EPS_OMESH. n, latMesh(n), lat(n), diff_lat, "//&
+                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
+         write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat, eps_omesh
+         call MOM_error(FATAL, err_msg)
         end if
         if (abs(maskMesh(n) - mask(n)) > 0) then
-          write(6,102)n,maskMesh(n),mask(n)
-102       format('ERROR: MOM n, maskMesh(n), mask(n) = ',3(i8,2x))
-          !call shr_sys_abort()
+          frmt = "('ERROR: ESMF mesh and MOM6 domain masks are inconsistent! - "//&
+                 "MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
+          write(err_msg, frmt)n,maskMesh(n),mask(n)
+          call MOM_error(FATAL, err_msg)
         end if
      end do
 
