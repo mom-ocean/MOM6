@@ -135,6 +135,7 @@ interface MOM_open_file
   module procedure MOM_open_file_DD_ocean_grid
   module procedure MOM_open_file_DD_supergrid
   module procedure MOM_open_file_DD_dyn_horgrid
+  module procedure MOM_open_file_noDD
 end interface
 
 !> Read a data field from a file
@@ -1363,6 +1364,36 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
   end select     
 end function MOM_open_file_DD_dyn_horgrid
+!> Open non-domain-decomposed file(s) with the base file name
+!! 'filename' to read from or write/append to. The domain comes from the ocean_grid_type structure G.
+function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+
+  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg      ! A message for warnings.
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                          is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                   is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                   is_restart = is_restart)
+        endif
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
+  end select     
+end function MOM_open_file_noDD
+
 
 
 !> This function uses the fms_io function read_data to read 1-D
