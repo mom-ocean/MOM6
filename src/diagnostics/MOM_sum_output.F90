@@ -12,9 +12,14 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, mpp_open_file, reopen_file
+!use MOM_io, only : flush_file, create_file, reopen_file
+use MOM_io, only : fieldtype, mpp_open_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : register_variable_attribute, get_var_dimension_features
+use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
+use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>)
@@ -396,11 +401,18 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                                  ! lbelow & labove are lower & upper limits for l
                                  ! in the search for the entry in lH to use.
   integer :: start_of_day, num_days
+  integer :: isg, ieg ! global start and end indices for writing axis data
+  integer :: num_dims ! counter for variable dimensions
+  integer :: total_axes ! counter for all coordinate axes in file
+  integer, dimension(4) :: dim_lengths
   real    :: reday, var
   character(len=240) :: energypath_nc
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
+  logical :: multiple_files
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: axis_found, variable_found ! If true, the axis or variable is registered to the file
   type(time_type) :: dt_force ! A time_type version of the forcing timestep.
   real :: Tr_stocks(MAX_FIELDS_)
   real :: Tr_min(MAX_FIELDS_), Tr_max(MAX_FIELDS_)
@@ -416,6 +428,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
 
   ! write_energy_time is the next integral multiple of energysavedays.
   dt_force = set_time(seconds=2) ; if (present(dt_forcing)) dt_force = dt_forcing
@@ -449,6 +463,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       CS%write_energy_time = CS%write_energy_time + CS%energysavedays
     endif
   endif
+
+  
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
@@ -620,15 +636,80 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     endif
 
     energypath_nc = trim(CS%energyfile) // ".nc"
-    if (day > CS%Start_time) then
-      call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-                       G=G, GV=GV)
-    else
-      call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-                       G=G, GV=GV)
-    endif
+    !if (day > CS%Start_time) then
+    !  call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+    !                   num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+    !                   G=G, GV=GV)
+    !else
+    !  call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+    !                   num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+    !                   G=G, GV=GV)
+    !endif
+
+    !allocate the axis data and attribute types for the file
+    !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+    !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+    allocate(axis_data_CS%axis(20))
+    allocate(axis_data_CS%data(20))
+
+     ! open the file   
+     file_open_success = MOM_open_file(fileObjWrite, trim(energypath_nc), "write", &
+                                        G, is_restart=.false.)
+
+     ! loop through the variables, and get the global dimension names and lengths for the file
+     total_axes=0      
+     do i=1,num_nc_fields 
+        num_dims=0
+    
+        call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                        dim_names, dim_lengths, num_dims,G=G, GV=GV)
+        if (num_dims <= 0) then
+         call MOM_error(FATAL, &
+                        "MOM_shared_initialization:write_ocean_geometry_file: num_dims is an invalid value.")
+        endif
+
+        ! register the variable dimensions to the file if the corresponding global axes are not registered
+        do j=1,num_dims
+           axis_found = dimension_exists(fileObjWrite, dim_names(j))
+           if (.not.(axis_found)) then
+              total_axes=total_axes+1
+              call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, G=G, GV=GV, &
+                                     time_val=CS%timeunit, time_units="seconds")
+              call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+           endif
+        enddo
+  
+        ! register the fields and attributes for non-coordinate variable 'i'
+        call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
+        call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+        call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+     enddo
+     ! register and write the coordinate variables (axes) to the file
+     do i=1,total_axes
+        variable_found = variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
+
+        if (.not.(variable_found)) then 
+           if (associated(axis_data_CS%data(i)%p)) then
+              call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+              if (axis_data_CS%axis(i)%is_domain_decomposed) then
+                 call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), isg, ieg)
+                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(isg:ieg))
+              else
+                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+              endif
+
+              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                               'long_name',axis_data_CS%axis(i)%longname)
+
+              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                               'units',trim(axis_data_CS%axis(i)%units))
+
+           endif
+        endif
+     enddo
+
   endif
 
   if (CS%do_APE_calc) then
@@ -877,36 +958,62 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     endif
   endif
 
+  ! write the fields that are not coordinate variables to the energy netcdf file 
   var = real(CS%ntrunc)
-  call write_field(CS%fileenergy_nc, CS%fields(1), var, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(2), toten, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(3), PE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(4), KE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(5), H_0APE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(6), mass_lay, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(1), var, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(2), toten, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(3), PE, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(4), KE, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(5), H_0APE, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(6), mass_lay, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(7), mass_tot, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(8), mass_chg, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
+  !call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday) !>@bug max_CFL index correctly set in new write call
 
-  call write_field(CS%fileenergy_nc, CS%fields(7), mass_tot, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(8), mass_chg, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
-  call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday)
+  call write_data(fileObjWrite, vars(1)%name, var)
+  call write_data(fileObjWrite, vars(2)%name, toten)
+  call write_data(fileObjWrite, vars(3)%name, PE)
+  call write_data(fileObjWrite, vars(4)%name, KE)
+  call write_data(fileObjWrite, vars(5)%name, H_0APE)
+  call write_data(fileObjWrite, vars(6)%name, mass_lay)
+  call write_data(fileObjWrite, vars(7)%name, mass_tot)
+  call write_data(fileObjWrite, vars(8)%name, mass_chg)
+  call write_data(fileObjWrite, vars(9)%name, mass_anom)
+  call write_data(fileObjWrite, vars(10)%name, max_CFL(1))
+  call write_data(fileObjWrite, vars(11)%name, max_CFL(2))
+
   if (CS%use_temperature) then
-    call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(14), 0.001*salt_anom, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(15), Heat, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(16), heat_chg, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(17), heat_anom, reday)
+    !call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
+    !call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
+    !call write_field(CS%fileenergy_nc, CS%fields(14), 0.001*salt_anom, reday)
+    !call write_field(CS%fileenergy_nc, CS%fields(15), Heat, reday)
+    !call write_field(CS%fileenergy_nc, CS%fields(16), heat_chg, reday)
+    !call write_field(CS%fileenergy_nc, CS%fields(17), heat_anom, reday)
+    call write_data(fileObjWrite, vars(12)%name, 0.001*Salt)
+    call write_data(fileObjWrite, vars(13)%name, 0.001*salt_chg)
+    call write_data(fileObjWrite, vars(14)%name, 0.001*salt_anom)
+    call write_data(fileObjWrite, vars(15)%name, Heat)
+    call write_data(fileObjWrite, vars(16)%name, heat_chg)
+    call write_data(fileObjWrite, vars(17)%name, heat_anom)
     do m=1,nTr_stocks
-      call write_field(CS%fileenergy_nc, CS%fields(17+m), Tr_stocks(m), reday)
+      !call write_field(CS%fileenergy_nc, CS%fields(17+m), Tr_stocks(m), reday)
+      call write_data(fileObjWrite, vars(17+m)%name, Tr_stocks(m))
     enddo
   else
     do m=1,nTr_stocks
-      call write_field(CS%fileenergy_nc, CS%fields(11+m), Tr_stocks(m), reday)
+      !call write_field(CS%fileenergy_nc, CS%fields(11+m), Tr_stocks(m), reday)
+      call write_data(fileObjWrite, vars(11+m)%name, Tr_stocks(m))
     enddo
   endif
 
-  call flush_file(CS%fileenergy_nc)
+  ! close the file
+  call close_file(fileObjWrite)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
+
+  !call flush_file(CS%fileenergy_nc)
 
   ! The second (impossible-looking) test looks for a NaN in En_mass.
   if ((En_mass>CS%max_Energy) .or. &
