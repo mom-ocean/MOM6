@@ -557,11 +557,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   total_axes=0 
   file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
                                      G, is_restart=.false.)
-  do i=1,size(vars)
-     t_grid=''
-     z_grid=''
-     hor_grid=''   
- 
+  do i=1,size(vars)  
      num_dims=0
     
      call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
@@ -619,6 +615,8 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
 
   ! close the file
   call close_file(fileObjWrite)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
 
 end subroutine write_vertgrid_file
 
