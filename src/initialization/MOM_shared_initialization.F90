@@ -1198,6 +1198,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer :: nFlds_used
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  integer :: isg, ieg ! global start and end indices for writing axis data
   integer :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
@@ -1281,65 +1282,153 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   !call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
   !                 file_threading, dG=G)
+  ! old write API: mpp_write(unit, field, domain, data, tstamp)
 
+  ! allocate the axis data and attribute types for the file
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+
+  ! open the file   
+  file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
+                                     G, is_restart=.false.)
+  ! loop through the variables, and get the global dimension names and lengths for the file
+  total_axes=0      
+  do i=1,size(vars)  
+     num_dims=0
+    
+     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                     dim_names, dim_lengths, num_dims,dG=G)
+     if (num_dims <= 0) then
+         call MOM_error(FATAL, &
+                        "MOM_shared_initialization:write_ocean_geometry_file: num_dims is an invalid value.")
+     endif
+
+     ! register the variable dimensions to the file if the corresponding global axes are not registered
+     do j=1,num_dims
+        axis_found = dimension_exists(fileObjWrite, dim_names(j))
+        if (.not.(axis_found)) then
+            total_axes=total_axes+1
+            call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, dG=G)
+            call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+        endif
+     enddo
+  
+     ! register the fields and attributes for non-coordinate variable 'i'
+     call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
+     call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+     call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+  enddo
+
+  ! register and write the coordinate variables (axes) to the file,
+  do i=1,total_axes
+     variable_found = variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
+     if (.not.(variable_found)) then 
+        if (associated(axis_data_CS%data(i)%p)) then
+           call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+           if (axis_data_CS%axis(i)%is_domain_decomposed) then
+              call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), isg, ieg)
+              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(isg:ieg))
+
+           else
+              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+           endif
+
+           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                            'long_name',axis_data_CS%axis(i)%longname)
+
+           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                            'units',trim(axis_data_CS%axis(i)%units))
+
+        endif
+     endif
+  enddo 
+  
+  ! write the fields that are not coordinate variables
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
-  call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
+  !call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
+  call write_data(fileObjWrite, vars(1)%name, out_q)
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
-  call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
-  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
-  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
+  !call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
+  !call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
+  !call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
+  call write_data(fileObjWrite, vars(2)%name, out_q)
+  call write_data(fileObjWrite, vars(3)%name, G%geoLatT)
+  call write_data(fileObjWrite, vars(4)%name, G%geoLonT)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
+  !call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
+  call write_data(fileObjWrite, vars(5)%name, out_h)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
-
+  !call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
+  call write_data(fileObjWrite, vars(6)%name, out_q)
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
+  !call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
+  call write_data(fileObjWrite, vars(7)%name, out_v)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
+  !call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
+  call write_data(fileObjWrite, vars(8)%name, out_u)
 
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
+  !call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
+  call write_data(fileObjWrite, vars(9)%name, out_u)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
+  !call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
+  call write_data(fileObjWrite, vars(10)%name, out_v)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
+  !call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
+  call write_data(fileObjWrite, vars(11)%name, out_h)
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
-
+  !call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
+  call write_data(fileObjWrite, vars(12)%name, out_h)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
+  !call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
+  call write_data(fileObjWrite, vars(13)%name, out_q)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
-
+  !call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
+  call write_data(fileObjWrite, vars(14)%name, out_q)
   do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
+  !call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
+  call write_data(fileObjWrite, vars(15)%name, out_h)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
-
+  !call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
+  call write_data(fileObjWrite, vars(16)%name, out_q)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
+  !call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
+  call write_data(fileObjWrite, vars(17)%name, out_v)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
-  call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
-
+  !call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
+  !call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
+  call write_data(fileObjWrite, vars(18)%name, out_u)
+  call write_data(fileObjWrite, vars(19)%name, G%mask2dT)
   if (G%bathymetry_at_vel) then
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(20), G%Domain%mpp_domain, out_u)
+    !call write_field(unit, fields(20), G%Domain%mpp_domain, out_u)
+    call write_data(fileObjWrite, vars(20)%name, out_u)
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
+    !call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
+    call write_data(fileObjWrite, vars(21)%name, out_u)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(22), G%Domain%mpp_domain, out_v)
+    !call write_field(unit, fields(22), G%Domain%mpp_domain, out_v)
+    call write_data(fileObjWrite, vars(22)%name, out_v)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
+    !call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
+    call write_data(fileObjWrite, vars(23)%name, out_v)
   endif
 
-  call mpp_close_file(unit)
+  ! close the file
+  call close_file(fileObjWrite)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
+
+  !call mpp_close_file(unit)
 
 end subroutine write_ocean_geometry_file
 
