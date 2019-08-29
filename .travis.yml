@@ -5,6 +5,11 @@
 language: c
 dist: xenial
 
+# --depth flag is breaking our merge, try disabling it
+# NOTE: We may be able to go back to depth=50 in production
+git:
+    depth: false
+
 addons:
   apt:
     sources:
@@ -13,99 +18,28 @@ addons:
     - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev openmpi-bin libopenmpi-dev gfortran
     - doxygen graphviz flex bison cmake
 
-# Stages occur sequentially. Within each stage jobs run concurrently.
-stages:
-  - check and compile
-  - tests
-  - cleanup
-
-cache:
-  directories:
-    - build
-
-# Compilation and testing is controlled by the "configure" and "Makefile" in
-# .testing/ but they operate from the root directory. We copy them into place
-# so that they can remain hidden from users.
-install:
-  - echo "Install step"
-  - cp .testing/{configure,Makefile} .
-
-before_script:
-  - ls -l
-  - ls build
-
-# This avoids caching files we do not need between stages
-before_cache:
-  - rm -f build/*.o build/*.mod
-
 jobs:
   include:
-
-    # Checks and compilation ###################################################
-#   - stage: check and compile
-#     script:
-#     - echo "Blank environment - this is where we would compile if we wanted to reuse executables in multiple tests"
-#     #- touch build/comp_nothing
-    - stage: check and compile
-      env: JOB="Code style compliance"
+    - env: JOB="Code style compliance"
       script:
-      - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
-    - stage: check and compile
-      env: JOB="Doxygen"
+        - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
+    - env: JOB="Doxygen"
       script:
-      - cd docs && doxygen Doxyfile_nortd
-      - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
-      - test ! -s  doxy_errors
-    - &compile-code
-      stage: check and compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+        - cd docs && doxygen Doxyfile_nortd
+        - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
+        - test ! -s  doxy_errors
+    - env: JOB="Compile and run"
       script:
-      - make $MAKEARGS compile
-      - touch build/comp_${MAKEARGS//\ /_}
-    - <<: *compile-code
-      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-    - <<: *compile-code
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1"
-    - <<: *compile-code
-      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1"
-#   - <<: *compile-code
-#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
-
-    # Run tests ################################################################
-    # The default "test" job is automatically invoked for each of the matrix environments
-    # The "test" jobs executes "./configure && make && make test"
-#   - stage: tests
-#     script:
-#     - echo "Placeholder for generic text using blank environment"
-    - &compile
-      stage: tests
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-      script:
-      - ./configure && make -j && make test
-    - <<: *compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-    - <<: *compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1"
-    - <<: *compile
-      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1"
-#   - <<: *compile
-#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
-
-    # Clean up #################################################################
-    # We only want the cache directory to exist between stages so we manually
-    # clean out the cache, i.e. build/
-    - &clean-build
-      stage: cleanup
-      script:
-      - rm -rf build/*
-      - ls -l
-#   - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
-    - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
-    - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1"
-    - <<: *clean-build
-      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1"
-#   - <<: *clean-build
-#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
+        - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
+        - TRAVIS_IS_PR=$( [ ${TRAVIS_PULL_REQUEST} = "false" ] || echo "true" )
+        - cd .testing
+        - make \
+            MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk \
+            MOM_TARGET_SLUG=${TRAVIS_REPO_SLUG} \
+            MOM_TARGET_LOCAL_BRANCH=${TRAVIS_BRANCH} \
+            DO_REGRESSION_TESTS=${TRAVIS_IS_PR} \
+            REPORT_COVERAGE=true
+        - echo -en 'travis_fold:end:script.1\\r'
+        - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
+        - make DO_REGRESSION_TESTS=${TRAVIS_IS_PR} test
+        - echo -en 'travis_fold:end:script.2\\r'
