@@ -1386,7 +1386,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
      eps_omesh = get_eps_omesh(ocean_state)
      do n = 1,numOwnedElements
-       diff_lon = abs(lonMesh(n) - lon(n))
+       diff_lon = abs(mod(lonMesh(n) - lon(n),360.0))
        if (diff_lon > eps_omesh) then
          frmt = "('ERROR: Inconsistent coords - "//&
                 "MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)"

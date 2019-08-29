@@ -334,7 +334,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call get_param(param_file, mdl, "EPS_OMESH",OS%eps_omesh, &
                  "Maximum allowable difference between ESMF mesh and "//&
                  "MOM6 domain coordinates in nuopc cap.", &
-                 units="degrees", default=1.e-2)
+                 units="degrees", default=1.e-4)
   call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
                  "If true, the coupled driver will add a globally-balanced "//&
                  "fresh-water flux that drives sea-surface salinity "//&
