@@ -514,6 +514,13 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   enddo ; enddo ; enddo
 !$OMP end parallel
 
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  if (CS%id_uhml > 0 .or. CS%id_vhml > 0) &
+    ! Remapped uhml and vhml require east/north halo updates of h
+    call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
+  call diag_update_remap_grids(CS%diag)
+
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_urestrat_time > 0) call post_data(CS%id_urestrat_time, utimescale_diag, CS%diag)
