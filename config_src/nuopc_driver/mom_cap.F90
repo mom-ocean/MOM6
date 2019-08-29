@@ -1388,20 +1388,22 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
      do n = 1,numOwnedElements
        diff_lon = abs(mod(lonMesh(n) - lon(n),360.0))
        if (diff_lon > eps_omesh) then
-         frmt = "('ERROR: Inconsistent coords - "//&
-                "MOM  n, lonMesh(n), lon(n), diff_lon = ',i8,2(f21.13,3x),d21.5)"
-         write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon
+         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is "//&
+                "greater than parameter EPS_OMESH. n, lonMesh(n), lon(n), diff_lon, "//&
+                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
+         write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon, eps_omesh
          call MOM_error(FATAL, err_msg)
        end if
        diff_lat = abs(latMesh(n) - lat(n))
        if (diff_lat > eps_omesh) then
-         frmt = "('ERROR: Inconsistent coords - "//&
-                "MOM n, latMesh(n), lat(n), diff_lat = ',i8,2(f21.13,3x),d21.5)"
-         write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat
+         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is"//&
+                "greater than parameter EPS_OMESH. n, latMesh(n), lat(n), diff_lat, "//&
+                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
+         write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat, eps_omesh
          call MOM_error(FATAL, err_msg)
         end if
         if (abs(maskMesh(n) - mask(n)) > 0) then
-          frmt = "('ERROR: Inconsistent masks - "//&
+          frmt = "('ERROR: ESMF mesh and MOM6 domain masks are inconsistent! - "//&
                  "MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
           write(err_msg, frmt)n,maskMesh(n),mask(n)
           call MOM_error(FATAL, err_msg)
