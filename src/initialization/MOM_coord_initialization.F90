@@ -41,9 +41,8 @@ contains
 
 !> MOM_initialize_coord sets up time-invariant quantities related to MOM6's
 !!   vertical coordinate.
-subroutine MOM_initialize_coord(GV, G, US, PF, write_geom, output_dir, tv, max_depth)
+subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_depth)
   type(verticalGrid_type), intent(inout) :: GV         !< Ocean vertical grid structure.
-  type(ocean_grid_type),   intent(in)    :: G          !< Ocean horizontal grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: PF         !< A structure indicating the open file
                                                        !! to parse for model parameter values.
@@ -119,7 +118,7 @@ subroutine MOM_initialize_coord(GV, G, US, PF, write_geom, output_dir, tv, max_d
   GV%max_depth = max_depth
 
 ! Write out all of the grid data used by this run.
-  if (write_geom) call write_vertgrid_file(GV, G, US, PF, output_dir)
+  if (write_geom) call write_vertgrid_file(GV, US, PF, output_dir)
 
   call callTree_leave('MOM_initialize_coord()')
 
@@ -545,8 +544,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   !call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
 
   !call mpp_close_file(unit)
-                       
-  ! note: 4d variables are lon x lat x vertical level x time
+                      
   ! allocate the axis data and attribute types for the vertical grid file
   !>@NOTE the user may need to increase the allocated array sizes to accomodate 
   !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
@@ -555,13 +553,12 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
 
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file         
   total_axes=0 
-  file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
-                                     G, is_restart=.false.)
+  file_open_success = MOM_open_file(fileObjWrite, filepath, "write", is_restart=.false.)
   do i=1,size(vars)  
      num_dims=0
     
      call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
-                                     dim_names, dim_lengths, num_dims,G=G,GV=GV)
+                                     dim_names, dim_lengths, num_dims,GV=GV)
      if (num_dims <= 0) then
          call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
      endif
@@ -571,7 +568,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
         axis_found = dimension_exists(fileObjWrite, dim_names(j))
         if (.not.(axis_found)) then
             total_axes=total_axes+1
-            call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, G=G, GV=GV)
+            call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
             call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
         endif
      enddo
