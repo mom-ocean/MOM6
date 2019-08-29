@@ -1209,9 +1209,6 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
-   
-  
-  real, dimension(:), allocatable :: time_vals
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
