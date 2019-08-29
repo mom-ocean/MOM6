@@ -13,7 +13,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
 use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
-use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
@@ -523,7 +523,7 @@ subroutine write_vertgrid_file(GV, G, US, param_file, directory)
   character(len=200) :: dim_names(4)
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to MOM_open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   !integer :: unit
   integer :: i, is, ie, j

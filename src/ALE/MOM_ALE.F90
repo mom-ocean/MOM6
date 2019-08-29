@@ -22,7 +22,11 @@ use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,               only : create_file, write_field, mpp_close_file
+!use MOM_io,               only : create_file, write_field, mpp_close_file
+use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : register_variable_attribute, get_var_dimension_features
+use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
+use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
 use MOM_interface_heights,only : find_eta
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution
@@ -1205,9 +1209,19 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   character(len=*),        intent(in)  :: directory  !< directory for writing grid info
 
   character(len=240) :: filepath
+  character(len=200) :: dim_names(4)
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
-  integer            :: unit
+  type(FmsNetcdfFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
+  !integer            :: unit
+  integer            :: i,j
+  integer :: num_dims ! counter for variable dimensions
+  integer :: total_axes ! counter for all coordinate axes in file
+  integer, dimension(4) :: dim_lengths
+  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: axis_found, variable_found ! If true, the axis or variable is registered to the file
+
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
@@ -1221,10 +1235,74 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(unit, fields(1), ds)
-  call write_field(unit, fields(2), dsi)
-  call mpp_close_file(unit)
+   ! allocate the axis data and attribute types for the vertical grid file
+  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
+  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(20))
+  allocate(axis_data_CS%data(20))
+
+  ! loop through the variables, and get the dimension names and lengths for the vertical grid file         
+  total_axes=0 
+  file_open_success = MOM_open_file(fileObjWrite, filepath, "write", is_restart=.false.)
+  do i=1,size(vars)  
+     num_dims=0
+    
+     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                     dim_names, dim_lengths, num_dims,GV=GV)
+     if (num_dims <= 0) then
+         call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
+     endif
+
+     ! register the variable dimensions to the file if the corresponding global axes are not registered
+     do j=1,num_dims
+        axis_found = dimension_exists(fileObjWrite, dim_names(j))
+        if (.not.(axis_found)) then
+            total_axes=total_axes+1
+            call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
+            call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+        endif
+     enddo
+     ! register the field variable
+     call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
+     ! register the variable attributes
+     call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+     call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+
+  enddo
+  
+  ! register and write the coordinate variables (axes) to the file
+  do i=1,total_axes
+     variable_found = variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
+     if (.not.(variable_found)) then 
+        if (associated(axis_data_CS%data(i)%p)) then
+           call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+           call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+
+           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                            'long_name',axis_data_CS%axis(i)%longname)
+
+           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                            'units',trim(axis_data_CS%axis(i)%units))
+
+        endif
+     endif
+  enddo
+
+  ! write the non-coordinate variables to the file
+  call write_data(fileObjWrite, vars(1)%name, ds)
+  call write_data(fileObjWrite, vars(2)%name, dsi)
+
+  ! close the file
+  call close_file(fileObjWrite)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
+
+!  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+!  call write_field(unit, fields(1), ds)
+!  call write_field(unit, fields(2), dsi)
+!  call mpp_close_file(unit)
 
 end subroutine ALE_writeCoordinateFile
 

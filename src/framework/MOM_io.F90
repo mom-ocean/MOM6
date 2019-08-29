@@ -51,7 +51,9 @@ use fms2_io_mod,          only: get_dimension_size, &
                                 variable_exists, &
                                 dimension_exists, &
                                 file_exists, &
-                                FmsNetcdfDomainFile_t, unlimited
+                                FmsNetcdfDomainFile_t, &
+                                FmsNetcdfFile_t, & 
+                                unlimited
 
 use netcdf
 
@@ -72,6 +74,7 @@ public :: attribute_exists
 public :: close_file
 public :: dimension_exists
 public :: file_exists
+public :: FmsNetcdfFile_t
 public :: FmsNetcdfDomainFile_t
 public :: get_dimension_size
 public :: get_global_io_domain_indices
@@ -1367,7 +1370,7 @@ end function MOM_open_file_DD_dyn_horgrid
 !> Open non-domain-decomposed file(s) with the base file name
 !! 'filename' to read from or write/append to. The domain comes from the ocean_grid_type structure G.
 function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  type(FmsNetcdfFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
