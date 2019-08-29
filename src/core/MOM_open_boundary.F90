@@ -53,6 +53,7 @@ public register_segment_tracer
 public register_temp_salt_segments
 public fill_temp_salt_segments
 public open_boundary_register_restarts
+public update_segment_tracer_reservoirs
 
 integer, parameter, public :: OBC_NONE = 0      !< Indicates the use of no open boundary
 integer, parameter, public :: OBC_SIMPLE = 1    !< Indicates the use of a simple inflow open boundary
@@ -181,11 +182,11 @@ type, public :: OBC_segment_type
                                                             !! can occur [T-1 ~> s-1].
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
-  real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed [m-3]
-  real :: Tr_InvLscale3_in                                      !< for restoring the tracer concentration in a
-                                                                !! ficticious reservior towards interior values
-                                                                !! when flow is exiting the domain, or towards
-                                                                !! an externally imposed value when flow is entering
+  real :: Tr_InvLscale_out                                   !< An effective inverse length scale [m-1]
+  real :: Tr_InvLscale_in                                    !< for restoring the tracer concentration in a
+                                                             !! ficticious reservior towards interior values
+                                                             !! when flow is exiting the domain, or towards
+                                                             !! an externally imposed value when flow is entering
 end type OBC_segment_type
 
 !> Open-boundary data
@@ -494,10 +495,10 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
     ! by data while others are well constrained - MJH.
     do l = 1, OBC%number_of_segments
-      OBC%segment(l)%Tr_InvLscale3_in=0.0
-      if (Lscale_in>0.) OBC%segment(l)%Tr_InvLscale3_in =  1.0/(Lscale_in*Lscale_in*Lscale_in)
-      OBC%segment(l)%Tr_InvLscale3_out=0.0
-      if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale3_out =  1.0/(Lscale_out*Lscale_out*Lscale_out)
+      OBC%segment(l)%Tr_InvLscale_in=0.0
+      if (Lscale_in>0.) OBC%segment(l)%Tr_InvLscale_in =  1.0/Lscale_in
+      OBC%segment(l)%Tr_InvLscale_out=0.0
+      if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale_out =  1.0/Lscale_out
     enddo
 
   endif ! OBC%number_of_segments > 0
@@ -4041,7 +4042,7 @@ subroutine flood_fill2(G, color, cin, cout, cland)
 end subroutine flood_fill2
 
 !> Register OBC segment data for restarts
-subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
+subroutine open_boundary_register_restarts(HI, GV, OBC_CS, restart_CSp)
   type(hor_index_type),    intent(in) :: HI !< Horizontal indices
   type(verticalGrid_type), pointer    :: GV !< Container for vertical grid information
   type(ocean_OBC_type),    pointer    :: OBC_CS !< OBC data structure, data intent(inout)
@@ -4079,6 +4080,87 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
   endif
 
 end subroutine open_boundary_register_restarts
+
+!> Update the OBC tracer reservoirs after the tracers have been updated.
+subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
+  type(ocean_grid_type),                     intent(in) :: G   !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in) :: GV  !<  Ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uhr !< accumulated volume/mass flux through
+                                                               !! the zonal face [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vhr !< accumulated volume/mass flux through
+                                                               !! the meridional face [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h   !< layer thickness after advection
+                                                               !! [H ~> m or kg m-2]
+  type(ocean_OBC_type),                      pointer    :: OBC !< Open boundary structure
+  real,                                      intent(in) :: dt  !< time increment [s]
+  type(tracer_registry_type),                pointer    :: Reg !< pointer to tracer registry
+  ! Local variables
+  integer :: i, j, k, m, n, ntr, nz
+  integer :: ishift, idir, jshift, jdir
+  type(OBC_segment_type), pointer :: segment=>NULL()
+  real :: u_L_in, u_L_out
+  real :: v_L_in, v_L_out
+  real :: fac1
+
+  nz = GV%ke
+  ntr = Reg%ntr
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+     do n=1,OBC%number_of_segments
+       segment=>OBC%segment(n)
+       if (.not. associated(segment%tr_Reg)) cycle
+       if (segment%is_E_or_W) then
+         do j=segment%HI%jsd,segment%HI%jed
+            I = segment%HI%IsdB
+
+            ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
+            idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
+            if (segment%direction == OBC_DIRECTION_W) then
+               ishift=1
+               idir=-1
+            endif
+            ! update the reservoir tracer concentration implicitly
+            ! using Backward-Euler timestep
+            do m=1,ntr
+              if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                do k=1,nz
+                  u_L_in=max((idir*uhr(I,j,k))*segment%Tr_InvLscale_in/(h(i+ishift,j,k)*G%dyCu(I,j)),0.)
+                  u_L_out=min((idir*uhr(I,j,k))*segment%Tr_InvLscale_out/(h(i+ishift,j,k)*G%dyCu(I,j)),0.)
+                  fac1=1.0+dt*(u_L_in-u_L_out)
+                  segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
+                       dt*(u_L_in*Reg%Tr(m)%t(I+ishift,j,k) - &
+                       u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
+                enddo
+              endif
+            enddo
+         enddo
+       else
+         do i=segment%HI%isd,segment%HI%ied
+            J = segment%HI%JsdB
+            jshift=0 ! jshift+J corresponds to the nearest interior tracer cell index
+            jdir=1   ! jdir switches the sign of the flow so that positive is into the reservoir
+            if (segment%direction == OBC_DIRECTION_S) then
+               jshift=1
+               jdir=-1
+            endif
+            ! update the reservoir tracer concentration implicitly
+            ! using Backward-Euler timestep
+            do m=1,ntr
+              if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                do k=1,nz
+                  v_L_in=max((jdir*vhr(i,J,k))*segment%Tr_InvLscale_in/(h(i,j+jshift,k)*G%dxCv(i,J)),0.)
+                  v_L_out=min((jdir*vhr(i,J,k))*segment%Tr_InvLscale_out/(h(i,j+jshift,k)*G%dxCv(i,J)),0.)
+                  fac1=1.0+dt*(v_L_in-v_L_out)
+                  segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
+                       dt*(v_L_in*Reg%Tr(m)%t(i,J+jshift,k) - &
+                       v_L_out*segment%tr_Reg%Tr(m)%t(i,J,k)))
+                enddo
+              endif
+            enddo
+         enddo
+       endif
+     enddo
+   endif; endif
+end subroutine update_segment_tracer_reservoirs
 
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !!
