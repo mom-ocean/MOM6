@@ -612,7 +612,13 @@ subroutine initialize_segment_data(G, OBC, PF)
     ! needs documentation !!  Yet, unsafe for now, causes grief for
     ! MOM_parameter_docs in circle_obcs on two processes.
 !   call get_param(PF, mdl, segnam, segstr, 'xyz')
+    ! Clear out any old values
+    segstr = ''
     call get_param(PF, mdl, segnam, segstr)
+    if (segstr == '') then
+      write(mesg,'("No OBC_SEGMENT_XXX_DATA string for OBC segment ",I3)') n
+      call MOM_error(FATAL, mesg)
+    endif
 
     call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
     if (num_fields == 0) then
@@ -772,8 +778,7 @@ subroutine initialize_segment_data(G, OBC, PF)
         segment%t_values_needed .or. segment%s_values_needed .or. &
         segment%z_values_needed .or. segment%g_values_needed) then
       write(mesg,'("Values needed for OBC segment ",I3)') n
-!     call MOM_error(FATAL, mesg)
-      call MOM_error(WARNING, mesg)
+      call MOM_error(FATAL, mesg)
     endif
   enddo
 
@@ -4111,7 +4116,6 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
        if (segment%is_E_or_W) then
          do j=segment%HI%jsd,segment%HI%jed
             I = segment%HI%IsdB
-
             ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
             idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
             if (segment%direction == OBC_DIRECTION_W) then
