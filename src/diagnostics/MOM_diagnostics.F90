@@ -1495,7 +1495,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
   CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
-      long_name = 'Cell thickness from the previous timestep', units='m', v_extensive=.true.)
+      long_name = 'Cell thickness from the previous timestep', units='m', &
+      v_extensive=.true., conversion=GV%H_to_m)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
@@ -1832,10 +1833,10 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive = .true.)
+      'm s-1', v_extensive=.true., conversion=GV%H_to_m)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive = .true.)
+      'm s-1', v_extensive=.true.)
 
 end subroutine register_transport_diags
 
@@ -1882,34 +1883,34 @@ subroutine write_static_fields(G, GV, US, tv, diag)
         'Longitude of zonal velocity (Cu) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
-        'Surface area of tracer (T) cells', 'm2', conversion=US%m_to_L**2,  &
+  id = register_static_field('ocean_model', 'area_t', diag%axesT1, &
+        'Surface area of tracer (T) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',      &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaT, diag, .true.)
     call diag_register_area_ids(diag, id_area_t=id)
   endif
 
-  id = register_static_field('ocean_model', 'area_u', diag%axesCu1,     &
-        'Surface area of x-direction flow (U) cells', 'm2', conversion=US%m_to_L**2, &
+  id = register_static_field('ocean_model', 'area_u', diag%axesCu1, &
+        'Surface area of x-direction flow (U) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
-        'Surface area of y-direction flow (V) cells', 'm2', conversion=US%m_to_L**2, &
+  id = register_static_field('ocean_model', 'area_v', diag%axesCv1, &
+        'Surface area of y-direction flow (V) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaCv, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
-        'Surface area of B-grid flow (Q) cells', 'm2', conversion=US%m_to_L**2, &
+  id = register_static_field('ocean_model', 'area_q', diag%axesB1, &
+        'Surface area of B-grid flow (Q) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaBu, diag, .true.)
 
