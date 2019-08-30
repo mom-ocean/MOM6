@@ -15,7 +15,10 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
-use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, register_axis
+use MOM_io, only : get_compute_domain_dimension_indices, get_global_io_domain_indices
+use MOM_io, only : get_variable_size, get_dimension_size, get_variable_num_dimensions
+use MOM_io, only : get_variable_dimension_names
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -193,7 +196,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer :: i, j, i2, j2
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
-  integer        :: start(4), nread(4)
+  integer :: start(4), nread(4)
+  integer :: isg, ieg, jsg, jeg
+  integer, dimension(:), allocatable :: compute_indices
+  integer :: num_dims
+  integer, dimension(:), allocatable :: dim_sizes
+  character(len=32), dimension(:), allocatable :: dim_names
   type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
 
@@ -226,11 +234,24 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   nj = 2*(G%jec-G%jsc+1) ! j size of supergrid
 
   ! Define a domain for the supergrid (SGdom)
+  ! For a model grid size (ni, nj), the supergrid size is (2*ni+, 2*nj+1)
+  ! For example, a 2x2 model grid defined by 4 centroids (c)
+  ! has a 5x5 supergrid defined by vertices (*) and face midpoints (.)
+  !  *--.--*--.--*
+  !  |     |     |
+  !  .  c  .  c  .
+  !  |     |     |
+  !  *--.--*--.--*
+  !  |     |     |  
+  !  .  c  .  c  .
+  !  |     |     |
+  !  *--.--*--.--*
+                           
   npei = G%domain%layout(1) ; npej = G%domain%layout(2)
   allocate(exni(npei)) ; allocate(exnj(npej))
   call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
   allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo+1
+  SGdom%nihalo = 2*G%domain%nihalo+1 
   SGdom%njhalo = 2*G%domain%njhalo+1
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
@@ -273,12 +294,32 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! open the file
   file_open_success = MOM_open_file(fileObjRead, filename, "read", &
                                      SGdom, .false.)
-  call get_global_io_domain_indices(fileObjRead, trim(axis_data_CS%axis(i)%name), isg, ieg,jsg,jeg)
-   
   ! Read X from the supergrid
+  ! tmpZ is defined on the data domain
   tmpZ(:,:) = 999.
   !call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
-  call read_data(fileObjRead, 'x', tmpZ(global_indices(1):global_indices(2),global_indices(3):global_indices(4)))
+  num_dims = get_variable_num_dimensions(fileObjRead, 'x')
+  allocate(dim_sizes(num_dims))
+  allocate(dim_names(num_dims))
+  dim_names(:) = ""
+  call get_variable_size(fileObjRead, "x", dim_sizes)
+
+  call get_variable_dimension_names(fileObjRead, 'x', dim_names)
+  do i=1,num_dims
+     if (scan(dim_names(i), "x") .gt. 0) then 
+        call register_axis(fileObjRead, dim_names(i),'x')
+        call get_global_io_domain_indices(fileObjRead, dim_names(i), isg, ieg)
+        call get_compute_domain_dimension_indices(fileObjRead,dim_names(i), compute_indices)
+     else if (scan(dim_names(i), "y") .gt. 0) then 
+        call register_axis(fileObjRead, dim_names(i),'y')
+        call get_global_io_domain_indices(fileObjRead, dim_names(i), jsg, jeg)
+     endif
+  enddo
+  
+  call read_data(fileObjRead, 'x', tmpZ)
+  deallocate(dim_names)
+  deallocate(dim_sizes)
+  deallocate(compute_indices)
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
