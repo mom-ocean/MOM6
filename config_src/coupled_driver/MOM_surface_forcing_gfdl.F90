@@ -1,4 +1,4 @@
-module MOM_surface_forcing
+module MOM_surface_forcing_gfdl
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -1639,4 +1639,4 @@ subroutine check_mask_val_consistency(val, mask, i, j, varname, G)
 
 end subroutine
 
-end module MOM_surface_forcing
+end module MOM_surface_forcing_gfdl
