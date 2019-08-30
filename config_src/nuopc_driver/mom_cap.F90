@@ -322,7 +322,6 @@ use mpp_domains_mod,          only: domain2d, mpp_get_compute_domain, mpp_get_co
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
 use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR, MPP_APPEND, mpp_close, MPP_SINGLE
-use mpp_mod,                  only: input_nml_file, mpp_error, FATAL, NOTE, mpp_pe, mpp_npes, mpp_set_current_pelist
 use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
 use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
 use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
@@ -339,12 +338,13 @@ use MOM_domains,              only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,            only: Get_MOM_Input, directories
 use MOM_domains,              only: pass_var
-use MOM_error_handler,        only: is_root_pe
+use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
 use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
 use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
-use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end, get_ocean_grid
+use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
+use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
 #ifdef CESMCOUPLED
@@ -366,7 +366,7 @@ use ESMF,  only: ESMF_GEOMTYPE_MESH, ESMF_GEOMTYPE_GRID, ESMF_SUCCESS
 use ESMF,  only: ESMF_METHOD_INITIALIZE, ESMF_MethodRemove, ESMF_State
 use ESMF,  only: ESMF_LOGMSG_INFO, ESMF_RC_ARG_BAD, ESMF_VM, ESMF_Time
 use ESMF,  only: ESMF_TimeInterval, ESMF_MAXSTR, ESMF_VMGetCurrent
-use ESMF,  only: ESMF_VMGet, ESMF_TimeGet, ESMF_TimeIntervalGet
+use ESMF,  only: ESMF_VMGet, ESMF_TimeGet, ESMF_TimeIntervalGet, ESMF_MeshGet
 use ESMF,  only: ESMF_MethodExecute, ESMF_Mesh, ESMF_DeLayout, ESMF_Distgrid
 use ESMF,  only: ESMF_DistGridConnection, ESMF_StateItem_Flag, ESMF_KIND_I4
 use ESMF,  only: ESMF_KIND_I8, ESMF_FAILURE, ESMF_DistGridCreate, ESMF_MeshCreate
@@ -378,7 +378,8 @@ use ESMF,  only: ESMF_AlarmIsRinging, ESMF_AlarmRingerOff, ESMF_StateRemove
 use ESMF,  only: ESMF_FieldCreate, ESMF_LOGMSG_ERROR, ESMF_LOGMSG_WARNING
 use ESMF,  only: ESMF_COORDSYS_SPH_DEG, ESMF_GridCreate, ESMF_INDEX_DELOCAL
 use ESMF,  only: ESMF_MESHLOC_ELEMENT, ESMF_RC_VAL_OUTOFRANGE, ESMF_StateGet
-use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet
+use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet, ESMF_Array
+use ESMF,  only: ESMF_ArrayCreate
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
 
 ! TODO ESMF_GridCompGetInternalState does not have an explicit Fortran interface.
@@ -737,8 +738,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
   type(ocean_internalstate_wrapper)      :: ocean_internalstate
   type(ocean_grid_type),         pointer :: ocean_grid => NULL()
-  type(time_type)                        :: Run_len      ! length of experiment
-  type(time_type)                        :: Time
+  type(time_type)                        :: Run_len      !< length of experiment
+  type(time_type)                        :: time0        !< Start time of coupled model's calendar.
+  type(time_type)                        :: time_start   !< The time at which to initialize the ocean model
   type(time_type)                        :: Time_restart
   type(time_type)                        :: DT
   integer                                :: DT_OCEAN
@@ -841,7 +843,31 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   ! this ocean connector will be driven at set interval
   DT = set_time (DT_OCEAN, 0)
-  Time = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+  ! get current time
+  time_start = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+
+  if (is_root_pe()) then
+    write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+  endif
+
+  ! get start/reference time
+  call ESMF_ClockGet(CLOCK, refTime=MyTime, RC=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+
+  call ESMF_TimeGet (MyTime, YY=YEAR, MM=MONTH, DD=DAY, H=HOUR, M=MINUTE, S=SECOND, RC=rc )
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+
+  time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
+
+  if (is_root_pe()) then
+    write(logunit,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+  endif
 
   ! rsd need to figure out how to get this without share code
   !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
@@ -970,11 +996,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  if (len_trim(restartfile) > 0) then
-     call ocean_model_init(ocean_public, ocean_state, Time, Time, input_restart_file=trim(restartfile))
-  else
-     call ocean_model_init(ocean_public, ocean_state, Time, Time)
-  endif
+  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfile))
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
@@ -1159,7 +1181,18 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   integer, allocatable                       :: gindex(:) ! global index space
   character(len=128)                         :: fldname
   character(len=256)                         :: cvalue
+  character(len=256)                         :: frmt    ! format specifier for several error msgs
+  character(len=512)                         :: err_msg ! error messages
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
+  integer                         :: spatialDim
+  integer                         :: numOwnedElements
+  type(ESMF_Array)                :: elemMaskArray
+  real(ESMF_KIND_R8)    , pointer :: ownedElemCoords(:)
+  real(ESMF_KIND_R8)    , pointer :: lat(:), latMesh(:)
+  real(ESMF_KIND_R8)    , pointer :: lon(:), lonMesh(:)
+  integer(ESMF_KIND_I4) , pointer :: mask(:), maskMesh(:)
+  real(ESMF_KIND_R8)              :: diff_lon, diff_lat
+  real                            :: eps_omesh
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -1305,6 +1338,82 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          file=__FILE__)) &
          return
 
+     ! Check for consistency of lat, lon and mask between mesh and mom6 grid
+     call ESMF_MeshGet(Emesh, spatialDim=spatialDim, numOwnedElements=numOwnedElements, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+
+     allocate(ownedElemCoords(spatialDim*numOwnedElements))
+     allocate(lonMesh(numOwnedElements), lon(numOwnedElements))
+     allocate(latMesh(numOwnedElements), lat(numOwnedElements))
+     allocate(maskMesh(numOwnedElements), mask(numOwnedElements))
+
+     call ESMF_MeshGet(Emesh, ownedElemCoords=ownedElemCoords, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+     do n = 1,numOwnedElements
+        lonMesh(n) = ownedElemCoords(2*n-1)
+        latMesh(n) = ownedElemCoords(2*n)
+     end do
+
+     elemMaskArray = ESMF_ArrayCreate(Distgrid, maskMesh, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+     call ESMF_MeshGet(Emesh, elemMaskArray=elemMaskArray, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return
+
+     call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+     n = 0
+     do j = jsc, jec
+       jg = j + ocean_grid%jsc - jsc
+       do i = isc, iec
+         ig = i + ocean_grid%isc - isc
+         n = n+1
+         mask(n) = ocean_grid%mask2dT(ig,jg)
+         lon(n)  = ocean_grid%geolonT(ig,jg)
+         lat(n)  = ocean_grid%geolatT(ig,jg)
+       end do
+     end do
+
+     eps_omesh = get_eps_omesh(ocean_state)
+     do n = 1,numOwnedElements
+       diff_lon = abs(mod(lonMesh(n) - lon(n),360.0))
+       if (diff_lon > eps_omesh) then
+         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is "//&
+                "greater than parameter EPS_OMESH. n, lonMesh(n), lon(n), diff_lon, "//&
+                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
+         write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon, eps_omesh
+         call MOM_error(FATAL, err_msg)
+       end if
+       diff_lat = abs(latMesh(n) - lat(n))
+       if (diff_lat > eps_omesh) then
+         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is"//&
+                "greater than parameter EPS_OMESH. n, latMesh(n), lat(n), diff_lat, "//&
+                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
+         write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat, eps_omesh
+         call MOM_error(FATAL, err_msg)
+        end if
+        if (abs(maskMesh(n) - mask(n)) > 0) then
+          frmt = "('ERROR: ESMF mesh and MOM6 domain masks are inconsistent! - "//&
+                 "MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
+          write(err_msg, frmt)n,maskMesh(n),mask(n)
+          call MOM_error(FATAL, err_msg)
+        end if
+     end do
+
+     deallocate(ownedElemCoords)
+     deallocate(lonMesh , lon )
+     deallocate(latMesh , lat )
+     deallocate(maskMesh, mask)
      ! realize the import and export fields using the mesh
      call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
