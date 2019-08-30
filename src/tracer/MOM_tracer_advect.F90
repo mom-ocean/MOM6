@@ -380,7 +380,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,u_L_in,u_L_out  ! terms used for time-stepping OBC reservoirs
   type(OBC_segment_type), pointer :: segment=>NULL()
-  integer :: ishift, idir
   real    :: dt ! the inverse of Idt, needed for time-stepping of tracer reservoirs
   logical :: usePLMslope
 
@@ -439,27 +438,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
          if (segment%is_E_or_W) then
            if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
               I = segment%HI%IsdB
-
-              ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
-              idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
-              if (segment%direction == OBC_DIRECTION_W) then
-                 ishift=1
-                 idir=-1
-              endif
-              ! update the reservoir tracer concentration implicitly
-              ! using Backward-Euler timestep
-              do m=1,ntr
-                if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                   uhh(I)=uhr(I,j,k)
-                   u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale3_in,0.)
-                   u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale3_out,0.)
-                   fac1=1.0+dt*(u_L_in-u_L_out)
-                   segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
-                        dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
-                        u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
-                endif
-              enddo
-
               do m = 1,ntr ! replace tracers with OBC values
                 if (associated(segment%tr_Reg%Tr(m)%tres)) then
                    if (segment%direction == OBC_DIRECTION_W) then
@@ -624,7 +602,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             endif
           endif
         enddo
-       endif
+      endif
 
       if (OBC%open_u_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
@@ -633,25 +611,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           if (segment%is_E_or_W .and. (j >= segment%HI%jsd .and. j<= segment%HI%jed)) then
             if (segment%specified) cycle
             if (.not. associated(segment%tr_Reg)) cycle
-            ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
-            idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
-            if (segment%direction == OBC_DIRECTION_W) then
-              ishift = 1
-              idir = -1
-            endif
-            ! update the reservoir tracer concentration implicitly
-            ! using Backward-Euler timestep
-            do m=1,ntr
-              if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                uhh(I) = uhr(I,j,k)
-                u_L_in = max(idir*uhh(I)*segment%Tr_InvLscale3_in,0.)
-                u_L_out = min(idir*uhh(I)*segment%Tr_InvLscale3_out,0.)
-                fac1 = 1.0+dt*(u_L_in-u_L_out)
-                segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
-                     dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
-                     u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
-              endif
-            enddo
 
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
@@ -777,7 +736,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,v_L_in,v_L_out  ! terms used for time-stepping OBC reservoirs
-  integer :: jshift, jdir
   real  :: dt ! The inverse of Idt, needed for segment reservoir time-stepping
   type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
@@ -847,26 +805,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
          if (segment%is_N_or_S) then
            if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
               J = segment%HI%JsdB
-              jshift=0 ! jshift+J corresponds to the nearest interior tracer cell index
-              jdir=1   ! jdir switches the sign of the flow so that positive is into the reservoir
-              if (segment%direction == OBC_DIRECTION_S) then
-                 jshift=1
-                 jdir=-1
-              endif
-              ! update the reservoir tracer concentration implicitly
-              ! using Backward-Euler timestep
-              do m=1,ntr
-                if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                   vhh(i,J)=vhr(i,J,k)
-                   v_L_in=max(jdir*vhh(i,J)*segment%Tr_InvLscale3_in,0.)
-                   v_L_out=min(jdir*vhh(i,J)*segment%Tr_InvLscale3_out,0.)
-                   fac1=1.0+dt*(v_L_in-v_L_out)
-                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                        dt*(v_L_in*Tr(m)%t(i,J+jshift,k) - &
-                        v_L_out*segment%tr_Reg%Tr(m)%t(i,J,k)))
-                endif
-              enddo
-
               do m = 1,ntr ! replace tracers with OBC values
                 if (associated(segment%tr_Reg%Tr(m)%tres)) then
                    if (segment%direction == OBC_DIRECTION_S) then
@@ -1040,24 +978,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           if (segment%specified) cycle
           if (.not. associated(segment%tr_Reg)) cycle
           if (segment%is_N_or_S .and. (J >= segment%HI%JsdB .and. J<= segment%HI%JedB)) then
-            jshift = 0 ; jdir = 1
-            if (segment%direction == OBC_DIRECTION_S) then
-              jshift = 1 ; jdir = -1
-            endif
             do i=segment%HI%isd,segment%HI%ied
-            ! update the reservoir tracer concentration implicitly
-            ! using Backward-Euler timestep
-              do m=1,ntr
-                if (associated(segment%tr_Reg%Tr(m)%tres)) then
-                  vhh(i,J)=vhr(i,J,k)
-                  v_L_in = max(jdir*vhh(i,J)*segment%Tr_InvLscale3_in,0.)
-                  v_L_out = min(jdir*vhh(i,J)*segment%Tr_InvLscale3_out,0.)
-                  fac1 = 1.0 + dt*(v_L_in-v_L_out)
-                  segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                       dt*v_L_in*Tr(m)%t(i,j+jshift,k) - &
-                       dt*v_L_out*segment%tr_Reg%Tr(m)%t(i,j,k))
-                endif
-              enddo
               ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
               if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                   (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
