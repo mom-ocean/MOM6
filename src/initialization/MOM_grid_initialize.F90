@@ -198,7 +198,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer, dimension(:), allocatable :: exni,exnj
   integer :: start(4), nread(4)
   integer :: isg, ieg, jsg, jeg
-  integer, dimension(:), allocatable :: compute_indices
+  integer, dimension(:), allocatable :: compute_indices_i, compute_indices_j
   integer :: num_dims
   integer, dimension(:), allocatable :: dim_sizes
   character(len=32), dimension(:), allocatable :: dim_names
@@ -309,17 +309,20 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
      if (scan(dim_names(i), "x") .gt. 0) then 
         call register_axis(fileObjRead, dim_names(i),'x')
         call get_global_io_domain_indices(fileObjRead, dim_names(i), isg, ieg)
-        call get_compute_domain_dimension_indices(fileObjRead,dim_names(i), compute_indices)
+        call get_compute_domain_dimension_indices(fileObjRead,dim_names(i), compute_indices_i)
      else if (scan(dim_names(i), "y") .gt. 0) then 
         call register_axis(fileObjRead, dim_names(i),'y')
         call get_global_io_domain_indices(fileObjRead, dim_names(i), jsg, jeg)
+        call get_compute_domain_dimension_indices(fileObjRead,dim_names(i), compute_indices_j)
      endif
   enddo
   
-  call read_data(fileObjRead, 'x', tmpZ)
+  call read_data(fileObjRead, 'x', tmpZ,corner=(/compute_indices_i(1),compute_indices_j(1)/), &
+                 edge_lengths=(/size(tmpZ,DIM=1),size(tmpZ,DIM=2)/))
   deallocate(dim_names)
   deallocate(dim_sizes)
-  deallocate(compute_indices)
+  deallocate(compute_indices_i)
+  deallocate(compute_indices_j)
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
