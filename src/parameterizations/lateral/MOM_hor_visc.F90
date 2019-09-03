@@ -1002,7 +1002,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_Kh_q>0 .or. CS%debug) Kh_q(I,J,k) = Kh
         if (CS%id_vort_xy_q>0) vort_xy_q(I,J,k) = vort_xy(I,J)
-        if (CS%debug) sh_xy_3d(I,J,k) = sh_xy(I,J)
+!        if (CS%debug) sh_xy_3d(I,J,k) = sh_xy(I,J)
 
         str_xy(I,J) = -Kh * sh_xy(I,J)
       else   ! not Laplacian
@@ -1048,10 +1048,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%id_Ah_q>0 .or. CS%debug) Ah_q(I,J,k) = Ah
 
-        str_xy(I,J) = str_xy(I,J) + Ah * ( dvdx3(I,J) + dudy3(I,J) )
+        str_xy(I,J) = str_xy(I,J) + Ah * ( dDel2vdx(I,J) + dDel2udy(I,J) )
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xy(I,J) = Ah * ( dvdx3(I,J) + dudy3(I,J) ) * &
+        bhstr_xy(I,J) = Ah * ( dDel2vdx(I,J) + dDel2udy(I,J) ) * &
                         (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
 
       endif  ! biharmonic
@@ -1305,7 +1305,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (CS%Laplacian) then
       call hchksum(Kh_h, "Kh_h", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
       call Bchksum(Kh_q, "Kh_q", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
-      call Bchksum(sh_xy_3d, "shear_xy", G%HI, haloshift=0, scale=US%s_to_T)
+!      call Bchksum(sh_xy_3d, "shear_xy", G%HI, haloshift=0, scale=US%s_to_T)
 !      call hchksum(sh_xx_3d, "shear_xx", G%HI, haloshift=0, scale=US%s_to_T)
     endif
     if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
@@ -1426,13 +1426,14 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   ! parameter spelling checks.
   call get_param(param_file, mdl, "GET_ALL_PARAMS", get_all, default=.false.)
 
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
-  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", CS%answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+!  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+!                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+!                 default=.true.)
+!  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", CS%answers_2018, &
+!                 "If true, use the order of arithmetic and expressions that recover the "//&
+!                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+!                 "forms of the same expressions.", default=default_2018_answers)
+
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
