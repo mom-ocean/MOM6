@@ -30,6 +30,8 @@ if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxyge
 return_code = subprocess.call(doxygenize, shell=True)
 if return_code != 0: sys.exit(return_code)
 
+
+
 # Build doxyrest if needed:
 get_doxyrest = '(git clone https://github.com/vovkos/doxyrest_b ; cd doxyrest_b ; git submodule update --init)'
 #build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cmake --build .)'
@@ -43,6 +45,9 @@ if return_code != 0: sys.exit(return_code)
 #    if return_code != 0: sys.exit(return_code)
 #    os.environ['PATH'] = os.environ['PATH'] + ':./doxyrest_b/build/doxyrest/bin/Release'
 
+here = subprocess.check_output('pwd', shell=True).decode('utf-8').replace('\n','')
+sys.path.insert(1, os.path.abspath(here + '/doxyrest_b/doxyrest/sphinx'))
+
 # add doxyrest
 xml2rst = 'doxyrest -c mom6-config.lua'
 return_code = subprocess.call(xml2rst, shell=True)
@@ -51,7 +56,7 @@ if return_code != 0: sys.exit(return_code)
 # link images
 linkimages = '(cd api ; ln -s ../images/*png .)'
 return_code = subprocess.call(linkimages, shell=True)
-if return_code != 0: sys.exit(return_code)
+#if return_code != 0: sys.exit(return_code)
 
 # -- General configuration ------------------------------------------------
 
@@ -63,6 +68,8 @@ if return_code != 0: sys.exit(return_code)
 # ones.
 extensions = [
     'sphinx.ext.mathjax',
+    'doxyrest',
+    'cpplexer',
 ]
 
 doxygen_xml = 'xml'

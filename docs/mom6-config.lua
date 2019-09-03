@@ -149,7 +149,7 @@ LANGUAGE = cpp
 --! no syntax highlighting. To disable conversion at all, use ``nil``.
 --!
 
-VERBATIM_TO_CODE_BLOCK = "none"
+VERBATIM_TO_CODE_BLOCK = nil
 
 --!
 --! If the original doxy comments contain asterisks, they have to be escaped

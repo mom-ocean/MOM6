@@ -181,8 +181,8 @@ doxygen:
 doxygen/bin/doxygen: doxygen
 	(cd $(<); cmake -G "Unix Makefiles" .)
 	(cd $(<); make)
-nortd: doxygen/bin/doxygen
-	$< Doxyfile_nortd
+nortd:
+	doxygen Doxyfile_nortd
 Clean: clean
 	rm -rf _build APIs xml doxygen.log api
 CLEAN: Clean
