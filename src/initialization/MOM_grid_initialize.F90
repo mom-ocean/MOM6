@@ -19,8 +19,9 @@ use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, register_ax
 use MOM_io, only : get_compute_domain_dimension_indices, get_global_io_domain_indices
 use MOM_io, only : get_variable_size, get_dimension_size, get_variable_num_dimensions
 use MOM_io, only : get_variable_dimension_names
-use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
+use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE, CENTER
 use MOM_unit_scaling, only : unit_scale_type
+use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
 
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 
@@ -197,11 +198,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
   integer :: start(4), nread(4)
-  integer :: isg, ieg, jsg, jeg
+  integer :: isg, ieg, jsg, jeg, isc, jsc, iec, jec, isd, ied, jsd, jed
+  integer :: num_dims, pos
   integer, dimension(:), allocatable :: compute_indices_i, compute_indices_j
-  integer :: num_dims
   integer, dimension(:), allocatable :: dim_sizes
   character(len=32), dimension(:), allocatable :: dim_names
+!  character(len=120) :: str_format
   type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
 
@@ -263,16 +265,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
   exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  ! API mpp_define_domains_2d( global_indices, layout, domain, pelist, xflags, yflags,    &
-  !       xhalo, yhalo, xextent, yextent, maskmap, name, symmetry,  memory_size&
-  !      whalo, ehalo, shalo, nhalo, is_mosaic, tile_count, tile_id, complete, x_cyclic_offset, y_cyclic_offset )
-  !  integer, intent(in) :: global indices(:) !(/ isg, ieg, jsg, jeg /)
-  !  integer, intent(in) :: layout(:) ! domain's processor layout
-  !  type(domain2D), intent(inout) :: domain ! FMS domain with halos
-  !  integer, intent(in), optional :: xflags, yflags, xhalo,yhalo ! flags specifying properties of domain in i and j directions
-  !  default halo sizes
-  !  integer, intent(in), optional ::  xetent(:0), yextent(:0) ! compute domain sizes in x and y directions
-  !  logical, intent(in), optional :: symmetry ! indicates whether symmetric memory is used
+
   if (associated(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
@@ -294,35 +287,31 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! open the file
   file_open_success = MOM_open_file(fileObjRead, filename, "read", &
                                      SGdom, .false.)
-  ! Read X from the supergrid
+
+  ! What are the domains
+
+!   call mpp_get_compute_domain(SGdom%mpp_domain,isc,iec,jsc,jec)
+!   str_format = "(A,I5,A,I5,A,I5,A,I5)"
+!   write(*,str_format) 'The compute domain indices are ',isc,'',iec,'',jsc,'',jec
+
+!   call mpp_get_data_domain(SGdom%mpp_domain,isd,ied,jsd,jed)
+!   write(*,str_format) 'The data domain indices are ',isd,'',ied,'',jsd,'',jed
+
+ !  call mpp_get_global_domain(SGdom%mpp_domain,isg,ieg,jsg,jeg)
+ !  write(*,str_format) 'The global domain indices are ',isg,'',ieg,'',jsg,'',jeg
+
+    
   ! tmpZ is defined on the data domain
   tmpZ(:,:) = 999.
   !call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
-  num_dims = get_variable_num_dimensions(fileObjRead, 'x')
-  allocate(dim_sizes(num_dims))
-  allocate(dim_names(num_dims))
-  dim_names(:) = ""
-  call get_variable_size(fileObjRead, "x", dim_sizes)
-
-  call get_variable_dimension_names(fileObjRead, 'x', dim_names)
-  do i=1,num_dims
-     if (scan(dim_names(i), "x") .gt. 0) then 
-        call register_axis(fileObjRead, dim_names(i),'x')
-        call get_global_io_domain_indices(fileObjRead, dim_names(i), isg, ieg)
-        call get_compute_domain_dimension_indices(fileObjRead,dim_names(i), compute_indices_i)
-     else if (scan(dim_names(i), "y") .gt. 0) then 
-        call register_axis(fileObjRead, dim_names(i),'y')
-        call get_global_io_domain_indices(fileObjRead, dim_names(i), jsg, jeg)
-        call get_compute_domain_dimension_indices(fileObjRead,dim_names(i), compute_indices_j)
-     endif
-  enddo
   
-  call read_data(fileObjRead, 'x', tmpZ,corner=(/compute_indices_i(1),compute_indices_j(1)/), &
-                 edge_lengths=(/size(tmpZ,DIM=1),size(tmpZ,DIM=2)/))
-  deallocate(dim_names)
-  deallocate(dim_sizes)
-  deallocate(compute_indices_i)
-  deallocate(compute_indices_j)
+  ! register the global axes
+  call register_axis(fileObjRead, 'nxp','x', domain_position=EAST_FACE)
+  call register_axis(fileObjRead, 'nx','x', domain_position=CENTER)
+  call register_axis(fileObjRead, 'nyp','y', domain_position=NORTH_FACE)         
+  call register_axis(fileObjRead, 'ny','y', domain_position=CENTER)
+ 
+  call read_data(fileObjRead, 'x', tmpZ)
 
   if (lon_bug) then
     call pass_var(tmpZ, SGdom, position=CORNER)
@@ -348,6 +337,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Read Y from the supergrid
   tmpZ(:,:) = 999.
   !call MOM_read_data(filename, 'y', tmpZ, SGdom, position=CORNER)
+ 
   call read_data(fileObjRead, 'y', tmpZ)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
@@ -366,6 +356,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   enddo ; enddo
 
   ! Read DX,DY from the supergrid
+ 
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
   !call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
   call read_data(fileObjRead, 'dx', tmpV)
