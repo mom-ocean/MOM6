@@ -519,16 +519,26 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 end subroutine reopen_file
 
 !> register an axis to a domain-decomposed file
-subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length)
+subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length, domain_position)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
                                                 !! (only needed for Layer, Interface, Time, and Period)
+   integer, intent(in), optional :: domain_position !< Domain position.
+   ! local
+   integer :: pos
+   if (present(domain_position)) then 
+      pos = domain_position
+   else 
+      pos = CENTER
+   endif
+
    select case (trim(axis_name))
-         case ('latq'); call register_axis(fileObj,'latq','y')
-         case ('lath'); call register_axis(fileObj,'lath','y') 
-         case ('lonq'); call register_axis(fileObj,'lonq','x') 
-         case ('lonh'); call register_axis(fileObj,'lonh','x')
+         
+         case ('latq'); call register_axis(fileObj,'latq','y', domain_position=pos)
+         case ('lath'); call register_axis(fileObj,'lath','y', domain_position=pos) 
+         case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=pos) 
+         case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=pos)
          case ('Layer')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
