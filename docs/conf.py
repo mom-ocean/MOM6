@@ -30,8 +30,6 @@ if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxyge
 return_code = subprocess.call(doxygenize, shell=True)
 if return_code != 0: sys.exit(return_code)
 
-
-
 # Build doxyrest if needed:
 get_doxyrest = '(git clone https://github.com/vovkos/doxyrest_b ; cd doxyrest_b ; git submodule update --init)'
 #build_doxyrest = '(mkdir doxyrest_b/build ; cd doxyrest_b/build ; cmake .. ; cmake --build .)'
