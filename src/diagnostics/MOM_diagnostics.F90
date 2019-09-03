@@ -92,8 +92,8 @@ type, public :: diagnostics_CS ; private
 
   ! The following arrays hold diagnostics in the layer-integrated energy budget.
   real, pointer, dimension(:,:,:) :: &
-    KE        => NULL(), &  !< KE per unit mass [m2 s-2]
-    dKE_dt    => NULL(), &  !< time derivative of the layer KE [m3 s-3]
+    KE        => NULL(), &  !< KE per unit mass [L2 T-2 ~> m2 s-2]
+    dKE_dt    => NULL(), &  !< time derivative of the layer KE [H L2 T-3 ~> m3 s-3]
     PE_to_KE  => NULL(), &  !< potential energy to KE term [m3 s-3]
     KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and advection terms [m3 s-3].
                             !! The Coriolis source should be zero, but is not due to truncation
@@ -254,7 +254,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (loc(CS)==0) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
 
-  call calculate_derivs(dt, G, CS)
+  call calculate_derivs(US%s_to_T*dt, G, CS)
 
   if (dt > 0.0) then
     call diag_save_grids(CS%diag)
@@ -916,8 +916,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
 
   if (associated(CS%KE)) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%KE(i,j,k) = US%L_T_to_m_s**2*((u(I,j,k)*u(I,j,k) + u(I-1,j,k)*u(I-1,j,k)) + &
-          (v(i,J,k)*v(i,J,k) + v(i,J-1,k)*v(i,J-1,k)))*0.25
+      CS%KE(i,j,k) = ((u(I,j,k) * u(I,j,k) + u(I-1,j,k) * u(I-1,j,k)) &
+          + (v(i,J,k) * v(i,J,k) + v(i,J-1,k) * v(i,J-1,k))) * 0.25
       ! DELETE THE FOLLOWING...  Make this 0 to test the momentum balance,
       ! or a huge number to test the continuity balance.
       ! CS%KE(i,j,k) *= 1e20
@@ -936,19 +936,19 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * CS%du_dt(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * CS%dv_dt(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k)*US%s_to_T*CS%dh_dt(i,j,k)
+        KE_h(i,j) = CS%KE(i,j,k) * CS%dh_dt(i,j,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%dKE_dt(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
+        CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_dKEdt > 0) call post_data(CS%id_dKEdt, CS%dKE_dt, CS%diag)
@@ -981,7 +981,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
+        KE_h(i,j) = -(US%L_T_to_m_s**2 * CS%KE(i,j,k)) * G%IareaT(i,j) * &
             US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
@@ -1009,7 +1009,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
           KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
+        KE_h(i,j) = -(US%L_T_to_m_s**2 * CS%KE(i,j,k)) * G%IareaT(i,j) * &
             US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
@@ -1067,7 +1067,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k) * &
+        KE_h(i,j) = (US%L_T_to_m_s**2 * CS%KE(i,j,k)) * &
             (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1))
       enddo ; enddo
       if (.not.G%symmetric) &
@@ -1626,11 +1626,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   ! terms in the kinetic energy budget
   CS%id_KE = register_diag_field('ocean_model', 'KE', diag%axesTL, Time, &
-      'Layer kinetic energy per unit mass', 'm2 s-2')
+      'Layer kinetic energy per unit mass', 'm2 s-2', &
+      conversion=US%L_T_to_m_s**2)
   if (CS%id_KE>0) call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
   CS%id_dKEdt = register_diag_field('ocean_model', 'dKE_dt', diag%axesTL, Time, &
-      'Kinetic Energy Tendency of Layer', 'm3 s-3')
+      'Kinetic Energy Tendency of Layer', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_dKEdt>0) call safe_alloc_ptr(CS%dKE_dt,isd,ied,jsd,jed,nz)
 
   CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', diag%axesTL, Time, &
