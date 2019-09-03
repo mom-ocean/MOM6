@@ -306,7 +306,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     FrictWork_GME, &  ! work done by GME [W m-2]
     div_xx_h         ! horizontal divergence [s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    ! KH_t_GME, &      !< interface height diffusivities in t-columns [m2 s-1]
     GME_coeff_h      !< GME coeff. at h-points [L2 T-1 ~> m2 s-1]
   real :: Ah         ! biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: Kh         ! Laplacian  viscosity [L2 T-1 ~> m2 s-1]
@@ -362,11 +361,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   Ah_h(:,:,:) = 0.0
   Kh_h(:,:,:) = 0.0
-
-!  if (CS%debug) then
-!    sh_xx_3d(:,:,:) = 0.0 ; sh_xy_3d(:,:,:) = 0.0
-!    Kh_q(:,:,:) = 0.0 ; Ah_q(:,:,:) = 0.0
-!  endif
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
@@ -1379,6 +1373,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: use_MEKE      ! If true, use the MEKE module for calculating eddy kinetic energy.
                            ! If false and USE_GME = True, issue a FATAL error.
+  logical :: default_2018_answers
 
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
@@ -1426,13 +1421,13 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   ! parameter spelling checks.
   call get_param(param_file, mdl, "GET_ALL_PARAMS", get_all, default=.false.)
 
-!  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-!                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-!                 default=.true.)
-!  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", CS%answers_2018, &
-!                 "If true, use the order of arithmetic and expressions that recover the "//&
-!                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-!                 "forms of the same expressions.", default=default_2018_answers)
+  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.true.)
+  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
@@ -2142,7 +2137,6 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   integer :: i, j, k, s
 
-  !do s=1,CS%n_smooth
   do s=1,1
 
     ! Update halos
