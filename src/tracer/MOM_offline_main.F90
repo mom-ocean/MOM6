@@ -10,7 +10,7 @@ use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diabatic_aux,         only : diabatic_aux_CS
+use MOM_diabatic_aux,         only : diabatic_aux_CS, set_pen_shortwave
 use MOM_diabatic_driver,      only : diabatic_CS, extract_diabatic_member
 use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
@@ -26,14 +26,14 @@ use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
 use MOM_offline_aux,          only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
 use MOM_offline_aux,          only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
-use MOM_opacity,              only : set_opacity, opacity_CS
+use MOM_opacity,              only : opacity_CS, optics_type
 use MOM_open_boundary,        only : ocean_OBC_type
-use MOM_shortwave_abs,        only : optics_type
 use MOM_time_manager,         only : time_type
 use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut
 use MOM_tracer_flow_control,  only : tracer_flow_control_CS, call_tracer_column_fns, call_tracer_stocks
 use MOM_tracer_registry,      only : tracer_registry_type, MOM_tracer_chksum, MOM_tracer_chkinv
+use MOM_unit_scaling,         only : unit_scale_type
 use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
 
@@ -68,8 +68,12 @@ type, public :: offline_transport_CS ; private
           !< Pointer to a structure containing metrics and related information
   type(verticalGrid_type),       pointer :: GV              => NULL()
           !< Pointer to structure containing information about the vertical grid
+  type(unit_scale_type),         pointer :: US              => NULL()
+          !< structure containing various unit conversion factors
   type(optics_type),             pointer :: optics          => NULL()
           !< Pointer to the optical properties type
+  type(diabatic_aux_CS),         pointer :: diabatic_aux_CSp => NULL()
+          !< Pointer to the diabatic_aux control structure
 
   !> Variables related to reading in fields from online run
   integer :: start_index  !< Timelevel to start
@@ -318,7 +322,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   do iter=1,CS%num_off_iter
 
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_vol(i,j,k) = h_new(i,j,k)*G%areaT(i,j)
+      h_vol(i,j,k) = h_new(i,j,k) * G%US%L_to_m**2*G%areaT(i,j)
       h_pre(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
 
@@ -329,7 +333,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       call MOM_tracer_chkinv(debug_msg, G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
     endif
 
-    call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, &
+    call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, CS%US, &
         CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
         uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
 
@@ -338,7 +342,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
     ! Update the new layer thicknesses after one round of advection has happened
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+      h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
     enddo ; enddo ; enddo
 
     if (MODULO(iter,CS%off_ale_mod)==0) then
@@ -479,7 +483,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
 
         ! Calculate the layer volumes at beginning of redistribute
         do k=1,nz ; do j=js,je ; do i=is,ie
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+          h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call pass_var(h_vol,G%Domain)
         call pass_vector(uhtr,vhtr,G%Domain)
@@ -500,7 +504,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           call distribute_residual_uh_upwards(G, GV, h_vol, uhtr)
         endif
 
-        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, CS%US, &
             CS%tracer_adv_CSp, CS%tracer_Reg, h_prev_opt = h_pre, max_iter_in=1, &
             h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
 
@@ -513,7 +517,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
           h_vol(i,j,k) = h_new(i,j,k)
-          h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+          h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
@@ -524,7 +528,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
 
         ! Calculate the layer volumes at beginning of redistribute
         do k=1,nz ; do j=js,je ; do i=is,ie
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+          h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
         enddo ; enddo ; enddo
         call pass_var(h_vol,G%Domain)
         call pass_vector(uhtr,vhtr,G%Domain)
@@ -545,7 +549,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           call distribute_residual_uh_barotropic(G, GV, h_vol, uhtr)
         endif
 
-        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, CS%US, &
             CS%tracer_adv_CSp, CS%tracer_Reg, h_prev_opt = h_pre, max_iter_in=1, &
             h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
 
@@ -558,7 +562,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
           h_vol(i,j,k) = h_new(i,j,k)
-          h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+          h_new(i,j,k) = h_new(i,j,k) / (G%US%L_to_m**2*G%areaT(i,j))
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
@@ -624,8 +628,8 @@ real function remaining_transport_sum(CS, uhtr, vhtr)
 
   remaining_transport_sum = 0.
   do k=1,nz; do j=js,je ; do i=is,ie
-    uh_neglect = h_min*MIN(CS%G%areaT(i,j),CS%G%areaT(i+1,j))
-    vh_neglect = h_min*MIN(CS%G%areaT(i,j),CS%G%areaT(i,j+1))
+    uh_neglect = h_min*CS%G%US%L_to_m**2*MIN(CS%G%areaT(i,j),CS%G%areaT(i+1,j))
+    vh_neglect = h_min*CS%G%US%L_to_m**2*MIN(CS%G%areaT(i,j),CS%G%areaT(i,j+1))
     if (ABS(uhtr(I,j,k))>uh_neglect) then
       remaining_transport_sum = remaining_transport_sum + ABS(uhtr(I,j,k))
     endif
@@ -718,7 +722,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   endif
 
   if (associated(CS%optics)) &
-    call set_opacity(CS%optics, fluxes, CS%G, CS%GV, CS%opacity_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, CS%G, CS%GV, CS%diabatic_aux_CSp, CS%opacity_CSp, CS%tracer_flow_CSp)
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
@@ -913,9 +917,9 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second zonal and meridional advection
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-        h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
       enddo ; enddo ; enddo
-      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, CS%US, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
       ! Done with horizontal so now h_pre should be h_new
@@ -930,9 +934,9 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First zonal and meridional advection
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
       do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-        h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        h_vol(i,j,k) = h_pre(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)
       enddo ; enddo ; enddo
-      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, CS%US, &
           CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
       ! Done with horizontal so now h_pre should be h_new
@@ -1267,13 +1271,14 @@ end subroutine insert_offline_main
 
 !> Initializes the control structure for offline transport and reads in some of the
 ! run time parameters from MOM_input
-subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
+subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
 
   type(param_file_type),           intent(in) :: param_file !< A structure to parse for run-time parameters
   type(offline_transport_CS),      pointer    :: CS !< Offline control structure
   type(diabatic_CS),               intent(in) :: diabatic_CSp !< The diabatic control structure
   type(ocean_grid_type),   target, intent(in) :: G  !< ocean grid structure
   type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   target, intent(in) :: US !< A dimensional unit scaling type
 
   character(len=40)  :: mdl = "offline_transport"
   character(len=20)  :: redistribute_method
@@ -1295,6 +1300,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   allocate(CS)
   call log_version(param_file, mdl,version, "This module allows for tracers to be run offline")
 
+  ! Determining the internal unit scaling factors for this run.
+  CS%US => US
+
   ! Parse MOM_input for offline control
   call get_param(param_file, mdl, "OFFLINEDIR", CS%offlinedir, &
     "Input directory where the offline fields can be found",  fail_if_missing = .true.)
@@ -1313,27 +1321,27 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   call get_param(param_file, mdl, "DT_OFFLINE", CS%dt_offline, &
     "Length of time between reading in of input fields",      fail_if_missing = .true.)
   call get_param(param_file, mdl, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
-    "Length of the offline timestep for tracer column sources/sinks\n" //&
-    "This should be set to the length of the coupling timestep for \n" //&
+    "Length of the offline timestep for tracer column sources/sinks " //&
+    "This should be set to the length of the coupling timestep for " //&
     "tracers which need shortwave fluxes",                    fail_if_missing = .true.)
   call get_param(param_file, mdl, "START_INDEX", CS%start_index, &
     "Which time index to start from", default=1)
   call get_param(param_file, mdl, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
-    "True if the time-averaged fields and snapshot fields\n"//&
+    "True if the time-averaged fields and snapshot fields "//&
     "are offset by one time level", default=.false.)
   call get_param(param_file, mdl, "REDISTRIBUTE_METHOD", redistribute_method, &
-    "Redistributes any remaining horizontal fluxes throughout\n"    //&
-    "the rest of water column. Options are 'barotropic' which\n"    //&
-    "evenly distributes flux throughout the entire water column,\n" //&
-    "'upwards' which adds the maximum of the remaining flux in\n"   //&
-    "each layer above, both which first applies upwards and then\n" //&
+    "Redistributes any remaining horizontal fluxes throughout "    //&
+    "the rest of water column. Options are 'barotropic' which "    //&
+    "evenly distributes flux throughout the entire water column, " //&
+    "'upwards' which adds the maximum of the remaining flux in "   //&
+    "each layer above, both which first applies upwards and then " //&
     "barotropic, and 'none' which does no redistribution", &
     default='barotropic')
   call get_param(param_file, mdl, "NUM_OFF_ITER", CS%num_off_iter, &
     "Number of iterations to subdivide the offline tracer advection and diffusion", &
     default = 60)
   call get_param(param_file, mdl, "OFF_ALE_MOD", CS%off_ale_mod, &
-    "Sets how many horizontal advection steps are taken before an ALE\n" //&
+    "Sets how many horizontal advection steps are taken before an ALE " //&
     "remapping step is done. 1 would be x->y->ALE, 2 would be"           //&
     "x->y->x->y->ALE", default = 1)
   call get_param(param_file, mdl, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
@@ -1350,21 +1358,21 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
     "Name of the variable containing the depth of active mixing",&
     default='ePBL_h_ML')
   call get_param(param_file, mdl, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
-    "Adds a synthetic diurnal cycle in the same way that the ice\n" // &
-    "model would have when time-averaged fields of shortwave\n"    // &
+    "Adds a synthetic diurnal cycle in the same way that the ice " // &
+    "model would have when time-averaged fields of shortwave "    // &
     "radiation are read in", default=.false.)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
-    "The maximum permitted increment for the diapycnal \n"//&
-    "diffusivity from TKE-based parameterizations, or a \n"//&
+    "The maximum permitted increment for the diapycnal "//&
+    "diffusivity from TKE-based parameterizations, or a "//&
     "negative value for no limit.", units="m2 s-1", default=-1.0)
   call get_param(param_file, mdl, "MIN_RESIDUAL_TRANSPORT", CS%min_residual, &
-    "How much remaining transport before the main offline advection\n"// &
-    "is exited. The default value corresponds to about 1 meter of\n"  // &
+    "How much remaining transport before the main offline advection "// &
+    "is exited. The default value corresponds to about 1 meter of "  // &
     "difference in a grid cell", default = 1.e9)
   call get_param(param_file, mdl, "READ_ALL_TS_UVH", CS%read_all_ts_uvh,  &
-    "Reads all time levels of a subset of the fields necessary to run \n"    //      &
-    "the model offline. This can require a large amount of memory\n"//      &
-    "and will make initialization very slow. However, for offline\n"//      &
+    "Reads all time levels of a subset of the fields necessary to run "    //      &
+    "the model offline. This can require a large amount of memory "//      &
+    "and will make initialization very slow. However, for offline "//      &
     "runs spanning more than a year this can reduce total I/O overhead",    &
     default = .false.)
 
@@ -1400,7 +1408,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   if (.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
 
   ! Copy members from other modules
-  call extract_diabatic_member(diabatic_CSp, opacity_CSp=CS%opacity_CSp, optics_CSp=CS%optics,&
+  call extract_diabatic_member(diabatic_CSp, opacity_CSp=CS%opacity_CSp, optics_CSp=CS%optics, &
+                               diabatic_aux_CSp=CS%diabatic_aux_CSp, &
                                evap_CFL_limit=CS%evap_CFL_limit, &
                                minimum_forcing_depth=CS%minimum_forcing_depth)
 

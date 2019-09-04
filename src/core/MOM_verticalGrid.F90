@@ -26,7 +26,8 @@ type, public :: verticalGrid_type
   ! Commonly used parameters
   integer :: ke     !< The number of layers/levels in the vertical
   real :: max_depth !< The maximum depth of the ocean [Z ~> m].
-  real :: g_Earth   !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
+  real :: mks_g_Earth !< The gravitational acceleration in unscaled MKS units [m s-2].
+  real :: g_Earth   !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
                     !! density used to convert depths into mass units [kg m-3].
 
@@ -47,10 +48,10 @@ type, public :: verticalGrid_type
                         !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real, allocatable, dimension(:) :: &
-    g_prime, &          !< The reduced gravity at each interface [m2 Z-1 s-2 ~> m s-2].
+    g_prime, &          !< The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
     Rlay                !< The target coordinate value (potential density) in each layer [kg m-3].
   integer :: nkml = 0   !< The number of layers at the top that should be treated
-                        !! as parts of a homogenous region.
+                        !! as parts of a homogeneous region.
   integer :: nk_rho_varies = 0 !< The number of layers at the top where the
                         !! density does not track any target density.
   real :: H_to_kg_m2    !< A constant that translates thicknesses from the units of thickness to kg m-2.
@@ -88,22 +89,22 @@ subroutine verticalGridInit( param_file, GV, US )
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, &
                    "Parameters providing information about the vertical grid.")
-  call get_param(param_file, mdl, "G_EARTH", GV%g_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", GV%mks_g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
   call get_param(param_file, mdl, "RHO_0", GV%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
   call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_m, &
-                 "The minumum layer thickness, usually one-Angstrom.", &
+                 "The minimum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
   call get_param(param_file, mdl, "H_RESCALE_POWER", H_power, &
-                 "An integer power of 2 that is used to rescale the model's \n"//&
+                 "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of thickness.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
   if (abs(H_power) > 300) call MOM_error(FATAL, "verticalGridInit: "//&
@@ -112,17 +113,17 @@ subroutine verticalGridInit( param_file, GV, US )
   if (H_power /= 0) H_rescale_factor = 2.0**H_power
   if (.not.GV%Boussinesq) then
     call get_param(param_file, mdl, "H_TO_KG_M2", GV%H_to_kg_m2,&
-                 "A constant that translates thicknesses from the model's \n"//&
+                 "A constant that translates thicknesses from the model's "//&
                  "internal units of thickness to kg m-2.", units="kg m-2 H-1", &
                  default=1.0)
     GV%H_to_kg_m2 = GV%H_to_kg_m2 * H_rescale_factor
   else
     call get_param(param_file, mdl, "H_TO_M", GV%H_to_m, &
-                 "A constant that translates the model's internal \n"//&
+                 "A constant that translates the model's internal "//&
                  "units of thickness into m.", units="m H-1", default=1.0)
     GV%H_to_m = GV%H_to_m * H_rescale_factor
   endif
-  GV%g_Earth = GV%g_Earth * US%Z_to_m
+  GV%g_Earth = US%m_to_L**2*US%Z_to_m*US%T_to_s**2 * GV%mks_g_Earth
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, mdl, "NK", nk, &
@@ -149,7 +150,7 @@ subroutine verticalGridInit( param_file, GV, US )
     GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
-  GV%H_to_Pa = (GV%g_Earth*US%m_to_Z) * GV%H_to_kg_m2
+  GV%H_to_Pa = GV%mks_g_Earth * GV%H_to_kg_m2
 
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = US%Z_to_m * GV%m_to_H

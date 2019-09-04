@@ -51,7 +51,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface, positive upward [Z ~> m]
   real :: jet_width         ! The width of the zonal-mean jet [km]
   real :: jet_height        ! The interface height scale associated with the zonal-mean jet [Z ~> m]
-  real :: y_2
+  real :: y_2             ! The y-position relative to the center of the domain [km]
   real :: half_strat      ! The fractional depth where the stratification is centered [nondim]
   real :: half_depth      ! The depth where the stratification is centered [Z ~> m]
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -67,14 +67,13 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
-!### UNCOMMENT TO FIX THIS "The fractional depth where the stratification is centered.", &
-                 "The maximum depth of the ocean.", &
+                 "The fractional depth where the stratification is centered.", &
                  units="nondim", default = 0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -121,18 +120,22 @@ end subroutine Phillips_initialize_thickness
 subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G  !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: u  !< i-component of velocity [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(out) :: v  !< j-component of velocity [m s-1]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file to
                                                      !! parse for modelparameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: jet_width, jet_height, x_2, y_2
-  real :: velocity_amplitude, pi
+  real :: jet_width       ! The width of the zonal-mean jet [km]
+  real :: jet_height      ! The interface height scale associated with the zonal-mean jet [Z ~> m]
+  real :: x_2             ! The x-position relative to the center of the domain [nondim]
+  real :: y_2             ! The y-position relative to the center of the domain [km] or [nondim]
+  real :: velocity_amplitude ! The amplitude of velocity perturbations [L T-1 ~> m s-1]
+  real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
@@ -143,12 +146,12 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
                  "The magnitude of the initial velocity perturbation.", &
-                 units="m s-1", default=0.001, do_not_log=just_read)
+                 units="m s-1", default=0.001, scale=US%m_s_to_L_T, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -164,10 +167,10 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
     y_2 = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
 ! This uses d/d y_2 atan(y_2 / jet_width)
 !    u(I,j,k) = u(I,j,k+1) + (1e-3 * jet_height / &
-!           (jet_width * (1.0 + (y_2 / jet_width)**2))) * &
+!           (US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
 !           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
-    u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / jet_width) * &
+    u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width)) * &
            (sech(y_2 / jet_width))**2 ) * &
            (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
   enddo ; enddo ; enddo
@@ -249,7 +252,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
+                 "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
 

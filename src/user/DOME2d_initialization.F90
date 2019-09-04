@@ -385,19 +385,19 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_TIME_SCALE", dome2d_west_sponge_time_scale, &
-                 'The time-scale on the west edge of the domain for restoring T/S\n' //&
+                 'The time-scale on the west edge of the domain for restoring T/S '//&
                  'in the sponge. If zero, the western sponge is disabled', &
                  units='s', default=0.)
   call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_TIME_SCALE", dome2d_east_sponge_time_scale, &
-                 'The time-scale on the east edge of the domain for restoring T/S\n' //&
+                 'The time-scale on the east edge of the domain for restoring T/S '//&
                  'in the sponge. If zero, the eastern sponge is disabled', &
                  units='s', default=0.)
   call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_WIDTH", dome2d_west_sponge_width, &
-                 'The fraction of the domain in which the western sponge for restoring T/S\n' //&
+                 'The fraction of the domain in which the western sponge for restoring T/S '//&
                  'is active.', &
                  units='nondim', default=0.1)
   call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_WIDTH", dome2d_east_sponge_width, &
-                 'The fraction of the domain in which the eastern sponge for restoring T/S\n' //&
+                 'The fraction of the domain in which the eastern sponge for restoring T/S '//&
                  'is active.', &
                  units='nondim', default=0.1)
 
@@ -471,7 +471,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
       z = -G%bathyT(i,j)
       do k = nz,1,-1
         z = z + 0.5 * GV%H_to_Z * h(i,j,k) ! Position of the center of layer k
-        S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
+        S(i,j,k) = 34.0 - 1.0 * (z / (G%max_depth))
         if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) &
           S(i,j,k) = S_ref + S_range
         z = z + 0.5 *  GV%H_to_Z * h(i,j,k) ! Position of the interface k

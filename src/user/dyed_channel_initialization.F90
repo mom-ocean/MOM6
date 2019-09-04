@@ -101,7 +101,7 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
         'dyed_channel_set_OBC_data() was called but OBC type was not initialized!')
 
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate boundary segment.", default=0,   &
                  do_not_log=.true.)
 
@@ -162,9 +162,9 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       if (CS%frequency == 0.0) then
-        flow = CS%zonal_flow
+        flow = G%US%m_s_to_L_T*CS%zonal_flow
       else
-        flow = CS%zonal_flow + CS%tidal_amp * cos(2 * PI * CS%frequency * time_sec)
+        flow = G%US%m_s_to_L_T*CS%zonal_flow + CS%tidal_amp * cos(2 * PI * CS%frequency * time_sec)
       endif
       do k=1,G%ke
         do j=jsd,jed ; do I=IsdB,IedB

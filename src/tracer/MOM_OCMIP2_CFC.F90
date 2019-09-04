@@ -4,7 +4,6 @@ module MOM_OCMIP2_CFC
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -140,7 +139,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CFC_IC_FILE", CS%IC_file, &
-                 "The file in which the CFC initial values can be \n"//&
+                 "The file in which the CFC initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -153,9 +152,9 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
                  default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
-                 "If true, tracers may go through the initialization code \n"//&
-                 "if they are not found in the restart files.  Otherwise \n"//&
-                 "it is a fatal error if tracers are not found in the \n"//&
+                 "If true, tracers may go through the initialization code "//&
+                 "if they are not found in the restart files.  Otherwise "//&
+                 "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
 
   !   The following vardesc types contain a package of metadata about each tracer,
@@ -314,7 +313,7 @@ end subroutine flux_init_OCMIP2_CFC
 
 !> Initialize the OCMP2 CFC tracer fields and set up the tracer output.
 subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
-                                 sponge_CSp, diag_to_Z_CSp)
+                                 sponge_CSp)
   logical,                        intent(in) :: restart    !< .true. if the fields have already been
                                                            !! read from a restart file.
   type(time_type), target,        intent(in) :: day        !< Time of the start of the run.
@@ -333,8 +332,6 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(sponge_CS),                pointer    :: sponge_CSp !< A pointer to the control structure for
                                                            !! the sponges, if they are in use.
                                                            !! Otherwise this may be unassociated.
-  type(diag_to_Z_CS),             pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                           !! for diagnostics in depth space.
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -531,7 +528,7 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)
+    mass = G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k)
     stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
     stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
   enddo ; enddo ; enddo

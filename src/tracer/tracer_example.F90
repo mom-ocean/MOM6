@@ -4,7 +4,6 @@ module USER_tracer_example
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -87,8 +86,8 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "TRACER_EXAMPLE_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the DOME tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the DOME tracers, or blank to initialize "//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -97,8 +96,8 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
                    CS%tracer_IC_file)
   endif
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
@@ -137,7 +136,7 @@ end function USER_register_tracer_example
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
 subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp)
+                                  sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
@@ -154,8 +153,6 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                                          !! call to USER_register_tracer_example.
   type(sponge_CS),                    pointer    :: sponge_CSp    !< A pointer to the control structure
                                                                   !! for the sponges, if they are in use.
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                  !! for diagnostics in depth space.
 
 ! Local variables
   real, allocatable :: temp(:,:,:)
@@ -396,7 +393,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+                             (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo

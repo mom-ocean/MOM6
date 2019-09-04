@@ -84,7 +84,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SLOSHING_IC_AMPLITUDE", a0, &
-                 "Initial amplitude of sloshing internal interface height \n"//&
+                 "Initial amplitude of sloshing internal interface height "//&
                  "displacements it the sloshing test case.", &
                  units='m', default=75.0, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl, "SLOSHING_IC_BUG", use_IC_bug, &

@@ -132,8 +132,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth / GV%Rho0
-  Z_to_Pa = GV%g_Earth * GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
   use_EOS = associated(tv%eqn_of_state)
 
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
@@ -522,7 +522,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [m s-1]
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
   type(wave_speed_CS), optional,            pointer     :: CS !< Control structure for MOM_wave_speed
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
                                                                       !! over the entire computational domain.
@@ -577,7 +577,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.
-  real, dimension(SZK_(G)+1) :: z_int, N2
+  real, dimension(SZK_(G)+1) :: z_int
+  ! real, dimension(SZK_(G)+1) :: N2
   integer :: nsub       ! number of subintervals used for root finding
   integer, parameter :: sub_it_max = 4
                         ! maximum number of times to subdivide interval
@@ -599,9 +600,9 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = GV%g_Earth / GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
-  Z_to_Pa = GV%g_Earth * GV%Rho0
+  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
 
   min_h_frac = tol1 / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
@@ -778,12 +779,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
+              ! N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
               speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
-            N2(1) = N2(2) ; N2(kc+1) = N2(kc)
-            ! Calcualte depth at bottom
+            ! N2(1) = N2(2) ; N2(kc+1) = N2(kc)
+            ! Calculate depth at bottom
             z_int(kc+1) = z_int(kc)+Hc(kc)
             ! check that thicknesses sum to total depth
             if (abs(z_int(kc+1)-htot(i)) > 1.e-12*htot(i)) then
@@ -940,6 +941,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             else
               cn(i,j,2:nmodes) = 0.0 ! else too small to worry about
             endif ! if nmodes>1 .and. kc>nmodes .and. c1>c1_thresh
+            do m=1,nmodes ; cn(i,j,m) = US%m_s_to_L_T*cn(i,j,m) ; enddo
           else
             cn(i,j,:) = 0.0
           endif ! if more than 2 layers

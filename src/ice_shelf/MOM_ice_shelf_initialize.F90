@@ -42,7 +42,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, PF)
   character(len=200) :: config
 
   call get_param(PF, mdl, "ICE_PROFILE_CONFIG", config, &
-                 "This specifies how the initial ice profile is specified. \n"//&
+                 "This specifies how the initial ice profile is specified. "//&
                  "Valid values are: CHANNEL, FILE, and USER.", &
                  fail_if_missing=.true.)
 
@@ -128,11 +128,11 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
       ! update thickness mask
 
-      if (area_shelf_h (i,j) >= G%areaT(i,j)) then
+      if (area_shelf_h (i,j) >= US%L_to_m**2*G%areaT(i,j)) then
         hmask(i,j) = 1.
       elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
-      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
+      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= US%L_to_m**2*G%areaT(i,j))) then
         hmask(i,j) = 2.
       else
         call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
@@ -180,9 +180,9 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
   call get_param(PF, mdl, "SHELF_EDGE_POS_0", edge_pos, &
                  units="axis_units", default=0.0)
 !  call get_param(param_file, mdl, "RHO_0", Rho_ocean, &
-!                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-!                 "calculate accelerations and the mass for conservation \n"//&
-!                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+!                 "The mean ocean density used with BOUSSINESQ true to "//&
+!                 "calculate accelerations and the mass for conservation "//&
+!                 "properties, or with BOUSSINSEQ false to convert some "//&
 !                 "parameters from vertical units of m to kg m-2.", &
 !                 units="kg m-3", default=1035.0, scale=US%Z_to_m)
 
@@ -206,11 +206,11 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
           h_shelf (i,j) = 0.0
         else
           if (G%geoLonCu(i,j) > edge_pos) then
-            area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                             (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
             hmask (i,j) = 2.0
           else
-            area_shelf_h(i,j) = G%areaT(i,j)
+            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j)
             hmask (i,j) = 1.0
           endif
 
@@ -272,11 +272,11 @@ end subroutine initialize_ice_thickness_channel
 !   logical flux_bdry
 
 !   call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
-!                  "This specifies how the ice domain boundary is specified. \n"//&
+!                  "This specifies how the ice domain boundary is specified. "//&
 !                  "valid values include CHANNEL, FILE and USER.", &
 !                  fail_if_missing=.true.)
 !   call get_param(PF, mdl, "ICE_BOUNDARY_FLUX_CONDITION", flux_bdry, &
-!                  "This specifies whether mass input is a dirichlet or \n"//&
+!                  "This specifies whether mass input is a dirichlet or "//&
 !                  "flux condition", default=.true.)
 
 !   select case ( trim(config) )

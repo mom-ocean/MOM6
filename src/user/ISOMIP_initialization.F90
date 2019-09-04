@@ -107,13 +107,13 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
   else
     do j=js,je ; do i=is,ie
       ! 3D setup
-      ! #### TEST #######
+      ! ===== TEST =====
       !if (G%geoLonT(i,j)<500.) then
       !  xtil = 500.*1.0e3/xbar
       !else
       !  xtil = G%geoLonT(i,j)*1.0e3/xbar
       !endif
-      ! ##### TEST #####
+      ! ===== TEST =====
 
       xtil = G%geoLonT(i,j)*1.0e3/xbar
 
@@ -321,7 +321,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
     case ( REGRIDDING_LAYER )
       call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
-                  "If true, accept the prescribed temperature and fit the \n"//&
+                  "If true, accept the prescribed temperature and fit the "//&
                   "salinity; otherwise take salinity and fit temperature.", &
                   default=.false., do_not_log=just_read)
       call get_param(param_file, mdl, "DRHO_DS", drho_dS1, &
@@ -628,16 +628,16 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
     ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
     ! combined the *correct* temp and salt values in one file instead.
     call get_param(PF, mdl, "ISOMIP_SPONGE_FILE", state_file, &
-              "The name of the file with temps., salts. and interfaces to \n"// &
+              "The name of the file with temps., salts. and interfaces to "//&
               "damp toward.", fail_if_missing=.true.)
     call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
-              "The name of the potential temperature variable in \n"//&
+              "The name of the potential temperature variable in "//&
               "SPONGE_STATE_FILE.", default="Temp")
     call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
-              "The name of the salinity variable in \n"//&
+              "The name of the salinity variable in "//&
               "SPONGE_STATE_FILE.", default="Salt")
     call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
-              "The name of the interface height variable in \n"//&
+              "The name of the interface height variable in "//&
               "SPONGE_STATE_FILE.", default="eta")
 
     !read temp and eta

@@ -148,7 +148,7 @@ program SHELF_main
 
   namelist /ice_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
 
-  !#######################################################################
+  !=======================================================================
 
   call write_cputime_start_clock(write_CPU_CSp)
 
@@ -209,14 +209,14 @@ program SHELF_main
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "ICE_SHELF", use_ice_shelf, &
-                 "If true, call the code to apply an ice shelf model over \n"//&
+                 "If true, call the code to apply an ice shelf model over "//&
                  "some of the domain.", default=.false.)
 
   if (.not.use_ice_shelf) call MOM_error(FATAL, &
         "shelf_driver: ICE_SHELF must be defined.")
 
   call get_param(param_file, mdl, "ICE_VELOCITY_TIMESTEP", time_step, &
-                 "The time step for changing forcing, coupling with other \n"//&
+                 "The time step for changing forcing, coupling with other "//&
                  "components, or potentially writing certain diagnostics.", &
                  units="s", fail_if_missing=.true.)
 
@@ -250,16 +250,16 @@ program SHELF_main
     Time_end = increment_date(Time, years, months, days, hours, minutes, seconds)
     call MOM_mesg('Segment run length determied from ice_solo_nml.', 2)
     call get_param(param_file, mdl, "DAYMAX", daymax, &
-                 "The final time of the whole simulation, in units of \n"//&
-                 "TIMEUNIT seconds.  This also sets the potential end \n"//&
-                 "time of the present run segment if the end time is \n"//&
+                 "The final time of the whole simulation, in units of "//&
+                 "TIMEUNIT seconds.  This also sets the potential end "//&
+                 "time of the present run segment if the end time is "//&
                  "not set (as it was here) via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit, default=Time_end)
   else
     call get_param(param_file, mdl, "DAYMAX", daymax, &
-                 "The final time of the whole simulation, in units of \n"//&
-                 "TIMEUNIT seconds.  This also sets the potential end \n"//&
-                 "time of the present run segment if the end time is \n"//&
+                 "The final time of the whole simulation, in units of "//&
+                 "TIMEUNIT seconds.  This also sets the potential end "//&
+                 "time of the present run segment if the end time is "//&
                  "not set via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit, fail_if_missing=.true.)
     Time_end = daymax
@@ -271,14 +271,14 @@ program SHELF_main
     "MOM_driver: The run has been started at or after the end time of the run.")
 
   call get_param(param_file, mdl, "RESTART_CONTROL", Restart_control, &
-                 "An integer whose bits encode which restart files are \n"//&
-                 "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
-                 "(bit 0) for a non-time-stamped file. A non-time-stamped \n"//&
-                 "restart file is saved at the end of the run segment \n"//&
+                 "An integer whose bits encode which restart files are "//&
+                 "written. Add 2 (bit 1) for a time-stamped file, and odd "//&
+                 "(bit 0) for a non-time-stamped file. A non-time-stamped "//&
+                 "restart file is saved at the end of the run segment "//&
                  "for any non-negative value.", default=1)
   call get_param(param_file, mdl, "RESTINT", restint, &
-                 "The interval between saves of the restart file in units \n"//&
-                 "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
+                 "The interval between saves of the restart file in units "//&
+                 "of TIMEUNIT.  Use 0 (the default) to not save "//&
                  "incremental restart files at all.", default=set_time(0), &
                  timeunit=Time_unit)
   call log_param(param_file, mdl, "ELAPSED TIME AS MASTER", elapsed_time_master)

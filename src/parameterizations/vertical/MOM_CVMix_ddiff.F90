@@ -82,9 +82,9 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of mixing due to double diffusion processes via CVMix")
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_init, &
-                 "If true, turns on double diffusive processes via CVMix.  \n"// &
-                 "Note that double diffusive processes on viscosity are ignored \n"// &
-                 "in CVMix, see http://cvmix.github.io/ for justification.",&
+                 "If true, turns on double diffusive processes via CVMix. "//&
+                 "Note that double diffusive processes on viscosity are ignored "//&
+                 "in CVMix, see http://cvmix.github.io/ for justification.", &
                  default=.false.)
 
   if (.not. CVMix_ddiff_init) return
@@ -100,7 +100,7 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=2.55)
 
   call get_param(param_file, mdl, "KAPPA_DDIFF_S", CS%kappa_ddiff_s, &
-                 "Leading coefficient in formula for salt-fingering regime \n"// &
+                 "Leading coefficient in formula for salt-fingering regime "//&
                  "for salinity diffusion.", units="m2 s-1", default=1.0e-4)
 
   call get_param(param_file, mdl, "DDIFF_EXP1", CS%ddiff_exp1, &
@@ -138,10 +138,10 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z_to_m**2)
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z_to_m**2)
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_R_rho = register_diag_field('ocean_model','R_rho',diag%axesTi,Time, &
          'Double-diffusion density ratio', 'nondim')
@@ -170,9 +170,9 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for temp [Z2 s-1 ~> m2 s-1].
+                                                                  !! diffusivity for temp [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for salt [Z2 s-1 ~> m2 s-1].
+                                                                  !! diffusivity for salt [Z2 T-1 ~> m2 s-1].
   type(CVMix_ddiff_cs),                       pointer     :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
   integer,                                    intent(in)  :: j    !< Meridional grid indice.
@@ -275,8 +275,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
                             nlev=G%ke,    &
                             max_nlev=G%ke)
     do K=1,G%ke+1
-      Kd_T(i,j,K) = US%m_to_Z**2 * Kd1_T(K)
-      Kd_S(i,j,K) = US%m_to_Z**2 * Kd1_S(K)
+      Kd_T(i,j,K) = US%m2_s_to_Z2_T * Kd1_T(K)
+      Kd_S(i,j,K) = US%m2_s_to_Z2_T * Kd1_S(K)
     enddo
 
     ! Do not apply mixing due to convection within the boundary layer

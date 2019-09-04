@@ -103,14 +103,14 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
   call get_param(PF, mdl, "Z_INIT_HOMOGENIZE", homog, &
-                 "If True, then horizontally homogenize the interpolated \n"//&
+                 "If True, then horizontally homogenize the interpolated "//&
                  "initial conditions.", default=.false.)
   call get_param(PF, mdl, "Z_INIT_ALE_REMAPPING", useALE, &
                  "If True, then remap straight to model coordinate from file.",&
                  default=.true.)
   call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
-                 "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
-                 "is True.", default="PLM")
+                 "The remapping scheme to use if using Z_INIT_ALE_REMAPPING is True.", &
+                 default="PLM")
 
   ! These are model grid properties, but being applied to the data grid for now.
   ! need to revisit this (mjh)

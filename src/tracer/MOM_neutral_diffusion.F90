@@ -18,6 +18,7 @@ use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, build_reconstructions_1d
 use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use polynomial_functions,      only : evaluation_polynomial, first_derivative_polynomial
 use PPM_functions,             only : PPM_reconstruction, PPM_boundary_extrapolation
@@ -131,14 +132,14 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "NDIFF_CONTINUOUS", CS%continuous_reconstruction, &
-                 "If true, uses a continuous reconstruction of T and S when  \n"//  &
-                 "finding neutral surfaces along which diffusion will happen.\n"//  &
-                 "If false, a PPM discontinuous reconstruction of T and S    \n"//  &
-                 "is done which results in a higher order routine but exacts \n"//  &
+                 "If true, uses a continuous reconstruction of T and S when "//&
+                 "finding neutral surfaces along which diffusion will happen. "//&
+                 "If false, a PPM discontinuous reconstruction of T and S "//&
+                 "is done which results in a higher order routine but exacts "//&
                  "a higher computational cost.", default=.true.)
   call get_param(param_file, mdl, "NDIFF_REF_PRES", CS%ref_pres,                    &
-                 "The reference pressure (Pa) used for the derivatives of    \n"//  &
-                 "the equation of state. If negative (default), local        \n"//  &
+                 "The reference pressure (Pa) used for the derivatives of "//&
+                 "the equation of state. If negative (default), local "//&
                  "pressure is used.", &
                  default = -1.)
   ! Initialize and configure remapping
@@ -148,9 +149,9 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                    "assume boundaries are piecewise constant",                      &
                    default=.false.)
     call get_param(param_file, mdl, "NDIFF_REMAPPING_SCHEME", string, &
-                   "This sets the reconstruction scheme used\n"//&
-                   "for vertical remapping for all variables.\n"//&
-                   "It can be one of the following schemes:\n"//&
+                   "This sets the reconstruction scheme used "//&
+                   "for vertical remapping for all variables. "//&
+                   "It can be one of the following schemes: "//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
     call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
@@ -186,7 +187,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                      default=10)
     endif
     call get_param(param_file, mdl, "NDIFF_DEBUG", CS%debug,             &
-                   "Turns on verbose output for discontinuous neutral \n"//      &
+                   "Turns on verbose output for discontinuous neutral "//&
                    "diffusion routines.", &
                    default = .false.)
   endif
@@ -427,15 +428,16 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
 end subroutine neutral_diffusion_calc_coeffs
 
 !> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update.
-subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
+subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [m2]
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [m2]
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts
                                                                      !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),                pointer       :: Reg    !< Tracer registry
+  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
   type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables

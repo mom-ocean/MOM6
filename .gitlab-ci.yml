@@ -32,6 +32,7 @@ setup:
     - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea-stats-MOM6-examples.git tests && cd tests
     # Install / update testing scripts
     - git clone https://github.com/adcroft/MRS.git MRS
+    - (cd MRS ; git checkout xanadu-fms)
     # Update MOM6-examples and submodules
     - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
     - (cd MOM6-examples/src/MOM6 && git submodule update)
@@ -73,7 +74,7 @@ gnu:ice-ocean-nolibs:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build build/gnu/env && cd build/gnu
     # mkdir -p build/gnu/repro/symmetric_dynamic/ocean_only && cd build/gnu/repro/symmetric_dynamic/ocean_only
-    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_ocean_extras,land_null,atmos_null}
+    - ../../MOM6-examples/src/mkmf/bin/list_paths -l ../../../config_src/{coupled_driver,dynamic} ../../../src ../../MOM6-examples/src/{FMS,coupler,SIS2,icebergs,ice_param,land_null,atmos_null}
     - ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/ncrc-gnu.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
     - time (source ./env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
 
@@ -115,8 +116,8 @@ run:
     - time tar zxf $CACHE_DIR/build-intel-repro-$CI_PIPELINE_ID.tgz
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
-    - echo "make -f MRS/Makefile.tests all -B" > job.sh
-    - msub -l partition=c4,nodes=29,walltime=00:31:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
+    - (echo '#!/bin/tcsh';echo 'make -f MRS/Makefile.tests all -B') > job.sh
+    - sbatch --clusters=c3,c4 --nodes=29 --time=0:34:00 --account=gfdl_o --qos=debug --job-name=mom6_regressions --output=log.$CI_PIPELINE_ID --wait job.sh
     - cat log.$CI_PIPELINE_ID
     - test -f restart_results_gnu.tar.gz
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz

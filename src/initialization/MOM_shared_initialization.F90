@@ -56,7 +56,7 @@ end subroutine MOM_shared_init_init
 !> MOM_initialize_rotation makes the appropriate call to set up the Coriolis parameter.
 subroutine MOM_initialize_rotation(f, G, PF, US)
   type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid type
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter [s-1]
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter [T-1 ~> s-1]
   type(param_file_type),                        intent(in)  :: PF !< Parameter file structure
   type(unit_scale_type),              optional, intent(in)  :: US !< A dimensional unit scaling type
 
@@ -72,13 +72,13 @@ subroutine MOM_initialize_rotation(f, G, PF, US)
                  "This specifies how the Coriolis parameter is specified: \n"//&
                  " \t 2omegasinlat - Use twice the planetary rotation rate \n"//&
                  " \t\t times the sine of latitude.\n"//&
-                 " \t betaplane - Use a beta-plane or f-plane. \n"//&
+                 " \t betaplane - Use a beta-plane or f-plane.\n"//&
                  " \t USER - call a user modified routine.", &
                  default="2omegasinlat")
   select case (trim(config))
-    case ("2omegasinlat"); call set_rotation_planetary(f, G, PF)
-    case ("beta"); call set_rotation_beta_plane(f, G, PF)
-    case ("betaplane"); call set_rotation_beta_plane(f, G, PF)
+    case ("2omegasinlat"); call set_rotation_planetary(f, G, PF, US)
+    case ("beta"); call set_rotation_beta_plane(f, G, PF, US)
+    case ("betaplane"); call set_rotation_beta_plane(f, G, PF, US)
    !case ("nonrotating") ! Note from AJA: Missing case?
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized rotation setup "//trim(config))
@@ -90,13 +90,16 @@ end subroutine MOM_initialize_rotation
 subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(dyn_horgrid_type),             intent(inout) :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out)   :: dF_dx !< x-component of grad f
+                                      intent(out)   :: dF_dx !< x-component of grad f [T-1 L-1 ~> s-1 m-1]
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out)   :: dF_dy !< y-component of grad f
+                                      intent(out)   :: dF_dy !< y-component of grad f [T-1 L-1 ~> s-1 m-1]
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real :: f1, f2
+
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
       (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
@@ -114,6 +117,7 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
     dF_dy(i,j) = G%IdyT(i,j) * ( f1 - f2 )
   enddo ; enddo
   call pass_vector(dF_dx, dF_dy, G%Domain, stagger=AGRID)
+
 end subroutine MOM_calculate_grad_Coriolis
 
 !> Return the global maximum ocean bottom depth in the same units as the input depth.
@@ -349,7 +353,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 !   call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
 !                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mdl, "TOPOG_SLOPE_SCALE", expdecay, &
-                   "The exponential decay scale used in defining some of \n"//&
+                   "The exponential decay scale used in defining some of "//&
                    "the named topographies.", units="m", default=400000.0)
   endif
 
@@ -426,9 +430,9 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
   m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
-                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
-                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "If MASKING_DEPTH is unspecified, then anything shallower than "//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than "//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
@@ -459,20 +463,24 @@ end subroutine limit_topography
 subroutine set_rotation_planetary(f, G, param_file, US)
   type(dyn_horgrid_type), intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                          intent(out) :: f  !< Coriolis parameter (vertical component) in s^-1
+                          intent(out) :: f  !< Coriolis parameter (vertical component) [T-1 ~> s-1]
   type(param_file_type),  intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine sets up the Coriolis parameter for a sphere
   character(len=30) :: mdl = "set_rotation_planetary" ! This subroutine's name.
   integer :: I, J
-  real    :: PI, omega
+  real    :: PI
+  real    :: omega  ! The planetary rotation rate [T-1 ~> s-1]
+  real    :: T_to_s ! A time unit conversion factor
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
+  T_to_s = 1.0 ; if (present(US)) T_to_s = US%T_to_s
+
   call get_param(param_file, "set_rotation_planetary", "OMEGA", omega, &
                  "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5)
+                 default=7.2921e-5, scale=T_to_s)
   PI = 4.0*atan(1.0)
 
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
@@ -488,24 +496,30 @@ end subroutine set_rotation_planetary
 subroutine set_rotation_beta_plane(f, G, param_file, US)
   type(dyn_horgrid_type), intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                          intent(out) :: f  !< Coriolis parameter (vertical component) in s^-1
+                          intent(out) :: f  !< Coriolis parameter (vertical component) [T-1 ~> s-1]
   type(param_file_type),  intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
 ! This subroutine sets up the Coriolis parameter for a beta-plane
   integer :: I, J
-  real    :: f_0, beta, y_scl, Rad_Earth, PI
+  real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
+  real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 m-1 ~> s-1 m-1]
+  real    :: y_scl, Rad_Earth
+  real    :: T_to_s ! A time unit conversion factor
+  real    :: PI
   character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
+  T_to_s = 1.0 ; if (present(US)) T_to_s = US%T_to_s
+
   call get_param(param_file, mdl, "F_0", f_0, &
-                 "The reference value of the Coriolis parameter with the \n"//&
-                 "betaplane option.", units="s-1", default=0.0)
+                 "The reference value of the Coriolis parameter with the "//&
+                 "betaplane option.", units="s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "BETA", beta, &
-                 "The northward gradient of the Coriolis parameter with \n"//&
-                 "the betaplane option.", units="m-1 s-1", default=0.0)
+                 "The northward gradient of the Coriolis parameter with "//&
+                 "the betaplane option.", units="m-1 s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
   PI = 4.0*atan(1.0)
@@ -544,8 +558,8 @@ subroutine initialize_grid_rotation_angle(G, PF)
   integer :: i, j, m, n
 
   call get_param(PF, mdl, "GRID_ROTATION_ANGLE_BUGS", use_bugs, &
-                 "If true, use an older algorithm to calculate the sine and \n"//&
-                 "cosines needed rotate between grid-oriented directions and \n"//&
+                 "If true, use an older algorithm to calculate the sine and "//&
+                 "cosines needed rotate between grid-oriented directions and "//&
                  "true north and east.  Differences arise at the tripolar fold.", &
                  default=.True.)
 
@@ -613,6 +627,8 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   real    :: dx_2 = -1.0, dy_2 = -1.0
   real    :: pi_180
   integer :: option = -1
@@ -627,68 +643,70 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
       "Unrecognized channel configuration name "//trim(name))
   end select
 
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
+
   if (option==1) then ! 1-degree settings.
     do j=jsd,jed ; do I=IsdB,IedB  ! Change any u-face lengths within this loop.
       dy_2 = dx_2 * G%dyCu(I,j)*G%IdxCu(I,j) * cos(pi_180 * G%geoLatCu(I,j))
 
       if ((abs(G%geoLatCu(I,j)-35.5) < dy_2) .and. (G%geoLonCu(I,j) < -4.5) .and. &
           (G%geoLonCu(I,j) > -6.5)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*12000.0   ! Gibraltar
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*12000.0*m_to_L   ! Gibraltar
 
       if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0   ! Red Sea
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0*m_to_L   ! Red Sea
 
       if ((abs(G%geoLatCu(I,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-26.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0   ! Dardanelles
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0*m_to_L   ! Dardanelles
 
       if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0   ! Tsugaru strait at 140.0e
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0*m_to_L   ! Tsugaru strait at 140.0e
 
       if ((abs(G%geoLatCu(I,j)-45.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+217.5) < 0.9)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*15000.0   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
-
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*15000.0*m_to_L   ! Betw Hokkaido and Sakhalin at 217&218 = 142e
 
       ! Greater care needs to be taken in the tripolar region.
       if ((abs(G%geoLatCu(I,j)-80.84) < 0.2) .and. (abs(G%geoLonCu(I,j)+64.9) < 0.8)) &
-        G%dy_Cu(I,j) = G%mask2dCu(I,j)*38000.0   ! Smith Sound in Canadian Arch - tripolar region
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*38000.0*m_to_L   ! Smith Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
 
     do J=JsdB,JedB ; do i=isd,ied  ! Change any v-face lengths within this loop.
       dy_2 = dx_2 * G%dyCv(i,J)*G%IdxCv(i,J) * cos(pi_180 * G%geoLatCv(i,J))
       if ((abs(G%geoLatCv(i,J)-41.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-28.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0   ! Bosporus - should be 1000.0 m wide.
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0*m_to_L   ! Bosporus - should be 1000.0 m wide.
 
       if ((abs(G%geoLatCv(i,J)-13.0) < dy_2) .and. (abs(G%geoLonCv(i,J)-42.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*10000.0   ! Red Sea
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*10000.0*m_to_L   ! Red Sea
 
       if ((abs(G%geoLatCv(i,J)+2.8) < 0.8) .and. (abs(G%geoLonCv(i,J)+241.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*40000.0   ! Makassar Straits at 241.5 W = 118.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*40000.0*m_to_L   ! Makassar Straits at 241.5 W = 118.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.56) < 0.5) .and. (abs(G%geoLonCv(i,J)+240.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*80000.0   ! entry to Makassar Straits at 240.5 W = 119.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*80000.0*m_to_L   ! entry to Makassar Straits at 240.5 W = 119.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+230.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0*m_to_L   ! Channel betw N Guinea and Halmahara 230.5 W = 129.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.19) < 0.5) .and. (abs(G%geoLonCv(i,J)+229.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0*m_to_L   ! Channel betw N Guinea and Halmahara 229.5 W = 130.5 E
 
       if ((abs(G%geoLatCv(i,J)-0.0) < 0.25) .and. (abs(G%geoLonCv(i,J)+228.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*25000.0*m_to_L   ! Channel betw N Guinea and Halmahara 228.5 W = 131.5 E
 
       if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+244.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0   ! Lombok Straits at 244.5 W = 115.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0*m_to_L   ! Lombok Straits at 244.5 W = 115.5 E
 
       if ((abs(G%geoLatCv(i,J)+8.5) < 0.5) .and. (abs(G%geoLonCv(i,J)+235.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0   ! Timor Straits at 235.5 W = 124.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*20000.0*m_to_L   ! Timor Straits at 235.5 W = 124.5 E
 
       if ((abs(G%geoLatCv(i,J)-52.5) < dy_2) .and. (abs(G%geoLonCv(i,J)+218.5) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*2500.0*m_to_L    ! Russia and Sakhalin Straits at 218.5 W = 141.5 E
 
       ! Greater care needs to be taken in the tripolar region.
       if ((abs(G%geoLatCv(i,J)-76.8) < 0.06) .and. (abs(G%geoLonCv(i,J)+88.7) < dx_2)) &
-        G%dx_Cv(i,J) = G%mask2dCv(i,J)*8400.0    ! Jones Sound in Canadian Arch - tripolar region
+        G%dx_Cv(i,J) = G%mask2dCv(i,J)*8400.0*m_to_L    ! Jones Sound in Canadian Arch - tripolar region
 
     enddo ; enddo
   endif
@@ -696,30 +714,30 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
   ! These checks apply regardless of the chosen option.
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (G%dy_Cu(I,j) > G%dyCu(I,j)) then
+    if (L_to_m*G%dy_Cu(I,j) > L_to_m*G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dy_Cu(I,j), G%dyCu(I,j), G%dy_Cu(I,j)-G%dyCu(I,j), &
+                   L_to_m*G%dy_Cu(I,j), L_to_m*G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-L_to_m*G%dyCu(I,j), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / G%areaCu(I,j)
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (G%dx_Cv(i,J) > G%dxCv(i,J)) then
+    if (L_to_m*G%dx_Cv(i,J) > L_to_m*G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dx_Cv(i,J), G%dxCv(i,J), G%dx_Cv(i,J)-G%dxCv(i,J), &
+                   L_to_m*G%dx_Cv(i,J), L_to_m*G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-L_to_m*G%dxCv(i,J), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
     endif
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
 end subroutine reset_face_lengths_named
@@ -737,12 +755,16 @@ subroutine reset_face_lengths_file(G, param_file, US)
   character(len=40)  :: mdl = "reset_face_lengths_file" ! This subroutine's name.
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   call get_param(param_file, mdl, "CHANNEL_WIDTH_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -757,34 +779,34 @@ subroutine reset_face_lengths_file(G, param_file, US)
                            trim(filename))
   endif
 
-  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain)
+  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=m_to_L)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (G%dy_Cu(I,j) > G%dyCu(I,j)) then
+    if (L_to_m*G%dy_Cu(I,j) > L_to_m*G%dyCu(I,j)) then
       write(mesg,'("dy_Cu of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dy_Cu(I,j), G%dyCu(I,j), G%dy_Cu(I,j)-G%dyCu(I,j), &
+                   L_to_m*G%dy_Cu(I,j), L_to_m*G%dyCu(I,j), L_to_m*G%dy_Cu(I,j)-L_to_m*G%dyCu(I,j), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / G%areaCu(I,j)
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (G%dx_Cv(i,J) > G%dxCv(i,J)) then
+    if (L_to_m*G%dx_Cv(i,J) > L_to_m*G%dxCv(i,J)) then
       write(mesg,'("dx_Cv of ",ES11.4," exceeds unrestricted width of ",ES11.4,&
                    &" by ",ES11.4, " at lon/lat of ", ES11.4, ES11.4)') &
-                   G%dx_Cv(i,J), G%dxCv(i,J), G%dx_Cv(i,J)-G%dxCv(i,J), &
+                   L_to_m*G%dx_Cv(i,J), L_to_m*G%dxCv(i,J), L_to_m*G%dx_Cv(i,J)-L_to_m*G%dxCv(i,J), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
       call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
     endif
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave(trim(mdl)//'()')
@@ -808,6 +830,8 @@ subroutine reset_face_lengths_list(G, param_file, US)
     u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
   real, pointer, dimension(:) :: &
     u_width => NULL(), v_width => NULL()
+  real    :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real    :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.
@@ -823,6 +847,8 @@ subroutine reset_face_lengths_list(G, param_file, US)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   call get_param(param_file, mdl, "CHANNEL_LIST_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
@@ -832,7 +858,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   filename = trim(inputdir)//trim(chan_file)
   call log_param(param_file, mdl, "INPUTDIR/CHANNEL_LIST_FILE", filename)
   call get_param(param_file, mdl, "CHANNEL_LIST_360_LON_CHECK", check_360, &
-                 "If true, the channel configuration list works for any \n"//&
+                 "If true, the channel configuration list works for any "//&
                  "longitudes in the range of -360 to 360.", default=.true.)
 
   if (is_root_pe()) then
@@ -966,7 +992,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*min(L_to_m*G%dyCu(I,j), max(u_width(npt), 0.0))
         if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCu(I,j) == 0.0 )  then
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
@@ -974,15 +1000,15 @@ subroutine reset_face_lengths_list(G, param_file, US)
           else
             write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
-                  u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
+                  u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",L_to_m*G%dy_Cu(I,j),"m"
           endif
         endif
       endif
     enddo
 
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
-    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / G%areaCu(I,j)
+    if (G%areaCu(I,j) > 0.0) G%IareaCu(I,j) = G%mask2dCu(I,j) / (G%areaCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -995,7 +1021,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
-        G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*min(L_to_m*G%dxCv(i,J), max(v_width(npt), 0.0))
         if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCv(i,J) == 0.0 )  then
             write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
@@ -1003,15 +1029,15 @@ subroutine reset_face_lengths_list(G, param_file, US)
           else
             write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') &
                   "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
-                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
+                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",L_to_m*G%dx_Cv(I,j),"m"
           endif
         endif
       endif
     enddo
 
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
-    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
+    if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / (G%areaCv(i,J))
   enddo ; enddo
 
   if (num_lines > 0) then
@@ -1137,7 +1163,7 @@ subroutine compute_global_grid_integrals(G)
     call MOM_error(FATAL, "compute_global_grid_integrals: "//&
                     "zero ocean area (check topography?)")
 
-  G%IareaT_global = 1. / G%areaT_global
+  G%IareaT_global = 1.0 / (G%areaT_global)
 end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
 
@@ -1159,6 +1185,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
+  real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
+  real :: L_to_m_scale ! A unit conversion factor from L to m.
   integer :: unit
   integer :: file_threading
   integer :: nFlds_used
@@ -1176,6 +1204,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
+  s_to_T_scale = 1.0 ; if (present(US)) s_to_T_scale = US%s_to_T
+  L_to_m_scale = 1.0 ; if (present(US)) L_to_m_scale = US%L_to_m
 
 !   vardesc is a structure defined in MOM_io.F90.  The elements of
 ! this structure, in order, are:
@@ -1229,7 +1259,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   out_q(:,:) = 0.0
 
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
-                 "If true, each processor writes its own restart file, \n"//&
+                 "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
   file_threading = SINGLE_FILE
@@ -1247,29 +1277,30 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
-  call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
+  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
 
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dxCv(i,J) ; enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = G%dyCu(I,j) ; enddo ; enddo
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
   call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
 
-  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = G%dxCu(I,j) ; enddo ; enddo
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
   call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
-  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dyCv(i,J) ; enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
 
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dxT(i,j); enddo ; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
   call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
-  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dyT(i,j) ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
 
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = G%dxBu(I,J) ; enddo ; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
-  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%dyBu(I,J) ; enddo ; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
@@ -1277,8 +1308,10 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
 
-  call write_field(unit, fields(17), G%Domain%mpp_domain, G%dx_Cv)
-  call write_field(unit, fields(18), G%Domain%mpp_domain, G%dy_Cu)
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
+  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
+  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
   call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then

@@ -80,18 +80,18 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, &
   do j=js,je ; do I=is-1,ie
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
       forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
-          (((forces%area_berg(i,j)*G%areaT(i,j)) + &
-            (forces%area_berg(i+1,j)*G%areaT(i+1,j))) / &
-           (G%areaT(i,j) + G%areaT(i+1,j)) )
+          (((forces%area_berg(i,j)*G%US%L_to_m**2*G%areaT(i,j)) + &
+            (forces%area_berg(i+1,j)*G%US%L_to_m**2*G%areaT(i+1,j))) / &
+           (G%US%L_to_m**2*G%areaT(i,j) + G%US%L_to_m**2*G%areaT(i+1,j)) )
     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + kv_rho_ice * &
                          min(forces%mass_berg(i,j), forces%mass_berg(i+1,j))
   enddo ; enddo
   do J=js-1,je ; do i=is,ie
     if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
       forces%frac_shelf_v(i,J) = forces%frac_shelf_v(i,J) + &
-          (((forces%area_berg(i,j)*G%areaT(i,j)) + &
-            (forces%area_berg(i,j+1)*G%areaT(i,j+1))) / &
-           (G%areaT(i,j) + G%areaT(i,j+1)) )
+          (((forces%area_berg(i,j)*G%US%L_to_m**2*G%areaT(i,j)) + &
+            (forces%area_berg(i,j+1)*G%US%L_to_m**2*G%areaT(i,j+1))) / &
+           (G%US%L_to_m**2*G%areaT(i,j) + G%US%L_to_m**2*G%areaT(i,j+1)) )
     forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
                          min(forces%mass_berg(i,j), forces%mass_berg(i,j+1))
   enddo ; enddo
@@ -185,8 +185,7 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   character(len=40)  :: mdl = "MOM_marine_ice"  ! This module's name.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "marine_ice_init called with an "// &
-                            "associated control structure.")
+    call MOM_error(WARNING, "marine_ice_init called with an associated control structure.")
     return
   else ; allocate(CS) ; endif
 
@@ -200,8 +199,8 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
   call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", CS%berg_area_threshold, &
-                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
-                 "below berg are set to zero. Not applied for negative \n"//&
+                 "Fraction of grid cell which iceberg must occupy, so that fluxes "//&
+                 "below berg are set to zero. Not applied for negative "//&
                  "values.", units="non-dim", default=-1.0)
 
 end subroutine marine_ice_init

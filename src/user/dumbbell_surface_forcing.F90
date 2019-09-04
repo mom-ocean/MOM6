@@ -15,6 +15,7 @@ use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -27,7 +28,7 @@ type, public :: dumbbell_surface_forcing_CS ; private
                              !! state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
-  real :: G_Earth            !< The gravitational acceleration [m s-2]
+  real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
@@ -64,8 +65,6 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
-  real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux [m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -113,7 +112,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [L2 T-3 ~> m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
@@ -177,9 +176,10 @@ subroutine dumbbell_dynamic_forcing(state, fluxes, day, dt, G, CS)
 end subroutine dumbbell_dynamic_forcing
 
 !> Reads and sets up the forcing for the dumbbell test case
-subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
+subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(time_type),              intent(in) :: Time !< The current model time.
   type(ocean_grid_type),        intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type),        intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl),      target, intent(in) :: diag !< A structure that is used to
                                                    !! regulate diagnostic output.
@@ -203,16 +203,16 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "DUMBBELL_SLP_AMP", CS%slp_amplitude, &
@@ -231,13 +231,13 @@ subroutine dumbbell_surface_forcing_init(Time, G, param_file, diag, CS)
                  default=2., do_not_log=.true.)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
-                 "If true, the buoyancy fluxes drive the model back \n"//&
-                 "toward some specified surface state with a rate \n"//&
+                 "If true, the buoyancy fluxes drive the model back "//&
+                 "toward some specified surface state with a rate "//&
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes \n"//&
-                 "to the relative surface anomalies (akin to a piston \n"//&
+                 "The constant that relates the restoring surface fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
     ! Convert CS%Flux_const from m day-1 to m s-1.
