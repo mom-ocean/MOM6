@@ -1548,8 +1548,8 @@ function find_neutral_pos_full( CS, z0, T_ref, S_ref, P_ref, P_top, P_bot, ppoly
     return
   endif
   if ( SIGN(1.,drho_b) == SIGN(1.,drho_c) ) then
-    print *, drho_b, drho_c
-    call MOM_error(WARNING, "drho_b is the same sign as dhro_c")
+!    print *, drho_b, drho_c
+!    call MOM_error(WARNING, "drho_b is the same sign as dhro_c")
     z = z0
     return
   endif
