@@ -79,7 +79,8 @@ type, public :: neutral_diffusion_CS ; private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                              !! regulate the timing of diagnostic output.
   integer :: neutral_pos_method              !< Method to find the position of a neutral surface within the layer
-  character(len=40)  :: delta_rho_form
+  character(len=40)  :: delta_rho_form       !< Determine which (if any) approximation is made to the
+                                             !! equation describing the difference in density
 
   integer :: id_uhEff_2d = -1 !< Diagnostic IDs
   integer :: id_vhEff_2d = -1 !< Diagnostic IDs
@@ -1652,9 +1653,9 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho,    
 end subroutine calc_delta_rho_and_derivs
 
 !> Calculate delta rho from derivatives and gradients of properties
-!! $\Delta \rho$ = \frac{1}{2}\left[ (\alpha_1 + \alpha_2)*(T_1-T_2) +
+!! \f$ \Delta \rho$ = \frac{1}{2}\left[ (\alpha_1 + \alpha_2)*(T_1-T_2) +
 !!                                   (\beta_1 + \beta_2)*(S_1-S_2) +
-!!                                   (\gamma^{-1}_1 + \gamma%{-1}_2)*(P_1-P_2) \right]
+!!                                   (\gamma^{-1}_1 + \gamma%{-1}_2)*(P_1-P_2) \right] \f$
 function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, &
                                 T2, S2, P2, dRdT2, dRdS2  ) result (drho)
   real :: T1    !< Temperature at point 1
@@ -1670,7 +1671,7 @@ function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, &
   ! Local variables
   real :: drho
 
-  drho = 0.5 * ( (dRdT1+dRdT2)*(T1-T2) + (dRdS1+dRdS2)*(S1-S2  ))
+  drho = 0.5 * ( (dRdT1+dRdT2)*(T1-T2) + (dRdS1+dRdS2)*(S1-S2))
 
 end function delta_rho_from_derivs
 !> Converts non-dimensional position within a layer to absolute position (for debugging)

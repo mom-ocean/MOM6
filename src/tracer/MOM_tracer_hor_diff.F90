@@ -58,7 +58,7 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: use_neutral_diffusion !< If true, use the neutral_diffusion module from within
                                    !! tracer_hor_diff.
   logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
-                                   !! exceeded 
+                                   !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.

@@ -82,6 +82,7 @@ interface calculate_TFreeze
   module procedure calculate_TFreeze_scalar, calculate_TFreeze_array
 end interface calculate_TFreeze
 
+!> Calculates the compressibility of water from T, S, and P
 interface calculate_compress
   module procedure calculate_compress_scalar, calculate_compress_array
 end interface calculate_compress
@@ -528,15 +529,15 @@ end subroutine calculate_specific_vol_derivs
 
 !> Calls the appropriate subroutine to calculate the density and compressibility for 1-D array inputs.
 subroutine calculate_compress_array(T, S, pressure, rho, drho_dp, start, npts, EOS)
-  real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface (degC)
-  real, dimension(:), intent(in)  :: S !< Salinity (PSU)
-  real, dimension(:), intent(in)  :: pressure !< Pressure (Pa)
-  real, dimension(:), intent(out) :: rho !< In situ density in kg m-3.
-  real, dimension(:), intent(out) :: drho_dp !< The partial derivative of density with pressure
-                                     !! (also the inverse of the square of sound speed) in s2 m-2.
-  integer,            intent(in)  :: start !< Starting index within the array
-  integer,            intent(in)  :: npts !< The number of values to calculate
-  type(EOS_type),     pointer     :: EOS !< Equation of state structure
+  real, dimension(:), intent(in)  :: T        !< Potential temperature referenced to the surface [degC]
+  real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
+  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(out) :: rho      !< In situ density [kg m-3].
+  real, dimension(:), intent(out) :: drho_dp   !< The partial derivative of density with pressure
+                                     !! (also the inverse of the square of sound speed) [s2 m-2].
+  integer,            intent(in)  :: start    !< Starting index within the array
+  integer,            intent(in)  :: npts     !< The number of values to calculate
+  type(EOS_type),     pointer     :: EOS      !< Equation of state structure
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_compress called with an unassociated EOS_type EOS.")
