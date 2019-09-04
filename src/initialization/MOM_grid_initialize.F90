@@ -390,6 +390,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   tmpT(:,:) = 0.
   !call MOM_read_data(filename, 'area', tmpT, SGdom)
   call read_data(fileObjRead, 'area', tmpT)
+  
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
@@ -429,42 +430,50 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).
   start(:) = 1 ; nread(:) = 1
-  start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
+  start(2) = 2 ; nread(1) = ni ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
-  if (is_root_PE()) &
-!    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
-  call read_data(fileObjRead, 'x', tmpGlbl, corner=start, edge_lengths=nread)
-  call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
+!   if (is_root_PE()) &
+!    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+!   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
+   
+  call read_data(fileObjRead, 'x', tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
+  
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
   enddo
   ! Note that the dynamic grid always uses symmetric memory for the global
   ! arrays G%gridLatB and G%gridLonB.
-  do I=G%isg-1,G%ieg
+  ! The global arrays returned by new io do not have the extra indices that match ni+1 and nj+1
+  ! assume first and last indices have same data to define end points on the B grid
+  do I=G%isg-1,G%ieg-1
     G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
   enddo
+  G%gridLonB(G%ieg) =  tmpGlbl(1,1)
   deallocate( tmpGlbl )
 
   allocate( tmpGlbl(1, nj+1) )
   start(:) = 1 ; nread(:) = 1
-  start(1) = int(ni/4)+1 ; nread(2) = nj+1
-  if (is_root_PE()) &
+  start(1) = int(ni/4)+1 ; nread(2) = nj
+!  if (is_root_PE()) &
     !call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
-    call read_data(fileObjRead, 'y', tmpGlbl, corner=start, edge_lengths=nread)
-  call broadcast(tmpGlbl, nj+1, root_PE())
+!  call broadcast(tmpGlbl, nj+1, root_PE())
+  call read_data(fileObjRead, 'y', tmpGlbl, corner=start(1:2), edge_lengths=nread(1:2))
+   
+  call close_file(fileObjRead)
 
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
   enddo
-  do J=G%jsg-1,G%jeg
+  do J=G%jsg-1,G%jeg-1
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
+  G%gridLatB(G%jeg) = tmpGlbl(1,1)
   deallocate( tmpGlbl )
 
   call callTree_leave("set_grid_metrics_from_mosaic()")
-  call close_file(fileObjRead)
+
 end subroutine set_grid_metrics_from_mosaic
 
 
