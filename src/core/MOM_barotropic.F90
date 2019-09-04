@@ -4245,10 +4245,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       conversion=GV%H_to_m)
   CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', diag%axesCu1, Time, &
       'High Frequency Barotropic zonal transport', 'm3 s-1', &
-      conversion=GV%H_to_m*US%L_T_to_m_s)
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
   CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', diag%axesCv1, Time, &
       'High Frequency Barotropic meridional transport', 'm3 s-1', &
-      conversion=GV%H_to_m*US%L_T_to_m_s)
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
   CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', diag%axesCuL, Time, &
       'Fractional thickness of layers in u-columns', 'nondim')
   CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', diag%axesCvL, Time, &
@@ -4259,10 +4259,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       'Predictor Fractional thickness of layers in v-columns', 'nondim')
   CS%id_uhbt = register_diag_field('ocean_model', 'uhbt', diag%axesCu1, Time, &
       'Barotropic zonal transport averaged over a baroclinic step', 'm3 s-1', &
-      conversion=GV%H_to_m*US%L_T_to_m_s)
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
   CS%id_vhbt = register_diag_field('ocean_model', 'vhbt', diag%axesCv1, Time, &
       'Barotropic meridional transport averaged over a baroclinic step', 'm3 s-1', &
-      conversion=GV%H_to_m*US%L_T_to_m_s)
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
 
   if (use_BT_cont_type) then
     CS%id_BTC_FA_u_EE = register_diag_field('ocean_model', 'BTC_FA_u_EE', diag%axesCu1, Time, &
