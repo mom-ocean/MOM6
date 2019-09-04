@@ -3,3 +3,6 @@
 *~
 html
 *.log
+MOM6
+build/
+deps/

@@ -15,6 +15,7 @@ use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -27,7 +28,7 @@ type, public :: BFB_surface_forcing_CS ; private
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
-  real :: G_Earth            !< The gravitational acceleration [m s-2]
+  real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
@@ -46,7 +47,7 @@ end type BFB_surface_forcing_CS
 contains
 
 !> Bouyancy forcing for the boundary-forced-basin (BFB) configuration
-subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
+subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
   type(surface),                intent(inout) :: state  !< A structure containing fields that
                                                       !! describe the surface state of the ocean.
   type(forcing),                intent(inout) :: fluxes !< A structure containing pointers to any
@@ -56,6 +57,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   real,                         intent(in)    :: dt   !< The amount of time over which
                                                       !! the fluxes apply [s]
   type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type),        intent(in)    :: US   !< A dimensional unit scaling type
   type(BFB_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure
                                                       !! returned by a previous call to
                                                       !! BFB_surface_forcing_init.
@@ -66,7 +68,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
                          ! toward [kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux [m5 s-3 kg-1].
+                           ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -111,7 +113,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean [m2 s-3].  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [L2 T-3 ~> m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
@@ -145,7 +147,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       !   "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / CS%Rho0
       Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
@@ -170,9 +172,10 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 end subroutine BFB_buoyancy_forcing
 
 !> Initialization for forcing the boundary-forced-basin (BFB) configuration
-subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
+subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(time_type),              intent(in) :: Time !< The current model time.
   type(ocean_grid_type),        intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type),        intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,      intent(in) :: diag !< A structure that is used to
                                                    !! regulate diagnostic output.
@@ -197,7 +200,7 @@ subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&

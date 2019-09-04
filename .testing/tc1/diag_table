@@ -1,0 +1,10 @@
+"MOM test configuration 1"
+1 1 1 0 0 0
+"prog",      1,"days",1,"days","time",
+
+# Prognostic Ocean fields:
+"ocean_model","u","u","prog","all",.false.,"none",2
+"ocean_model","v","v","prog","all",.false.,"none",2
+"ocean_model","h","h","prog","all",.false.,"none",1
+"ocean_model","e","e","prog","all",.false.,"none",2
+"ocean_model","temp","temp","prog","all",.false.,"none",2

@@ -4,7 +4,6 @@ module advection_test_tracer
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -164,7 +163,7 @@ end function register_advection_test_tracer
 
 !>   Initializes the NTR tracer fields in tr(:,:,:,:) and it sets up the tracer output.
 subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS, &
-                                            sponge_CSp, diag_to_Z_CSp)
+                                            sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
@@ -180,8 +179,6 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   type(advection_test_tracer_CS),     pointer    :: CS !< The control structure returned by a previous
                                                        !! call to register_advection_test_tracer.
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                  !! for diagnostics in depth space.
 
   ! Local variables
   real, allocatable :: temp(:,:,:)
@@ -384,7 +381,7 @@ function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+                             (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo
