@@ -38,16 +38,21 @@ public find_limited_slope
 public register_Zint_diag
 public calc_Zint_diags
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> The control structure for the MOM_diag_to_Z module
 type, public :: diag_to_Z_CS ; private
   ! The following arrays are used to store diagnostics calculated in this
   ! module and unavailable outside of it.
 
   real, pointer, dimension(:,:,:) :: &
-    u_z  => NULL(), &   !< zonal velocity remapped to depth space (m/s)
-    v_z  => NULL(), &   !< meridional velocity remapped to depth space (m/s)
-    uh_z => NULL(), &   !< zonal transport remapped to depth space (m3/s or kg/s)
-    vh_z => NULL()      !< meridional transport remapped to depth space (m3/s or kg/s)
+    u_z  => NULL(), &   !< zonal velocity remapped to depth space [m s-1]
+    v_z  => NULL(), &   !< meridional velocity remapped to depth space [m s-1]
+    uh_z => NULL(), &   !< zonal transport remapped to depth space [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vh_z => NULL()      !< meridional transport remapped to depth space [H m2 s-1 ~> m3 s-1 or kg s-1]
 
   type(p3d) :: tr_z(MAX_FIELDS_)     !< array of tracers, remapped to depth space
   type(p3d) :: tr_model(MAX_FIELDS_) !< pointers to an array of tracers
@@ -67,7 +72,7 @@ type, public :: diag_to_Z_CS ; private
   integer :: num_tr_used = 0 !< Th enumber of tracers in use.
   integer :: nk_zspace = -1 !< The number of levels in the z-space output
 
-  real, pointer :: Z_int(:) => NULL()  !< interface depths of the z-space file, in Z
+  real, pointer :: Z_int(:) => NULL()  !< interface depths of the z-space file [Z ~> m].
 
   !>@{ Axis groups for z-space diagnostic output
   type(axes_grp) :: axesBz,  axesTz,  axesCuz,  axesCvz
@@ -145,11 +150,11 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+                           intent(in)    :: u    !< The zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+                           intent(in)    :: v    !< The meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: ssh_in !< Sea surface height in meters.
   real, dimension(:,:),    pointer       :: frac_shelf_h !< The fraction of the cell area covered by
@@ -158,29 +163,29 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, G, GV, US, CS)
                                                  !! to diag_to_Z_init.
   ! Local variables
   ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
-  real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in whose halos can be updated (meter or kg/m2)
-  real :: e(SZK_(G)+2)           ! z-star interface heights in Z
-  real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers (meter or kg/m2)
+  real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in whose halos can be updated [H ~> m or kg m-2]
+  real :: e(SZK_(G)+2)           ! z-star interface heights [Z ~> m].
+  real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers [H ~> m or kg m-2]
   real :: u_f(SZK_(G)+1,SZIB_(G))! zonal velocity component in any massive layer
   real :: v_f(SZK_(G)+1,SZI_(G)) ! meridional velocity component in any massive layer
 
   real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! tracer concentration in massive layers
   integer :: nk_valid(SZIB_(G))  ! number of massive layers in a column
 
-  real :: D_pt(SZIB_(G))        ! bottom depth in Z
-  real :: shelf_depth(SZIB_(G)) ! ice shelf depth in Z
-  real :: htot           ! summed layer thicknesses (meter or kg/m2)
+  real :: D_pt(SZIB_(G))        ! bottom depth [Z ~> m].
+  real :: shelf_depth(SZIB_(G)) ! ice shelf depth [Z ~> m].
+  real :: htot           ! summed layer thicknesses [H ~> m or kg m-2]
   real :: dilate         ! proportion by which to dilate every layer
   real :: wt(SZK_(G)+1)  ! fractional weight for each layer in the
-                         ! range between k_top and k_bot (nondim)
+                         ! range between k_top and k_bot [nondim]
   real :: z1(SZK_(G)+1)  ! z1 and z2 are the depths of the top and bottom
   real :: z2(SZK_(G)+1)  ! limits of the part of a layer that contributes
                          ! to a depth level, relative to the cell center
-                         ! and normalized by the cell thickness (nondim)
+                         ! and normalized by the cell thickness [nondim]
                          ! Note that -1/2 <= z1 < z2 <= 1/2.
   real :: sl_tr(max(CS%num_tr_used,1)) ! normalized slope of the tracer
                                        ! within the cell, in tracer units
-  real :: Angstrom ! A minimal layer thickness, in H.
+  real :: Angstrom ! A minimal layer thickness [H ~> m or kg m-2].
   real :: slope ! normalized slope of a variable within the cell
 
   real :: layer_ave(CS%nk_zspace)
@@ -500,11 +505,10 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
                                                                    !! structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int !< Time integrated zonal
-                                                                   !! transport (m3 or kg).
+                                                                   !! transport [H m2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int !< Time integrated meridional
-                                                                   !! transport (m3 or kg).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
+                                                                   !! transport [H m2 ~> m3 or kg].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real,                                      intent(in)    :: dt   !< The time difference in s since
                                                                    !! the last call to this
                                                                    !! subroutine.
@@ -513,32 +517,32 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
                                                                    !! diag_to_Z_init.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    htot, &        ! total layer thickness, in H
+    htot, &        ! total layer thickness [H ~> m or kg m-2]
     dilate         ! Factor by which to dilate layers to convert them
-                   ! into z* space, in Z H-1.  (-G%D < z* < 0)
+                   ! into z* space [Z H-1 ~> 1 or m3 kg-1].  (-G%D < z* < 0)
 
   real, dimension(SZI_(G), max(CS%nk_zspace,1)) :: &
-    uh_Z           ! uh_int interpolated into depth space (m3 or kg)
+    uh_Z           ! uh_int interpolated into depth space [H m2 ~> m3 or kg]
   real, dimension(SZIB_(G), max(CS%nk_zspace,1)) :: &
-    vh_Z           ! vh_int interpolated into depth space (m3 or kg)
+    vh_Z           ! vh_int interpolated into depth space [H m2 ~> m3 or kg]
 
   real :: h_rem    ! dilated thickness of a layer that has yet to be mapped
-                   ! into depth space (in Z)
+                   ! into depth space [Z ~> m]
   real :: uh_rem   ! integrated zonal transport of a layer that has yet to be
-                   ! mapped into depth space (m3 or kg)
+                   ! mapped into depth space [H m2 ~> m3 or kg]
   real :: vh_rem   ! integrated meridional transport of a layer that has yet
-                   ! to be mapped into depth space (m3 or kg)
+                   ! to be mapped into depth space [H m2 ~> m3 or kg]
   real :: h_here   ! thickness of a layer that is within the range of the
-                   ! current depth level (in Z)
+                   ! current depth level [Z ~> m]
   real :: h_above  ! thickness of a layer that is above the current depth
-                   ! level (in Z)
+                   ! level [Z ~> m]
   real :: uh_here  ! zonal transport of a layer that is attributed to the
-                   ! current depth level (m3 or kg)
+                   ! current depth level [H m2 ~> m3 or kg]
   real :: vh_here  ! meridional transport of a layer that is attributed to
-                   ! the current depth level (m3 or kg)
-  real :: Idt      ! inverse of the time step (sec)
+                   ! the current depth level [H m2 ~> m3 or kg]
+  real :: Idt      ! inverse of the time step [s]
 
-  real :: z_int_above(SZIB_(G)) ! height of the interface atop a layer (meter or kg/m2)
+  real :: z_int_above(SZIB_(G)) ! height of the interface atop a layer [H ~> m or kg m-2]
 
   integer :: kz(SZIB_(G)) ! index of depth level that is being contributed to
 
@@ -670,10 +674,10 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
   real, dimension(:), intent(out)   :: wt     !< Relative weights of each layer from k_top to k_bot.
   real, dimension(:), intent(out)   :: z1     !< Depth of the top limits of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
-       !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+       !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
   real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
        !! a layer that contributes to a depth level, relative to the cell center and normalized
-       !! by the cell thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
+       !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
   ! Local variables
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
@@ -747,7 +751,7 @@ end subroutine find_limited_slope
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(p3d), dimension(:), intent(in) :: in_ptrs !< Pointers to the diagnostics to be regridded
   integer,   dimension(:), intent(in) :: ids  !< The diagnostic IDs of the diagnostics
   integer,                 intent(in) :: num_diags !< The number of diagnostics to regrid
@@ -761,7 +765,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   real, dimension(max(num_diags,1),SZI_(G),SZK_(G)+1) :: diag2d
 
   real, dimension(SZI_(G)) :: &
-    htot, &              ! summed layer thicknesses (meter or kg/m2)
+    htot, &              ! summed layer thicknesses [H ~> m or kg m-2]
     dilate               ! proportion by which to dilate every layer
   real :: wt             ! weighting of the interface above in the
                          ! interpolation to target depths

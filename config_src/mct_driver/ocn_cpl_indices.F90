@@ -10,8 +10,8 @@ module ocn_cpl_indices
   type cpl_indices_type
     ! ocean to coupler
     integer :: o2x_So_t          !< Surface potential temperature (deg C)
-    integer :: o2x_So_u          !< Surface zonal velocity (m/s)
-    integer :: o2x_So_v          !< Surface meridional velocity (m/s)
+    integer :: o2x_So_u          !< Surface zonal velocity [m s-1]
+    integer :: o2x_So_v          !< Surface meridional velocity [m s-1]
     integer :: o2x_So_s          !< Surface salinity (PSU)
     integer :: o2x_So_dhdx       !< Zonal slope in the sea surface height
     integer :: o2x_So_dhdy       !< Meridional lope in the sea surface height
@@ -41,7 +41,7 @@ module ocn_cpl_indices
     integer :: x2o_Faxa_swndr    !< near-IR, direct shortwave (W/m2)
     integer :: x2o_Faxa_swndf    !< near-IR, direct shortwave (W/m2)
     integer :: x2o_Fioi_melth    !< Heat flux from snow & ice melt (W/m2)
-    integer :: x2o_Fioi_meltw    !< Snow melt flux (kg/m2/s)
+    integer :: x2o_Fioi_meltw    !< Water flux from sea ice and snow melt (kg/m2/s)
     integer :: x2o_Fioi_bcpho    !< Black Carbon hydrophobic release from sea ice component
     integer :: x2o_Fioi_bcphi    !< Black Carbon hydrophilic release from sea ice component
     integer :: x2o_Fioi_flxdst   !< Dust release from sea ice component

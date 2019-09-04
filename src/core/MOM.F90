@@ -136,6 +136,11 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> A structure with diagnostic IDs of the state variables
 type MOM_diag_IDs
   !>@{ 3-d state field diagnostic IDs
@@ -148,32 +153,32 @@ end type MOM_diag_IDs
 !! the state of the ocean.
 type, public :: MOM_control_struct ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-    h, &            !< layer thickness (m or kg/m2 (H))
-    T, &            !< potential temperature (degrees C)
-    S               !< salinity (ppt)
+    h, &            !< layer thickness [H ~> m or kg m-2]
+    T, &            !< potential temperature [degC]
+    S               !< salinity [ppt]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    u,  &           !< zonal velocity component (m/s)
-    uh, &           !< uh = u * h * dy at u grid points (m3/s or kg/s)
-    uhtr            !< accumulated zonal thickness fluxes to advect tracers (m3 or kg)
+    u,  &           !< zonal velocity component [m s-1]
+    uh, &           !< uh = u * h * dy at u grid points [H m2 s-1 ~> m3 s-1 or kg s-1]
+    uhtr            !< accumulated zonal thickness fluxes to advect tracers [H m2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    v,  &           !< meridional velocity (m/s)
-    vh, &           !< vh = v * h * dx at v grid points (m3/s or kg/s)
-    vhtr            !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
+    v,  &           !< meridional velocity [m s-1]
+    vh, &           !< vh = v * h * dx at v grid points [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vhtr            !< accumulated meridional thickness fluxes to advect tracers [H m2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ssh_rint
-                    !< A running time integral of the sea surface height, in s m.
+                    !< A running time integral of the sea surface height [s m].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ave_ssh_ibc
                     !< time-averaged (over a forcing time step) sea surface height
-                    !! with a correction for the inverse barometer (meter)
+                    !! with a correction for the inverse barometer [m]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_av_bc
                     !< free surface height or column mass time averaged over the last
-                    !! baroclinic dynamics time step (m or kg/m2)
+                    !! baroclinic dynamics time step [H ~> m or kg m-2]
   real, dimension(:,:), pointer :: &
-    Hml => NULL()   !< active mixed layer depth, in m
+    Hml => NULL()   !< active mixed layer depth [m]
   real :: time_in_cycle !< The running time of the current time-stepping cycle
                     !! in calls that step the dynamics, and also the length of
-                    !! the time integral of ssh_rint, in s.
+                    !! the time integral of ssh_rint [s].
   real :: time_in_thermo_cycle !< The running time of the current time-stepping
-                    !! cycle in calls that step the thermodynamics, in s.
+                    !! cycle in calls that step the thermodynamics [s].
 
   type(ocean_grid_type) :: G  !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: &
@@ -213,8 +218,8 @@ type, public :: MOM_control_struct ; private
   logical :: do_remap
 
   type(time_type), pointer :: Time   !< pointer to the ocean clock
-  real    :: dt                      !< (baroclinic) dynamics time step (seconds)
-  real    :: dt_therm                !< thermodynamics time step (seconds)
+  real    :: dt                      !< (baroclinic) dynamics time step [s]
+  real    :: dt_therm                !< thermodynamics time step [s]
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
                                      !! steps can span multiple coupled time steps.
   integer :: nstep_tot = 0           !< The total number of dynamic timesteps tcaaken
@@ -235,10 +240,9 @@ type, public :: MOM_control_struct ; private
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: useWaves                !< If true, update Stokes drift
-  real :: dtbt_reset_period          !< The time interval in seconds between dynamic
-                                     !! recalculation of the barotropic time step.  If
-                                     !! this is negative, it is never calculated, and
-                                     !! if it is 0, it is calculated every step.
+  real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
+                                     !! barotropic time step [s]. If this is negative dtbt is never
+                                     !! calculated, and if it is 0, dtbt is calculated every step.
   type(time_type) :: dtbt_reset_interval !< A time_time representation of dtbt_reset_period.
   type(time_type) :: dtbt_reset_time !< The next time DTBT should be calculated.
 
@@ -247,16 +251,16 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
 
   real, dimension(:,:,:), pointer :: &
-    h_pre_dyn => NULL(), &      !< The thickness before the transports, in H.
-    T_pre_dyn => NULL(), &      !< Temperature before the transports, in degC.
-    S_pre_dyn => NULL()         !< Salinity before the transports, in psu.
+    h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
+    T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].
+    S_pre_dyn => NULL()         !< Salinity before the transports [ppt].
   type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
                                 !! for derived diagnostics (e.g., energy budgets)
   type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
                                 !! terms, for derived diagnostics (e.g., energy budgets)
   real, dimension(:,:,:), pointer :: &
-    u_prev => NULL(), &         !< previous value of u stored for diagnostics
-    v_prev => NULL()            !< previous value of v stored for diagnostics
+    u_prev => NULL(), &         !< previous value of u stored for diagnostics [m s-1]
+    v_prev => NULL()            !< previous value of v stored for diagnostics [m s-1]
 
   logical :: interp_p_surf      !< If true, linearly interpolate surface pressure
                                 !! over the coupling time step, using specified value
@@ -265,9 +269,9 @@ type, public :: MOM_control_struct ; private
                                 !! a previous time-step or the ocean restart file.
                                 !! This is only valid when interp_p_surf is true.
   real, dimension(:,:), pointer :: &
-    p_surf_prev  => NULL(), &   !< surface pressure (Pa) at end  previous call to step_MOM
-    p_surf_begin => NULL(), &   !< surface pressure (Pa) at start of step_MOM_dyn_...
-    p_surf_end   => NULL()      !< surface pressure (Pa) at end   of step_MOM_dyn_...
+    p_surf_prev  => NULL(), &   !< surface pressure [Pa] at end  previous call to step_MOM
+    p_surf_begin => NULL(), &   !< surface pressure [Pa] at start of step_MOM_dyn_...
+    p_surf_end   => NULL()      !< surface pressure [Pa] at end   of step_MOM_dyn_...
 
   ! Variables needed to reach between start and finish phases of initialization
   logical :: write_IC           !< If true, then the initial conditions will be written to file
@@ -278,23 +282,23 @@ type, public :: MOM_control_struct ; private
 
   ! These elements are used to control the calculation and error checking of the surface state
   real :: Hmix                  !< Diagnostic mixed layer thickness over which to
-                                !! average surface tracer properties (in depth units, Z) when
-                                !! bulk mixed layer is not used, or a negative value
+                                !! average surface tracer properties when a bulk
+                                !! mixed layer is not used [Z ~> m], or a negative value
                                 !! if a bulk mixed layer is being used.
   real :: HFrz                  !< If HFrz > 0, melt potential will be computed.
                                 !! The actual depth over which melt potential is computed will
                                 !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                                 !! If HFrz <= 0 (default), melt potential will not be computed.
   real :: Hmix_UV               !< Depth scale over which to average surface flow to
-                                !! feedback to the coupler/driver (in depth units, Z) when
+                                !! feedback to the coupler/driver [Z ~> m] when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   logical :: check_bad_sfc_vals !< If true, scan surface state for ridiculous values.
-  real    :: bad_val_ssh_max    !< Maximum SSH before triggering bad value message
-  real    :: bad_val_sst_max    !< Maximum SST before triggering bad value message
-  real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message
-  real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message
-  real    :: bad_vol_col_thick  !< Minimum column thickness before triggering bad value message
+  real    :: bad_val_ssh_max    !< Maximum SSH before triggering bad value message [m]
+  real    :: bad_val_sst_max    !< Maximum SST before triggering bad value message [degC]
+  real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message [degC]
+  real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message [ppt]
+  real    :: bad_val_col_thick  !< Minimum column thickness before triggering bad value message [m]
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
   type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
@@ -404,7 +408,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
                                                      !! tracer and mass exchange forcing fields
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
-  real,               intent(in)    :: time_interval !< time interval covered by this run segment, in s.
+  real,               intent(in)    :: time_interval !< time interval covered by this run segment [s].
   type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
   type(Wave_parameters_CS), &
             optional, pointer       :: Waves         !< An optional pointer to a wave property CS
@@ -419,7 +423,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
                                                      !! treated as the last call to step_MOM in a
                                                      !! time-stepping cycle; missing is like true.
   real,     optional, intent(in)    :: cycle_length  !< The amount of time in a coupled time
-                                                     !! stepping cycle, in s.
+                                                     !! stepping cycle [s].
   logical,  optional, intent(in)    :: reset_therm   !< This indicates whether the running sums of
                                                      !! thermodynamic quantities should be reset.
                                                      !! If missing, this is like start_cycle.
@@ -436,17 +440,17 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
-  real :: dt              ! baroclinic time step (sec)
-  real :: dtth            ! time step for thickness diffusion (sec)
-  real :: dtdia           ! time step for diabatic processes (sec)
-  real :: dt_therm        ! a limited and quantized version of CS%dt_therm (sec)
-  real :: dt_therm_here   ! a further limited value of dt_therm (sec)
+  real :: dt              ! baroclinic time step [s]
+  real :: dtth            ! time step for thickness diffusion [s]
+  real :: dtdia           ! time step for diabatic processes [s]
+  real :: dt_therm        ! a limited and quantized version of CS%dt_therm [s]
+  real :: dt_therm_here   ! a further limited value of dt_therm [s]
 
   real :: wt_end, wt_beg
   real :: bbl_time_int    ! The amount of time over which the calculated BBL
                           ! properties will apply, for use in diagnostics, or 0
-                          ! if it is not to be calculated anew (sec).
-  real :: rel_time = 0.0  ! relative time since start of this call (sec).
+                          ! if it is not to be calculated anew [s].
+  real :: rel_time = 0.0  ! relative time since start of this call [s].
 
   logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
                                        ! barotropic time step needs to be updated.
@@ -461,16 +465,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   logical :: cycle_end  ! If true, do calculations and diagnostics that are only done at
                         ! the end of a stepping cycle (whatever that may mean).
   logical :: therm_reset ! If true, reset running sums of thermodynamic quantities.
-  real :: cycle_time    ! The length of the coupled time-stepping cycle, in s.
+  real :: cycle_time    ! The length of the coupled time-stepping cycle [s].
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
-    ssh         ! sea surface height, which may be based on eta_av (meter)
+    ssh         ! sea surface height, which may be based on eta_av [m]
 
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component (m/s)
-    v => NULL(), & ! v : meridional velocity component (m/s)
-    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+    u => NULL(), & ! u : zonal velocity component [m s-1]
+    v => NULL(), & ! v : meridional velocity component [m s-1]
+    h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
   real, dimension(:,:), pointer :: &
-    p_surf => NULL() ! A pointer to the ocean surface pressure, in Pa.
+    p_surf => NULL() ! A pointer to the ocean surface pressure [Pa].
   real :: I_wt_ssh
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
@@ -877,16 +881,16 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
-                                                  !! step, intent in, in Pa.
+                                                  !! step, intent in [Pa].
   real, dimension(:,:), pointer     :: p_surf_end !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the end of this dynamic step,
-                                                  !! intent in, in Pa.
-  real,               intent(in)    :: dt         !< time interval covered by this call, in s.
+                                                  !! intent in [Pa].
+  real,               intent(in)    :: dt         !< time interval covered by this call [s].
   real,               intent(in)    :: dt_thermo  !< time interval covered by any updates that may
-                                                  !! span multiple dynamics steps, in s.
+                                                  !! span multiple dynamics steps [s].
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
-                                                  !! bottom boundary layer properties will apply,
-                                                  !! in s, or zero not to update the properties.
+                                                  !! bottom boundary layer properties will apply [s],
+                                                  !! or zero not to update the properties.
   type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
   type(wave_parameters_CS), &
@@ -901,9 +905,9 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                    ! various unit conversion factors
   type(MOM_diag_IDs), pointer :: IDs => NULL() ! A structure with the diagnostic IDs.
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component (m/s)
-    v => NULL(), & ! v : meridional velocity component (m/s)
-    h => NULL()    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+    u => NULL(), & ! u : zonal velocity component [m s-1]
+    v => NULL(), & ! v : meridional velocity component [m s-1]
+    h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
 
   logical :: calc_dtbt  ! Indicates whether the dynamically adjusted
                         ! barotropic time step needs to be updated.
@@ -1063,7 +1067,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, Time_local)
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(in)    :: h      !< layer thicknesses after the transports (m or kg/m2)
+                            intent(in)    :: h      !< layer thicknesses after the transports [H ~> m or kg m-2]
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
   type(group_pass_type) :: pass_T_S
@@ -1132,14 +1136,14 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
   type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(inout) :: u      !< zonal velocity (m/s)
+                            intent(inout) :: u      !< zonal velocity [m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(inout) :: v      !< meridional velocity (m/s)
+                            intent(inout) :: v      !< meridional velocity [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                            intent(inout) :: h      !< layer thickness (m or kg/m2)
+                            intent(inout) :: h      !< layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
-  real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
+  real,                     intent(in)    :: dtdia  !< The time interval over which to advance [s]
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
   type(wave_parameters_CS), &
@@ -1529,23 +1533,20 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(unit_scale_type),  pointer :: US => NULL()
   character(len=4), parameter :: vers_num = 'v2.0'
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: dtbt
-  real    :: Z_diag_int  ! minimum interval between calc depth-space diagnostics (sec)
+  real    :: dtbt        ! The barotropic timestep [s]
+  real    :: Z_diag_int  ! minimum interval between calc depth-space diagnosetics [s]
 
-  real, allocatable, dimension(:,:,:) :: e   ! interface heights (meter)
-  real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
-  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf
-  real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf
+  real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf [m2]
+  real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf [nondim]
   real, dimension(:,:), pointer :: shelf_area => NULL()
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
-  ! GMM, the following *is not* used. Should we delete it?
-  type(group_pass_type) :: tmp_pass_Kv_shear
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
@@ -1880,7 +1881,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "The value of SST below which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=-2.1)
-    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_vol_col_thick, &
+    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_val_col_thick, &
                  "The value of column thickness below which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                  default=0.0)
@@ -2491,7 +2492,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(unit_scale_type),   pointer :: US => NULL() ! Pointer to a structure containing
                                                    ! various unit conversion factors
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
-  real, allocatable :: z_interface(:,:,:) ! Interface heights (meter)
+  real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
   type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
@@ -2662,14 +2663,14 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(ocean_grid_type),             intent(in)    :: G   !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height (m)
-  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure (Pascal)
+  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
+  real, dimension(:,:),    optional, pointer       :: p_atm !< atmospheric pressure [Pa]
   logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv    ! The density used to convert surface pressure to
-                      ! a corrected effective SSH, in kg m-3.
-  real :: IgR0        ! The SSH conversion factor from Pa to m.
+                      ! a corrected effective SSH [kg m-3].
+  real :: IgR0        ! The SSH conversion factor from Pa to m [m Pa-1].
   logical :: calc_rho
   integer :: i, j, is, ie, js, je
 
@@ -2703,22 +2704,22 @@ subroutine extract_surface_state(CS, sfc_state)
                                                 !! data in this structure is intent out.
 
   ! local
-  real :: hu, hv
+  real :: hu, hv  ! Thicknesses interpolated to velocity points [H ~> m or kg m-2]
   type(ocean_grid_type), pointer :: G => NULL() !< pointer to a structure containing
                                       !! metrics and related information
   type(verticalGrid_type), pointer :: GV => NULL()
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & !< u : zonal velocity component (m/s)
-    v => NULL(), & !< v : meridional velocity component (m/s)
-    h => NULL()    !< h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
-  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units (Z)
+    u => NULL(), & !< u : zonal velocity component [m s-1]
+    v => NULL(), & !< v : meridional velocity component [m s-1]
+    h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
+  real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m]
   real :: depth_ml           !< Depth over which to average to determine mixed
-                             !! layer properties (Z)
-  real :: dh                 !< Thickness of a layer within the mixed layer (Z)
-  real :: mass               !< Mass per unit area of a layer (kg/m2)
-  real :: bathy_m            !< The depth of bathymetry in m (not Z), used for error checking.
-  real :: T_freeze           !< freezing temperature (oC)
-  real :: delT(SZI_(CS%G))   !< T-T_freeze (oC)
+                             !! layer properties [Z ~> m]
+  real :: dh                 !< Thickness of a layer within the mixed layer [Z ~> m]
+  real :: mass               !< Mass per unit area of a layer [kg m-2]
+  real :: bathy_m            !< The depth of bathymetry [m] (not Z), used for error checking.
+  real :: T_freeze           !< freezing temperature [degC]
+  real :: delT(SZI_(CS%G))   !< T-T_freeze [degC]
   logical :: use_temperature !< If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
@@ -2915,7 +2916,7 @@ subroutine extract_surface_state(CS, sfc_state)
        sfc_state%melt_potential(i,j) = 0.0
 
        if (G%mask2dT(i,j)>0.) then
-         ! instantaneous melt_potential, in J/m^2
+         ! instantaneous melt_potential [J m-2]
          sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * delT(i)
        endif
       enddo
@@ -2987,7 +2988,7 @@ subroutine extract_surface_state(CS, sfc_state)
         localError = sfc_state%sea_lev(i,j)<=-bathy_m &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j) + bathy_m < CS%bad_vol_col_thick
+                .or. sfc_state%sea_lev(i,j) + bathy_m < CS%bad_val_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
@@ -3075,9 +3076,9 @@ end subroutine get_MOM_state_elements
 !> Find the global integrals of various quantities.
 subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
   type(MOM_control_struct), pointer :: CS !< MOM control structure
-  real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat, in J.
-  real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt, in kg.
-  real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass, in kg.
+  real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat [J].
+  real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt [kg].
+  real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass [kg].
   logical, optional, intent(in)  :: on_PE_only !< If present and true, only sum on the local PE.
 
   if (present(mass)) &
