@@ -212,7 +212,6 @@ type, public :: MOM_control_struct ; private
   logical :: offline_tracer_mode = .false.
                     !< If true, step_offline() is called instead of step_MOM().
                     !! This is intended for running MOM6 in offline tracer mode
-  logical :: do_remap
 
   type(time_type), pointer :: Time   !< pointer to the ocean clock
   real    :: dt                      !< (baroclinic) dynamics time step [s]
@@ -1201,7 +1200,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! Regridding/remapping is done here, at end of thermodynamics time step
     ! (that may comprise several dynamical time steps)
     ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-    if ( CS%use_ALE_algorithm .and. CS%do_remap ) then
+    if ( CS%use_ALE_algorithm ) then
       call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 !         call pass_vector(u, v, G%Domain)
       if (associated(tv%T)) &
@@ -1702,9 +1701,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
-  call get_param(param_file, "MOM", "DO_REMAP", CS%do_remap, &
-                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
-                 "If False, use the layered isopycnal algorithm.", default=.true. )
   call get_param(param_file, "MOM", "BULKMIXEDLAYER", bulkmixedlayer, &
                  "If true, use a Kraus-Turner-like bulk mixed layer "//&
                  "with transitional buffer layers.  Layers 1 through "//&
