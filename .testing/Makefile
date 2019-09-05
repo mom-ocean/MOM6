@@ -222,7 +222,8 @@ $$(BASE)/.testing/%/ocean.stats.$(1): $$(BUILD)/$(2)/MOM6
 	if [ $(3) ]; then find $$(BUILD) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)/RESTART
 	echo $(4) > $$(@D)/MOM_override
-	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) $$< 2> debug.out
+	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) $$< 2> debug.out \
+		|| ! cat debug.out
 	cp $$(@D)/ocean.stats $$@
 	> $$(@D)/MOM_override
 	if [ $(3) ]; then cd $$(BASE) && bash <(curl -s https://codecov.io/bash) -n $$@; fi
