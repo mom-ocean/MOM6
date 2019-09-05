@@ -4301,12 +4301,12 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
             do m=1,ntr
               if (associated(segment%tr_Reg%Tr(m)%tres)) then
                 do k=1,nz
-                  u_L_in=max((idir*uhr(I,j,k))*segment%Tr_InvLscale_in/(h(i+ishift,j,k)*G%dyCu(I,j)),0.)
-                  u_L_out=min((idir*uhr(I,j,k))*segment%Tr_InvLscale_out/(h(i+ishift,j,k)*G%dyCu(I,j)),0.)
-                  fac1=1.0+dt*(u_L_in-u_L_out)
+                  u_L_out=max((idir*uhr(I,j,k))*segment%Tr_InvLscale_out/(h(i+ishift,j,k)*G%dyCu(I,j)),0.)
+                  u_L_in=min((idir*uhr(I,j,k))*segment%Tr_InvLscale_in/(h(i+ishift,j,k)*G%dyCu(I,j)),0.)
+                  fac1=1.0+dt*(u_L_out-u_L_in)
                   segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
-                       dt*(u_L_in*Reg%Tr(m)%t(I+ishift,j,k) - &
-                       u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
+                       dt*(u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
+                       u_L_in*segment%tr_Reg%Tr(m)%t(I,j,k)))
                 enddo
               endif
             enddo
@@ -4325,12 +4325,12 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
             do m=1,ntr
               if (associated(segment%tr_Reg%Tr(m)%tres)) then
                 do k=1,nz
-                  v_L_in=max((jdir*vhr(i,J,k))*segment%Tr_InvLscale_in/(h(i,j+jshift,k)*G%dxCv(i,J)),0.)
-                  v_L_out=min((jdir*vhr(i,J,k))*segment%Tr_InvLscale_out/(h(i,j+jshift,k)*G%dxCv(i,J)),0.)
-                  fac1=1.0+dt*(v_L_in-v_L_out)
+                  v_L_out=max((jdir*vhr(i,J,k))*segment%Tr_InvLscale_out/(h(i,j+jshift,k)*G%dxCv(i,J)),0.)
+                  v_L_in=min((jdir*vhr(i,J,k))*segment%Tr_InvLscale_in/(h(i,j+jshift,k)*G%dxCv(i,J)),0.)
+                  fac1=1.0+dt*(v_L_out-v_L_in)
                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                       dt*(v_L_in*Reg%Tr(m)%t(i,J+jshift,k) - &
-                       v_L_out*segment%tr_Reg%Tr(m)%t(i,J,k)))
+                       dt*(v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
+                       v_L_in*segment%tr_Reg%Tr(m)%t(i,J,k)))
                 enddo
               endif
             enddo
