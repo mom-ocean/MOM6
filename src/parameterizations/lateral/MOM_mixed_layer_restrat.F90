@@ -884,8 +884,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 
   CS%diag => diag
 
-  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0*US%L_to_m**2*US%s_to_T
-  else ; flux_to_kg_per_s = US%L_to_m**2*US%s_to_T ; endif
+  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%H_to_kg_m2 * US%L_to_m**2 * US%s_to_T
+  else ; flux_to_kg_per_s = GV%H_to_m * US%L_to_m**2 * US%s_to_T ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
