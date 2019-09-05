@@ -47,7 +47,7 @@ type, public :: set_visc_CS ; private
   real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
                             !! calculating the drag in channels.
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
-                            !! calculating the bottom drag [m s-1].
+                            !! calculating the bottom drag [L T-1 ~> m s-1].
   real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness [H ~> m or kg m-2].
                             !! This might be Kv / (cdrag * drag_bg_vel) to give
                             !! Kv as the minimum near-bottom viscosity.
@@ -111,9 +111,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: u    !< The zonal velocity [m s-1].
+                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: v    !< The meridional velocity [m s-1].
+                            intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),    intent(in)    :: tv   !< A structure containing pointers to any
@@ -171,7 +171,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! Rho0 divided by G_Earth and the conversion
                            ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
-                           ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
+                           ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
   real :: cdrag_sqrt       ! Square root of the drag coefficient [nondim].
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
@@ -191,12 +191,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot            ! Running sum of thicknesses times the
-                           ! velocity magnitudes [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+                           ! velocity magnitudes [H T T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: Thtot            ! Running sum of thickness times temperature [degC H ~> degC m or degC kg m-2].
   real :: Shtot            ! Running sum of thickness times salinity [ppt H ~> ppt m or ppt kg m-2].
   real :: hweight          ! The thickness of a layer that is within Hbbl
                            ! of the bottom [H ~> m or kg m-2].
-  real :: v_at_u, u_at_v   ! v at a u point or vice versa [m s-1].
+  real :: v_at_u, u_at_v   ! v at a u point or vice versa [L T-1 ~> m s-1].
   real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors
                            ! [kg T2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                            ! The 400 is a constant proposed by Killworth and Edwards, 1999.
@@ -231,9 +231,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: Vol_quit         ! The volume error below which to quit iterating [H ~> m or kg m-2].
   real :: Vol_tol          ! A volume error tolerance [H ~> m or kg m-2].
   real :: L(SZK_(G)+1)     ! The fraction of the full cell width that is open at
-                           ! the depth of each interface, nondimensional.
+                           ! the depth of each interface [nondim].
   real :: L_direct         ! The value of L above volume Vol_direct [nondim].
-  real :: L_max, L_min     ! Upper and lower bounds on the correct value for L.
+  real :: L_max, L_min     ! Upper and lower bounds on the correct value for L  [nondim].
   real :: Vol_err_max      ! The volume errors for the upper and lower bounds on
   real :: Vol_err_min      ! the correct value for L [H ~> m or kg m-2].
   real :: Vol_0            ! A deeper volume with known width L0 [H ~> m or kg m-2].
@@ -246,7 +246,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: ustH             ! ustar converted to units of H T-1 [H T-1 ~> m s-1 or kg m-2 s-1].
   real :: root             ! A temporary variable [H T-1 ~> m s-1 or kg m-2 s-1].
 
-  real :: Cell_width       ! The transverse width of the velocity cell [m].
+  real :: Cell_width       ! The transverse width of the velocity cell [L ~> m].
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
                            ! velocity magnitude to give the Rayleigh drag velocity, times
                            ! a lateral to vertical distance conversion factor [Z L-1 ~> 1].
@@ -282,7 +282,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   endif ; endif
 
   if (CS%debug) then
-    call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
+    call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
     call hchksum(h,"Start set_viscous_BBL h", G%HI, haloshift=1, scale=GV%H_to_m)
     if (associated(tv%T)) call hchksum(tv%T, "Start set_viscous_BBL T", G%HI, haloshift=1)
     if (associated(tv%S)) call hchksum(tv%S, "Start set_viscous_BBL S", G%HI, haloshift=1)
@@ -293,7 +293,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
-  cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
+  cdrag_sqrt_Z = US%L_to_Z * sqrt(CS%cdrag)
   K2 = max(nkmb+1, 2)
 
 !  With a linear drag law, the friction velocity is already known.
@@ -521,9 +521,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         enddo ! end of k loop
 
         if (.not.CS%linear_drag .and. (hwtot > 0.0)) then
-          ustar(i) = cdrag_sqrt_Z*US%T_to_s*hutot/hwtot
+          ustar(i) = cdrag_sqrt_Z*hutot/hwtot
         else
-          ustar(i) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel
+          ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel
         endif
 
         if (use_BBL_EOS) then ; if (hwtot > 0.0) then
@@ -533,7 +533,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         endif ; endif
       endif ; enddo
     else
-      do i=is,ie ; ustar(i) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel ; enddo
+      do i=is,ie ; ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel ; enddo
     endif ! Not linear_drag
 
     if (use_BBL_EOS) then
@@ -822,7 +822,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           endif
 
           ! Determine the drag contributing to the bottom boundary layer
-          ! and the Raleigh drag that acting on each layer.
+          ! and the Raleigh drag that acts on each layer.
           if (L(K) > L(K+1)) then
             if (vol_below < bbl_thick) then
               BBL_frac = (1.0-vol_below/bbl_thick)**2
@@ -834,9 +834,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
             if (m==1) then ; Cell_width = G%dy_Cu(I,j)
             else ; Cell_width = G%dx_Cv(i,J) ; endif
             gam = 1.0 - L(K+1)/L(K)
-            Rayleigh = US%m_to_Z * CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
+            Rayleigh = US%L_to_Z * CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
                 (12.0*CS%c_Smag*h_vel_pos) /  (12.0*CS%c_Smag*h_vel_pos + &
-                 GV%m_to_H * CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
+                 US%L_to_Z*GV%Z_to_H * CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
           else ! This layer feels no drag.
             Rayleigh = 0.0
           endif
@@ -844,13 +844,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           if (m==1) then
             if (Rayleigh > 0.0) then
               v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
-              visc%Ray_u(I,j,k) = Rayleigh*US%T_to_s*sqrt(u(I,j,k)*u(I,j,k) + &
+              visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
               u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
-              visc%Ray_v(i,J,k) = Rayleigh*US%T_to_s*sqrt(v(i,J,k)*v(i,J,k) + &
+              visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
           endif
@@ -913,7 +913,7 @@ end subroutine set_viscous_BBL
 function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                         intent(in) :: v    !< The meridional velocity [m s-1]
+                         intent(in) :: v    !< The meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer,               intent(in) :: i    !< The i-index of the u-location to work on.
@@ -922,7 +922,8 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
   real, dimension(SZI_(G),SZJB_(G)),&
                          intent(in) :: mask2dCv !< A multiplicative mask of the v-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
-  real                              :: set_v_at_u !< The retur value of v at u points [m s-1].
+  real                              :: set_v_at_u !< The return value of v at u points points in the
+                                            !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v [H ~> m or kg m-2].
@@ -956,7 +957,7 @@ end function set_v_at_u
 function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                         intent(in) :: u    !< The zonal velocity [m s-1]
+                         intent(in) :: u    !< The zonal velocity [L T-1 ~> m s-1] or other units.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                          intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer,               intent(in) :: i    !< The i-index of the u-location to work on.
@@ -965,7 +966,8 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
   real, dimension(SZIB_(G),SZJ_(G)), &
                          intent(in) :: mask2dCu !< A multiplicative mask of the u-points
   type(ocean_OBC_type),  pointer    :: OBC  !< A pointer to an open boundary condition structure
-  real                              :: set_u_at_v !< The return value of u at v points [m s-1].
+  real                              :: set_u_at_v !< The return value of u at v points in the
+                                            !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v [H ~> m or kg m-2].
@@ -1005,9 +1007,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u    !< The zonal velocity [m s-1].
+                           intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v    !< The meridional velocity [m s-1].
+                           intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
@@ -1022,6 +1024,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
                                                  !! of those values in visc that would be
                                                  !! calculated with symmetric memory.
+
   ! Local variables
   real, dimension(SZIB_(G)) :: &
     htot, &     !   The total depth of the layers being that are within the
@@ -1034,7 +1037,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                 ! [H kg m-3 ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
                 ! equation of state is used.
     uhtot, &    !   The depth integrated zonal and meridional velocities within
-    vhtot, &    ! the surface mixed layer [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+    vhtot, &    ! the surface mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
     Idecay_len_TKE, & ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     dR_dT, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with temperature [kg m-3 degC-1].
@@ -1064,7 +1067,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: hwtot     ! Sum of the thicknesses used to calculate
                     ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot     ! Running sum of thicknesses times the
-                    ! velocity magnitudes [H m s-1 ~> m2 s-1 or kg m-1 s-1].
+                    ! velocity magnitudes [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: hweight   ! The thickness of a layer that is within Hbbl
                     ! of the bottom [H ~> m or kg m-2].
   real :: tbl_thick_Z  ! The thickness of the top boundary layer [Z ~> m].
@@ -1075,8 +1078,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: S_lay     ! The layer salinity at velocity points [ppt].
   real :: Rlay      ! The layer potential density at velocity points [kg m-3].
   real :: Rlb       ! The potential density of the layer below [kg m-3].
-  real :: v_at_u    ! The meridonal velocity at a zonal velocity point [m s-1].
-  real :: u_at_v    ! The zonal velocity at a meridonal velocity point [m s-1].
+  real :: v_at_u    ! The meridonal velocity at a zonal velocity point [L T-1 ~> m s-1].
+  real :: u_at_v    ! The zonal velocity at a meridonal velocity point [L T-1 ~> m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
                     ! on the mixed layer thickness and density difference across
                     ! the base of the mixed layer [L2 T-2 ~> m2 s-2].
@@ -1091,7 +1094,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                       ! Rho0 divided by G_Earth and the conversion
                       ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z  ! Square root of the drag coefficient, times a unit conversion
-                      ! factor from lateral lengths to vertical depths [Z m-1 ~> 1].
+                      ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
   real :: cdrag_sqrt  ! Square root of the drag coefficient [nondim].
   real :: oldfn       ! The integrated energy required to
                       ! entrain up to the bottom of the layer,
@@ -1102,7 +1105,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                       ! the present layer [H ~> m or kg m-2].
   real :: U_bg_sq   ! The square of an assumed background velocity, for
                     ! calculating the mean magnitude near the top for use in
-                    ! the quadratic surface drag [m2 s-2].
+                    ! the quadratic surface drag [L2 T-2 ~> m2 s-2].
   real :: h_tiny    ! A very small thickness [H ~> m or kg m-2]. Layers that are less than
                     ! h_tiny can not be the deepest in the viscous mixed layer.
   real :: absf      ! The absolute value of f averaged to velocity points [T-1 ~> s-1].
@@ -1134,7 +1137,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   Rho0x400_G = 400.0*(GV%Rho0/(US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
-  cdrag_sqrt_Z = US%m_to_Z * sqrt(CS%cdrag)
+  cdrag_sqrt_Z = US%L_to_Z * sqrt(CS%cdrag)
 
   OBC => CS%OBC
   use_EOS = associated(tv%eqn_of_state)
@@ -1202,8 +1205,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           do_i(I) = .true. ; do_any = .true.
           k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
-          uhtot(I) = dt_Rho0 * forces%taux(I,j)
-          vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
+          uhtot(I) = US%m_s_to_L_T*dt_Rho0 * forces%taux(I,j)
+          vhtot(I) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1239,7 +1242,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               I_2hlay = 1.0 / (h(i,j,k) + h(i+1,j,k))
               v_at_u = 0.5 * (h(i,j,k)   * (v(i,J,k) + v(i,J-1,k)) + &
                               h(i+1,j,k) * (v(i+1,J,k) + v(i+1,J-1,k))) * I_2hlay
-              Uh2 = US%m_s_to_L_T**2*((uhtot(I) - htot(I)*u(I,j,k))**2 + (vhtot(I) - htot(I)*v_at_u)**2)
+              Uh2 = ((uhtot(I) - htot(I)*u(I,j,k))**2 + (vhtot(I) - htot(I)*v_at_u)**2)
 
               if (use_EOS) then
                 T_lay = (h(i,j,k)*tv%T(i,j,k) + h(i+1,j,k)*tv%T(i+1,j,k)) * I_2hlay
@@ -1336,9 +1339,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
         enddo ; endif
 
         if ((.not.CS%linear_drag) .and. (hwtot > 0.0)) then
-          ustar(I) = cdrag_sqrt_Z*US%T_to_s*hutot/hwtot
+          ustar(I) = cdrag_sqrt_Z * hutot/hwtot
         else
-          ustar(I) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel
+          ustar(I) = cdrag_sqrt_Z * CS%drag_bg_vel
         endif
 
         if (use_EOS) then ; if (hwtot > 0.0) then
@@ -1437,8 +1440,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           do_i(i) = .true. ; do_any = .true.
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
-          vhtot(i) = dt_Rho0 * forces%tauy(i,J)
-          uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
+          vhtot(i) = US%m_s_to_L_T*dt_Rho0 * forces%tauy(i,J)
+          uhtot(i) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1476,7 +1479,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               I_2hlay = 1.0 / (h(i,j,k) + h(i,j+1,k))
               u_at_v = 0.5 * (h(i,j,k)   * (u(I-1,j,k)   + u(I,j,k)) + &
                               h(i,j+1,k) * (u(I-1,j+1,k) + u(I,j+1,k))) * I_2hlay
-              Uh2 = US%m_s_to_L_T**2*((uhtot(I) - htot(I)*u_at_v)**2 + (vhtot(I) - htot(I)*v(i,J,k))**2)
+              Uh2 = ((uhtot(I) - htot(I)*u_at_v)**2 + (vhtot(I) - htot(I)*v(i,J,k))**2)
 
               if (use_EOS) then
                 T_lay = (h(i,j,k)*tv%T(i,j,k) + h(i,j+1,k)*tv%T(i,j+1,k)) * I_2hlay
@@ -1573,9 +1576,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
         enddo ; endif
 
         if (.not.CS%linear_drag) then ; if (hwtot > 0.0) then
-          ustar(i) = cdrag_sqrt_Z*US%T_to_s*hutot/hwtot
+          ustar(i) = cdrag_sqrt_Z * hutot/hwtot
         else
-          ustar(i) = cdrag_sqrt_Z*US%T_to_s*CS%drag_bg_vel
+          ustar(i) = cdrag_sqrt_Z * CS%drag_bg_vel
         endif ; endif
 
         if (use_EOS) then ; if (hwtot > 0.0) then
@@ -1922,7 +1925,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "LINEAR_DRAG) or an unresolved  velocity that is "//&
                  "combined with the resolved velocity to estimate the "//&
                  "velocity magnitude.  DRAG_BG_VEL is only used when "//&
-                 "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0)
+                 "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
                  "If true, use the equation of state in determining the "//&
                  "properties of the bottom boundary layer.  Otherwise use "//&

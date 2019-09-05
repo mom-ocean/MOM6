@@ -307,8 +307,8 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
                                                                    !! last time step [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field [m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field [L T-1 ~> m s-1]
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
@@ -639,16 +639,16 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, 
   type(ocean_grid_type),   intent(inout) :: G      !< Ocean grid
   type(verticalGrid_type), intent(in)    :: GV     !< Vertical grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: h      !< Original thicknesses
+                           intent(inout) :: h      !< Original thicknesses [H ~> m or kg-2]
   type(thermo_var_ptrs),   intent(inout) :: tv     !< Thermo vars (T/S/EOS)
   integer,                 intent(in)    :: n      !< Number of times to regrid
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: u      !< Zonal velocity
+                           intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(inout) :: v      !< Meridional velocity
+                           intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
   type(tracer_registry_type), &
                  optional, pointer       :: Reg    !< Tracer registry to remap onto new grid
-  real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding
+  real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding [s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                  optional, intent(inout) :: dzRegrid !< Final change in interface positions
   logical,       optional, intent(in)    :: initial !< Whether we're being called from an initialization
@@ -732,11 +732,11 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
                                    optional, intent(in)    :: dxInterface  !< Change in interface position
                                                                            !! [H ~> m or kg-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                                   optional, intent(inout) :: u          !< Zonal velocity component [m s-1]
+                                   optional, intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                                   optional, intent(inout) :: v          !< Meridional velocity component [m s-1]
-  logical,                         optional, intent(in)    :: debug      !< If true, show the call tree
-  real,                            optional, intent(in)    :: dt         !< time step for diagnostics
+                                   optional, intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
+  logical,                         optional, intent(in)    :: debug  !< If true, show the call tree
+  real,                            optional, intent(in)    :: dt     !< time step for diagnostics
   ! Local variables
   integer                                     :: i, j, k, m
   integer                                     :: nz, ntr
@@ -900,7 +900,7 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid
                                                                       !! [H ~> m or kg-2]
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)    :: h_dst    !< Level thickness of destination grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid
                                                                       !! [H ~> m or kg-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for

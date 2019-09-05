@@ -8,6 +8,7 @@ use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_domains, only : get_global_shape, get_domain_extent_dsamp2
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
@@ -73,54 +74,54 @@ type, public :: ocean_grid_type
                              !! set_first_direction.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid. Nd.
+    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid [nondim].
     geoLatT, &   !< The geographic latitude at q points in degrees of latitude or m.
     geoLonT, &   !< The geographic longitude at q points in degrees of longitude or m.
-    dxT, &       !< dxT is delta x at h points [m].
-    IdxT, &      !< 1/dxT [m-1].
-    dyT, &       !< dyT is delta y at h points [m].
-    IdyT, &      !< IdyT is 1/dyT [m-1].
-    areaT, &     !< The area of an h-cell [m2].
-    IareaT, &    !< 1/areaT [m-2].
+    dxT, &       !< dxT is delta x at h points [L ~> m].
+    IdxT, &      !< 1/dxT [L-1 ~> m-1].
+    dyT, &       !< dyT is delta y at h points [L ~> m].
+    IdyT, &      !< IdyT is 1/dyT [L-1 ~> m-1].
+    areaT, &     !< The area of an h-cell [L2 ~> m2].
+    IareaT, &    !< 1/areaT [L-2 ~> m-2].
     sin_rot, &   !< The sine of the angular rotation between the local model grid's northward
                  !! and the true northward directions.
     cos_rot      !< The cosine of the angular rotation between the local model grid's northward
                  !! and the true northward directions.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
+    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid [nondim].
     geoLatCu, &  !< The geographic latitude at u points in degrees of latitude or m.
     geoLonCu, &  !< The geographic longitude at u points in degrees of longitude or m.
-    dxCu, &      !< dxCu is delta x at u points [m].
-    IdxCu, &     !< 1/dxCu [m-1].
-    dyCu, &      !< dyCu is delta y at u points [m].
-    IdyCu, &     !< 1/dyCu [m-1].
-    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [m].
-    IareaCu, &   !< The masked inverse areas of u-grid cells [m2].
-    areaCu       !< The areas of the u-grid cells [m2].
+    dxCu, &      !< dxCu is delta x at u points [L ~> m].
+    IdxCu, &     !< 1/dxCu [L-1 ~> m-1].
+    dyCu, &      !< dyCu is delta y at u points [L ~> m].
+    IdyCu, &     !< 1/dyCu [L-1 ~> m-1].
+    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
+    IareaCu, &   !< The masked inverse areas of u-grid cells [L-2 ~> m-2].
+    areaCu       !< The areas of the u-grid cells [L2 ~> m2].
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
+    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid [nondim].
     geoLatCv, &  !< The geographic latitude at v points in degrees of latitude or m.
     geoLonCv, &  !< The geographic longitude at v points in degrees of longitude or m.
-    dxCv, &      !< dxCv is delta x at v points [m].
-    IdxCv, &     !< 1/dxCv [m-1].
-    dyCv, &      !< dyCv is delta y at v points [m].
-    IdyCv, &     !< 1/dyCv [m-1].
-    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [m].
-    IareaCv, &   !< The masked inverse areas of v-grid cells [m2].
-    areaCv       !< The areas of the v-grid cells [m2].
+    dxCv, &      !< dxCv is delta x at v points [L ~> m].
+    IdxCv, &     !< 1/dxCv [L-1 ~> m-1].
+    dyCv, &      !< dyCv is delta y at v points [L ~> m].
+    IdyCv, &     !< 1/dyCv [L-1 ~> m-1].
+    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
+    IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
+    areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
+    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points in degrees of latitude or m.
     geoLonBu, &  !< The geographic longitude at q points in degrees of longitude or m.
-    dxBu, &      !< dxBu is delta x at q points [m].
-    IdxBu, &     !< 1/dxBu [m-1].
-    dyBu, &      !< dyBu is delta y at q points [m].
-    IdyBu, &     !< 1/dyBu [m-1].
-    areaBu, &    !< areaBu is the area of a q-cell [m2]
-    IareaBu      !< IareaBu = 1/areaBu [m-2].
+    dxBu, &      !< dxBu is delta x at q points [L ~> m].
+    IdxBu, &     !< 1/dxBu [L-1 ~> m-1].
+    dyBu, &      !< dyBu is delta y at q points [L ~> m].
+    IdyBu, &     !< 1/dyBu [L-1 ~> m-1].
+    areaBu, &    !< areaBu is the area of a q-cell [L2 ~> m2]
+    IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: &
     gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes.
@@ -151,13 +152,16 @@ type, public :: ocean_grid_type
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     CoriolisBu    !< The Coriolis parameter at corner points [T-1 ~> s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
-    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
   real :: g_Earth !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
 
-  ! These variables are global sums that are useful for 1-d diagnostics
+  ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
   real :: areaT_global  !< Global sum of h-cell area [m2]
-  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m2].
+  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m-2].
+
+  type(unit_scale_type), pointer :: US => NULL() !< A dimensional unit scaling type
+
 
   ! These variables are for block structures.
   integer :: nblocks  !< The number of sub-PE blocks on this PE
@@ -176,9 +180,10 @@ end type ocean_grid_type
 contains
 
 !> MOM_grid_init initializes the ocean grid array sizes and grid memory.
-subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
+subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_vel)
   type(ocean_grid_type), intent(inout) :: G          !< The horizontal grid type
   type(param_file_type), intent(in)    :: param_file !< Parameter file handle
+  type(unit_scale_type), optional, pointer :: US !< A dimensional unit scaling type
   type(hor_index_type), &
                   optional, intent(in) :: HI !< A hor_index_type for array extents
   logical,        optional, intent(in) :: global_indexing !< If true use global index
@@ -213,6 +218,8 @@ subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
   call get_param(param_file, mod_nm, "NJBLOCK", njblock, "The number of blocks "// &
                  "in the y-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
+
+  if (present(US)) then ; if (associated(US)) G%US => US ; endif
 
   if (present(HI)) then
     G%HI = HI
@@ -402,8 +409,9 @@ subroutine rescale_grid_bathymetry(G, m_in_new_units)
 end subroutine rescale_grid_bathymetry
 
 !> set_derived_metrics calculates metric terms that are derived from other metrics.
-subroutine set_derived_metrics(G)
-  type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
+subroutine set_derived_metrics(G, US)
+  type(ocean_grid_type), intent(inout) :: G  !< The horizontal grid structure
+  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
   integer :: i, j, isd, ied, jsd, jed

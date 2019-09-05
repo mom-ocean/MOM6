@@ -128,11 +128,11 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
       ! update thickness mask
 
-      if (area_shelf_h (i,j) >= G%areaT(i,j)) then
+      if (area_shelf_h (i,j) >= US%L_to_m**2*G%areaT(i,j)) then
         hmask(i,j) = 1.
       elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
-      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
+      elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= US%L_to_m**2*G%areaT(i,j))) then
         hmask(i,j) = 2.
       else
         call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
@@ -206,11 +206,11 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
           h_shelf (i,j) = 0.0
         else
           if (G%geoLonCu(i,j) > edge_pos) then
-            area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                             (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
             hmask (i,j) = 2.0
           else
-            area_shelf_h(i,j) = G%areaT(i,j)
+            area_shelf_h(i,j) = US%L_to_m**2*G%areaT(i,j)
             hmask (i,j) = 1.0
           endif
 

@@ -1,5 +1,5 @@
 !> Top-level module for the MOM6 ocean model in coupled mode.
-module MOM_ocean_model
+module MOM_ocean_model_nuopc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -11,57 +11,57 @@ module MOM_ocean_model
 ! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
 ! in the same way as MOM4.
 
-use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
-use MOM, only : get_MOM_state_elements, MOM_state_is_synchronized
-use MOM, only : get_ocean_stocks, step_offline
-use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
-use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
-use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
-use MOM_domains, only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
-use MOM_domains, only : TO_ALL, Omit_Corners
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_error_handler, only : callTree_enter, callTree_leave
-use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
-use MOM_forcing_type, only : allocate_forcing_type
-use MOM_forcing_type, only : forcing, mech_forcing
-use MOM_forcing_type, only : forcing_accumulate, copy_common_forcing_fields
-use MOM_forcing_type, only : copy_back_forcing_fields, set_net_mass_forcing
-use MOM_forcing_type, only : set_derived_forcing_fields
-use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
-use MOM_get_input, only : Get_MOM_Input, directories
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, file_exists, read_data, write_version_number
-use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
-use MOM_restart, only : MOM_restart_CS, save_restart
-use MOM_string_functions, only : uppercase
-use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
-use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
-use MOM_surface_forcing, only : forcing_save_restart
-use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
-use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager, only : operator(/=), operator(<=), operator(>=)
-use MOM_time_manager, only : operator(<), real_to_time_type, time_type_to_real
+use MOM,                     only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
+use MOM,                     only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
+use MOM,                     only : get_MOM_state_elements, MOM_state_is_synchronized
+use MOM,                     only : get_ocean_stocks, step_offline
+use MOM_constants,           only : CELSIUS_KELVIN_OFFSET, hlf
+use MOM_diag_mediator,       only : diag_ctrl, enable_averaging, disable_averaging
+use MOM_diag_mediator,       only : diag_mediator_close_registration, diag_mediator_end
+use MOM_domains,             only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains,             only : TO_ALL, Omit_Corners
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,       only : callTree_enter, callTree_leave
+use MOM_file_parser,         only : get_param, log_version, close_param_file, param_file_type
+use MOM_forcing_type,        only : allocate_forcing_type
+use MOM_forcing_type,        only : forcing, mech_forcing
+use MOM_forcing_type,        only : forcing_accumulate, copy_common_forcing_fields
+use MOM_forcing_type,        only : copy_back_forcing_fields, set_net_mass_forcing
+use MOM_forcing_type,        only : set_derived_forcing_fields
+use MOM_forcing_type,        only : forcing_diagnostics, mech_forcing_diags
+use MOM_get_input,           only : Get_MOM_Input, directories
+use MOM_grid,                only : ocean_grid_type
+use MOM_io,                  only : close_file, file_exists, read_data, write_version_number
+use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
+use MOM_restart,             only : MOM_restart_CS, save_restart
+use MOM_string_functions,    only : uppercase
+use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
+use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
+use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
+use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling,        only : unit_scale_type
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
-use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
-use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
-use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data
-use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
-use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
-use fms_mod, only : stdout
-use mpp_mod, only : mpp_chksum
-use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
+use MOM_variables,           only : surface
+use MOM_verticalGrid,        only : verticalGrid_type
+use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
+use MOM_ice_shelf,           only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
+use coupler_types_mod,       only : coupler_1d_bc_type, coupler_2d_bc_type
+use coupler_types_mod,       only : coupler_type_spawn, coupler_type_write_chksums
+use coupler_types_mod,       only : coupler_type_initialized, coupler_type_copy_data
+use coupler_types_mod,       only : coupler_type_set_diags, coupler_type_send_data
+use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain
+use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
+use atmos_ocean_fluxes_mod,  only : aof_set_coupler_flux
+use fms_mod,                 only : stdout
+use mpp_mod,                 only : mpp_chksum
+use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_wave_interface,      only: wave_parameters_CS, MOM_wave_interface_init
+use MOM_wave_interface,      only: MOM_wave_interface_init_lite, Update_Surface_Waves
+use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxes
+use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
+use MOM_surface_forcing_nuopc, only : forcing_save_restart
 
 #include <MOM_memory.h>
 
@@ -260,7 +260,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: use_temperature
-  type(time_type) :: dt_geometric, dt_savedays, dt_from_base
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
@@ -409,7 +408,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
     call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
-    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 
   endif
 
@@ -476,7 +475,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   integer :: secs, days
   integer :: is, ie, js, je
 
-  call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
+  call callTree_enter("update_ocean_model(), MOM_ocean_model_nuopc.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
   dt_coupling = 86400.0*real(days) + real(secs)
 
@@ -520,7 +519,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       if (do_thermo) &
         call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+        call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
@@ -551,7 +550,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       if (do_thermo) &
         call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+        call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
@@ -672,7 +671,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
   call coupler_type_send_data(Ocean_sfc%fields, OS%Time)
 
   call callTree_leave("update_ocean_model()")
@@ -846,7 +845,7 @@ end subroutine initialize_ocean_public_type
 !! code that calculates the surface state in the first place.
 !! Note the offset in the arrays because the ocean_data_type has no
 !! halo points in its arrays and always uses absolute indicies.
-subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z)
+subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_to_z)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                !! describe the surface state of the ocean.
   type(ocean_public_type), &
@@ -854,6 +853,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
                                                !! visible ocean surface fields, whose elements
                                                !! have their data set here.
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface, in Pa.
   real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
                                                !! ocean depth in m, usually 1/(rho_0*g), in m Pa-1.
@@ -900,12 +900,12 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, patm, press_to_z
   if (present(patm)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
-      Ocean_sfc%area(i,j) = G%areaT(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
     enddo ; enddo
   else
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0)
-      Ocean_sfc%area(i,j) = G%areaT(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = US%L_to_m**2*G%areaT(i+i0,j+j0)
     enddo ; enddo
   endif
 
@@ -979,7 +979,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 
 end subroutine ocean_model_init_sfc
 
@@ -1077,7 +1077,7 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
 
   select case(name)
   case('area')
-     array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+     array2D(isc:,jsc:) = OS%US%L_to_m**2*OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
   case('mask')
      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
 !OR same result
@@ -1175,4 +1175,4 @@ subroutine get_ocean_grid(OS, Gridp)
   return
 end subroutine get_ocean_grid
 
-end module MOM_ocean_model
+end module MOM_ocean_model_nuopc
