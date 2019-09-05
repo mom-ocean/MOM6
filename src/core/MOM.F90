@@ -2123,7 +2123,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (associated(CS%OBC)) &
-    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, restart_CSp)
+    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
+                          param_file, restart_CSp, use_temperature)
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
@@ -2161,6 +2162,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                             CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
+
+! ! Need this after MOM_initialize_state for DOME OBC stuff.
+! if (associated(CS%OBC)) &
+!   call open_boundary_register_restarts(G%HI, GV, CS%OBC, CS%tracer_Reg, &
+!                         param_file, restart_CSp, use_temperature)
+
+! call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   ! From this point, there may be pointers being set, so the final grid type
   ! that will persist throughout the run has to be used.
