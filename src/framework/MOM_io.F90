@@ -57,6 +57,7 @@ use fms2_io_mod,          only: get_dimension_size, &
                                 file_exists, &
                                 FmsNetcdfDomainFile_t, &
                                 FmsNetcdfFile_t, & 
+                                FmsNetcdfUnstructuredDomainFile_t, &
                                 unlimited
 
 use netcdf
@@ -80,6 +81,7 @@ public :: dimension_exists
 public :: file_exists
 public :: FmsNetcdfFile_t
 public :: FmsNetcdfDomainFile_t
+public :: FmsNetcdfUnstructuredDomainFile_t
 public :: get_compute_domain_dimension_indices
 public :: get_dimension_size
 public :: get_global_io_domain_indices
@@ -148,6 +150,7 @@ interface MOM_open_file
   module procedure MOM_open_file_DD_supergrid
   module procedure MOM_open_file_DD_dyn_horgrid
   module procedure MOM_open_file_noDD
+  module procedure MOM_open_file_unstruct_dyn_horgrid
 end interface
 !> Register axes to a netCDF file
 interface MOM_register_axis
@@ -1336,7 +1339,8 @@ function ensembler(name, ens_no_in) result(en_nm)
 end function ensembler
 
 !> Open domain-decomposed file(s) with the base file name
-!! 'filename' to read from or write/append to. The domain comes from the ocean_grid_type structure G.
+!! 'filename' to read or write/append data.  
+!! The domain comes from the ocean_grid_type structure G.
 function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
   type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
@@ -1398,7 +1402,8 @@ function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) r
 end function MOM_open_file_DD_supergrid
 
 !> Open domain-decomposed file with the base file name
-!! 'filename' to read from or write/append to. The domain comes from the dyn_horgrid_type structure G.
+!! 'filename' to read, or write/append data. 
+!! The domain comes from the dyn_horgrid_type structure G.
 function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
   type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
@@ -1428,7 +1433,7 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
   end select     
 end function MOM_open_file_DD_dyn_horgrid
 !> Open non-domain-decomposed file(s) with the base file name
-!! 'filename' to read from or write/append to. The domain comes from the ocean_grid_type structure G.
+!! 'filename' to read, write/append data.
 function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
   type(FmsNetcdfFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
@@ -1456,8 +1461,37 @@ function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
   end select     
 end function MOM_open_file_noDD
+!> Open file(s)  with the base file name
+!! 'filename' to read, or write/append data on an unstructured grid . 
+!! The domain comes from the dyn_horgrid_type structure G.
+function MOM_open_file_unstruct_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+  type(FmsNetcdfUnstructuredDomainFile_t), intent(inout) :: MOMfileObj !< netCDF unstructured grid file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  type(dyn_horgrid_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
 
-
+  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg      ! A message for warnings.
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                                      G%Domain%mpp_domain, is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                      G%Domain%mpp_domain, is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                         G%Domain%mpp_domain, is_restart = is_restart)
+        endif
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_unstruct: "//mesg)
+  end select     
+end function MOM_open_file_unstruct_dyn_horgrid
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
