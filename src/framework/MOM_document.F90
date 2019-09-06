@@ -1,13 +1,8 @@
+!> The subroutines here provide hooks for document generation functions at
+!! various levels of granularity.
 module MOM_document
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    The subroutines here provide hooks for document generation       *
-!*  functions at various levels of granularity.                        *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_time_manager, only : time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
@@ -17,6 +12,7 @@ implicit none ; private
 public doc_param, doc_subroutine, doc_function, doc_module, doc_init, doc_end
 public doc_openBlock, doc_closeBlock
 
+!> Document parameter values
 interface doc_param
   module procedure doc_param_none, &
                    doc_param_logical, doc_param_logical_array, &
@@ -26,36 +22,38 @@ interface doc_param
                    doc_param_time
 end interface
 
-integer, parameter :: mLen = 1240 ! Length of interface/message strings
+integer, parameter :: mLen = 1240 !< Length of interface/message strings
 
 !> A structure that controls where the documentation occurs, its veborsity and formatting.
 type, public :: doc_type ; private
-  integer :: unitAll = -1           ! The open unit number for docFileBase + .all.
-  integer :: unitShort = -1         ! The open unit number for docFileBase + .short.
-  integer :: unitLayout = -1        ! The open unit number for docFileBase + .layout.
-  integer :: unitDebugging  = -1    ! The open unit number for docFileBase + .debugging.
-  logical :: filesAreOpen = .false. ! True if any files were successfully opened.
-  character(len=mLen) :: docFileBase = '' ! The basename of the files where run-time
-                                    ! parameters, settings and defaults are documented.
-  logical :: complete = .true.      ! If true, document all parameters.
-  logical :: minimal = .true.       ! If true, document non-default parameters.
-  logical :: layout = .true.        ! If true, document layout parameters.
-  logical :: debugging = .true.     ! If true, document debugging parameters.
-  logical :: defineSyntax = .false. ! If true, use #def syntax instead of a=b syntax
-  logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
-  integer :: commentColumn = 32     ! Number of spaces before the comment marker.
-  type(link_msg), pointer :: chain_msg => NULL() ! Db of messages
-  character(len=240) :: blockPrefix = '' ! The full name of the current block.
+  integer :: unitAll = -1           !< The open unit number for docFileBase + .all.
+  integer :: unitShort = -1         !< The open unit number for docFileBase + .short.
+  integer :: unitLayout = -1        !< The open unit number for docFileBase + .layout.
+  integer :: unitDebugging  = -1    !< The open unit number for docFileBase + .debugging.
+  logical :: filesAreOpen = .false. !< True if any files were successfully opened.
+  character(len=mLen) :: docFileBase = '' !< The basename of the files where run-time
+                                    !! parameters, settings and defaults are documented.
+  logical :: complete = .true.      !< If true, document all parameters.
+  logical :: minimal = .true.       !< If true, document non-default parameters.
+  logical :: layout = .true.        !< If true, document layout parameters.
+  logical :: debugging = .true.     !< If true, document debugging parameters.
+  logical :: defineSyntax = .false. !< If true, use '\#def' syntax instead of a=b syntax
+  logical :: warnOnConflicts = .false. !< Cause a WARNING error if defaults differ.
+  integer :: commentColumn = 32     !< Number of spaces before the comment marker.
+  integer :: max_line_len = 112     !< The maximum length of message lines.
+  type(link_msg), pointer :: chain_msg => NULL() !< Database of messages
+  character(len=240) :: blockPrefix = '' !< The full name of the current block.
 end type doc_type
 
+!> A linked list of the parameter documentation messages that have been issued so far.
 type :: link_msg ; private
-  type(link_msg), pointer :: next => NULL()  ! Facilitates linked list
-  character(len=80) :: name                  ! Parameter name
-  character(len=620) :: msg                  ! Parameter value and default
+  type(link_msg), pointer :: next => NULL()  !< Facilitates linked list
+  character(len=80) :: name                  !< Parameter name
+  character(len=620) :: msg                  !< Parameter value and default
 end type link_msg
 
-character(len=4), parameter :: STRING_TRUE = 'True'
-character(len=5), parameter :: STRING_FALSE = 'False'
+character(len=4), parameter :: STRING_TRUE  = 'True'  !< A string for true logicals
+character(len=5), parameter :: STRING_FALSE = 'False' !< A string for false logicals
 
 contains
 
@@ -460,9 +458,16 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   integer, optional, intent(in) :: indent      !< An amount by which to indent this message
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
-  character(len=mLen) :: mesg
-  integer :: start_ind = 1, end_ind, indnt, tab, len_tab, len_nl
-  logical :: all, short, layout, debug
+
+  ! Local variables
+  character(len=mLen) :: mesg          ! A full line of a message including indents.
+  character(len=mLen) :: mesg_text     ! A line of message text without preliminary indents.
+  integer :: start_ind = 1             ! The starting index in the description for the next line.
+  integer :: nl_ind, tab_ind, end_ind  ! The indices of new-lines, tabs, and the end of a line.
+  integer :: len_text, len_tab, len_nl ! The lengths of the text string, tabs and new-lines.
+  integer :: indnt, msg_pad            ! Space counts used to format a message.
+  logical :: msg_done, reset_msg_pad   ! Logicals used to format messages.
+  logical :: all, short, layout, debug ! Flags indicating which files to write into.
 
   layout = .false. ; if (present(layoutParam)) layout = layoutParam
   debug = .false. ; if (present(debuggingParam)) debug = debuggingParam
@@ -478,41 +483,64 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   if (len_trim(desc) == 0) return
 
   len_tab = len_trim("_\t_") - 2
-  len_nl = len_trim("_\n_") -2
+  len_nl = len_trim("_\n_") - 2
 
   indnt = doc%commentColumn ; if (present(indent)) indnt = indent
-  start_ind = 1
+  len_text = doc%max_line_len - (indnt + 2)
+  start_ind = 1 ; msg_pad = 0 ; msg_done = .false.
   do
     if (len_trim(desc(start_ind:)) < 1) exit
 
-    end_ind = index(desc(start_ind:), "\n")
+    nl_ind = index(desc(start_ind:), "\n")
 
-    if (end_ind > 0) then
-      mesg = repeat(" ",indnt)//"! "//trim(desc(start_ind:start_ind+end_ind-2))
-      start_ind = start_ind + end_ind - 1 + len_nl
-
-      do ; tab = index(mesg, "\t")
-        if (tab == 0) exit
-        mesg(tab:) = "  "//trim(mesg(tab+len_tab:))
-      enddo
-      if (all) write(doc%unitAll, '(a)') trim(mesg)
-      if (short) write(doc%unitShort, '(a)') trim(mesg)
-      if (layout) write(doc%unitLayout, '(a)') trim(mesg)
-      if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
-    else
-      mesg = repeat(" ",indnt)//"! "//trim(desc(start_ind:))
-      do ; tab = index(mesg, "\t")
-        if (tab == 0) exit
-        mesg(tab:) = "  "//trim(mesg(tab+len_tab:))
-      enddo
-      if (all) write(doc%unitAll, '(a)') trim(mesg)
-      if (short) write(doc%unitShort, '(a)') trim(mesg)
-      if (layout) write(doc%unitLayout, '(a)') trim(mesg)
-      if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
-      exit
+    end_ind = 0
+    if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_text-msg_pad)) then
+      ! This line is too long despite the new-line character.  Look for an earlier space to break.
+      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
+      if (end_ind > 0) nl_ind = 0
+    elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_text-msg_pad)) then
+      ! This line is too long and does not have a new-line character.  Look for a space to break.
+      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
     endif
 
+    reset_msg_pad = .false.
+    if (nl_ind > 0) then
+      mesg_text = trim(desc(start_ind:start_ind+nl_ind-2))
+      start_ind = start_ind + nl_ind + len_nl - 1
+      reset_msg_pad = .true.
+    elseif (end_ind > 0) then
+      mesg_text = trim(desc(start_ind:start_ind+end_ind))
+      start_ind = start_ind + end_ind + 1
+      ! Adjust the starting point to move past leading spaces.
+      start_ind = start_ind + (len_trim(desc(start_ind:)) - len_trim(adjustl(desc(start_ind:))))
+    else
+      mesg_text = trim(desc(start_ind:))
+      msg_done = .true.
+    endif
+
+    do ; tab_ind = index(mesg_text, "\t") ! Replace \t with 2 spaces.
+      if (tab_ind == 0) exit
+      mesg_text(tab_ind:) = "  "//trim(mesg_text(tab_ind+len_tab:))
+    enddo
+
+    mesg = repeat(" ",indnt)//"! "//repeat(" ",msg_pad)//trim(mesg_text)
+
+    if (reset_msg_pad) then
+      msg_pad = 0
+    elseif (msg_pad == 0) then ! Indent continuation lines.
+      msg_pad = len_trim(mesg_text) - len_trim(adjustl(mesg_text))
+      ! If already indented, indent an additional 2 spaces.
+      if (msg_pad >= 2) msg_pad = msg_pad + 2
+    endif
+
+    if (all) write(doc%unitAll, '(a)') trim(mesg)
+    if (short) write(doc%unitShort, '(a)') trim(mesg)
+    if (layout) write(doc%unitLayout, '(a)') trim(mesg)
+    if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
+
+    if (msg_done) exit
   enddo
+
 end subroutine writeMessageAndDesc
 
 ! ----------------------------------------------------------------------
@@ -737,6 +765,7 @@ end subroutine doc_function
 
 ! ----------------------------------------------------------------------
 
+!> Initialize the parameter documentation
 subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
   character(len=*),  intent(in)  :: docFileBase !< The base file name for this set of parameters,
                                              !! for example MOM_parameter_doc
@@ -750,8 +779,6 @@ subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
                                              !! the layout parameters
   logical, optional, intent(in)  :: debugging !< If present and true, write out the (.debugging) files documenting
                                              !! the debugging parameters
-! Arguments: docFileBase - The name of the doc file.
-!  (inout)   doc - The doc_type to populate.
 
   if (.not. associated(doc)) then
     allocate(doc)
@@ -765,7 +792,7 @@ subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
 
 end subroutine doc_init
 
-!< This subroutine allocates and populates a structure that controls where the
+!> This subroutine allocates and populates a structure that controls where the
 !! documentation occurs and its formatting, and opens up the files controlled
 !! by this structure
 subroutine open_doc_file(doc)
@@ -865,7 +892,7 @@ subroutine open_doc_file(doc)
 
 end subroutine open_doc_file
 
-! Find an unused unit number, returning >0 if found, and triggering a FATAL error if not.
+!> Find an unused unit number, returning >0 if found, and triggering a FATAL error if not.
 function find_unused_unit_number()
 ! Find an unused unit number.
 ! Returns >0 if found. FATAL if not.
@@ -879,12 +906,12 @@ function find_unused_unit_number()
     "doc_init failed to find an unused unit number.")
 end function find_unused_unit_number
 
-!< This subroutine closes the the files controlled by doc, and sets flags in
+!> This subroutine closes the the files controlled by doc, and sets flags in
 !! doc to indicate that parameterization is no longer permitted.
 subroutine doc_end(doc)
   type(doc_type), pointer :: doc !< A pointer to a structure that controls where the
                                  !! documentation occurs and its formatting
-  type(link_msg), pointer :: this, next
+  type(link_msg), pointer :: this => NULL(), next => NULL()
 
   if (.not.associated(doc)) return
 
@@ -929,7 +956,7 @@ function mesgHasBeenDocumented(doc,varName,mesg)
                                         !! to compare with the message that was written previously
   logical                       :: mesgHasBeenDocumented
 ! Returns true if documentation has already been written
-  type(link_msg), pointer :: newLink, this, last
+  type(link_msg), pointer :: newLink => NULL(), this => NULL(), last => NULL()
 
   mesgHasBeenDocumented = .false.
 

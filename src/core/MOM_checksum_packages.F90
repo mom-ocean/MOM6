@@ -1,14 +1,16 @@
+!> Provides routines that do checksums of groups of MOM variables
 module MOM_checksum_packages
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!   This module provdes a several routines that do check-sums of groups
+!   This module provides several routines that do check-sums of groups
 ! of variables in the various dynamic solver routines.
 
 use MOM_debugging, only : hchksum, uvchksum
 use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -17,6 +19,7 @@ implicit none ; private
 public MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
 public MOM_state_stats, MOM_surface_chksum
 
+!> Write out checksums of the MOM6 state variables
 interface MOM_state_chksum
   module procedure MOM_state_chksum_5arg
   module procedure MOM_state_chksum_3arg
@@ -24,109 +27,103 @@ end interface
 
 #include <MOM_memory.h>
 
-type :: stats
-  private
-  real :: minimum = 1.E34, maximum = -1.E34, average = 0.
+!> A type for storing statistica about a variable
+type :: stats ; private
+  real :: minimum = 1.E34  !< The minimum value
+  real :: maximum = -1.E34 !< The maximum value
+  real :: average = 0.     !< The average value
 end type stats
 
 contains
 
 ! =============================================================================
 
-subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmetric)
+!> Write out chksums for the model's basic state variables, including transports.
+subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, symmetric, vel_scale)
   character(len=*),                          &
                            intent(in) :: mesg !< A message that appears on the chksum lines.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: u    !< The zonal velocity, in m s-1.
+                           intent(in) :: u    !< The zonal velocity [L T-1 ~> m s-1] or other units.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in) :: v    !< The meridional velocity, in m s-1.
+                           intent(in) :: v    !< The meridional velocity [L T-1 ~> m s-1] or other units.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: uh   !< Volume flux through zonal faces = u*h*dy, m3 s-1.
+                           intent(in) :: uh   !< Volume flux through zonal faces = u*h*dy
+                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in) :: vh   !< Volume flux through meridional
-                                              !! faces = v*h*dx, in m3 s-1.
+                           intent(in) :: vh   !< Volume flux through meridional faces = v*h*dx
+                                              !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
-                                                   !! computationoal domain.
-!   This subroutine writes out chksums for the model's basic state variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-  integer :: is, ie, js, je, nz, hs
+                                                   !! computational domain.
+  real,          optional, intent(in) :: vel_scale !< The scaling factor to convert velocities to [m s-1]
+
+  real :: scale_vel ! The scaling factor to convert velocities to [m s-1]
   logical :: sym
+  integer :: is, ie, js, je, nz, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  hs=1; if (present(haloshift)) hs=haloshift
-  sym=.false.; if (present(symmetric)) sym=symmetric
-  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym)
+  hs = 1 ; if (present(haloshift)) hs=haloshift
+  sym = .false. ; if (present(symmetric)) sym=symmetric
+  scale_vel = US%L_T_to_m_s ; if (present(vel_scale)) scale_vel = vel_scale
+
+  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym, scale=scale_vel)
   call hchksum(h, mesg//" h", G%HI, haloshift=hs, scale=GV%H_to_m)
   call uvchksum(mesg//" [uv]h", uh, vh, G%HI, haloshift=hs, &
-                symmetric=sym, scale=GV%H_to_m)
+                symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
 
-subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift, symmetric)
-  character(len=*),        intent(in) :: mesg !< A message that appears on the chksum lines.
-  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+!> Write out chksums for the model's basic state variables.
+subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric)
+  character(len=*),                intent(in) :: mesg !< A message that appears on the chksum lines.
+  type(ocean_grid_type),           intent(in) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),         intent(in) :: GV !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: u    !< Zonal velocity, in m s-1.
+                                   intent(in) :: u  !< Zonal velocity [L T-1 ~> m s-1] or [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in) :: v    !< Meridional velocity, in m s-1.
+                                   intent(in) :: v  !< Meridional velocity [L T-1 ~> m s-1] or [m s-1]..
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2).
-  integer,       optional, intent(in) :: haloshift !< The width of halos to check (default 0).
-  logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
-                                                   !! computationoal domain.
-!   This subroutine writes out chksums for the model's basic state variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
+                                   intent(in) :: h  !< Layer thicknesses [H ~> m or kg m-2].
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type, which is
+                                                    !! used to rescale u and v if present.
+  integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0).
+  logical,               optional, intent(in) :: symmetric !< If true, do checksums on the fully
+                                                    !! symmetric computational domain.
+  real :: L_T_to_m_s ! A rescaling factor for velocities [m T s-1 L-1 ~> nondim] or [nondim]
   integer :: is, ie, js, je, nz, hs
   logical :: sym
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  L_T_to_m_s = 1.0 ; if (present(US)) L_T_to_m_s = US%L_T_to_m_s
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   hs=1; if (present(haloshift)) hs=haloshift
   sym=.false.; if (present(symmetric)) sym=symmetric
-  call uvchksum(mesg//" u", u, v, G%HI,haloshift=hs, symmetric=sym)
+  call uvchksum(mesg//" u", u, v, G%HI, haloshift=hs, symmetric=sym, scale=L_T_to_m_s)
   call hchksum(h, mesg//" h",G%HI, haloshift=hs, scale=GV%H_to_m)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
 
+!> Write out chksums for the model's thermodynamic state variables.
 subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
   character(len=*),         intent(in) :: mesg !< A message that appears on the chksum lines.
   type(thermo_var_ptrs),    intent(in) :: tv   !< A structure pointing to various
                                                !! thermodynamic variables.
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure.
   integer,        optional, intent(in) :: haloshift !< The width of halos to check (default 0).
-!   This subroutine writes out chksums for the model's thermodynamic state
-! variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      tv - A structure containing pointers to any thermodynamic
-!                 fields that are in use.
-!  (in)      G - The ocean's grid structure.
+
   integer :: is, ie, js, je, nz, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   hs=1; if (present(haloshift)) hs=haloshift
@@ -140,6 +137,7 @@ end subroutine MOM_thermo_chksum
 
 ! =============================================================================
 
+!> Write out chksums for the ocean surface variables.
 subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   character(len=*),      intent(in) :: mesg !< A message that appears on the chksum lines.
   type(surface),         intent(inout) :: sfc !< transparent ocean surface state
@@ -148,13 +146,8 @@ subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   integer,     optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,     optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
-                                                 !! computationoal domain.
-!   This subroutine writes out chksums for the model's thermodynamic state
-! variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      tv - A structure containing pointers to any thermodynamic
-!                 fields that are in use.
-!  (in)      G - The ocean's grid structure.
+                                                 !! computational domain.
+
   integer :: hs
   logical :: sym
 
@@ -174,65 +167,44 @@ end subroutine MOM_surface_chksum
 
 ! =============================================================================
 
-subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce, &
+!> Write out chksums for the model's accelerations
+subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, pbce, &
                             u_accel_bt, v_accel_bt, symmetric)
   character(len=*),         intent(in) :: mesg !< A message that appears on the chksum lines.
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in) :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: CAu  !< Zonal acceleration due to Coriolis
-                                               !! and momentum advection terms, in m s-2.
+                                               !! and momentum advection terms [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: CAv  !< Meridional acceleration due to Coriolis
-                                               !! and momentum advection terms, in m s-2.
+                                               !! and momentum advection terms [L T-2 ~> m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: PFu  !< Zonal acceleration due to pressure gradients
-                                               !! (equal to -dM/dx) in m s-2.
+                                               !! (equal to -dM/dx) [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: PFv  !< Meridional acceleration due to pressure gradients
-                                               !! (equal to -dM/dy) in m s-2.
+                                               !! (equal to -dM/dy) [L T-2 ~> m s-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: diffu !< Zonal acceleration due to convergence of the
-                                                !! along-isopycnal stress tensor, in m s-2.
+                                                !! along-isopycnal stress tensor [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: diffv !< Meridional acceleration due to convergence of
-                                                !! the along-isopycnal stress tensor, in m s-2.
+                                                !! the along-isopycnal stress tensor [L T-2 ~> m s-2].
+  type(unit_scale_type),    intent(in) :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
-                                               !! due to free surface height anomalies, in
-                                               !! m2 s-2 H-1.
+                                               !! due to free surface height anomalies
+                                               !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                   optional, intent(in) :: u_accel_bt !< The zonal acceleration from terms in the
-                                                     !! barotropic solver,in m s-2.
+                                                     !! barotropic solver [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                   optional, intent(in) :: v_accel_bt !< The meridional acceleration from terms in
-                                                     !! the barotropic solver,in m s-2.
+                                                     !! the barotropic solver [L T-2 ~> m s-2].
   logical,        optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
-                                                    !! computationoal domain.
+                                                    !! computational domain.
 
-!   This subroutine writes out chksums for the model's accelerations.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      CAu - Zonal acceleration due to Coriolis and momentum
-!                  advection terms, in m s-2.
-!  (in)      CAv - Meridional acceleration due to Coriolis and
-!                  momentum advection terms, in m s-2.
-!  (in)      PFu - Zonal acceleration due to pressure gradients
-!                  (equal to -dM/dx) in m s-2.
-!  (in)      PFv - Meridional acceleration due to pressure
-!                  gradients (equal to -dM/dy) in m s-2.
-!  (in)      diffu - Zonal acceleration due to convergence of the
-!                    along-isopycnal stress tensor, in m s-2.
-!  (in)      diffv - Meridional acceleration due to convergence of
-!                    the along-isopycnal stress tensor, in m s-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m2 s-2 H-1.
-!                   pbce points to a space with nz layers or NULL.
-!  (in)      u_accel_bt - The zonal acceleration from terms in the barotropic
-!                         solver, in m s-2.
-!  (in)      v_accel_bt - The meridional acceleration from terms in the
-!                         barotropic solver, in m s-2.
   integer :: is, ie, js, je, nz
   logical :: sym
 
@@ -242,67 +214,69 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym)
-  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym)
-  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym)
+  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
+  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
+  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
   if (present(pbce)) &
-    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H)
+    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H*US%L_T_to_m_s**2)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
-    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym)
+    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym, &
+                  scale=US%L_T2_to_m_s2)
 end subroutine MOM_accel_chksum
 
 ! =============================================================================
 
-subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDiminishing)
+!> Monitor and write out statistics for the model's state variables.
+subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, permitDiminishing)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   character(len=*),        intent(in) :: mesg !< A message that appears on the chksum lines.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: u    !< The zonal velocity, in m s-1.
+                           intent(in) :: u    !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in) :: v    !< The meridional velocity, in m s-1.
+                           intent(in) :: v    !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:),           &
-                           intent(in) :: Temp !< Temperature in degree C.
+                           intent(in) :: Temp !< Temperature [degC].
   real, pointer, dimension(:,:,:),           &
-                           intent(in) :: Salt !< Salinity, in ppt.
+                           intent(in) :: Salt !< Salinity [ppt].
+  type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
   logical,       optional, intent(in) :: allowChange !< do not flag an error
                                                      !! if the statistics change.
-  logical,       optional, intent(in) :: permitDiminishing !< do not flag error
-                                                           !!if the extrema are diminishing.
-!   This subroutine monitors statistics for the model's state variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in) u - Zonal velocity, in m s-1.
-!  (in) v - Meridional velocity, in m s-1.
-!  (in) h - Layer thickness, in m.
-!  (in) T - Temperature, in degree C.
-!  (in) S - Salinity, in ppt.
-!  (in) G - The ocean's grid structure.
-!  (in) allowChange - do not flag an error if the statistics change
-!  (in) permitDiminishing - do not flag an error if the extrema are diminishing
-  integer :: is, ie, js, je, nz, i, j, k
-  real :: Vol, dV, Area, h_minimum
-  type(stats) :: T, S, delT, delS
-  type(stats), save :: oldT, oldS     ! NOTE: save data is not normally allowed but
-  logical, save :: firstCall = .true. ! we use it for debugging purposes here on the
-  logical :: do_TS
-  real, save :: oldVol                ! assumption we will not turn this on with threads
-  character(len=80) :: lMsg
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  logical,       optional, intent(in) :: permitDiminishing !< do not flag error if the
+                                                           !! extrema are diminishing.
 
+  ! Local variables
+  real :: Vol, dV    ! The total ocean volume and its change [m3] (unscaled to permit reproducing sum).
+  real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
+  real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
+  logical :: do_TS   ! If true, evaluate statistics for temperature and salinity
+  type(stats) :: T, S, delT, delS
+
+  ! NOTE: save data is not normally allowed but we use it for debugging purposes here on the
+  !       assumption we will not turn this on with threads
+  type(stats), save :: oldT, oldS
+  logical, save :: firstCall = .true.
+  real, save :: oldVol ! The previous total ocean volume [m3]
+
+  character(len=80) :: lMsg
+  integer :: is, ie, js, je, nz, i, j, k
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   do_TS = associated(Temp) .and. associated(Salt)
 
   ! First collect local stats
   Area = 0. ; Vol = 0.
   do j = js, je ; do i = is, ie
-    Area = Area + G%areaT(i,j)
+    Area = Area + US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
   T%minimum = 1.E34 ; T%maximum = -1.E34 ; T%average = 0.
   S%minimum = 1.E34 ; S%maximum = -1.E34 ; S%average = 0.
-  h_minimum = 1.E34
+  h_minimum = 1.E34*GV%m_to_H
   do k = 1, nz ; do j = js, je ; do i = is, ie
     if (G%mask2dT(i,j)>0.) then
-      dV = G%areaT(i,j)*h(i,j,k) ; Vol = Vol + dV
+      dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_m*h(i,j,k) ; Vol = Vol + dV
       if (do_TS .and. h(i,j,k)>0.) then
         T%minimum = min( T%minimum, Temp(i,j,k) ) ; T%maximum = max( T%maximum, Temp(i,j,k) )
         T%average = T%average + dV*Temp(i,j,k)
@@ -325,7 +299,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
       delT%average = T%average - oldT%average
       delS%minimum = S%minimum - oldS%minimum ; delS%maximum = S%maximum - oldS%maximum
       delS%average = S%average - oldS%average
-      write(lMsg(1:80),'(2(a,es12.4))') 'Mean thickness =',Vol/Area,' frac. delta=',dV/Vol
+      write(lMsg(1:80),'(2(a,es12.4))') 'Mean thickness =', Vol/Area,' frac. delta=',dV/Vol
       call MOM_mesg(lMsg//trim(mesg))
       if (do_TS) then
         write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
@@ -338,12 +312,12 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
         call MOM_mesg(lMsg//trim(mesg))
       endif
     else
-      write(lMsg(1:80),'(a,es12.4)') 'Mean thickness =',Vol/Area
+      write(lMsg(1:80),'(a,es12.4)') 'Mean thickness =', Vol/Area
       call MOM_mesg(lMsg//trim(mesg))
       if (do_TS) then
-        write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
+        write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =', T%minimum, T%average, T%maximum
         call MOM_mesg(lMsg//trim(mesg))
-        write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
+        write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =', S%minimum, S%average, S%maximum
         call MOM_mesg(lMsg//trim(mesg))
       endif
     endif
@@ -355,10 +329,10 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   if (do_TS .and. T%minimum<-5.0) then
     do j = js, je ; do i = is, ie
       if (minval(Temp(i,j,:)) == T%minimum) then
-        write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
+        write(0,'(a,2f12.5)') 'x,y=', G%geoLonT(i,j), G%geoLatT(i,j)
         write(0,'(a3,3a12)') 'k','h','Temp','Salt'
         do k = 1, nz
-          write(0,'(i3,3es12.4)') k,h(i,j,k),Temp(i,j,k),Salt(i,j,k)
+          write(0,'(i3,3es12.4)') k, h(i,j,k), Temp(i,j,k), Salt(i,j,k)
         enddo
         stop 'Extremum detected'
       endif
@@ -371,7 +345,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
         write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
         write(0,'(a3,3a12)') 'k','h','Temp','Salt'
         do k = 1, nz
-          write(0,'(i3,3es12.4)') k,h(i,j,k),Temp(i,j,k),Salt(i,j,k)
+          write(0,'(i3,3es12.4)') k, h(i,j,k), Temp(i,j,k), Salt(i,j,k)
         enddo
         stop 'Negative thickness detected'
       endif

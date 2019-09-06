@@ -1,9 +1,9 @@
+!> This tracer package dyes flow through open boundaries
 module dyed_obc_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,      only : diag_ctrl
-use MOM_diag_to_Z,          only : diag_to_Z_CS
 use MOM_error_handler,      only : MOM_error, FATAL, WARNING
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,       only : forcing
@@ -12,7 +12,7 @@ use MOM_grid,               only : ocean_grid_type
 use MOM_io,                 only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : MOM_restart_CS
-use MOM_time_manager,       only : time_type, get_time
+use MOM_time_manager,       only : time_type
 use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables,          only : surface
@@ -28,32 +28,28 @@ implicit none ; private
 public register_dyed_obc_tracer, initialize_dyed_obc_tracer
 public dyed_obc_tracer_column_physics, dyed_obc_tracer_end
 
+!> The control structure for the dyed_obc tracer package
 type, public :: dyed_obc_tracer_CS ; private
-  integer :: ntr    ! The number of tracers that are actually used.
-  logical :: coupled_tracers = .false.  ! These tracers are not offered to the
-                                        ! coupler.
-  character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
-                                   ! to initialize internally.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(tracer_registry_type), pointer :: tr_Reg => NULL()
-  real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
-                                           ! subroutine, in g m-3?
+  integer :: ntr    !< The number of tracers that are actually used.
+  logical :: coupled_tracers = .false. !< These tracers are not offered to the coupler.
+  character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
+  type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: &
-    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
-               ! surface tracer concentrations are to be provided to the coupler.
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+                                               !! surface tracer concentrations are to be provided to the coupler.
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                   !! regulate the timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
-  type(vardesc), allocatable :: tr_desc(:)
+  type(vardesc), allocatable :: tr_desc(:) !< Descriptions and metadata for the tracers
 end type dyed_obc_tracer_CS
 
 contains
 
-!> This subroutine is used to register tracer fields and subroutines
-!! to be used with MOM.
+!> Register tracer fields and subroutines to be used with MOM.
 function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
@@ -86,14 +82,14 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", CS%ntr, &
-                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "The number of dye tracers in this run. Each tracer "//&
                  "should have a separate boundary segment.", default=0)
   allocate(CS%ind_tr(CS%ntr))
   allocate(CS%tr_desc(CS%ntr))
 
   call get_param(param_file, mdl, "dyed_obc_TRACER_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the dyed_obc tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the dyed_obc tracers, or blank to initialize "//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -134,22 +130,18 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   register_dyed_obc_tracer = .true.
 end function register_dyed_obc_tracer
 
-!> This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
-!! and it sets up the tracer output.
-subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                  diag_to_Z_CSp)
+!> Initializes the CS%ntr tracer fields in tr(:,:,:,:) and sets up the tracer output.
+subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                               intent(in) :: restart !< .true. if the fields have already
                                                                !! been read from a restart file.
   type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl), target,               intent(in) :: diag    !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
   type(dyed_obc_tracer_CS),              pointer    :: CS      !< The control structure returned by a previous
                                                                !! call to dyed_obc_register_tracer.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                                     !! for diagnostics in depth space.
 
 ! Local variables
   real, allocatable :: temp(:,:,:)
@@ -165,7 +157,7 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
+                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -206,32 +198,32 @@ end subroutine initialize_dyed_obc_tracer
 !! This is a simple example of a set of advected passive tracers.
 !!
 !! The arguments to this subroutine are redundant in that
-!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 subroutine dyed_obc_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(dyed_obc_tracer_CS), pointer   :: CS   !< The control structure returned by a previous
                                               !! call to dyed_obc_register_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 
 ! Local variables
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
@@ -274,35 +266,19 @@ subroutine dyed_obc_tracer_end(CS)
 end subroutine dyed_obc_tracer_end
 
 !> \namespace dyed_obc_tracer
-!!                                                                     *
-!!  By Kate Hedstrom, 2017, copied from DOME tracers and also          *
-!!    dye_example.                                                     *
-!!                                                                     *
-!!    This file contains an example of the code that is needed to set  *
-!!  up and use a set of dynamically passive tracers. These tracers     *
-!!  dye the inflowing water, one per open boundary segment.            *
-!!                                                                     *
-!!    A single subroutine is called from within each file to register  *
-!!  each of the tracers for reinitialization and advection and to      *
-!!  register the subroutine that initializes the tracers and set up    *
-!!  their output and the subroutine that does any tracer physics or    *
-!!  chemistry along with diapycnal mixing (included here because some  *
-!!  tracers may float or swim vertically or dye diapycnal processes).  *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q                                        *
-!!    j+1  > o > o >   At ^:  v                                        *
-!!    j    x ^ x ^ x   At >:  u                                        *
-!!    j    > o > o >   At o:  h, tr                                    *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
-!!                                                                     *
-!!*******+*********+*********+*********+*********+*********+*********+**
+!!
+!! By Kate Hedstrom, 2017, copied from DOME tracers and also
+!! dye_example.
+!!
+!! This file contains an example of the code that is needed to set
+!! up and use a set of dynamically passive tracers. These tracers
+!! dye the inflowing water, one per open boundary segment.
+!!
+!! A single subroutine is called from within each file to register
+!! each of the tracers for reinitialization and advection and to
+!! register the subroutine that initializes the tracers and set up
+!! their output and the subroutine that does any tracer physics or
+!! chemistry along with diapycnal mixing (included here because some
+!! tracers may float or swim vertically or dye diapycnal processes).
 
 end module dyed_obc_tracer

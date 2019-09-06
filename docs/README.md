@@ -17,7 +17,7 @@ which will generate html in `docs/_build/html/`. Start at `docs/_build/html/inde
 
 The doxygen generated HTML can be obtained locally (and slightly more quickly) with
 ```bash
-make nortd
+make nortd SPHINXBUILD=false
 ```
 which will generate html in `docs/APIs/`. Start at `docs/APIs/index.html`. If doxygen is not already available this will install a local copy of doxygen.
 
@@ -38,11 +38,11 @@ If you are building the full generated sphinx documentation you will need the fo
 
 (.e.g `apt-get install libxml2-dev libxslt-dev`)
 
-Before running sphinc (`make html`) you will need to issue:
+Before running sphinx (`make html`) you will need to issue:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Credits
 
-The sphinx documentation of MOM6 is made possible by modifications by Angus Gibson to two packages, [sphinx-fortran](https://github.com/angus-g/sphinx-fortran) and [autodoc_doxygen](https://github.com/angus-g/sphinxcontrib-autodoc_doxygen).
+The sphinx documentation of MOM6 is made possible by modifications by [Angus Gibson](https://github.com/angus-g) to two packages, [sphinx-fortran](https://github.com/angus-g/sphinx-fortran) and [autodoc_doxygen](https://github.com/angus-g/sphinxcontrib-autodoc_doxygen).

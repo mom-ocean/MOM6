@@ -20,17 +20,17 @@ public refine_nondim_position
 public check_neutral_positions
 public kahan_sum
 
+!> The control structure for this module
 type, public :: ndiff_aux_CS_type ; private
   integer :: nterm        !< Number of terms in polynomial (deg+1)
   integer :: max_iter     !< Maximum number of iterations
-  real :: drho_tol        !< Tolerance criterion for difference in density (kg/m3)
-  real :: xtol            !< Criterion for how much position changes (nondim)
+  real :: drho_tol        !< Tolerance criterion for difference in density [kg m-3]
+  real :: xtol            !< Criterion for how much position changes [nondim]
   real :: ref_pres        !< Determines whether a constant reference pressure is used everywhere or locally referenced
                           !< density is done. ref_pres <-1 is the latter, ref_pres >= 0. otherwise
-  logical :: force_brent = .false.  !< Use Brent's method instead of Newton even when second derivatives are available
-  logical :: debug
+  logical :: force_brent = .false. !< Use Brent's method instead of Newton even when second derivatives are available
+  logical :: debug        !< If true, write verbose debugging messages and checksusm
   type(EOS_type), pointer :: EOS !< Pointer to equation of state used in the model
-
 end type ndiff_aux_CS_type
 
 contains
@@ -62,10 +62,10 @@ end subroutine set_ndiff_aux_params
 !! For an layer to be unstable the top interface must be denser than the bottom or the bottom interface of the layer
 subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
   integer,                intent(in)    :: nk          !< Number of levels in a column
-  real, dimension(nk,2),  intent(in)    :: dRdT        !< drho/dT (kg/m3/degC) at interfaces
-  real, dimension(nk,2),  intent(in)    :: dRdS        !< drho/dS (kg/m3/ppt) at interfaces
-  real, dimension(nk,2),  intent(in)    :: T           !< drho/dS (kg/m3/ppt) at interfaces
-  real, dimension(nk,2),  intent(in)    :: S           !< drho/dS (kg/m3/ppt) at interfaces
+  real, dimension(nk,2),  intent(in)    :: dRdT        !< drho/dT [kg m-3 degC-1] at interfaces
+  real, dimension(nk,2),  intent(in)    :: dRdS        !< drho/dS [kg m-3 ppt-1] at interfaces
+  real, dimension(nk,2),  intent(in)    :: T           !< Temperature [degC] at interfaces
+  real, dimension(nk,2),  intent(in)    :: S           !< Salinity [ppt] at interfaces
   logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
   integer,                intent(  out) :: ns          !< Number of neutral surfaces in unmasked part of the column
 

@@ -1,3 +1,4 @@
+!> Functions and routines to take area, volume, mass-weighted, layerwise, zonal or meridional means
 module MOM_spatial_means
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -35,7 +36,7 @@ function global_area_mean(var,G)
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is, ie
-    tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
+    tmpForSumming(i,j) = ( var(i,j) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)) )
   enddo ; enddo
   global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
 
@@ -53,7 +54,7 @@ function global_area_integral(var,G)
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is, ie
-    tmpForSumming(i,j) = ( var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j)) )
+    tmpForSumming(i,j) = ( var(i,j) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)) )
   enddo ; enddo
   global_area_integral = reproducing_sum( tmpForSumming )
 
@@ -64,7 +65,7 @@ function global_layer_mean(var, h, G, GV)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var  !< The variable to average
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZK_(GV))                   :: global_layer_mean
 
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: tmpForSumming, weight
@@ -76,7 +77,7 @@ function global_layer_mean(var, h, G, GV)
   tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
-    weight(i,j,k)  =  (GV%H_to_m * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j))
+    weight(i,j,k)  =  (GV%H_to_m * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
 
@@ -96,7 +97,7 @@ function global_volume_mean(var, h, G, GV)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)  :: var  !< The variable being averaged
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real :: global_volume_mean  !< The thickness-weighted average of var
 
   real :: weight_here
@@ -107,7 +108,7 @@ function global_volume_mean(var, h, G, GV)
   tmpForSumming(:,:) = 0. ; sum_weight(:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
-    weight_here  =  (GV%H_to_m * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j))
+    weight_here  =  (GV%H_to_m * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j) = tmpForSumming(i,j) + var(i,j,k) * weight_here
     sum_weight(i,j) = sum_weight(i,j) + weight_here
   enddo ; enddo ; enddo
@@ -122,7 +123,7 @@ function global_mass_integral(h, G, GV, var, on_PE_only)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)  :: var  !< The variable being integrated
   logical,       optional, intent(in)  :: on_PE_only  !< If present and true, the sum is only
@@ -140,12 +141,12 @@ function global_mass_integral(h, G, GV, var, on_PE_only)
   if (present(var)) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       tmpForSumming(i,j) = tmpForSumming(i,j) + var(i,j,k) * &
-                ((GV%H_to_kg_m2 * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j)))
+                ((GV%H_to_kg_m2 * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)))
     enddo ; enddo ; enddo
   else
     do k=1,nz ; do j=js,je ; do i=is,ie
       tmpForSumming(i,j) = tmpForSumming(i,j) + &
-                ((GV%H_to_kg_m2 * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j)))
+                ((GV%H_to_kg_m2 * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)))
     enddo ; enddo ; enddo
   endif
   global_sum = .true. ; if (present(on_PE_only)) global_sum = .not.on_PE_only
@@ -170,14 +171,7 @@ subroutine global_i_mean(array, i_mean, G, mask)
   real, dimension(SZI_(G),SZJ_(G)), &
                           optional, intent(in)    :: mask !< An array used for weighting the i-mean
 
-!    This subroutine determines the global mean of a field along rows of
-!  constant i, returning it in a 1-d array using the local indexing.
-
-! Arguments: array - The 2-d array whose i-mean is to be taken.
-!  (out)     i_mean - Global mean of array along its i-axis.
-!  (in)      G - The ocean's grid structure.
-!  (in)      mask - An array used for weighting the i-mean.
-
+  ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
@@ -251,14 +245,7 @@ subroutine global_j_mean(array, j_mean, G, mask)
   real, dimension(SZI_(G),SZJ_(G)), &
                           optional, intent(in)    :: mask !< An array used for weighting the j-mean
 
-!    This subroutine determines the global mean of a field along rows of
-!  constant j, returning it in a 1-d array using the local indexing.
-
-! Arguments: array - The 2-d array whose j-mean is to be taken.
-!  (out)     j_mean - Global mean of array along its j-axis.
-!  (in)      G - The ocean's grid structure.
-!  (in)      mask - An array used for weighting the j-mean.
-
+  ! Local variables
   type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
@@ -338,9 +325,9 @@ subroutine adjust_area_mean_to_zero(array, G, scaling)
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     posVals(i,j) = max(0., array(i,j))
-    areaXposVals(i,j) = G%areaT(i,j) * posVals(i,j)
+    areaXposVals(i,j) = G%US%L_to_m**2*G%areaT(i,j) * posVals(i,j)
     negVals(i,j) = min(0., array(i,j))
-    areaXnegVals(i,j) = G%areaT(i,j) * negVals(i,j)
+    areaXnegVals(i,j) = G%US%L_to_m**2*G%areaT(i,j) * negVals(i,j)
   enddo ; enddo
 
   areaIntPosVals = reproducing_sum( areaXposVals )

@@ -1,47 +1,7 @@
+!> The MOM6 facility for reading and writing restart files, and querying what has been read.
 module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This file contains four subroutines associated with saving       *
-!*  restart files or restoring the model state from files.             *
-!*                                                                     *
-!*    register_restart_field is used to specify the fields that will   *
-!*  be written to restart files.                                       *
-!*                                                                     *
-!*    Save_restart saves a restart file from which a simulation can    *
-!*  be restarted with results that are identical to those which would  *
-!*  have been attained if there had been no interruption.  If this     *
-!*  file would be larger than 2 Gbytes, it is broken up into a number  *
-!*  of smaller files.                                                  *
-!*                                                                     *
-!*    The subroutine restore_state initializes the fields for the      *
-!*  simulations from a number of restart files or other NetCDF files.  *
-!*  Each restart field is initialized from the first file in the       *
-!*  list in which it is found.  The files are separated by spaces,     *
-!*  and all must be in the specified directory.  If 'r' is included    *
-!*  in the list, it is expanded to include all of the restart files    *
-!*  that are found in the directory.                                   *
-!*                                                                     *
-!*    query_initialized returns true if a field (or the entire restart *
-!*  file) has been initialized from a restart file and false otherwise.*
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT, tr                            *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_domains, only : pe_here, num_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
@@ -49,15 +9,15 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : read_field, write_field, MOM_read_data, read_data, get_filename_appendix
+use MOM_io, only : write_field, MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
-use MOM_time_manager, only : time_type, get_time, get_date, set_date, set_time
-use MOM_time_manager, only : days_in_month
+use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
+use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod,         only:  mpp_chksum
+use mpp_mod,         only:  mpp_chksum,mpp_pe
 use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
 
 implicit none ; private
@@ -65,67 +25,85 @@ implicit none ; private
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
+public register_restart_field_as_obsolete
 
+!> A type for making arrays of pointers to 4-d arrays
 type p4d
-  real, dimension(:,:,:,:), pointer :: p => NULL()
+  real, dimension(:,:,:,:), pointer :: p => NULL() !< A pointer to a 4d array
 end type p4d
 
+!> A type for making arrays of pointers to 3-d arrays
 type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3d array
 end type p3d
 
+!> A type for making arrays of pointers to 2-d arrays
 type p2d
-  real, dimension(:,:), pointer :: p => NULL()
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2d array
 end type p2d
 
+!> A type for making arrays of pointers to 1-d arrays
 type p1d
-  real, dimension(:), pointer :: p => NULL()
+  real, dimension(:), pointer :: p => NULL() !< A pointer to a 1d array
 end type p1d
 
+!> A type for making arrays of pointers to scalars
 type p0d
-  real, pointer :: p => NULL()
+  real, pointer :: p => NULL() !< A pointer to a scalar
 end type p0d
 
+!> A structure with information about a single restart field
 type field_restart
-  type(vardesc) :: vars         ! Descriptions of the fields that
-                                ! are to be read from or  written
-                                ! to the restart file.
-  logical :: mand_var           ! If .true. the run will abort if this
-                                ! field is not successfully read
-                                ! from the restart file.
-  logical :: initialized        ! .true. if this field has been read
-                                ! from the restart file.
-  character(len=32) :: var_name ! A name by which a variable may be queried.
+  type(vardesc) :: vars         !< Description of a field that is to be read from or written
+                                !! to the restart file.
+  logical :: mand_var           !< If .true. the run will abort if this field is not successfully
+                                !! read from the restart file.
+  logical :: initialized        !< .true. if this field has been read from the restart file.
+  character(len=32) :: var_name !< A name by which a variable may be queried.
 end type field_restart
 
-type, public :: MOM_restart_CS ; private
-  logical :: restart    ! restart is set to .true. if the run has been started
-                        ! from a full restart file.  Otherwise some fields must
-                        ! be initialized approximately.
-  integer :: novars = 0 ! The number of restart fields that have been registered.
-  logical :: parallel_restartfiles  ! If true, each PE writes its own restart file,
-                                    ! otherwise they are combined internally.
-  logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
-                                    ! and large-file-support is enabled.
-  logical :: new_run                ! If true, the input filenames and restart file
-                                    ! existence will result in a new run that is not
-                                    ! initializedfrom restart files.
-  logical :: new_run_set = .false.  ! If true, new_run has been determined for this restart_CS.
-  logical :: checksum_required      ! If true, require the restart checksums to match and error out otherwise.
-                                    ! Users may want to avoid this comparison if for example the restarts are
-                                    ! made from a run with a different mask_table than the current run,
-                                    ! in which case the checksums will not match and cause crash.
-  character(len=240) :: restartfile ! The name or name root for MOM restart files.
+!> A structure to store information about restart fields that are no longer used
+type obsolete_restart
+   character(len=32) :: field_name       !< Name of restart field that is no longer in use
+   character(len=32) :: replacement_name !< Name of replacement restart field, if applicable
+end type obsolete_restart
 
+!> A restart registry and the control structure for restarts
+type, public :: MOM_restart_CS ; private
+  logical :: restart    !< restart is set to .true. if the run has been started from a full restart
+                        !! file.  Otherwise some fields must be initialized approximately.
+  integer :: novars = 0 !< The number of restart fields that have been registered.
+  integer :: num_obsolete_vars = 0  !< The number of obsolete restart fields that have been registered.
+  logical :: parallel_restartfiles  !< If true, each PE writes its own restart file,
+                                    !! otherwise they are combined internally.
+  logical :: large_file_support     !< If true, NetCDF 3.6 or later is being used
+                                    !! and large-file-support is enabled.
+  logical :: new_run                !< If true, the input filenames and restart file existence will
+                                    !! result in a new run that is not initialized from restart files.
+  logical :: new_run_set = .false.  !< If true, new_run has been determined for this restart_CS.
+  logical :: checksum_required      !< If true, require the restart checksums to match and error out otherwise.
+                                    !! Users may want to avoid this comparison if for example the restarts are
+                                    !! made from a run with a different mask_table than the current run,
+                                    !! in which case the checksums will not match and cause crash.
+  character(len=240) :: restartfile !< The name or name root for MOM restart files.
+
+  !> An array of descriptions of the registered fields
   type(field_restart), pointer :: restart_field(:) => NULL()
+
+  !> An array of obsolete restart fields
+  type(obsolete_restart), pointer :: restart_obsolete(:) => NULL()
+
+  !>@{ Pointers to the fields that have been registered for restarts
   type(p0d), pointer :: var_ptr0d(:) => NULL()
   type(p1d), pointer :: var_ptr1d(:) => NULL()
   type(p2d), pointer :: var_ptr2d(:) => NULL()
   type(p3d), pointer :: var_ptr3d(:) => NULL()
   type(p4d), pointer :: var_ptr4d(:) => NULL()
-  integer :: max_fields
+  !!@}
+  integer :: max_fields !< The maximum number of restart fields
 end type MOM_restart_CS
 
+!> Register fields for restarts
 interface register_restart_field
   module procedure register_restart_field_ptr4d, register_restart_field_4d
   module procedure register_restart_field_ptr3d, register_restart_field_3d
@@ -134,6 +112,7 @@ interface register_restart_field
   module procedure register_restart_field_ptr0d, register_restart_field_0d
 end interface
 
+!> Indicate whether a field has been read from a restart file
 interface query_initialized
   module procedure query_initialized_name
   module procedure query_initialized_0d, query_initialized_0d_name
@@ -144,6 +123,16 @@ interface query_initialized
 end interface
 
 contains
+!!> Register a restart field as obsolete
+subroutine register_restart_field_as_obsolete(field_name, replacement_name, CS)
+  character(*), intent(in) :: field_name       !< Name of restart field that is no longer in use
+  character(*), intent(in) :: replacement_name !< Name of replacement restart field, if applicable
+  type(MOM_restart_CS), pointer :: CS          !< A pointer to a MOM_restart_CS object (intent in/out)
+
+  CS%num_obsolete_vars = CS%num_obsolete_vars+1
+  CS%restart_obsolete(CS%num_obsolete_vars)%field_name = field_name
+  CS%restart_obsolete(CS%num_obsolete_vars)%replacement_name = replacement_name
+end subroutine register_restart_field_as_obsolete
 
 !> Register a 3-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
@@ -443,10 +432,7 @@ function query_initialized_name(name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine returns .true. if the field referred to by name has
 ! initialized from a restart file, and .false. otherwise.
-!
-! Arguments: name - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -480,10 +466,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -510,10 +493,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -541,10 +521,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -572,10 +549,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -603,10 +577,7 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr has
 ! been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -635,11 +606,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -675,11 +642,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -715,11 +678,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m,n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -755,11 +714,7 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -795,11 +750,7 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 !   This subroutine tests whether the field pointed to by f_ptr or with the
 ! specified variable name has been initialized from a restart file.
-!
-! Arguments: f_ptr - A pointer to the field that is being queried.
-!  (in)      name - The name of the field that is being queried.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
+
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -837,21 +788,13 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                                   !! to the restart file names.
   character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
   type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
-! Arguments: directory - The directory where the restart file goes.
-!  (in)      time - The time of this restart file.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 restart_init.
-!  (in, opt) time_stamped - If true, the restart file names include
-!                           a unique time stamp.  The default is false.
-!  (in, opt) filename - A filename that overrides the name in CS%restartfile.
-!
-!  (in, opt) GV - The ocean's vertical grid structure.
+
+  ! Local variables
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
-  character(len=200) :: restartpath     ! The restart file path (dir/file).
-  character(len=80)  :: restartname     ! The restart file name (no dir).
+  character(len=512) :: restartpath     ! The restart file path (dir/file).
+  character(len=256) :: restartname     ! The restart file name (no dir).
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
                                         ! to the name of files after the first.
   integer(kind=8) :: var_sz, size_in_file ! The size in bytes of each variable
@@ -879,15 +822,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
   ! With parallel read & write, it is possible to disable the following...
 
-! jgj: this was set to 4294967292, changed to 4294967295 (see mpp_parameter.F90)
-  if (CS%large_file_support) max_file_size = 4294967295_8
+  ! The maximum file size is 4294967292, according to the NetCDF documentation.
+  if (CS%large_file_support) max_file_size = 4294967292_8
 
   num_files = 0
   next_var = 0
   nz = 1 ; if (present(GV)) nz = GV%ke
 
-  call get_time(time,seconds,days)
-  restart_time = real(days) + real(seconds)/86400.0
+  restart_time = time_type_to_real(time) / 86400.0
 
   restartname = trim(CS%restartfile)
   if (present(filename)) restartname = trim(filename)
@@ -996,7 +938,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p)
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
       endif
     enddo
 
@@ -1051,16 +993,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
 
-! Arguments: filename - A series of space delimited strings, each of
-!                       which is either "r" or the name of a file
-!                       from which the run is to be restarted.
-!  (in)      directory - The directory where the restart or save
-!                        files should be found.
-!  (out)     day - The time of the restarted run.
-!  (in)      G - The ocean's grid structure.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
-
+  ! Local variables
   character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
   character(len=80) :: fname     ! The name of the current file.
   character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
@@ -1069,7 +1002,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
-  integer :: i, n, m, start_of_day, num_days, missing_fields
+  integer :: i, n, m, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
@@ -1083,7 +1016,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
   logical                          :: check_exist, is_there_a_checksum
-  integer(kind=8),dimension(1)     :: checksum_file
+  integer(kind=8),dimension(3)     :: checksum_file
   integer(kind=8)                  :: checksum_data
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -1115,9 +1048,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     t1 = time_vals(1)
     deallocate(time_vals)
 
-    start_of_day = INT((t1 - INT(t1)) *86400) ! Number of seconds.
-    num_days = INT(t1)
-    day = set_time(start_of_day, num_days)
+    day = real_to_time(t1*86400.0)
     exit
   enddo
 
@@ -1152,6 +1083,17 @@ subroutine restore_state(filename, directory, day, G, CS)
     allocate(fields(nvar))
     call get_file_fields(unit(n),fields(1:nvar))
 
+    do m=1, nvar
+      call get_file_atts(fields(m),name=varname)
+      do i=1,CS%num_obsolete_vars
+        if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
+            call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
+                           trim(varname)//" - the new corresponding restart field is "//&
+                           trim(CS%restart_obsolete(i)%replacement_name))
+        endif
+      enddo
+    enddo
+
     missing_fields = 0
 
     do m=1,CS%novars
@@ -1176,124 +1118,53 @@ subroutine restore_state(filename, directory, day, G, CS)
         call get_file_atts(fields(i),name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
           check_exist = mpp_attribute_exist(fields(i),"checksum")
-          checksum_file = -1
+          checksum_file(:) = -1
           checksum_data = -1
           is_there_a_checksum = .false.
           if ( check_exist ) then
             call mpp_get_atts(fields(i),checksum=checksum_file)
             is_there_a_checksum = .true.
           endif
-          if (.NOT. CS%checksum_required ) is_there_a_checksum = .false. ! Do not need to do data checksumming.
+          if (.NOT. CS%checksum_required) is_there_a_checksum = .false. ! Do not need to do data checksumming.
 
           if (associated(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
             call read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
+                           G%Domain%mpp_domain, timelevel=1)
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr1d(m)%p)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p)
-          elseif ((pos == 0) .and. associated(CS%var_ptr2d(m)%p)) then  ! Read a non-decomposed 2d array.
-            ! Probably should query the field type to make sure that the sizes are right.
-            call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-          elseif ((pos == 0) .and. associated(CS%var_ptr3d(m)%p)) then  ! Read a non-decomposed 3d array.
-            ! Probably should query the field type to make sure that the sizes are right.
-            call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                           no_domain=.true., timelevel=1)
-             if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-          elseif ((pos == 0) .and. associated(CS%var_ptr4d(m)%p)) then  ! Read a non-decomposed 4d array.
-            ! Probably should query the field type to make sure that the sizes are right.
-            call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                           no_domain=.true., timelevel=1)
-            if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-          elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
-            if (associated(CS%var_ptr3d(m)%p)) then
-              ! Read 3d array...  Time level 1 is always used.
-              call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             G%Domain, 1, position=pos)
-              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-            elseif (associated(CS%var_ptr2d(m)%p)) then ! Read 2d array...
+                           G%Domain%mpp_domain, timelevel=1)
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+          elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
+            if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             G%Domain, 1, position=pos)
-              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-            elseif (associated(CS%var_ptr4d(m)%p)) then ! Read 4d array...
+                                 G%Domain, timelevel=1, position=pos)
+            else ! This array is not domain-decomposed.  This variant may be under-tested.
+              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                             no_domain=.true., timelevel=1)
+            endif
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+          elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
+            if (pos /= 0) then
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                                 G%Domain, timelevel=1, position=pos)
+            else ! This array is not domain-decomposed.  This variant may be under-tested.
+              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                             no_domain=.true., timelevel=1)
+            endif
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+          elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
+            if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             G%Domain, 1, position=pos)
-              if ( is_there_a_checksum ) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-            else
-              call MOM_error(FATAL, "MOM_restart restore_state: "//&
-                              "No pointers set for "//trim(varname))
+                                 G%Domain, timelevel=1, position=pos)
+            else ! This array is not domain-decomposed.  This variant may be under-tested.
+              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                             no_domain=.true., timelevel=1)
             endif
-          else ! Do not use an io_layout.  !### GET RID OF THIS BRANCH ONCE read_data_4d_new IS AVAILABLE.
-            ! This file is decomposed onto the current processors.  We need
-            ! to check whether the sizes look right, and abort if not.
-            call get_file_atts(fields(i),ndim=ndim,siz=sizes)
-
-            !   NOTE: The index ranges f var_ptrs always start with 1, so with
-            ! symmetric memory the staggering is swapped from NE to SW!
-            is0 = 1-G%isd
-            if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%IsdB
-            if (sizes(1) == G%iec-G%isc+1) then
-              isL = G%isc+is0 ; ieL = G%iec+is0
-            elseif (sizes(1) == G%IecB-G%IscB+1) then
-              isL = G%IscB+is0 ; ieL = G%IecB+is0
-            elseif (((pos == EAST_FACE) .or. (pos == CORNER)) .and. &
-                    (G%IscB == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
-              ! This is reading a symmetric file in a non-symmetric model.
-              isL = G%isc-1+is0 ; ieL = G%iec+is0
-            else
-              call MOM_error(WARNING, "MOM_restart restore_state, "//trim(varname)//&
-                    " has the wrong i-size in "//trim(unit_path(n)))
-              exit
-            endif
-
-            js0 = 1-G%jsd
-            if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%JsdB
-            if (sizes(2) == G%jec-G%jsc+1) then
-              jsL = G%jsc+js0 ; jeL = G%jec+js0
-            elseif (sizes(2) == G%jecB-G%jscB+1) then
-              jsL = G%jscB+js0 ; jeL = G%jecB+js0
-            elseif (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. &
-                    (G%JscB == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
-              ! This is reading a symmetric file in a non-symmetric model.
-              jsL = G%jsc-1+js0 ; jeL = G%jec+js0
-            else
-              call MOM_error(WARNING, "MOM_restart restore_state, "//trim(varname)//&
-                    " has the wrong j-size in "//trim(unit_path(n)))
-              exit
-            endif
-
-            if (associated(CS%var_ptr3d(m)%p)) then
-              if (ntime == 0) then
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-              else
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), 1)
-              endif
-            elseif (associated(CS%var_ptr2d(m)%p)) then
-              if (ntime == 0) then
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-              else
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), 1)
-              endif
-            elseif (associated(CS%var_ptr4d(m)%p)) then
-              if (ntime == 0) then
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-              else
-                call read_field(unit(n), fields(i), &
-                                CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), 1)
-              endif
-            else
-              call MOM_error(FATAL, "MOM_restart restore_state: "//&
-                              "No pointers set for "//trim(varname))
-            endif
+            if (is_there_a_checksum) checksum_data = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+          else
+            call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
           endif
 
           if (is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
@@ -1430,18 +1301,10 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
 
-! Arguments: filename - A series of space delimited strings, each of
-!                       which is either "r" or the name of a file
-!                       from which the run is to be restarted.
-!  (in)      directory - The directory where the restart or save
-!                        files should be found.
-!  (in)      G - The ocean's grid structure.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
-
-  character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
-  character(len=80) :: fname      ! The name of the current file.
-  character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
+  ! Local variables
+  character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=256) :: fname     ! The name of the current file.
+  character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
 ! character(len=256) :: mesg      ! A message for warnings.
   integer :: num_restart     ! The number of restart files that have already
@@ -1466,8 +1329,12 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
     enddo
     fname = filename(start_char:m-1)
     start_char = m
-    do while ((start_char <= len_trim(filename)) .and. (filename(start_char:start_char) == ' '))
-      start_char = start_char + 1
+    do while (start_char <= len_trim(filename))
+      if (filename(start_char:start_char) == ' ') then
+        start_char = start_char + 1
+      else
+        exit
+      endif
     enddo
 
     if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
@@ -1506,24 +1373,11 @@ function open_restart_units(filename, directory, G, CS, units, file_paths, &
                            threading = MULTIPLE, fileset = SINGLE_FILE)
           if (present(global_files)) global_files(n) = .true.
         elseif (CS%parallel_restartfiles) then
-          if (G%Domain%use_io_layout) then
-            ! Look for decomposed files using the I/O Layout.
-            fexists = file_exists(filepath, G%Domain)
-            if (fexists .and. (present(units))) &
-              call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             domain=G%Domain%mpp_domain)
-          else
-            ! Look for any PE-specific files of the form NAME.nc.####.
-            if (num_PEs()>10000) then
-              write(filepath, '(a,i6.6)' ) trim(filepath)//'.', pe_here()
-            else
-              write(filepath, '(a,i4.4)' ) trim(filepath)//'.', pe_here()
-            endif
-            inquire(file=filepath, exist=fexists)
-            if (fexists .and. (present(units))) &
-              call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             threading = MULTIPLE, fileset = SINGLE_FILE)
-          endif
+          ! Look for decomposed files using the I/O Layout.
+          fexists = file_exists(filepath, G%Domain)
+          if (fexists .and. (present(units))) &
+            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+                           domain=G%Domain%mpp_domain)
           if (fexists .and. present(global_files)) global_files(n) = .false.
         endif
 
@@ -1570,13 +1424,7 @@ subroutine restart_init(param_file, CS, restart_root)
                          intent(in) :: restart_root !< A filename root that overrides the value
                                           !! set by RESTARTFILE to enable the use of this module by
                                           !! other components than MOM.
-! Arguments: param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module.
-!  (in,opt)  restart_root - A filename root that overrides the value in
-!                           RESTARTFILE.  This will enable the use of this
-!                           module by other components.
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_restart"   ! This module's name.
@@ -1591,7 +1439,7 @@ subroutine restart_init(param_file, CS, restart_root)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
-                 "If true, each processor writes its own restart file, \n"//&
+                 "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
 
@@ -1603,20 +1451,21 @@ subroutine restart_init(param_file, CS, restart_root)
                  "The name-root of the restart file.", default="MOM.res")
   endif
   call get_param(param_file, mdl, "LARGE_FILE_SUPPORT", CS%large_file_support, &
-                 "If true, use the file-size limits with NetCDF large \n"//&
+                 "If true, use the file-size limits with NetCDF large "//&
                  "file support (4Gb), otherwise the limit is 2Gb.", &
                  default=.true.)
   call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
   call get_param(param_file, mdl, "RESTART_CHECKSUMS_REQUIRED", CS%checksum_required, &
-                 "If true, require the restart checksums to match and error out otherwise. \n"//&
-                 "Users may want to avoid this comparison if for example the restarts are  \n"//&
-                 "made from a run with a different mask_table than the current run,  \n"//&
+                 "If true, require the restart checksums to match and error out otherwise. "//&
+                 "Users may want to avoid this comparison if for example the restarts are "//&
+                 "made from a run with a different mask_table than the current run, "//&
                  "in which case the checksums will not match and cause crash.",&
                  default=.true.)
 
   allocate(CS%restart_field(CS%max_fields))
+  allocate(CS%restart_obsolete(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))
   allocate(CS%var_ptr1d(CS%max_fields))
   allocate(CS%var_ptr2d(CS%max_fields))
@@ -1640,6 +1489,7 @@ subroutine restart_end(CS)
   type(MOM_restart_CS),  pointer    :: CS !< A pointer to a MOM_restart_CS object
 
   if (associated(CS%restart_field)) deallocate(CS%restart_field)
+  if (associated(CS%restart_obsolete)) deallocate(CS%restart_obsolete)
   if (associated(CS%var_ptr0d)) deallocate(CS%var_ptr0d)
   if (associated(CS%var_ptr1d)) deallocate(CS%var_ptr1d)
   if (associated(CS%var_ptr2d)) deallocate(CS%var_ptr2d)
@@ -1651,8 +1501,7 @@ end subroutine restart_end
 
 subroutine restart_error(CS)
   type(MOM_restart_CS),  pointer    :: CS !< A pointer to a MOM_restart_CS object
-! Arguments: CS - A pointer that is set to point to the control structure
-!                 for this module.  (Intent in.)
+
   character(len=16)  :: num  ! String for error messages
 
   if (CS%novars > CS%max_fields) then

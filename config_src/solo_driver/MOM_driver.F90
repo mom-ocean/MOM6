@@ -48,13 +48,15 @@ program MOM_main
   use MOM_string_functions,only : uppercase
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager,    only : time_type, set_date, set_time, get_date, time_type_to_real
+  use MOM_time_manager,    only : time_type, set_date, get_date
+  use MOM_time_manager,    only : real_to_time, time_type_to_real
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
   use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
   use MOM_time_manager,    only : NO_CALENDAR
   use MOM_tracer_flow_control, only : tracer_flow_control_CS
+  use MOM_unit_scaling,    only : unit_scale_type
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
@@ -66,7 +68,7 @@ program MOM_main
   use time_interp_external_mod, only : time_interp_external_init
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
+  use MOM_ice_shelf, only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
@@ -88,6 +90,8 @@ program MOM_main
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid
   type(verticalGrid_type), pointer :: GV
+  ! A pointer to a structure containing dimensional unit scaling factors.
+  type(unit_scale_type), pointer :: US
 
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
@@ -123,21 +127,21 @@ program MOM_main
   type(time_type) :: restart_time       ! The next time to write restart files.
   type(time_type) :: Time_step_ocean    ! A time_type version of dt_forcing.
 
-  real    :: elapsed_time = 0.0   ! Elapsed time in this run in seconds.
+  real    :: elapsed_time = 0.0   ! Elapsed time in this run  [s].
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
                                   ! model's master clock (Time).  This is needed
                                   ! if Time_step_ocean is not an exact
                                   ! representation of dt_forcing.
-  real :: dt_forcing              ! The coupling time step in seconds.
-  real :: dt                      ! The baroclinic dynamics time step, in seconds.
-  real :: dt_off                  ! Offline time step in seconds
+  real :: dt_forcing              ! The coupling time step [s].
+  real :: dt                      ! The baroclinic dynamics time step [s].
+  real :: dt_off                  ! Offline time step [s].
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within dt_forcing.
   real :: dt_therm
   real :: dt_dyn, dtdia, t_elapsed_seg
   integer :: n, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
-  type(time_type) :: Time2
+  type(time_type) :: Time2, time_chg
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
                                 ! incremental restart files are saved and whether they
@@ -146,7 +150,7 @@ program MOM_main
                                 ! restart file is saved at the end of a run segment
                                 ! unless Restart_control is negative.
 
-  real            :: Time_unit       ! The time unit in seconds for the following input fields.
+  real            :: Time_unit       ! The time unit for the following input fields [s].
   type(time_type) :: restint         ! The time between saves of the restart file.
   type(time_type) :: daymax          ! The final day of the simulation.
 
@@ -206,7 +210,7 @@ program MOM_main
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
                             ocean_nthreads, ncores_per_node, use_hyper_thread
 
-  !#######################################################################
+  !=====================================================================
 
   call write_cputime_start_clock(write_CPU_CSp)
 
@@ -246,8 +250,8 @@ program MOM_main
   endif
 
 !$  call omp_set_num_threads(ocean_nthreads)
-!$OMP PARALLEL private(adder)
 !$  base_cpu = get_cpu_affinity()
+!$OMP PARALLEL private(adder)
 !$  if (use_hyper_thread) then
 !$     if (mod(omp_get_thread_num(),2) == 0) then
 !$        adder = omp_get_thread_num()/2
@@ -258,7 +262,7 @@ program MOM_main
 !$     adder = omp_get_thread_num()
 !$  endif
 !$  call set_cpu_affinity (base_cpu + adder)
-!$  write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$  write(6,*) " ocean ", base_cpu, get_cpu_affinity(), adder, omp_get_thread_num(), omp_get_num_threads()
 !$  call flush(6)
 !$OMP END PARALLEL
 
@@ -290,7 +294,7 @@ program MOM_main
     Start_time = set_date(date_init(1),date_init(2), date_init(3), &
          date_init(4),date_init(5),date_init(6))
   else
-    Start_time = set_time(0,days=0)
+    Start_time = real_to_time(0.0)
   endif
 
   call time_interp_external_init
@@ -311,14 +315,14 @@ program MOM_main
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
 
-  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, C_p=fluxes%C_p)
+  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, US=US, C_p=fluxes%C_p)
   Master_Time = Time
 
   call callTree_waypoint("done initialize_MOM")
 
   call extract_surface_state(MOM_CSp, sfc_state)
 
-  call surface_forcing_init(Time, grid, param_file, diag, &
+  call surface_forcing_init(Time, grid, US, param_file, diag, &
                             surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
@@ -334,7 +338,7 @@ program MOM_main
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
-    call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
+    call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
   else
     call MOM_wave_interface_init_lite(param_file)
   endif
@@ -346,8 +350,8 @@ program MOM_main
   call log_version(param_file, mod_name, version, "")
   call get_param(param_file, mod_name, "DT", dt, fail_if_missing=.true.)
   call get_param(param_file, mod_name, "DT_FORCING", dt_forcing, &
-                 "The time step for changing forcing, coupling with other \n"//&
-                 "components, or potentially writing certain diagnostics. \n"//&
+                 "The time step for changing forcing, coupling with other "//&
+                 "components, or potentially writing certain diagnostics. "//&
                  "The default value is given by DT.", units="s", default=dt)
   if (offline_tracer_mode) then
     call get_param(param_file, mod_name, "DT_OFFLINE", dt_forcing, &
@@ -356,7 +360,7 @@ program MOM_main
   endif
   ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))
 
-  Time_step_ocean = set_time(int(floor(dt_forcing+0.5)))
+  Time_step_ocean = real_to_time(dt_forcing)
   elapsed_time_master = (abs(dt_forcing - time_type_to_real(Time_step_ocean)) > 1.0e-12*dt_forcing)
   if (elapsed_time_master) &
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
@@ -371,35 +375,35 @@ program MOM_main
     call get_param(param_file, mod_name, "DAYMAX", daymax, timeunit=Time_unit, &
                    default=Time_end, do_not_log=.true.)
     call log_param(param_file, mod_name, "DAYMAX", daymax, &
-                 "The final time of the whole simulation, in units of \n"//&
-                 "TIMEUNIT seconds.  This also sets the potential end \n"//&
-                 "time of the present run segment if the end time is \n"//&
+                 "The final time of the whole simulation, in units of "//&
+                 "TIMEUNIT seconds.  This also sets the potential end "//&
+                 "time of the present run segment if the end time is "//&
                  "not set via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit)
   else
     call get_param(param_file, mod_name, "DAYMAX", daymax, &
-                 "The final time of the whole simulation, in units of \n"//&
-                 "TIMEUNIT seconds.  This also sets the potential end \n"//&
-                 "time of the present run segment if the end time is \n"//&
+                 "The final time of the whole simulation, in units of "//&
+                 "TIMEUNIT seconds.  This also sets the potential end "//&
+                 "time of the present run segment if the end time is "//&
                  "not set via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit, fail_if_missing=.true.)
     Time_end = daymax
   endif
 
   call get_param(param_file, mod_name, "SINGLE_STEPPING_CALL", single_step_call, &
-                 "If true, advance the state of MOM with a single step \n"//&
-                 "including both dynamics and thermodynamics.  If false \n"//&
+                 "If true, advance the state of MOM with a single step "//&
+                 "including both dynamics and thermodynamics.  If false "//&
                  "the two phases are advanced with separate calls.", default=.true.)
   call get_param(param_file, mod_name, "DT_THERM", dt_therm, &
-                 "The thermodynamic and tracer advection time step. \n"//&
-                 "Ideally DT_THERM should be an integer multiple of DT \n"//&
-                 "and less than the forcing or coupling time-step, unless \n"//&
-                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
-                 "can be an integer multiple of the coupling timestep.  By \n"//&
+                 "The thermodynamic and tracer advection time step. "//&
+                 "Ideally DT_THERM should be an integer multiple of DT "//&
+                 "and less than the forcing or coupling time-step, unless "//&
+                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM "//&
+                 "can be an integer multiple of the coupling timestep.  By "//&
                  "default DT_THERM is set to DT.", units="s", default=dt)
   call get_param(param_file, mod_name, "DIABATIC_FIRST", diabatic_first, &
-                 "If true, apply diabatic and thermodynamic processes, \n"//&
-                 "including buoyancy forcing and mass gain or loss, \n"//&
+                 "If true, apply diabatic and thermodynamic processes, "//&
+                 "including buoyancy forcing and mass gain or loss, "//&
                  "before stepping the dynamics forward.", default=.false.)
 
 
@@ -407,19 +411,19 @@ program MOM_main
     "MOM_driver: The run has been started at or after the end time of the run.")
 
   call get_param(param_file, mod_name, "RESTART_CONTROL", Restart_control, &
-                 "An integer whose bits encode which restart files are \n"//&
-                 "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
-                 "(bit 0) for a non-time-stamped file. A non-time-stamped \n"//&
-                 "restart file is saved at the end of the run segment \n"//&
+                 "An integer whose bits encode which restart files are "//&
+                 "written. Add 2 (bit 1) for a time-stamped file, and odd "//&
+                 "(bit 0) for a non-time-stamped file. A non-time-stamped "//&
+                 "restart file is saved at the end of the run segment "//&
                  "for any non-negative value.", default=1)
   call get_param(param_file, mod_name, "RESTINT", restint, &
-                 "The interval between saves of the restart file in units \n"//&
-                 "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
-                 "incremental restart files at all.", default=set_time(0), &
+                 "The interval between saves of the restart file in units "//&
+                 "of TIMEUNIT.  Use 0 (the default) to not save "//&
+                 "incremental restart files at all.", default=real_to_time(0.0), &
                  timeunit=Time_unit)
   call get_param(param_file, mod_name, "WRITE_CPU_STEPS", cpu_steps, &
-                 "The number of coupled timesteps between writing the cpu \n"//&
-                 "time. If this is not positive, do not check cpu time, and \n"//&
+                 "The number of coupled timesteps between writing the cpu "//&
+                 "time. If this is not positive, do not check cpu time, and "//&
                  "the segment run-length can not be set via an elapsed CPU time.", &
                  default=1000)
   call get_param(param_file, "MOM", "DEBUG", debug, &
@@ -454,7 +458,7 @@ program MOM_main
   if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
 
-  if (restint > set_time(0)) then
+  if (restint > real_to_time(0.0)) then
     ! restart_time is the next integral multiple of restint.
     restart_time = Start_time + restint * &
         (1 + ((Time + Time_step_ocean) - Start_time) / restint)
@@ -474,25 +478,23 @@ program MOM_main
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
-        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, &
+        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, US, &
                      surface_forcing_CSp)
     endif
     if (debug) then
-      call MOM_mech_forcing_chksum("After set forcing", forces, grid, haloshift=0)
-      call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
+      call MOM_mech_forcing_chksum("After set forcing", forces, grid, US, haloshift=0)
+      call MOM_forcing_chksum("After set forcing", fluxes, grid, US, haloshift=0)
     endif
 
     if (use_ice_shelf) then
-      call shelf_calc_flux(sfc_state, forces, fluxes, Time, dt_forcing, ice_shelf_CSp)
-!###IS     call add_shelf_flux_forcing(fluxes, ice_shelf_CSp)
-!###IS  ! With a coupled ice/ocean run, use the following call.
-!###IS      call add_shelf_flux_IOB(ice_ocean_bdry_type, ice_shelf_CSp)
+      call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
+      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
 
     if (use_waves) then
-      call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
+      call Update_Surface_Waves(grid, GV, US, time, time_step_ocean, waves_csp)
     endif
 
     if (ns==1) then
@@ -534,7 +536,7 @@ program MOM_main
             dtdia = dt_dyn*(n - n_last_thermo)
             ! Back up Time2 to the start of the thermodynamic segment.
             if (n > n_last_thermo+1) &
-              Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
+              Time2 = Time2 - real_to_time(dtdia - dt_dyn)
             call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_forcing)
@@ -543,7 +545,7 @@ program MOM_main
         endif
 
         t_elapsed_seg = t_elapsed_seg + dt_dyn
-        Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
+        Time2 = Time1 + real_to_time(t_elapsed_seg)
       enddo
     endif
 
@@ -551,17 +553,17 @@ program MOM_main
 !   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + dt_forcing
     if (elapsed_time > 2e9) then
-      ! This is here to ensure that the conversion from a real to an integer
-      ! can be accurately represented in long runs (longer than ~63 years).
-      ! It will also ensure that elapsed time does not lose resolution of order
-      ! the timetype's resolution, provided that the timestep and tick are
-      ! larger than 10-5 seconds.  If a clock with a finer resolution is used,
-      ! a smaller value would be required.
-      segment_start_time = segment_start_time + set_time(int(floor(elapsed_time)))
-      elapsed_time = elapsed_time - floor(elapsed_time)
+      ! This is here to ensure that the conversion from a real to an integer can be accurately
+      ! represented in long runs (longer than ~63 years). It will also ensure that elapsed time
+      ! does not lose resolution of order the timetype's resolution, provided that the timestep and
+      ! tick are larger than 10-5 seconds.  If a clock with a finer resolution is used, a smaller
+      ! value would be required.
+      time_chg = real_to_time(elapsed_time)
+      segment_start_time = segment_start_time + time_chg
+      elapsed_time = elapsed_time - time_type_to_real(time_chg)
     endif
     if (elapsed_time_master) then
-      Master_Time = segment_start_time + set_time(int(floor(elapsed_time+0.5)))
+      Master_Time = segment_start_time + real_to_time(elapsed_time)
     else
       Master_Time = Master_Time + Time_step_ocean
     endif
@@ -572,8 +574,7 @@ program MOM_main
     endif ; endif
 
     call enable_averaging(dt_forcing, Time, diag)
-    call mech_forcing_diags(forces, fluxes, dt_forcing, grid, diag, &
-                            surface_forcing_CSp%handles)
+    call mech_forcing_diags(forces, dt_forcing, grid, diag, surface_forcing_CSp%handles)
     call disable_averaging(diag)
 
     if (.not. offline_tracer_mode) then
