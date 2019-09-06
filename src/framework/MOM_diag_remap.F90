@@ -14,11 +14,50 @@
 !! 5. diag_remap_do_remap() is called from within a diag post() to do the remapping before
 !!    the diagnostic is written out.
 
+
+! NOTE: In the following functions, the fields are passed using 1-based
+! indexing, which requires special handling within the grid index loops.
+!
+!   * diag_remap_do_remap
+!   * vertically_reintegrate_diag_field
+!   * vertically_interpolate_diag_field
+!   * horizontally_average_diag_field
+!
+! Symmetric grids add an additional row of western and southern points to u-
+! and v-grids.  Non-symmetric grids are 1-based and symmetric grids are
+! zero-based, allowing the same expressions to be used when accessing the
+! fields.  But if u- or v-points become 1-indexed, as in these functions, then
+! the stencils must be re-assessed.
+!
+! For interpolation between h and u grids, we use the following relations:
+!
+!   h->u: f_u[ig] = 0.5 * (f_h[ ig ] + f_h[ig+1])
+!         f_u[i1] = 0.5 * (f_h[i1-1] + f_h[ i1 ])
+!
+!   u->h: f_h[ig] = 0.5 * (f_u[ig-1] + f_u[ ig ])
+!         f_h[i1] = 0.5 * (f_u[ i1 ] + f_u[i1+1])
+!
+! where ig is the grid index and i1 is the 1-based index.  That is, a 1-based
+! u-point is ahead of its matching h-point in non-symmetric mode, but behind
+! its matching h-point in non-symmetric mode.
+!
+! We can combine these expressions by applying to ig a -1 shift on u-grids and
+! a +1 shift on h-grids in symmetric mode.
+!
+! We do not adjust the h-point indices, since they are assumed to be 1-based.
+! This is only correct when global indexing is disabled.  If global indexing is
+! enabled, then all indices will need to be defined relative to the data
+! domain.
+!
+! Finally, note that the mask input fields are pointers to arrays which are
+! zero-indexed, and do not need any corrections over grid index loops.
+
+
 module MOM_diag_remap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms,             only : sum_across_PEs
+use MOM_coms,             only : reproducing_sum
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
@@ -26,6 +65,7 @@ use MOM_io,               only : slasher, mom_read_data
 use MOM_io,               only : file_exists, field_size
 use MOM_string_functions, only : lowercase, extractWord
 use MOM_grid,             only : ocean_grid_type
+use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
@@ -136,10 +176,11 @@ end subroutine diag_remap_set_active
 
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration parameters to determine coordinate generation.
-subroutine diag_remap_configure_axes(remap_cs, GV, param_file)
+subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
   type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
-  type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
-  type(param_file_type),      intent(in) :: param_file !< Parameter file structure
+  type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file structure
   ! Local variables
   integer :: nzi(4), nzl(4), k
   character(len=200) :: inputdir, string, filename, int_varname, layer_varname
@@ -152,7 +193,7 @@ subroutine diag_remap_configure_axes(remap_cs, GV, param_file)
 
   real, allocatable, dimension(:) :: interfaces, layers
 
-  call initialize_regridding(remap_cs%regrid_cs, GV, GV%max_depth, param_file, mod, &
+  call initialize_regridding(remap_cs%regrid_cs, GV, US, GV%max_depth, param_file, mod, &
            trim(remap_cs%vertical_coord_name), "DIAG_COORD", trim(remap_cs%diag_coord_name))
   call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
 
@@ -223,10 +264,11 @@ end function
 !! height or layer thicknesses changes. In the case of density-based
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
-subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
+subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in) :: US !< A dimensional unit scaling type
   real, dimension(:, :, :), intent(in) :: h  !< New thickness
   real, dimension(:, :, :), intent(in) :: T  !< New T
   real, dimension(:, :, :), intent(in) :: S  !< New S
@@ -270,21 +312,21 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
     if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
       call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), &
                               GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), &
-                              zInterfaces, zScale=GV%m_to_H)
+                              zInterfaces, zScale=GV%Z_to_H)
     elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
                               GV%Z_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
-                            G%Zd_to_m*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
+                            US%Z_to_m*G%bathyT(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
 !     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
-!                           G%Zd_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+!                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
     elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
 !     call build_hycom1_column(remap_cs%regrid_cs, nz, &
-!                           G%Zd_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+!                           US%Z_to_m*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
     endif
     remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
@@ -310,7 +352,10 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   real, dimension(size(h,3)) :: h_src
   real :: h_neglect, h_neglect_edge
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k                !< Grid index
+  integer :: i1, j1                 !< 1-based index
+  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
+  integer :: shift                  !< Symmetric offset for 1-based indexing
 
   call assert(remap_cs%initialized, 'diag_remap_do_remap: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
@@ -327,31 +372,40 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
   nz_dest = remap_cs%nz
   remapped_field(:,:,:) = 0.
 
+  ! Symmetric grid offset under 1-based indexing; see header for details.
+  shift = 0; if (G%symmetric) shift = 1
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
+        I1 = I - G%isdB + 1
+        i_lo = I1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(I,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:), &
+        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        call remapping_core_h(remap_cs%remap_cs, &
+                              nz_src, h_src(:), field(I1,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I1,j,:), &
                               h_neglect, h_neglect_edge)
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
+      J1 = J - G%jsdB + 1
+      j_lo = J1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(i,J,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:), &
+        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        call remapping_core_h(remap_cs%remap_cs, &
+                              nz_src, h_src(:), field(i,J1,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J1,:), &
                               h_neglect, h_neglect_edge)
       enddo
     enddo
@@ -360,11 +414,12 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j, 1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,j,:), &
+        call remapping_core_h(remap_cs%remap_cs, &
+                              nz_src, h_src(:), field(i,j,:), &
                               nz_dest, h_dest(:), remapped_field(i,j,:), &
                               h_neglect, h_neglect_edge)
       enddo
@@ -434,7 +489,10 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k                !< Grid index
+  integer :: i1, j1                 !< 1-based index
+  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
+  integer :: shift                  !< Symmetric offset for 1-based indexing
 
   call assert(remap_cs%initialized, 'vertically_reintegrate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
@@ -444,30 +502,37 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
   reintegrated_field(:,:,:) = 0.
 
+  ! Symmetric grid offset under 1-based indexing; see header for details.
+  shift = 0; if (G%symmetric) shift = 1
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
+        I1 = I - G%isdB + 1
+        i_lo = I1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(I,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
-        call reintegrate_column(nz_src, h_src, field(I,j,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(I,j,:))
+        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        call reintegrate_column(nz_src, h_src, field(I1,j,:), &
+                                nz_dest, h_dest, 0., reintegrated_field(I1,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
+      J1 = J - G%jsdB + 1
+      j_lo = J1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(i,J,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call reintegrate_column(nz_src, h_src, field(i,J,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(i,J,:))
+        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        call reintegrate_column(nz_src, h_src, field(i,J1,:), &
+                                nz_dest, h_dest, 0., reintegrated_field(i,J1,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -475,7 +540,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j, 1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
@@ -505,7 +570,10 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k                !< Grid index
+  integer :: i1, j1                 !< 1-based index
+  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
+  integer :: shift                  !< Symmetric offset for 1-based indexing
 
   call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3)+1, &
@@ -516,30 +584,37 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
 
+  ! Symmetric grid offset under 1-based indexing; see header for details.
+  shift = 0; if (G%symmetric) shift = 1
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
+        I1 = I - G%isdB + 1
+        i_lo = I1 - shift; i_hi = i_lo + 1
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(I,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
-        call interpolate_column(nz_src, h_src, field(I,j,:), &
-                                nz_dest, h_dest, 0., interpolated_field(I,j,:))
+        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
+        call interpolate_column(nz_src, h_src, field(I1,j,:), &
+                                nz_dest, h_dest, 0., interpolated_field(I1,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
     do J=G%jscB, G%jecB
+      J1 = J - G%jsdB + 1
+      j_lo = J1 - shift; j_hi = j_lo + 1
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
+          if (mask(i,J,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call interpolate_column(nz_src, h_src, field(i,J,:), &
-                                nz_dest, h_dest, 0., interpolated_field(i,J,:))
+        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
+        call interpolate_column(nz_src, h_src, field(i,J1,:), &
+                                nz_dest, h_dest, 0., interpolated_field(i,J1,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -547,7 +622,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do j=G%jsc, G%jec
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j, 1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
@@ -564,7 +639,8 @@ end subroutine vertically_interpolate_diag_field
 !> Horizontally average field
 subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y, &
                                            is_layer, is_extensive, &
-                                           missing_value, field, averaged_field)
+                                           missing_value, field, averaged_field, &
+                                           averaged_mask)
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
   real, dimension(:,:,:), intent(in) :: h !< The current thicknesses
   logical,                intent(in) :: staggered_in_x !< True if the x-axis location is at u or q points
@@ -574,12 +650,19 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
   real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged
+  logical, dimension(:), intent(inout) :: averaged_mask  !< Mask for horizontally averaged field
+
   ! Local variables
+  real, dimension(G%isc:G%iec, G%jsc:G%jec, size(field,3)) :: volume, stuff
   real, dimension(size(field, 3)) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
-  real :: v1, v2, total_volume, total_stuff, val
+  real :: height
   integer :: i, j, k, nz
+  integer :: i1, j1                 !< 1-based index
 
   nz = size(field, 3)
+
+  ! TODO: These averages could potentially be modified to use the function in
+  !       the MOM_spatial_means module.
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     if (is_layer) then
@@ -588,30 +671,26 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         if (is_extensive) then
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCu(I,j)
-            v2 = G%areaCu(I-1,j)
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+          do j=G%jsc, G%jec ; do I=G%isc, G%iec
+            I1 = I - G%isdB + 1
+            volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * G%mask2dCu(I,j)
+            stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         else ! Intensive
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCu(I,j) * 0.5 * ( h(i,j,k) + h(i+1,j,k) )
-            v2 = G%areaCu(I-1,j) * 0.5 * ( h(i,j,k) + h(i-1,j,k) )
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+          do j=G%jsc, G%jec ; do I=G%isc, G%iec
+            I1 = i - G%isdB + 1
+            height = 0.5 * (h(i,j,k) + h(i+1,j,k))
+            volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * height * G%mask2dCu(I,j)
+            stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
-        do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          v1 = G%areaCu(I,j)
-          v2 = G%areaCu(I-1,j)
-          vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-          stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+        do j=G%jsc, G%jec ; do I=G%isc, G%iec
+          I1 = I - G%isdB + 1
+          volume(I,j,k) = G%US%L_to_m**2*G%areaCu(I,j) * G%mask2dCu(I,j)
+          stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
         enddo ; enddo
       enddo
     endif
@@ -619,33 +698,27 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     if (is_layer) then
       ! V-points
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
         if (is_extensive) then
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCv(i,J)
-            v2 = G%areaCv(i,J-1)
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+          do J=G%jsc, G%jec ; do i=G%isc, G%iec
+            J1 = J - G%jsdB + 1
+            volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * G%mask2dCv(i,J)
+            stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         else ! Intensive
-          do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCv(i,J) * 0.5 * ( h(i,j,k) + h(i,j+1,k) )
-            v2 = G%areaCv(i,J-1) * 0.5 * ( h(i,j,k) + h(i,j-1,k) )
-            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+          do J=G%jsc, G%jec ; do i=G%isc, G%iec
+            J1 = J - G%jsdB + 1
+            height = 0.5 * (h(i,j,k) + h(i,j+1,k))
+            volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * height * G%mask2dCv(i,J)
+            stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
-        do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          v1 = G%areaCv(i,J)
-          v2 = G%areaCv(i,J-1)
-          vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-          stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+        do J=G%jsc, G%jec ; do i=G%isc, G%iec
+          J1 = J - G%jsdB + 1
+          volume(i,J,k) = G%US%L_to_m**2*G%areaCv(i,J) * G%mask2dCv(i,J)
+          stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
         enddo ; enddo
       enddo
     endif
@@ -653,37 +726,28 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     if (is_layer) then
       ! H-points
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
         if (is_extensive) then
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            if (G%mask2dT(i,j)>0. .and. h(i,j,k)>0.) then
-              v1 = G%areaT(i,j)
-              vol_sum(k) = vol_sum(k) + v1
-              stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
+            if (h(i,j,k) > 0.) then
+              volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
+              stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
+            else
+              volume(i,j,k) = 0.
+              stuff(i,j,k) = 0.
             endif
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            if (G%mask2dT(i,j)>0. .and. h(i,j,k)>0.) then
-              v1 = G%areaT(i,j) * h(i,j,k)
-              vol_sum(k) = vol_sum(k) + v1
-              stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
-            endif
+            volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k) * G%mask2dT(i,j)
+            stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
-        vol_sum(k) = 0.
-        stuff_sum(k) = 0.
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          val = field(i,j,k)
-          if (G%mask2dT(i,j)>0. .and. val/=missing_value) then
-            v1 = G%areaT(i,j)
-            vol_sum(k) = vol_sum(k) + v1
-            stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
-          endif
+          volume(i,j,k) = G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
+          stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
         enddo ; enddo
       enddo
     endif
@@ -691,14 +755,18 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
     call assert(.false., 'horizontally_average_diag_field: Q point averaging is not coded yet.')
   endif
 
-  call sum_across_PEs(vol_sum, nz)
-  call sum_across_PEs(stuff_sum, nz)
+  do k = 1,nz
+    vol_sum(k) = reproducing_sum(volume(:,:,k))
+    stuff_sum(k) = reproducing_sum(stuff(:,:,k))
+  enddo
 
+  averaged_mask(:) = .true.
   do k=1,nz
-    if (vol_sum(k)>0.) then
+    if (vol_sum(k) > 0.) then
       averaged_field(k) = stuff_sum(k) / vol_sum(k)
     else
-      averaged_field(k) = missing_value
+      averaged_field(k) = 0.
+      averaged_mask(k) = .false.
     endif
   enddo
 

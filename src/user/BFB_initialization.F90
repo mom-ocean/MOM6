@@ -9,6 +9,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -18,6 +19,11 @@ implicit none ; private
 
 public BFB_set_coord
 public BFB_initialize_sponges_southonly
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Unsafe model variable
 !! \todo Remove this module variable
@@ -32,7 +38,7 @@ contains
 subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
   real, dimension(NKMEM_), intent(out) :: Rlay !< Layer potential density.
   real, dimension(NKMEM_), intent(out) :: g_prime !< The reduced gravity at
-                                                  !! each interface, in m2 Z-1 s-2.
+                                                  !! each interface [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
@@ -70,22 +76,23 @@ end subroutine BFB_set_coord
 
 !> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
-subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_file, CSp, h)
+subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, param_file, CSp, h)
   type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   logical,                 intent(in) :: use_temperature !< If true, temperature and salinity are used as
                                             !! state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CSp  !< A pointer to the sponge control structure
   real, dimension(NIMEM_, NJMEM_, NKMEM_), &
-                           intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units (Z).
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
-  real :: H0(SZK_(G))               ! Resting layer thickesses in depth units (Z).
-  real :: min_depth                 ! The minimum ocean depth in depth units (Z).
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, in depth units [Z ~> m].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: H0(SZK_(G))               ! Resting layer thicknesses in depth units [Z ~> m].
+  real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
   real :: damp, e_dense, damp_new, slat, wlon, lenlat, lenlon, nlat
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -95,14 +102,14 @@ subroutine BFB_initialize_sponges_southonly(G, GV, use_temperature, tv, param_fi
 
   eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
-!  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
+!  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
 !  wherever there is no sponge, and the subroutines that are called  !
 !  will automatically set up the sponges only where Idamp is positive!
 !  and mask2dT is 1.                                                   !
 
 !   Set up sponges for DOME configuration
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=GV%m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   call get_param(param_file, mdl, "SOUTHLAT", slat, &
                  "The southern latitude of the domain.", units="degrees")

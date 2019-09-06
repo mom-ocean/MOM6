@@ -6,13 +6,14 @@ module MOM_CVMix_ddiff
 use MOM_diag_mediator,  only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,  only : post_data
 use MOM_EOS,            only : calculate_density_derivs
-use MOM_variables,      only : thermo_var_ptrs
 use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
+use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_debugging,      only : hchksum
 use MOM_grid,           only : ocean_grid_type
+use MOM_unit_scaling,   only : unit_scale_type
+use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_file_parser,    only : get_param, log_version, param_file_type
 use cvmix_ddiff,        only : cvmix_init_ddiff, CVMix_coeffs_ddiff
 use cvmix_kpp,          only : CVmix_kpp_compute_kOBL_depth
 implicit none ; private
@@ -25,16 +26,16 @@ public CVMix_ddiff_init, CVMix_ddiff_end, CVMix_ddiff_is_used, compute_ddiff_coe
 type, public :: CVMix_ddiff_cs
 
   ! Parameters
-  real    :: strat_param_max !< maximum value for the stratification parameter (nondim)
+  real    :: strat_param_max !< maximum value for the stratification parameter [nondim]
   real    :: kappa_ddiff_s   !< leading coefficient in formula for salt-fingering regime
-                             !! for salinity diffusion (m^2/s)
-  real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula (nondim)
-  real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula (nondim)
-  real    :: mol_diff        !< molecular diffusivity (m^2/s)
-  real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime (nondim)
-  real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime (nondim)
-  real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime (nondim)
-  real    :: min_thickness      !< Minimum thickness allowed (m)
+                             !! for salinity diffusion [m2 s-1]
+  real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula [nondim]
+  real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula [nondim]
+  real    :: mol_diff        !< molecular diffusivity [m2 s-1]
+  real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime [nondim]
+  real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime [nondim]
+  real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime [nondim]
+  real    :: min_thickness      !< Minimum thickness allowed [m]
   character(len=4) :: diff_conv_type !< type of diffusive convection to use. Options are Marmorino &
                                 !! Caldwell 1976 ("MC76"; default) and Kelley 1988, 1990 ("K90")
   logical :: debug              !< If true, turn on debugging
@@ -46,9 +47,9 @@ type, public :: CVMix_ddiff_cs
   !!@}
 
   ! Diagnostics arrays
-!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp (Z2/s)
-!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt (Z2/s)
-  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio (nondim)
+!  real, allocatable, dimension(:,:,:) :: KT_extra  !< Double diffusion diffusivity for temp [Z2 s-1 ~> m2 s-1]
+!  real, allocatable, dimension(:,:,:) :: KS_extra  !< Double diffusion diffusivity for salt [Z2 s-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:,:) :: R_rho     !< Double-diffusion density ratio [nondim]
 
 end type CVMix_ddiff_cs
 
@@ -57,14 +58,15 @@ character(len=40)  :: mdl = "MOM_CVMix_ddiff"     !< This module's name.
 contains
 
 !> Initialized the CVMix double diffusion module.
-logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
+logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_ddiff_cs),    pointer        :: CS        !< This module's control structure.
+  type(CVMix_ddiff_cs),    pointer       :: CS         !< This module's control structure.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -80,9 +82,9 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Parameterization of mixing due to double diffusion processes via CVMix")
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_init, &
-                 "If true, turns on double diffusive processes via CVMix.  \n"// &
-                 "Note that double diffusive processes on viscosity are ignored \n"// &
-                 "in CVMix, see http://cvmix.github.io/ for justification.",&
+                 "If true, turns on double diffusive processes via CVMix. "//&
+                 "Note that double diffusive processes on viscosity are ignored "//&
+                 "in CVMix, see http://cvmix.github.io/ for justification.", &
                  default=.false.)
 
   if (.not. CVMix_ddiff_init) return
@@ -98,7 +100,7 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
                  units="nondim", default=2.55)
 
   call get_param(param_file, mdl, "KAPPA_DDIFF_S", CS%kappa_ddiff_s, &
-                 "Leading coefficient in formula for salt-fingering regime \n"// &
+                 "Leading coefficient in formula for salt-fingering regime "//&
                  "for salinity diffusion.", units="m2 s-1", default=1.0e-4)
 
   call get_param(param_file, mdl, "DDIFF_EXP1", CS%ddiff_exp1, &
@@ -136,10 +138,10 @@ logical function CVMix_ddiff_init(Time, G, GV, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=GV%Z_to_m**2)
+         'Double-diffusive diffusivity for temperature', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=GV%Z_to_m**2)
+         'Double-diffusive diffusivity for salinity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_R_rho = register_diag_field('ocean_model','R_rho',diag%axesTi,Time, &
          'Double-diffusion density ratio', 'nondim')
@@ -160,36 +162,37 @@ end function CVMix_ddiff_init
 
 !> Subroutine for computing vertical diffusion coefficients for the
 !! double diffusion mixing parameterization.
-subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
+subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS)
 
   type(ocean_grid_type),                      intent(in)  :: G    !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV   !< Vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness, in m or kg m-2.
+  type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv   !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_T !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for temp (Z2/sec).
+                                                                  !! diffusivity for temp [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_S !< Interface double diffusion diapycnal
-                                                                  !! diffusivity for salt (Z2/sec).
-  type(CVMix_ddiff_cs),                           pointer :: CS   !< The control structure returned
+                                                                  !! diffusivity for salt [Z2 T-1 ~> m2 s-1].
+  type(CVMix_ddiff_cs),                       pointer     :: CS   !< The control structure returned
                                                                   !! by a previous call to CVMix_ddiff_init.
-  integer,                                   intent(in)   :: j    !< Meridional grid indice.
+  integer,                                    intent(in)  :: j    !< Meridional grid indice.
   ! Local variables
   real, dimension(SZK_(G)) :: &
-    cellHeight, &  !< Height of cell centers (m)
-    dRho_dT,    &  !< partial derivatives of density wrt temp (kg m-3 degC-1)
-    dRho_dS,    &  !< partial derivatives of density wrt saln (kg m-3 PPT-1)
-    pres_int,   &  !< pressure at each interface (Pa)
-    temp_int,   &  !< temp and at interfaces (degC)
-    salt_int,   &  !< salt at at interfaces
+    cellHeight, &  !< Height of cell centers [m]
+    dRho_dT,    &  !< partial derivatives of density wrt temp [kg m-3 degC-1]
+    dRho_dS,    &  !< partial derivatives of density wrt saln [kg m-3 ppt-1]
+    pres_int,   &  !< pressure at each interface [Pa]
+    temp_int,   &  !< temp and at interfaces [degC]
+    salt_int,   &  !< salt at at interfaces [ppt]
     alpha_dT,   &  !< alpha*dT across interfaces
     beta_dS,    &  !< beta*dS across interfaces
-    dT,         &  !< temp. difference between adjacent layers (degC)
-    dS             !< salt difference between adjacent layers
+    dT,         &  !< temp. difference between adjacent layers [degC]
+    dS             !< salt difference between adjacent layers [ppt]
   real, dimension(SZK_(G)+1) :: &
-    Kd1_T,      &  !< Diapycanal diffusivity of temperature, in m2 s-1.
-    Kd1_S          !< Diapycanal diffusivity of salinity, in m2 s-1.
+    Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
+    Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
-  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
+  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces [m]
   integer :: kOBL                        !< level of OBL extent
   real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, k
@@ -272,8 +275,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, j, Kd_T, Kd_S, CS)
                             nlev=G%ke,    &
                             max_nlev=G%ke)
     do K=1,G%ke+1
-      Kd_T(i,j,K) = GV%m_to_Z**2 * Kd1_T(K)
-      Kd_S(i,j,K) = GV%m_to_Z**2 * Kd1_S(K)
+      Kd_T(i,j,K) = US%m2_s_to_Z2_T * Kd1_T(K)
+      Kd_S(i,j,K) = US%m2_s_to_Z2_T * Kd1_S(K)
     enddo
 
     ! Do not apply mixing due to convection within the boundary layer

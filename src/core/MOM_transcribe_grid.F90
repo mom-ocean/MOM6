@@ -9,6 +9,7 @@ use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE, AGRID, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_grid, only : ocean_grid_type, set_derived_metrics
+use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
@@ -18,9 +19,10 @@ contains
 
 !> Copies information from a dynamic (shared) horizontal grid type into an
 !! ocean_grid_type.
-subroutine copy_dyngrid_to_MOM_grid(dG, oG)
+subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
   type(dyn_horgrid_type), intent(in)    :: dG  !< Common horizontal grid type
   type(ocean_grid_type),  intent(inout) :: oG  !< Ocean grid type
+  type(unit_scale_type),  intent(in)    :: US  !< A dimensional unit scaling type
 
   integer :: isd, ied, jsd, jed      ! Common data domains.
   integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
@@ -44,7 +46,6 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   if ((isd > oG%isc) .or. (ied < oG%ied) .or. (jsd > oG%jsc) .or. (jed > oG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
-  oG%Zd_to_m = dG%Zd_to_m
   do i=isd,ied ; do j=jsd,jed
     oG%geoLonT(i,j) = dG%geoLonT(i+ido,j+jdo)
     oG%geoLatT(i,j) = dG%geoLatT(i+ido,j+jdo)
@@ -155,16 +156,17 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
     call pass_vector(oG%Dopen_u, oG%Dopen_v, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   endif
 
-  call set_derived_metrics(oG)
+  call set_derived_metrics(oG, US)
 
 end subroutine copy_dyngrid_to_MOM_grid
 
 
 !> Copies information from an ocean_grid_type into a dynamic (shared)
 !! horizontal grid type.
-subroutine copy_MOM_grid_to_dyngrid(oG, dG)
+subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   type(ocean_grid_type),  intent(in)    :: oG  !< Ocean grid type
   type(dyn_horgrid_type), intent(inout) :: dG  !< Common horizontal grid type
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   integer :: isd, ied, jsd, jed      ! Common data domains.
   integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
@@ -188,7 +190,6 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
   if ((isd > dG%isc) .or. (ied < dG%ied) .or. (jsd > dG%jsc) .or. (jed > dG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
-  dG%Zd_to_m = oG%Zd_to_m
   do i=isd,ied ; do j=jsd,jed
     dG%geoLonT(i,j) = oG%geoLonT(i+ido,j+jdo)
     dG%geoLatT(i,j) = oG%geoLatT(i+ido,j+jdo)
@@ -300,7 +301,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
     call pass_vector(dG%Dopen_u, dG%Dopen_v, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   endif
 
-  call  set_derived_dyn_horgrid(dG)
+  call  set_derived_dyn_horgrid(dG, US)
 
 end subroutine copy_MOM_grid_to_dyngrid
 

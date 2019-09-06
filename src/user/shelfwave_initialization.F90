@@ -12,6 +12,7 @@ use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_time_manager,   only : time_type, time_type_to_real
+use MOM_unit_scaling,   only : unit_scale_type
 
 implicit none ; private
 
@@ -68,7 +69,7 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
                  "Length scale of shelfwave in x-direction.",&
                  units="Same as x,y", default=100.)
   call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",CS%Ly, &
-                 "Length scale of exponential dropoff of topography\n"//&
+                 "Length scale of exponential dropoff of topography "//&
                  "in the y-direction.", &
                  units="Same as x,y", default=50.)
   call get_param(param_file, mdl,"SHELFWAVE_Y_MODE",CS%jj, &
@@ -93,31 +94,33 @@ subroutine shelfwave_OBC_end(CS)
 end subroutine shelfwave_OBC_end
 
 !> Initialization of topography.
-subroutine shelfwave_initialize_topography ( D, G, param_file, max_depth )
-  ! Arguments
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
+  type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+  type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
+  real :: m_to_Z  ! A dimensional rescaling factor.
   integer   :: i, j
   real      :: y, rLy, Ly, H0
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",Ly, &
                  default=50., do_not_log=.true.)
-  call get_param(param_file, mdl,"MINIMUM_DEPTH",H0, &
-                 default=10., do_not_log=.true.)
+  call get_param(param_file, mdl,"MINIMUM_DEPTH", H0, &
+                 default=10., units="m", scale=m_to_Z, do_not_log=.true.)
 
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
-  do i=G%isc,G%iec
-    do j=G%jsc,G%jec
-      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      y = ( G%geoLatT(i,j) - G%south_lat )
-      D(i,j) = H0 * exp(2 * rLy * y)
-    enddo
-  enddo
+
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+    y = ( G%geoLatT(i,j) - G%south_lat )
+    D(i,j) = H0 * exp(2 * rLy * y)
+  enddo ; enddo
 
 end subroutine shelfwave_initialize_topography
 
@@ -167,9 +170,9 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
       cos_wt = cos(ll*x - omega*time_sec)
       sin_ky = sin(kk * y)
       cos_ky = cos(kk * y)
-      segment%normal_vel_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * &
+      segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * exp(- alpha * y) * cos_wt * &
            (alpha * sin_ky + kk * cos_ky)
-!     segment%tangential_vel_bt(I,j) = my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
+!     segment%tangential_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
 !     segment%vorticity_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * sin_ky&
 !           (ll*ll + kk*kk + alpha*alpha)
     enddo ; enddo

@@ -11,7 +11,6 @@ module ISOMIP_tracer
 ! Adapted to the ISOMIP test case by Gustavo Marques, May 2016
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -97,8 +96,8 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
-                 "The name of a file from which to read the initial \n"//&
-                 "conditions for the ISOMIP tracers, or blank to initialize \n"//&
+                 "The name of a file from which to read the initial "//&
+                 "conditions for the ISOMIP tracers, or blank to initialize "//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
@@ -108,8 +107,8 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                    CS%tracer_IC_file)
   endif
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
@@ -146,14 +145,14 @@ end function register_ISOMIP_tracer
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                    ALE_sponge_CSp, diag_to_Z_CSp)
+                                    ALE_sponge_CSp)
 
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
   logical,                               intent(in) :: restart !< .true. if the fields have already
                                                        !! been read from a restart file.
   type(time_type), target,               intent(in) :: day !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness [H ~> m or kg m-2].
   type(diag_ctrl),               target, intent(in) :: diag !< A structure that is used to regulate
                                                        !! diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies
@@ -164,8 +163,6 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< A pointer to the control structure for
                                                        !! the sponges, if they are in use.  Otherwise this
                                                        !! may be unassociated.
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
-                                                       !! for diagnostics in depth space.
 
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
@@ -181,9 +178,9 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
+  real :: dist2  ! The distance squared from a line [m2].
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
+                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -255,29 +252,29 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_old !< Layer thickness before entrainment, in m or kg m-2.
+                           intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h_new !< Layer thickness after entrainment, in m or kg m-2.
+                           intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
-                                              !! added, in m or kg m-2.
+                                              !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call, in s
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
   type(ISOMIP_tracer_CS),  pointer    :: CS !< The control structure returned by a previous
                                               !! call to ISOMIP_register_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep (nondim)
+                                              !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied, in m
+                                              !! fluxes can be applied [m]
 
 ! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
+!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
   real :: mmax
@@ -335,7 +332,7 @@ subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
   type(surface),          intent(inout) :: state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+                          intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   type(ISOMIP_tracer_CS), pointer       :: CS !< The control structure returned by a previous
                                               !! call to ISOMIP_register_tracer.
 

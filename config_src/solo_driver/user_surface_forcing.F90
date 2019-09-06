@@ -15,6 +15,7 @@ use MOM_io, only : file_exists, read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -32,11 +33,11 @@ type, public :: user_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq approximation, in kg m-3.
-  real :: G_Earth            !< The gravitational acceleration in m s-2.
-  real :: Flux_const         !< The restoring rate at the surface, in m s-1.
+  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
+  real :: G_Earth            !< The gravitational acceleration [L2 Z-1 s-2 ~> m s-2].
+  real :: Flux_const         !< The restoring rate at the surface [m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar, in Pa.
+                             !! that contributes to ustar [Pa].
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                              !! timing of diagnostic output.
@@ -44,15 +45,16 @@ end type user_surface_forcing_CS
 
 contains
 
-!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
+!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy, in [Pa].
 !! These are the stresses in the direction of the model grid (i.e. the same
-!! direction as the u- and v- velocities.)  They are both in Pa.
-subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
+!! direction as the u- and v- velocities).
+subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
+  type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
                                                        !! by a previous call to user_surface_forcing_init
 
@@ -86,7 +88,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
   !  is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+   forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
        sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo ; endif
@@ -96,14 +98,15 @@ end subroutine USER_wind_forcing
 !>    This subroutine specifies the current surface fluxes of buoyancy or
 !!  temperature and fresh water.  It may also be modified to add
 !!  surface fluxes of user provided tracers.
-subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply, in s
+                                                       !! the fluxes apply [s]
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
                                                        !! by a previous call to user_surface_forcing_init
 
@@ -122,13 +125,13 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward, in C.
-  real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
+  real :: Temp_restore   ! The temperature that is being restored toward [degC].
+  real :: Salin_restore  ! The salinity that is being restored toward [ppt]
   real :: density_restore  ! The potential density that is being restored
-                         ! toward, in kg m-3.
-  real :: rhoXcp         ! The mean density times the heat capacity, in J m-3 K-1.
+                         ! toward [kg m-3].
+  real :: rhoXcp         ! The mean density times the heat capacity [J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux, in m5 s-3 kg-1.
+                           ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
 
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -166,7 +169,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
+      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -182,7 +185,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
-      !   fluxes%buoy is the buoyancy flux into the ocean in m2 s-3.  A positive
+      !   fluxes%buoy is the buoyancy flux into the ocean [L2 T-3 ~> m2 s-3].  A positive
       ! buoyancy flux is of the same sign as heating the ocean.
       fluxes%buoy(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
@@ -198,8 +201,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in C) and
-        ! salinity (in PSU) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
+        ! salinity (in PSU or ppt) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 
@@ -216,10 +219,10 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
         "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density in kg m-3 that is being restored toward.
+       ! density [kg m-3] that is being restored toward.
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
@@ -231,9 +234,10 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
 end subroutine USER_buoyancy_forcing
 
 !> This subroutine initializes the USER_surface_forcing module
-subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
+subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(time_type),               intent(in) :: Time !< The current model time
   type(ocean_grid_type),         intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type),         intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),         intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,       intent(in) :: diag !< A structure that is used to regulate diagnostic output.
   type(user_surface_forcing_CS), pointer    :: CS   !< A pointer that is set to point to
@@ -254,16 +258,16 @@ subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state \n"//&
+                 "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
@@ -271,13 +275,13 @@ subroutine USER_surface_forcing_init(Time, G, param_file, diag, CS)
                  default=0.02)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
-                 "If true, the buoyancy fluxes drive the model back \n"//&
-                 "toward some specified surface state with a rate \n"//&
+                 "If true, the buoyancy fluxes drive the model back "//&
+                 "toward some specified surface state with a rate "//&
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes \n"//&
-                 "to the relative surface anomalies (akin to a piston \n"//&
+                 "The constant that relates the restoring surface fluxes "//&
+                 "to the relative surface anomalies (akin to a piston "//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
     ! Convert CS%Flux_const from m day-1 to m s-1.

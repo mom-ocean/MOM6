@@ -22,7 +22,7 @@ public tidal_forcing_sensitivity
 integer, parameter :: MAX_CONSTITUENTS = 10 !< The maximum number of tidal
                                             !! constituents that could be used.
 
-!> The control structure for the MOM_tidal_forcing mldule
+!> The control structure for the MOM_tidal_forcing module
 type, public :: tidal_forcing_CS ; private
   logical :: use_sal_scalar !< If true, use the scalar approximation when
                       !! calculating self-attraction and loading.
@@ -36,10 +36,10 @@ type, public :: tidal_forcing_CS ; private
                       !! and bottom geopotential anomalies.
   integer :: nc       !< The number of tidal constituents in use.
   real, dimension(MAX_CONSTITUENTS) :: &
-    freq, &           !< The frequency of a tidal constituent, in s-1.
+    freq, &           !< The frequency of a tidal constituent [s-1].
     phase0, &         !< The phase of a tidal constituent at time 0, in radians.
-    amp, &            !< The amplitude of a tidal constituent at time 0, in m.
-    love_no           !< The Love number of a tidal constituent at time 0, ND.
+    amp, &            !< The amplitude of a tidal constituent at time 0 [m].
+    love_no           !< The Love number of a tidal constituent at time 0 [nondim].
   integer :: struct(MAX_CONSTITUENTS) !< An encoded spatial structure for each constituent
   character (len=16) :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
 
@@ -48,10 +48,10 @@ type, public :: tidal_forcing_CS ; private
     cos_struct => NULL(), &    !< be associated with the astronomical forcing.
     cosphasesal => NULL(), &   !< The cosine and sine of the phase of the
     sinphasesal => NULL(), &   !< self-attraction and loading amphidromes.
-    ampsal => NULL(), &        !< The amplitude of the SAL, in m.
+    ampsal => NULL(), &        !< The amplitude of the SAL [m].
     cosphase_prev => NULL(), & !< The cosine and sine of the phase of the
     sinphase_prev => NULL(), & !< amphidromes in the previous tidal solutions.
-    amp_prev => NULL()         !< The amplitude of the previous tidal solution, in m.
+    amp_prev => NULL()         !< The amplitude of the previous tidal solution [m].
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -123,43 +123,43 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   enddo ; enddo
 
   call get_param(param_file, mdl, "TIDE_M2", use_M2, &
-                 "If true, apply tidal momentum forcing at the M2 \n"//&
+                 "If true, apply tidal momentum forcing at the M2 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_S2", use_S2, &
-                 "If true, apply tidal momentum forcing at the S2 \n"//&
+                 "If true, apply tidal momentum forcing at the S2 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_N2", use_N2, &
-                 "If true, apply tidal momentum forcing at the N2 \n"//&
+                 "If true, apply tidal momentum forcing at the N2 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_K2", use_K2, &
-                 "If true, apply tidal momentum forcing at the K2 \n"//&
+                 "If true, apply tidal momentum forcing at the K2 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_K1", use_K1, &
-                 "If true, apply tidal momentum forcing at the K1 \n"//&
+                 "If true, apply tidal momentum forcing at the K1 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_O1", use_O1, &
-                 "If true, apply tidal momentum forcing at the O1 \n"//&
+                 "If true, apply tidal momentum forcing at the O1 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_P1", use_P1, &
-                 "If true, apply tidal momentum forcing at the P1 \n"//&
+                 "If true, apply tidal momentum forcing at the P1 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_Q1", use_Q1, &
-                 "If true, apply tidal momentum forcing at the Q1 \n"//&
+                 "If true, apply tidal momentum forcing at the Q1 "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_MF", use_MF, &
-                 "If true, apply tidal momentum forcing at the MF \n"//&
+                 "If true, apply tidal momentum forcing at the MF "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
   call get_param(param_file, mdl, "TIDE_MM", use_MM, &
-                 "If true, apply tidal momentum forcing at the MM \n"//&
+                 "If true, apply tidal momentum forcing at the MM "//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
 
@@ -179,29 +179,29 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   endif
 
   call get_param(param_file, mdl, "TIDAL_SAL_FROM_FILE", CS%tidal_sal_from_file, &
-                 "If true, read the tidal self-attraction and loading \n"//&
-                 "from input files, specified by TIDAL_INPUT_FILE. \n"//&
+                 "If true, read the tidal self-attraction and loading "//&
+                 "from input files, specified by TIDAL_INPUT_FILE. "//&
                  "This is only used if TIDES is true.", default=.false.)
   call get_param(param_file, mdl, "USE_PREVIOUS_TIDES", CS%use_prev_tides, &
-                 "If true, use the SAL from the previous iteration of the \n"//&
-                 "tides to facilitate convergent iteration. \n"//&
+                 "If true, use the SAL from the previous iteration of the "//&
+                 "tides to facilitate convergent iteration. "//&
                  "This is only used if TIDES is true.", default=.false.)
   call get_param(param_file, mdl, "TIDE_USE_SAL_SCALAR", CS%use_sal_scalar, &
-                 "If true and TIDES is true, use the scalar approximation \n"//&
+                 "If true and TIDES is true, use the scalar approximation "//&
                  "when calculating self-attraction and loading.", &
                  default=.not.CS%tidal_sal_from_file)
   ! If it is being used, sal_scalar MUST be specified in param_file.
   if (CS%use_sal_scalar .or. CS%use_prev_tides) &
     call get_param(param_file, mdl, "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar, &
-                 "The constant of proportionality between sea surface \n"//&
-                 "height (really it should be bottom pressure) anomalies \n"//&
-                 "and bottom geopotential anomalies. This is only used if \n"//&
+                 "The constant of proportionality between sea surface "//&
+                 "height (really it should be bottom pressure) anomalies "//&
+                 "and bottom geopotential anomalies. This is only used if "//&
                  "TIDES and TIDE_USE_SAL_SCALAR are true.", units="m m-1", &
                  fail_if_missing=.true.)
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
-                &"to accomodate all the registered tidal constituents.")') nc
+                &"to accommodate all the registered tidal constituents.")') nc
     call MOM_error(FATAL, "MOM_tidal_forcing"//mesg)
   endif
 
@@ -290,15 +290,15 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   ! values that are actually used.
   do c=1,nc
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_FREQ", CS%freq(c), &
-                   "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. \n"//&
+                   "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true.", units="s-1", default=freq_def(c))
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
-                   "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. \n"//&
+                   "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true.", units="m", default=amp_def(c))
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_PHASE_T0", CS%phase0(c), &
-                   "Phase of the "//trim(CS%const_name(c))//" tidal constituent at time 0. \n"//&
+                   "Phase of the "//trim(CS%const_name(c))//" tidal constituent at time 0. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true.", units="radians", default=phase0_def(c))
   enddo
@@ -379,7 +379,7 @@ subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
   type(ocean_grid_type),  intent(in)  :: G  !< The ocean's grid structure.
   type(tidal_forcing_CS), pointer     :: CS !< The control structure returned by a previous call to tidal_forcing_init.
   real,                   intent(out) :: deta_tidal_deta !< The partial derivative of eta_tidal with
-                                            !! the local value of eta, nondim.
+                                            !! the local value of eta [nondim].
 
   if (CS%USE_SAL_SCALAR .and. CS%USE_PREV_TIDES) then
     deta_tidal_deta = 2.0*CS%SAL_SCALAR
@@ -400,14 +400,14 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure.
   type(time_type),                  intent(in)  :: Time      !< The time for the caluculation.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta       !< The sea surface height anomaly from
-                                                             !! a time-mean geoid in depth units (Z).
+                                                             !! a time-mean geoid [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal !< The tidal forcing geopotential height
-                                                             !! anomalies, in depth units (Z).
+                                                             !! anomalies [Z ~> m].
   type(tidal_forcing_CS),           pointer     :: CS        !< The control structure returned by a
                                                              !! previous call to tidal_forcing_init.
   real, optional,                   intent(out) :: deta_tidal_deta !< The partial derivative of
                                                              !! eta_tidal with the local value of
-                                                             !! eta, nondim.
+                                                             !! eta [nondim].
   real, optional,                   intent(in)  :: m_to_Z    !< A scaling factor from m to the units of eta.
 
   ! Local variables

@@ -20,6 +20,7 @@ use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_date, set_date
 use MOM_time_manager, only : time_type_to_real, real_to_time
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 
 implicit none ; private
@@ -36,23 +37,23 @@ type, public :: ctrl_forcing_CS ; private
   logical :: do_integrated   !< If true, use time-integrated anomalies to control
                              !! the surface state.
   integer :: num_cycle       !< The number of elements in the forcing cycle.
-  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate, in s-1.
-  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate, in s-1.
+  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate [s-1].
+  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate [s-1].
   real    :: heat_cyc_rate  !< The rate at which cyclical heating anomaliess
-                            !! accumulate, in s-1.
+                            !! accumulate [s-1].
   real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomaliess
-                            !! accumulate, in s-1.
+                            !! accumulate [s-1].
   real    :: Len2           !< The square of the length scale over which the anomalies
-                            !! are smoothed via a Laplacian filter, in m2.
+                            !! are smoothed via a Laplacian filter [m2].
   real    :: lam_heat       !< A constant of proportionality between SST anomalies
-                            !! and heat fluxes, in W m-2 K-1.
+                            !! and heat fluxes [W m-2 degC-1].
   real    :: lam_prec       !< A constant of proportionality between SSS anomalies
-                            !! (normalised by mean SSS) and precipitation, in kg m-2.
+                            !! (normalised by mean SSS) and precipitation [kg m-2].
   real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
-                            !! anomalies and corrective heat fluxes, in W m-2 K-1.
+                            !! anomalies and corrective heat fluxes [W m-2 degC-1].
   real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
                             !! anomalies (normalised by mean SSS) and corrective
-                            !! precipitation, in kg m-2.
+                            !! precipitation [kg m-2].
 
   !>@{ Pointers for data.
   !! \todo Needs more complete documentation.
@@ -78,24 +79,25 @@ contains
 !> This subroutine calls any of the other subroutines in this file
 !! that are needed to specify the current surface forcing fields.
 subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_precip, &
-                              day_start, dt, G, CS)
+                              day_start, dt, G, US, CS)
   type(ocean_grid_type), intent(inout) :: G                    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
-                                                               !! anomalies, in deg C.
+                                                               !! anomalies [degC].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity
-                                                               !! anomlies, in g kg-1.
+                                                               !! anomlies [ppt].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface
-                                                               !! salinity, in g kg-1.
+                                                               !! salinity [ppt].
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat !< Virtual (corrective) heat
                                                                !! fluxes that are augmented
-                                                               !! in this subroutine, in W m-2.
+                                                               !! in this subroutine [W m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_precip !< Virtual (corrective)
                                                                !! precipitation fluxes that
                                                                !! are augmented in this
-                                                               !! subroutine, in kg m-2 s-1.
+                                                               !! subroutine [kg m-2 s-1].
   type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
   real,                  intent(in)    :: dt             !< Length of time over which these
-                                                         !! fluxes will be applied, in s.
+                                                         !! fluxes will be applied [s].
+  type(unit_scale_type), intent(in)    :: US             !< A dimensional unit scaling type
   type(ctrl_forcing_CS), pointer       :: CS             !< A pointer to the control structure
                                                          !! returned by a previous call to
                                                          !! ctrl_forcing_init.
@@ -107,7 +109,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     flux_heat_y, &
     flux_prec_y
   type(time_type) :: day_end
-  real    :: coef    ! A heat-flux coefficient with units of m2.
+  real    :: coef    ! A heat-flux coefficient [m2].
   real    :: mr_st, mr_end, mr_mid, mr_prev, mr_next
   real    :: dt_wt, dt_heat_rate, dt_prec_rate
   real    :: dt1_heat_rate, dt1_prec_rate, dt2_heat_rate, dt2_prec_rate
@@ -146,12 +148,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     do j=js,je ; do i=is,ie
       CS%heat_0(i,j) = CS%heat_0(i,j) + dt_heat_rate * ( &
          -CS%lam_heat*G%mask2dT(i,j)*SST_anom(i,j) + &
-        (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+        (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                           (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
       CS%precip_0(i,j) = CS%precip_0(i,j) + dt_prec_rate * ( &
          CS%lam_prec * G%mask2dT(i,j)*(SSS_anom(i,j) / SSS_mean(i,j)) + &
-        (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+        (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                           (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
 
       virt_heat(i,j) = virt_heat(i,j) + CS%heat_0(i,j)
@@ -330,13 +332,13 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       do j=js,je ; do i=is,ie
         CS%heat_cyc(i,j,m_u1) = CS%heat_cyc(i,j,m_u1) + dt1_heat_rate * ( &
            -CS%lam_cyc_heat*(CS%avg_SST_anom(i,j,m_u2) - CS%avg_SST_anom(i,j,m_u1)) + &
-          (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                             (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
         CS%precip_cyc(i,j,m_u1) = CS%precip_cyc(i,j,m_u1) + dt1_prec_rate * ( &
           CS%lam_cyc_prec * (CS%avg_SSS_anom(i,j,m_u2) - CS%avg_SSS_anom(i,j,m_u1)) / &
                             (0.5*(CS%avg_SSS(i,j,m_u2) + CS%avg_SSS(i,j,m_u1))) + &
-          (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                             (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
       enddo ; enddo
     endif
@@ -355,13 +357,13 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       do j=js,je ; do i=is,ie
         CS%heat_cyc(i,j,m_u2) = CS%heat_cyc(i,j,m_u2) + dt1_heat_rate * ( &
          -CS%lam_cyc_heat*(CS%avg_SST_anom(i,j,m_u3) - CS%avg_SST_anom(i,j,m_u2)) + &
-          (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                             (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
         CS%precip_cyc(i,j,m_u2) = CS%precip_cyc(i,j,m_u2) + dt1_prec_rate * ( &
           CS%lam_cyc_prec * (CS%avg_SSS_anom(i,j,m_u3) - CS%avg_SSS_anom(i,j,m_u2)) / &
                              (0.5*(CS%avg_SSS(i,j,m_u3) + CS%avg_SSS(i,j,m_u2))) + &
-          (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+          (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                             (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
       enddo ; enddo
     endif
@@ -509,11 +511,11 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call log_param(param_file, mdl, "CTRL_FORCE_INTEGRATED", do_integrated, &
-                 "If true, use a PI controller to determine the surface \n"//&
+                 "If true, use a PI controller to determine the surface "//&
                  "forcing that is consistent with the observed mean properties.", &
                  default=.false.)
   call log_param(param_file, mdl, "CTRL_FORCE_NUM_CYCLE", num_cycle, &
-                 "The number of cycles per year in the controlled forcing, \n"//&
+                 "The number of cycles per year in the controlled forcing, "//&
                  "or 0 for no cyclic forcing.", default=0)
 
   if (.not.associated(CS)) return
@@ -521,33 +523,33 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   call get_param(param_file, mdl, "CTRL_FORCE_HEAT_INT_RATE", CS%heat_int_rate, &
-                 "The integrated rate at which heat flux anomalies are \n"//&
+                 "The integrated rate at which heat flux anomalies are "//&
                  "accumulated.", units="s-1", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_PREC_INT_RATE", CS%prec_int_rate, &
-                 "The integrated rate at which precipitation anomalies \n"//&
+                 "The integrated rate at which precipitation anomalies "//&
                  "are accumulated.", units="s-1", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_HEAT_CYC_RATE", CS%heat_cyc_rate, &
-                 "The integrated rate at which cyclical heat flux \n"//&
+                 "The integrated rate at which cyclical heat flux "//&
                  "anomalies are accumulated.", units="s-1", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_PREC_CYC_RATE", CS%prec_cyc_rate, &
-                 "The integrated rate at which cyclical precipitation \n"//&
+                 "The integrated rate at which cyclical precipitation "//&
                  "anomalies are accumulated.", units="s-1", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_SMOOTH_LENGTH", smooth_len, &
-                 "The length scales over which controlled forcing \n"//&
+                 "The length scales over which controlled forcing "//&
                  "anomalies are smoothed.", units="m", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_HEAT", CS%lam_heat, &
-                 "A constant of proportionality between SST anomalies \n"//&
+                 "A constant of proportionality between SST anomalies "//&
                  "and controlling heat fluxes", "W m-2 K-1", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_PREC", CS%lam_prec, &
-                 "A constant of proportionality between SSS anomalies \n"//&
+                 "A constant of proportionality between SSS anomalies "//&
                  "(normalised by mean SSS) and controlling precipitation.", &
                  "kg m-2", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_HEAT", CS%lam_cyc_heat, &
-                 "A constant of proportionality between SST anomalies \n"//&
+                 "A constant of proportionality between SST anomalies "//&
                  "and cyclical controlling heat fluxes", "W m-2 K-1", default=0.0)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_PREC", CS%lam_cyc_prec, &
-                 "A constant of proportionality between SSS anomalies \n"//&
-                 "(normalised by mean SSS) and cyclical controlling \n"//&
+                 "A constant of proportionality between SSS anomalies "//&
+                 "(normalised by mean SSS) and cyclical controlling "//&
                  "precipitation.", "kg m-2", default=0.0)
 
   CS%Len2 = smooth_len**2

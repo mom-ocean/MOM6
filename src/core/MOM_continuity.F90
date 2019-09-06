@@ -12,6 +12,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -38,33 +39,33 @@ contains
 
 !> Time steps the layer thicknesses, using a monotonically limited, directionally split PPM scheme,
 !! based on Lin (1994).
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
-                      visc_rem_u, visc_rem_v, u_cor, v_cor, &
-                      uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
+                      visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u   !< Zonal velocity, in m/s.
+                           intent(in)    :: u   !< Zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v   !< Meridional velocity, in m/s.
+                           intent(in)    :: v   !< Meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in)    :: hin !< Initial layer thickness, in m or kg/m2.
+                           intent(in)    :: hin !< Initial layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(inout) :: h   !< Final layer thickness, in m or kg/m2.
+                           intent(inout) :: h   !< Final layer thickness [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: uh  !< Volume flux through zonal faces =
-                                                !! u*h*dy, in m3/s.
+                                                !! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
-                                                !! v*h*dx, in m3/s.
-  real,                    intent(in)    :: dt  !< Time increment, in s.
+                                                !! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real,                    intent(in)    :: dt  !< Time increment [T ~> s].
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
-                                                !! flux through zonal faces, in m3/s.
+                                                !! flux through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt !< The vertically summed volume
-                                                !! flux through meridional faces, in m3/s.
+                                                !! flux through meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type), &
                  optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -79,22 +80,10 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that
-          !! give uhbt as the depth-integrated transport, in m/s.
+          !! give uhbt as the depth-integrated transport [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(out)   :: v_cor !< The meridional velocities that
-          !! give vhbt as the depth-integrated transport, in m/s.
-  real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(in)    :: uhbt_aux !< A second summed zonal
-          !! volume flux in m3/s.
-  real, dimension(SZI_(G),SZJB_(G)), &
-                 optional, intent(in)    :: vhbt_aux !< A second summed meridional
-          !! volume flux in m3/s.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                 optional, intent(inout) :: u_cor_aux !< The zonal velocities
-          !! that give uhbt_aux as the depth-integrated transport, in m/s.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                 optional, intent(inout) :: v_cor_aux !< The meridional velocities
-          !! that give vhbt_aux as the depth-integrated transport, in m/s.
+          !! give vhbt as the depth-integrated transport [L T-1 ~> m s-1].
   type(BT_cont_type), &
                  optional, pointer       :: BT_cont !< A structure with elements
           !! that describe the effective open face areas as a function of barotropic flow.
@@ -105,21 +94,10 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
   if (present(u_cor) .neqv. present(v_cor)) call MOM_error(FATAL, &
       "MOM_continuity: Either both u_cor and v_cor or neither"// &
        " one must be present in call to continuity.")
-  if (present(uhbt_aux) .neqv. present(vhbt_aux)) call MOM_error(FATAL, &
-      "MOM_continuity: Either both uhbt_aux and uhbt_aux or neither"// &
-       " one must be present in call to continuity.")
-  if (present(u_cor_aux) .neqv. present(v_cor_aux)) call MOM_error(FATAL, &
-      "MOM_continuity: Either both u_cor_aux and v_cor_aux or neither"// &
-       " one must be present in call to continuity.")
-  if (present(u_cor_aux) .neqv. present(uhbt_aux)) call MOM_error(FATAL, &
-      "MOM_continuity: u_cor_aux can only be calculated if uhbt_aux is"// &
-      " provided, and uhbt_aux has no other purpose.  Include both arguments"//&
-      " or neither.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS%PPM_CSp, uhbt, vhbt, OBC, &
-                        visc_rem_u, visc_rem_v, u_cor, v_cor, &
-                        uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, uhbt, vhbt, OBC, &
+                        visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont=BT_cont)
   else
     call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
   endif
@@ -127,10 +105,11 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
 end subroutine continuity
 
 !> Initializes continuity_cs
-subroutine continuity_init(Time, G, GV, param_file, diag, CS)
+subroutine continuity_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time       !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G          !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(continuity_CS),     pointer       :: CS         !< Control structure for mom_continuity.
@@ -148,7 +127,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CONTINUITY_SCHEME", tmpstr, &
-                 "CONTINUITY_SCHEME selects the discretization for the \n"//&
+                 "CONTINUITY_SCHEME selects the discretization for the "//&
                  "continuity solver. The only valid value currently is: \n"//&
                  "\t PPM - use a positive-definite (or monotonic) \n"//&
                  "\t       piecewise parabolic reconstruction solver.", &
@@ -166,7 +145,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   end select
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM_init(Time, G, GV, param_file, diag, CS%PPM_CSp)
+    call continuity_PPM_init(Time, G, GV, US, param_file, diag, CS%PPM_CSp)
   endif
 
 end subroutine continuity_init
