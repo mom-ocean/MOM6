@@ -1148,7 +1148,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
      'MEKE derived barotropic eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
   if (.not. associated(MEKE%MEKE)) CS%id_Ut = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
-     'MEKE energy source', 'm2 s-3')
+     'MEKE energy source', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
      'MEKE decay rate', 's-1', conversion=US%s_to_T)
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &

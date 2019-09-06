@@ -92,17 +92,18 @@ type, public :: diagnostics_CS ; private
 
   ! The following arrays hold diagnostics in the layer-integrated energy budget.
   real, pointer, dimension(:,:,:) :: &
-    KE        => NULL(), &  !< KE per unit mass [m2 s-2]
-    dKE_dt    => NULL(), &  !< time derivative of the layer KE [m3 s-3]
+    KE        => NULL(), &  !< KE per unit mass [L2 T-2 ~> m2 s-2]
+    dKE_dt    => NULL(), &  !< time derivative of the layer KE [H L2 T-3 ~> m3 s-3]
     PE_to_KE  => NULL(), &  !< potential energy to KE term [m3 s-3]
-    KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and advection terms [m3 s-3].
+    KE_CorAdv => NULL(), &  !< KE source from the combined Coriolis and
+                            !! advection terms [H L2 T-3 ~> m3 s-3].
                             !! The Coriolis source should be zero, but is not due to truncation
                             !! errors.  There should be near-cancellation of the global integral
                             !! of this spurious Coriolis source.
-    KE_adv     => NULL(), & !< KE source from along-layer advection [m3 s-3]
-    KE_visc    => NULL(), & !< KE source from vertical viscosity [m3 s-3]
-    KE_horvisc => NULL(), & !< KE source from horizontal viscosity [m3 s-3]
-    KE_dia     => NULL()    !< KE source from diapycnal diffusion [m3 s-3]
+    KE_adv     => NULL(), & !< KE source from along-layer advection [H L2 T-3 ~> m3 s-3]
+    KE_visc    => NULL(), & !< KE source from vertical viscosity [H L2 T-3 ~> m3 s-3]
+    KE_horvisc => NULL(), & !< KE source from horizontal viscosity [H L2 T-3 ~> m3 s-3]
+    KE_dia     => NULL()    !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
 
   !>@{ Diagnostic IDs
   integer :: id_u = -1,   id_v = -1, id_h = -1
@@ -254,7 +255,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (loc(CS)==0) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
 
-  call calculate_derivs(dt, G, CS)
+  call calculate_derivs(US%s_to_T*dt, G, CS)
 
   if (dt > 0.0) then
     call diag_save_grids(CS%diag)
@@ -916,8 +917,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
 
   if (associated(CS%KE)) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%KE(i,j,k) = US%L_T_to_m_s**2*((u(I,j,k)*u(I,j,k) + u(I-1,j,k)*u(I-1,j,k)) + &
-          (v(i,J,k)*v(i,J,k) + v(i,J-1,k)*v(i,J-1,k)))*0.25
+      CS%KE(i,j,k) = ((u(I,j,k) * u(I,j,k) + u(I-1,j,k) * u(I-1,j,k)) &
+          + (v(i,J,k) * v(i,J,k) + v(i,J-1,k) * v(i,J-1,k))) * 0.25
       ! DELETE THE FOLLOWING...  Make this 0 to test the momentum balance,
       ! or a huge number to test the continuity balance.
       ! CS%KE(i,j,k) *= 1e20
@@ -936,19 +937,19 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%dKE_dt)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*CS%du_dt(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * CS%du_dt(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*CS%dv_dt(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * CS%dv_dt(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k)*US%s_to_T*CS%dh_dt(i,j,k)
+        KE_h(i,j) = CS%KE(i,j,k) * CS%dh_dt(i,j,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%dKE_dt(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
+        CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_dKEdt > 0) call post_data(CS%id_dKEdt, CS%dKE_dt, CS%diag)
@@ -957,16 +958,16 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%PE_to_KE)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%PFu(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%PFu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%PFv(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%PFv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%PE_to_KE(i,j,k) = GV%H_to_m * 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%PE_to_KE(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, CS%PE_to_KE, CS%diag)
@@ -975,20 +976,20 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_CorAdv)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%CAu(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%CAu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%CAv(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%CAv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
-            US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
+        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) &
+            * (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_CorAdv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
+        CS%KE_CorAdv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_KE_Coradv > 0) call post_data(CS%id_KE_Coradv, CS%KE_Coradv, CS%diag)
@@ -1002,21 +1003,21 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         if (G%mask2dCu(i,j) /= 0.) &
-          KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%gradKEu(I,j,k)
+          KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%gradKEu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         if (G%mask2dCv(i,j) /= 0.) &
-          KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%gradKEv(i,J,k)
+          KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%gradKEv(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) * &
-            US%s_to_T*(uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
+        KE_h(i,j) = -CS%KE(i,j,k) * G%IareaT(i,j) &
+            * (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_adv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
+        CS%KE_adv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_KE_adv > 0) call post_data(CS%id_KE_adv, CS%KE_adv, CS%diag)
@@ -1025,16 +1026,16 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_visc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_visc(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_visc(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_visc(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%dv_dt_visc(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_visc(i,j,k) = GV%H_to_m * (0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
+        CS%KE_visc(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_KE_visc > 0) call post_data(CS%id_KE_visc, CS%KE_visc, CS%diag)
@@ -1043,16 +1044,16 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_horvisc)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%s_to_T*uh(I,j,k)*US%L_to_m*G%dxCu(I,j)*US%L_T2_to_m_s2*ADp%diffu(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%diffu(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%s_to_T*vh(i,J,k)*US%L_to_m*G%dyCv(i,J)*US%L_T2_to_m_s2*ADp%diffv(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_horvisc(i,j,k) = GV%H_to_m * 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%KE_horvisc(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_KE_horvisc > 0) call post_data(CS%id_KE_horvisc, CS%KE_horvisc, CS%diag)
@@ -1061,20 +1062,20 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (associated(CS%KE_dia)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
-        KE_u(I,j) = US%L_T_to_m_s**2*US%s_to_T*uh(I,j,k)*G%dxCu(I,j)*ADp%du_dt_dia(I,j,k)
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_dia(I,j,k)
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
-        KE_v(i,J) = US%L_T_to_m_s**2*US%s_to_T*vh(i,J,k)*G%dyCv(i,J)*ADp%dv_dt_dia(i,J,k)
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k) * &
-            (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1))
+        KE_h(i,j) = CS%KE(i,j,k) &
+            * (US%T_to_s * (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1)))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_dia(i,j,k) = KE_h(i,j) + GV%H_to_m * 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%KE_dia(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_KE_dia > 0) call post_data(CS%id_KE_dia, CS%KE_dia, CS%diag)
@@ -1495,7 +1496,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
   CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
-      long_name = 'Cell thickness from the previous timestep', units='m', v_extensive=.true.)
+      long_name = 'Cell thickness from the previous timestep', units='m', &
+      v_extensive=.true., conversion=GV%H_to_m)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
@@ -1625,36 +1627,44 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
   ! terms in the kinetic energy budget
   CS%id_KE = register_diag_field('ocean_model', 'KE', diag%axesTL, Time, &
-      'Layer kinetic energy per unit mass', 'm2 s-2')
+      'Layer kinetic energy per unit mass', 'm2 s-2', &
+      conversion=US%L_T_to_m_s**2)
   if (CS%id_KE>0) call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
   CS%id_dKEdt = register_diag_field('ocean_model', 'dKE_dt', diag%axesTL, Time, &
-      'Kinetic Energy Tendency of Layer', 'm3 s-3')
+      'Kinetic Energy Tendency of Layer', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_dKEdt>0) call safe_alloc_ptr(CS%dKE_dt,isd,ied,jsd,jed,nz)
 
   CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', diag%axesTL, Time, &
-      'Potential to Kinetic Energy Conversion of Layer', 'm3 s-3')
+      'Potential to Kinetic Energy Conversion of Layer', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
 
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
-      'Kinetic Energy Source from Coriolis and Advection', 'm3 s-3')
+      'Kinetic Energy Source from Coriolis and Advection', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_Coradv>0) call safe_alloc_ptr(CS%KE_Coradv,isd,ied,jsd,jed,nz)
 
   CS%id_KE_adv = register_diag_field('ocean_model', 'KE_adv', diag%axesTL, Time, &
-      'Kinetic Energy Source from Advection', 'm3 s-3')
+      'Kinetic Energy Source from Advection', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_adv>0) call safe_alloc_ptr(CS%KE_adv,isd,ied,jsd,jed,nz)
 
   CS%id_KE_visc = register_diag_field('ocean_model', 'KE_visc', diag%axesTL, Time, &
-      'Kinetic Energy Source from Vertical Viscosity and Stresses', 'm3 s-3')
+      'Kinetic Energy Source from Vertical Viscosity and Stresses', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_visc>0) call safe_alloc_ptr(CS%KE_visc,isd,ied,jsd,jed,nz)
 
   CS%id_KE_horvisc = register_diag_field('ocean_model', 'KE_horvisc', diag%axesTL, Time, &
-      'Kinetic Energy Source from Horizontal Viscosity', 'm3 s-3')
+      'Kinetic Energy Source from Horizontal Viscosity', 'm3 s-3', &
+      conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_horvisc>0) call safe_alloc_ptr(CS%KE_horvisc,isd,ied,jsd,jed,nz)
 
   if (.not. adiabatic) then
     CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', diag%axesTL, Time, &
-        'Kinetic Energy Source from Diapycnal Diffusion', 'm3 s-3')
+        'Kinetic Energy Source from Diapycnal Diffusion', 'm3 s-3', &
+        conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
     if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
   endif
 
@@ -1832,10 +1842,10 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive = .true.)
+      'm s-1', v_extensive=.true., conversion=GV%H_to_m)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive = .true.)
+      'm s-1', v_extensive=.true.)
 
 end subroutine register_transport_diags
 
@@ -1882,34 +1892,34 @@ subroutine write_static_fields(G, GV, US, tv, diag)
         'Longitude of zonal velocity (Cu) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
-        'Surface area of tracer (T) cells', 'm2', conversion=US%m_to_L**2,  &
+  id = register_static_field('ocean_model', 'area_t', diag%axesT1, &
+        'Surface area of tracer (T) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',      &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaT, diag, .true.)
     call diag_register_area_ids(diag, id_area_t=id)
   endif
 
-  id = register_static_field('ocean_model', 'area_u', diag%axesCu1,     &
-        'Surface area of x-direction flow (U) cells', 'm2', conversion=US%m_to_L**2, &
+  id = register_static_field('ocean_model', 'area_u', diag%axesCu1, &
+        'Surface area of x-direction flow (U) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaCu, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
-        'Surface area of y-direction flow (V) cells', 'm2', conversion=US%m_to_L**2, &
+  id = register_static_field('ocean_model', 'area_v', diag%axesCv1, &
+        'Surface area of y-direction flow (V) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaCv, diag, .true.)
 
-  id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
-        'Surface area of B-grid flow (Q) cells', 'm2', conversion=US%m_to_L**2, &
+  id = register_static_field('ocean_model', 'area_q', diag%axesB1, &
+        'Surface area of B-grid flow (Q) cells', 'm2', conversion=US%L_to_m**2, &
         cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
-        cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area', &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) call post_data(id, G%areaBu, diag, .true.)
 
