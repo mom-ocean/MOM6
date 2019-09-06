@@ -15,7 +15,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
-use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfUnstructuredDomainFile_t
+use MOM_io, only : FmsNetcdfDomainFile_t
 use MOM_io, only : MOM_open_file, close_file, register_axis
 use MOM_io, only : get_compute_domain_dimension_indices, get_global_io_domain_indices
 use MOM_io, only : get_variable_size, get_dimension_size, get_variable_num_dimensions
@@ -23,10 +23,9 @@ use MOM_io, only : get_variable_dimension_names
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE, CENTER
 use MOM_unit_scaling, only : unit_scale_type
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
-
-use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain, domainug
-use mpp_domains_mod, only : mpp_define_unstruct_domain
-use mpp_mod, only : mpp_pe, mpp_root_pe, mpp_npes, mpp_broadcast
+use mpp_domains_mod, only : mpp_get_io_domain
+use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain, domain2D
+use mpp_mod, only : mpp_broadcast
 
 implicit none ; private
 
@@ -203,14 +202,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer :: start(4), nread(4)
   integer :: isg, ieg, jsg, jeg, isc, jsc, iec, jec, isd, ied, jsd, jed
   integer :: num_dims, npes_io_group
-  integer, dimension(:), allocatable :: compute_indices_i, compute_indices_j
-  integer, dimension(:), allocatable :: dim_sizes
-  integer, dimension(:), allocatable :: grid_index, npts_tile, ntiles
-  character(len=32), dimension(:), allocatable :: dim_names
+  integer, dimension(2):: st_indices
 !  character(len=120) :: str_format
   type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
-  type(FmsNetcdfUnstructuredDomainFile_t) :: unstructFileObjRead  ! FMS file object for unstructured grid returned by call to MOM_open_file
-  type(domainug) :: SGdomUG ! unstructured Supergrid domain
+  type(domain2d), pointer :: io_domain=>NULL()
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
@@ -383,9 +378,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   !call MOM_read_data(filename, 'area', tmpT, SGdom)
   call read_data(fileObjRead, 'area', tmpT)
 
-  ! Close the file
-  call close_file(fileObjRead)
-  
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
@@ -422,60 +414,34 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).
-  start(:) = 1 ; nread(:) = 1
-  start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
-  allocate( tmpGlbl(ni+1,2) )
-! subroutine mpp_define_unstruct_domain(UG_domain, SG_domain, npts_tile, grid_nlev, ndivs, npes_io_group, grid_index, name)
-!     type(domainUG),   intent(inout) :: UG_domain
-!    type(domain2d), target,     intent(in) :: SG_domain 
-!     integer,                    intent(in) :: npts_tile(:) ! number of unstructured points on each tile
-!     integer,                    intent(in) :: grid_nlev(:) ! number of levels in each unstructured grid.
-!     integer,                    intent(in) :: ndivs       
-!     integer,                    intent(in) :: npes_io_group  ! number of processors in a io group. Only pe with same tile_id 
-!                                                              ! in the same group
-!     integer,                    intent(in) :: grid_index(:)
-!     character(len=*), optional, intent(in) :: name
-  
+  !start(:) = 1 ; nread(:) = 1
+  !start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
+ 
 
 !   if (is_root_PE()) &
 !    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
 !   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
     ! What are the domains
-
-   call mpp_get_compute_domain(SGdom%mpp_domain,isc,iec,jsc,jec)
+   io_domain=>mpp_get_io_domain(SGdom%mpp_domain)
+   call mpp_get_compute_domain(io_domain,isc,iec,jsc,jec, position=CORNER)
 !   str_format = "(A,I5,A,I5,A,I5,A,I5)"
 !   write(*,str_format) 'The compute domain indices are ',isc,'',iec,'',jsc,'',jec
 
-   call mpp_get_data_domain(SGdom%mpp_domain,isd,ied,jsd,jed)
+   call mpp_get_data_domain(io_domain,isd,ied,jsd,jed, position=CORNER)
 !   write(*,str_format) 'The data domain indices are ',isd,'',ied,'',jsd,'',jed
 
- !  call mpp_get_global_domain(SGdom%mpp_domain,isg,ieg,jsg,jeg)
- !  write(*,str_format) 'The global domain indices are ',isg,'',ieg,'',jsg,'',jeg
-  allocate(ntiles(1))
-  ntiles(1) = 1
-  allocate(npts_tile(1))
-  npes_io_group = mpp_npes()
-
-  call mpp_broadcast(npts_tile, ntiles(1), mpp_root_pe())
-
-  if (mpp_pe() .ne. mpp_root_pe()) then
-     npts_tile(1) = size(tmpGlbl,1)*size(tmpGlbl,2)
-    allocate(grid_index(npts_tile(1)))
-  endif
-  call mpp_define_unstruct_domain(SGdomUG, SGdom%mpp_domain, npts_tile, ntiles, mpp_npes(),npes_io_group,grid_index, name="Unstructured domain")
-
- ! re-open the file to read data on unstructured grid
-  ! open the file
-  file_open_success = MOM_open_file(UnstructFileObjRead, filename, "read", &
-                                     SGdomUG, .false.)
-  ! register the global axes
-  call register_axis(UnstructFileObjRead, 'nxp')
-  call register_axis(UnstructFileObjRead, 'nyp')         
-   
-  call read_data(UnstructFileObjRead, 'x', tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
+   call mpp_get_global_domain(io_domain,isg,ieg,jsg,jeg, position=CORNER)
   
-  call close_file(UnstructFileObjRead)
+ !  write(*,str_format) 'The global domain indices are ',isg,'',ieg,'',jsg,'',jeg
+  start(1) = 1
+  start(2) = 2
+  nread(1) = ieg-isg+1
+  nread(2) = 2
+  start(3) = isc-iec+1
+  allocate( tmpGlbl(start(3),2) )
+   
+  call read_data(fileObjRead, 'x', tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
@@ -490,8 +456,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   enddo
  
   deallocate( tmpGlbl )
-  deallocate(grid_index)
-  deallocate(npts_tile)
 
   allocate( tmpGlbl(1, nj+1) )
   start(:) = 1 ; nread(:) = 1
@@ -500,23 +464,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     !call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
 !  call broadcast(tmpGlbl, nj+1, root_PE())
 
-  call mpp_broadcast(npts_tile, ntiles(1), mpp_root_pe())
-
-  if (mpp_pe() .ne. mpp_root_pe()) then
-     npts_tile(1) = size(tmpGlbl,1)*size(tmpGlbl,2)
-    allocate(grid_index(npts_tile(1)))
-  endif
-
-  call mpp_define_unstruct_domain(SGdomUG, SGdom%mpp_domain, npts_tile, ntiles, mpp_npes(),npes_io_group,grid_index, name="Unstructured domain")
-  
-  ! open the file
-  file_open_success = MOM_open_file(UnstructFileObjRead, filename, "read", &
-                                     SGdomUG, .false.)
-
-  call read_data(UnstructFileObjRead, 'y', tmpGlbl, corner=start(1:2), edge_lengths=nread(1:2))
+  call read_data(fileObjRead, 'y', tmpGlbl(start(1):nread(1),start(2):nj), corner=start(1:2), edge_lengths=nread(1:2))
    
-  call close_file(UnstructFileObjRead)
-
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
   enddo
@@ -524,11 +473,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
  
+  call close_file(fileObjRead)
   deallocate( tmpGlbl )
-  deallocate(grid_index)
-  deallocate(npts_tile)
-  deallocate(ntiles)
-
+  
   call mpp_deallocate_domain(SGdom%mpp_domain)
   deallocate(SGdom%mpp_domain)
 
