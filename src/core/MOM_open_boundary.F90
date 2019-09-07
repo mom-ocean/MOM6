@@ -216,7 +216,6 @@ type, public :: ocean_OBC_type
                                                       !! for input from user directory.
   logical :: update_OBC = .false.                     !< Is OBC data time-dependent
   logical :: needs_IO_for_data = .false.              !< Is any i/o needed for OBCs
-  logical :: time_filter                              !< If true, apply time filtering to phase speed.
   logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
   logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the relative vorticity on open boundaries.
@@ -382,9 +381,6 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
          "If true, zeros the Laplacian of flow on open boundaries in the biharmonic "//&
          "viscosity term.", default=.false.)
-    call get_param(param_file, mdl, "OBC_TIME_FILTER", OBC%time_filter, &
-         "If true, apply a time filter to the calculation of the phase speed at the"//&
-         "boundary.", default=.true.)
     call get_param(param_file, mdl, "MASK_OUTSIDE_OBCS", mask_outside, &
          "If true, set the areas outside open boundaries to be land.", &
          default=.false.)
@@ -1656,7 +1652,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   !! Copy previously calculated phase velocity from global arrays into segments
   !! This is terribly inefficient and temporary solution for continuity across restarts
   !! and needs to be revisited in the future.
-  if (OBC%time_filter) then
+  if (OBC%gamma_uv > 0.0) then
     do n=1,OBC%number_of_segments
       segment=>OBC%segment(n)
       if (.not. segment%on_pe) cycle
@@ -1712,7 +1708,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdx = (u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sasha for I-1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            else
              rx_avg = rx_new
@@ -1724,7 +1720,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
            endif
          elseif (segment%oblique) then
@@ -1741,7 +1737,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            rx_new = US%L_T_to_m_s**2*dhdt*dhdx
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            ry_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdy,-cff_new))
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -1757,7 +1753,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                               (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
                                min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
                             (cff_avg + rx_avg)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary
              ! implementation as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -1783,7 +1779,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          I=segment%HI%IsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              do J=segment%HI%JsdB+1,segment%HI%JedB-1
@@ -1856,7 +1852,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              ry_tangential(I,segment%HI%JsdB,k) = segment%ry_normal(I,segment%HI%jsd,k)
@@ -1956,7 +1952,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdx = (u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sasha for I+1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            else
              rx_avg = rx_new
@@ -1966,7 +1962,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! value, u_new(I+1) and past boundary value but with barotropic
            ! accelerations, u_new(I).
            segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -1986,7 +1982,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            rx_new = US%L_T_to_m_s**2*dhdt*dhdx
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            ry_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdy,-cff_new))
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(I,j,k) + gamma_u*cff_new
@@ -2004,7 +2000,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                                        (cff_avg + rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -2030,7 +2026,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          I=segment%HI%IsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              do J=segment%HI%JsdB+1,segment%HI%JedB-1
@@ -2103,7 +2099,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              ry_tangential(I,segment%HI%JsdB,k) = segment%ry_normal(I,segment%HI%jsd,k)
@@ -2203,7 +2199,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdy = (v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ry_avg = (1.0-gamma_v)*segment%ry_normal(I,j,k) + gamma_v*ry_new
            else
              ry_avg = ry_new
@@ -2213,7 +2209,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! value, v_new(J-1) and past boundary value but with barotropic
            ! accelerations, v_new(J).
            segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
@@ -2233,7 +2229,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ry_new = US%L_T_to_m_s**2*dhdt*dhdy
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            rx_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdx,-cff_new))
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -2249,7 +2245,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                                         (max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) +&
                                          min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
                                        (cff_avg + ry_avg)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -2275,7 +2271,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          J=segment%HI%JsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
              rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
              do I=segment%HI%IsdB+1,segment%HI%IedB-1
@@ -2349,7 +2345,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
              rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
              ry_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
@@ -2449,7 +2445,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdy = (v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ry_avg = (1.0-gamma_v)*segment%ry_normal(I,j,k) + gamma_v*ry_new
            else
              ry_avg = ry_new
@@ -2459,7 +2455,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! value, v_new(J+1) and past boundary value but with barotropic
            ! accelerations, v_new(J).
            segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
@@ -2478,7 +2474,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ry_new = US%L_T_to_m_s**2*dhdt*dhdy
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            rx_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdx,-cff_new))
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -2494,7 +2490,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                              (max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) + &
                               min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
                               (cff_avg + ry_avg)
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -2584,7 +2580,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (OBC%time_filter) then
+           if (gamma_u > 0.0) then
              rx_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
              rx_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
              ry_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
