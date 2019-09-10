@@ -1,121 +1,68 @@
+!> This module specifies the initial values and evolving properties of the
+!! MOM6 ice shelf, using user-provided code.
 module user_shelf_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This subroutine initializes the fields for the simulations.      *
-!*  The one argument passed to initialize, Time, is set to the         *
-!*  current time of the simulation.  The fields which are initialized  *
-!*  here are:                                                          *
-!*    u - Zonal velocity in m s-1.                                     *
-!*    v - Meridional velocity in m s-1.                                *
-!*    h - Layer thickness in m.  (Must be positive.)                   *
-!*    D - Basin depth in m.  (Must be positive.)                       *
-!*    f - The Coriolis parameter, in s-1.                              *
-!*    g - The reduced gravity at each interface, in m s-2.             *
-!*    Rlay - Layer potential density (coordinate variable) in kg m-3.  *
-!*  If TEMPERATURE is defined:                                         *
-!*    T - Temperature in C.                                            *
-!*    S - Salinity in psu.                                             *
-!*  If BULKMIXEDLAYER is defined:                                      *
-!*    Rml - Mixed layer and buffer layer potential densities in        *
-!*          units of kg m-3.                                           *
-!*  If SPONGE is defined:                                              *
-!*    A series of subroutine calls are made to set up the damping      *
-!*    rates and reference profiles for all variables that are damped   *
-!*    in the sponge.                                                   *
-!*  Any user provided tracer code is also first linked through this    *
-!*  subroutine.                                                        *
-!*                                                                     *
-!*    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!*  in MOM_surface_forcing.F90.                                       *
-!*                                                                     *
-!*    These variables are all set in the set of subroutines (in this   *
-!*  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
-!*  USER_initialize_velocity,  USER_initialize_temperature_salinity,   *
-!*  USER_initialize_mixed_layer_density, USER_initialize_sponges,      *
-!*  USER_set_coord, and USER_set_ref_profile.                          *
-!*                                                                     *
-!*    The names of these subroutines should be self-explanatory. They  *
-!*  start with "USER_" to indicate that they will likely have to be    *
-!*  modified for each simulation to set the initial conditions and     *
-!*  boundary conditions.  Most of these take two arguments: an integer *
-!*  argument specifying whether the fields are to be calculated        *
-!*  internally or read from a NetCDF file; and a string giving the     *
-!*  path to that file.  If the field is initialized internally, the    *
-!*  path is ignored.                                                   *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h.*
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, D, buoy, tr, T, S, Rml, ustar         *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 
 ! use MOM_domains, only : sum_across_PEs
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
-
-use mpp_mod, only : mpp_pe, mpp_sync
+use MOM_unit_scaling, only : unit_scale_type
 ! use MOM_io, only : close_file, fieldtype, file_exists
 ! use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-! use MOM_io, only : write_field, slasher, vardesc
+! use MOM_io, only : write_field, slasher
 implicit none ; private
 
 #include <MOM_memory.h>
 
 public USER_initialize_shelf_mass, USER_update_shelf_mass
 public USER_init_ice_thickness
-logical :: first_call = .true.
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
+!> The control structure for the user_ice_shelf module
 type, public :: user_ice_shelf_CS ; private
-  real :: Rho_ocean  ! The ocean's typical density, in kg m-3.
-  real :: max_draft  ! The maximum ocean draft of the ice shelf, in m.
-  real :: min_draft  ! The minimum ocean draft of the ice shelf, in m.
-  real :: flat_shelf_width ! The range over which the shelf is min_draft thick.
-  real :: shelf_slope_scale ! The range over which the shelf slopes.
-  real :: pos_shelf_edge_0
-  real :: shelf_speed
+  real :: Rho_ocean  !< The ocean's typical density [kg m-2 Z-1].
+  real :: max_draft  !< The maximum ocean draft of the ice shelf [Z ~> m].
+  real :: min_draft  !< The minimum ocean draft of the ice shelf [Z ~> m].
+  real :: flat_shelf_width !< The range over which the shelf is min_draft thick [km].
+  real :: shelf_slope_scale !< The range over which the shelf slopes [km].
+  real :: pos_shelf_edge_0 !< The x-position of the shelf edge at time 0 [km].
+  real :: shelf_speed  !< The ice shelf speed of translation [km day-1]
+  logical :: first_call = .true. !< If true, this module has not been called before.
 end type user_ice_shelf_CS
 
 contains
 
-subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, param_file, new_sim)
+!> This subroutine sets up the initial mass and area covered by the ice shelf, based on user-provided code.
+subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, US, CS, param_file, new_sim)
 
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: mass_shelf, area_shelf_h, hmask, h_shelf
-  type(user_ice_shelf_CS),          pointer     :: CS
-  type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
-  logical                                       :: new_sim
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: mass_shelf !< The ice shelf mass per unit area averaged
+                                                  !! over the full ocean cell [kg m-2].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: h_shelf !< The ice shelf thickness [Z ~> m].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: hmask !< A mask indicating which tracer points are
+                                                !! partly or fully covered by an ice-shelf
+  type(unit_scale_type),   intent(in)  :: US    !< A structure containing unit conversion factors
+  type(user_ice_shelf_CS), pointer     :: CS    !< A pointer to the user ice shelf control structure
+  type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  logical,                 intent(in)  :: new_sim  !< If true, this is a new run; otherwise it is
+                                                   !! being started from a restart file.
 
-! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
-!                         cell, in kg m-2. (Intent out)
-!  (out)     area_shelf_h - The area of the ocean cell that is covered by the
-!                           rigid ice shelf, in m2.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-
-! just check for cvs
 ! This subroutine sets up the initial mass and area covered by the ice shelf.
-  real :: Rho_ocean  ! The ocean's typical density, in kg m-3.
-  real :: max_draft  ! The maximum ocean draft of the ice shelf, in m.
-  real :: min_draft  ! The minimum ocean draft of the ice shelf, in m.
+  real :: Rho_ocean  ! The ocean's typical density [kg m-3].
+  real :: max_draft  ! The maximum ocean draft of the ice shelf [Z ~> m].
+  real :: min_draft  ! The minimum ocean draft of the ice shelf [Z ~> m].
   real :: flat_shelf_width ! The range over which the shelf is min_draft thick.
   real :: c1 ! The maximum depths in m.
   character(len=40) :: mdl = "USER_initialize_shelf_mass" ! This subroutine's name.
@@ -127,17 +74,18 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   if (.not.associated(CS)) allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  if (first_call) call write_user_log(param_file)
+  if (CS%first_call) call write_user_log(param_file)
+  CS%first_call = .false.
   call get_param(param_file, mdl, "RHO_0", CS%Rho_ocean, &
-                 "The mean ocean density used with BOUSSINESQ true to \n"//&
-                 "calculate accelerations and the mass for conservation \n"//&
-                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%Z_to_m)
   call get_param(param_file, mdl, "SHELF_MAX_DRAFT", CS%max_draft, &
-                 units="m", default=1.0)
+                 units="m", default=1.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "SHELF_MIN_DRAFT", CS%min_draft, &
-                 units="m", default=1.0)
+                 units="m", default=1.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "FLAT_SHELF_WIDTH", CS%flat_shelf_width, &
                  units="axis_units", default=0.0)
   call get_param(param_file, mdl, "SHELF_SLOPE_SCALE", CS%shelf_slope_scale, &
@@ -149,37 +97,47 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
 
   call USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, set_time(0,0), new_sim)
 
-
 end subroutine USER_initialize_shelf_mass
 
-subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, param_file)
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: area_shelf_h, hmask, h_shelf
-  type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
+!> This subroutine updates the ice shelf thickness, as specified by user-provided code.
+subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, param_file)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: h_shelf !< The ice shelf thickness [m].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(out) :: hmask !< A mask indicating which tracer points are
+                                                !! partly or fully covered by an ice-shelf
+  type(unit_scale_type),   intent(in)  :: US    !< A structure containing unit conversion factors
+  type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
 
   ! This subroutine initializes the ice shelf thickness.  Currently it does so
   ! calling USER_initialize_shelf_mass, but this can be revised as needed.
   real, dimension(SZI_(G),SZJ_(G)) :: mass_shelf
   type(user_ice_shelf_CS), pointer :: CS => NULL()
 
-  call USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, param_file, .true.)
+  call USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, US, CS, param_file, .true.)
 
 end subroutine USER_init_ice_thickness
 
+!> This subroutine updates the ice shelf mass, as specified by user-provided code.
 subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, Time, new_sim)
-  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: mass_shelf, area_shelf_h, hmask, h_shelf
-  type(user_ice_shelf_CS),          pointer       :: CS
-  type(time_type),                  intent(in)    :: Time
-  logical,                          intent(in)    :: new_sim
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(inout) :: mass_shelf !< The ice shelf mass per unit area averaged
+                                                  !! over the full ocean cell [kg m-2].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [m2].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                           intent(inout) :: hmask !< A mask indicating which tracer points are
+                                                !! partly or fully covered by an ice-shelf
+  type(user_ice_shelf_CS), pointer       :: CS   !< A pointer to the user ice shelf control structure
+  type(time_type),         intent(in)    :: Time !< The current model time
+  logical,                 intent(in)    :: new_sim !< If true, this the start of a new run.
 
-! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
-!                         cell, in kg m-2. (Intent out)
-!  (out)     area_shelf_h - The area of the ocean cell that is covered by the
-!                           rigid ice shelf, in m2.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
 
   real :: c1, edge_pos, slope_pos
   integer :: i, j
@@ -190,17 +148,17 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   c1 = 0.0 ; if (CS%shelf_slope_scale > 0.0) c1 = 1.0 / CS%shelf_slope_scale
 
 
-  do j=G%jsd,G%jed ;
+  do j=G%jsd,G%jed
 
-   if (((j+G%jdg_offset) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-       ((j+G%jdg_offset) .ge. G%domain%njhalo+1)) then
+   if (((j+G%jdg_offset) <= G%domain%njglobal+G%domain%njhalo) .AND. &
+       ((j+G%jdg_offset) >= G%domain%njhalo+1)) then
 
     do i=G%isc,G%iec
 
 !    if (((i+G%idg_offset) <= G%domain%niglobal+G%domain%nihalo) .AND. &
 !           ((i+G%idg_offset) >= G%domain%nihalo+1)) then
 
-    if ((j.ge.G%jsc) .and. (j.le.G%jec)) then
+    if ((j >= G%jsc) .and. (j <= G%jec)) then
 
       if (new_sim) then ; if (G%geoLonCu(i-1,j) >= edge_pos) then
         ! Everything past the edge is open ocean.
@@ -210,11 +168,11 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
         h_shelf (i,j) = 0.0
       else
         if (G%geoLonCu(i,j) > edge_pos) then
-          area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
+          area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                               (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
           hmask (i,j) = 2.0
         else
-          area_shelf_h(i,j) = G%areaT(i,j)
+          area_shelf_h(i,j) = G%US%L_to_m**2*G%areaT(i,j)
           hmask (i,j) = 1.0
         endif
 
@@ -232,7 +190,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
     endif ; endif ; endif
 
-    if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
+    if ((i+G%idg_offset) == G%domain%nihalo+1) then
       hmask(i-1,j) = 3.0
     endif
 
@@ -240,6 +198,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
 end subroutine USER_update_shelf_mass
 
+!> This subroutine writes out the user ice shelf code version number to the model log.
 subroutine write_user_log(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
 
@@ -248,7 +207,6 @@ subroutine write_user_log(param_file)
   character(len=40)  :: mdl = "user_shelf_init" ! This module's name.
 
   call log_version(param_file, mdl, version, tagname)
-  first_call = .false.
 
 end subroutine write_user_log
 

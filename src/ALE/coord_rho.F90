@@ -11,23 +11,22 @@ use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, DEGREE
 implicit none ; private
 
 !> Control structure containing required parameters for the rho coordinate
-type, public :: rho_CS
-  private
+type, public :: rho_CS ; private
 
   !> Number of layers
   integer :: nk
 
-  !> Minimum thickness allowed for layers
+  !> Minimum thickness allowed for layers, often in [H ~> m or kg m-2]
   real :: min_thickness = 0.
 
-  !> Reference pressure for density calculations
+  !> Reference pressure for density calculations [Pa]
   real :: ref_pressure
 
   !> If true, integrate for interface positions from the top downward.
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .false.
 
-  !> Nominal density of interfaces
+  !> Nominal density of interfaces [kg m-3]
   real, allocatable, dimension(:) :: target_density
 
   !> Interpolation control structure
@@ -46,10 +45,10 @@ contains
 !> Initialise a rho_CS with pointers to parameters
 subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,              intent(in) :: nk
-  real,                 intent(in) :: ref_pressure
-  real, dimension(:),   intent(in) :: target_density
-  type(interp_CS_type), intent(in) :: interp_CS
+  integer,              intent(in) :: nk !< Number of layers in the grid
+  real,                 intent(in) :: ref_pressure !< Coordinate reference pressure [Pa]
+  real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [kg m-3]
+  type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")
   allocate(CS)
@@ -61,8 +60,9 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   CS%interp_CS         = interp_CS
 end subroutine init_coord_rho
 
+!> This subroutine deallocates memory in the control structure for the coord_rho module
 subroutine end_coord_rho(CS)
-  type(rho_CS), pointer :: CS
+  type(rho_CS), pointer :: CS !< Coordinate control structure
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -70,11 +70,15 @@ subroutine end_coord_rho(CS)
   deallocate(CS)
 end subroutine end_coord_rho
 
+!> This subroutine can be used to set the parameters for the coord_rho module
 subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS)
-  type(rho_CS),                   pointer    :: CS
-  real,                 optional, intent(in) :: min_thickness
-  logical,              optional, intent(in) :: integrate_downward_for_e
-  type(interp_CS_type), optional, intent(in) :: interp_CS
+  type(rho_CS),      pointer    :: CS !< Coordinate control structure
+  real,    optional, intent(in) :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
+  logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface
+                                      !! positions from the top downward.  If false, integrate
+                                      !! from the bottom upward, as does the rest of the model.
+
+  type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_rho_params: CS not associated")
 
@@ -92,7 +96,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   type(rho_CS),        intent(in)    :: CS !< coord_rho control structure
   integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
   real,                intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz), intent(in)    :: h  !< Layer thicknesses, in H
+  real, dimension(nz), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz), intent(in)    :: T  !< T for source column
   real, dimension(nz), intent(in)    :: S  !< S for source column
   type(EOS_type),      pointer       :: eqn_of_state !< Equation of state structure
@@ -119,14 +123,14 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
     xTmp(1) = 0.0
     do k = 1,count_nonzero_layers
       xTmp(k+1) = xTmp(k) + h_nv(k)
-    end do
+    enddo
 
     ! Compute densities on source column
     p(:) = CS%ref_pressure
     call calculate_density(T, S, p, densities, 1, nz, eqn_of_state)
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
-    end do
+    enddo
 
     ! Based on source column density profile, interpolate to generate a new grid
     call build_and_interpolate_grid(CS%interp_CS, densities, count_nonzero_layers, &
@@ -137,10 +141,10 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
     call old_inflate_layers_1d(CS%min_thickness, CS%nk, h_new)
 
     ! Comment: The following adjustment of h_new, and re-calculation of h_new via x1 needs to be removed
-    x1(1) = 0.0 ; do k = 1,CS%nk ; x1(k+1) = x1(k) + h_new(k) ; end do
+    x1(1) = 0.0 ; do k = 1,CS%nk ; x1(k+1) = x1(k) + h_new(k) ; enddo
     do k = 1,CS%nk
       h_new(k) = x1(k+1) - x1(k)
-    end do
+    enddo
 
   else ! count_nonzero_layers <= 1
     if (nz == CS%nk) then
@@ -168,36 +172,35 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
 
 end subroutine build_rho_column
 
+!> Iteratively build a rho coordinate column
+!!
+!! The algorithm operates as follows within each column:
+!!
+!! 1. Given T & S within each layer, the layer densities are computed.
+!! 2. Based on these layer densities, a global density profile is reconstructed
+!!    (this profile is monotonically increasing and may be discontinuous)
+!! 3. The new grid interfaces are determined based on the target interface
+!!    densities.
+!! 4. T & S are remapped onto the new grid.
+!! 5. Return to step 1 until convergence or until the maximum number of
+!!    iterations is reached, whichever comes first.
 subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_state, &
                                zInterface, h_neglect, h_neglect_edge)
-  !< Iteratively build a rho coordinate column
-  !!
-  !! The algorithm operates as follows within each column:
-  !!
-  !! 1. Given T & S within each layer, the layer densities are computed.
-  !! 2. Based on these layer densities, a global density profile is reconstructed
-  !!    (this profile is monotonically increasing and may be discontinuous)
-  !! 3. The new grid interfaces are determined based on the target interface
-  !!    densities.
-  !! 4. T & S are remapped onto the new grid.
-  !! 5. Return to step 1 until convergence or until the maximum number of
-  !!    iterations is reached, whichever comes first.
-
   type(rho_CS),          intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
   integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
-  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
+  real,                  intent(in)    :: depth !< Depth of ocean bottom [Z ~> m]
+  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses in Z coordinates [Z ~> m]
+  real, dimension(nz),   intent(in)    :: T  !< T for column [degC]
+  real, dimension(nz),   intent(in)    :: S  !< S for column [ppt]
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions
-                                             !! in the same units as h
+                                             !! in the same units as h [Z ~> m]
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations
-                                             !! in the same units as h
-
+                                             !! in the same units as h [Z ~> m]
   ! Local variables
   integer   :: k, m
   integer   :: count_nonzero_layers
@@ -227,12 +230,12 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     if ( count_nonzero_layers <= 1 ) then
       h1(:) = h0(:)
       exit  ! stop iterations here
-    end if
+    endif
 
     xTmp(1) = 0.0
     do k = 1,count_nonzero_layers
       xTmp(k+1) = xTmp(k) + hTmp(k)
-    end do
+    enddo
 
     ! Compute densities within current water column
     call calculate_density( T_tmp, S_tmp, p, densities,&
@@ -240,7 +243,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
 
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))
-    end do
+    enddo
 
     ! One regridding iteration
     ! Based on global density profile, interpolate to generate a new grid
@@ -248,12 +251,12 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
          hTmp, xTmp, CS%target_density, nz, h1, x1, h_neglect, h_neglect_edge)
 
     call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
-    x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
+    x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; enddo
 
     ! Remap T and S from previous grid to new grid
     do k = 1,nz
       h1(k) = x1(k+1) - x1(k)
-    end do
+    enddo
 
     call remapping_core_h(remapCS, nz, h0, S, nz, h1, Tmp, h_neglect, h_neglect_edge)
     S_tmp(:) = Tmp(:)
@@ -269,7 +272,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
       x0(k) = x0(k-1) + h0(k-1)
       x1(k) = x1(k-1) + h1(k-1)
       deviation = deviation + (x0(k)-x1(k))**2
-    end do
+    enddo
     deviation = sqrt( deviation / (nz-1) )
 
     m = m + 1
@@ -277,13 +280,13 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     ! Copy final grid onto start grid for next iteration
     h0(:) = h1(:)
 
-  end do ! end regridding iterations
+  enddo ! end regridding iterations
 
   if (CS%integrate_downward_for_e) then
     zInterface(1) = 0.
     do k = 1,nz
       zInterface(k+1) = zInterface(k) - h1(k)
-      ! Adjust interface position to accomodate inflating layers
+      ! Adjust interface position to accommodate inflating layers
       ! without disturbing the interface above
     enddo
   else
@@ -291,7 +294,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     zInterface(nz+1) = -depth
     do k = nz,1,-1
       zInterface(k) = zInterface(k+1) + h1(k)
-      ! Adjust interface position to accomodate inflating layers
+      ! Adjust interface position to accommodate inflating layers
       ! without disturbing the interface above
     enddo
   endif
@@ -326,12 +329,12 @@ subroutine copy_finite_thicknesses(nk, h_in, threshold, nout, h_out, mapping)
       if (h_out(nout) > thickest_h_out) then
         thickest_h_out = h_out(nout)
         k_thickest = nout
-      end if
+      endif
     else
       ! Add up mass in vanished layers
       thickness_in_vanished = thickness_in_vanished + h_in(k)
-    end if
-  end do
+    endif
+  enddo
 
   ! No finite layers
   if (nout <= 1) return
@@ -342,14 +345,13 @@ subroutine copy_finite_thicknesses(nk, h_in, threshold, nout, h_out, mapping)
 end subroutine copy_finite_thicknesses
 
 !------------------------------------------------------------------------------
-! Inflate vanished layers to finite (nonzero) width
-!------------------------------------------------------------------------------
-subroutine old_inflate_layers_1d( minThickness, N, h )
+!> Inflate vanished layers to finite (nonzero) width
+subroutine old_inflate_layers_1d( min_thickness, nk, h )
 
   ! Argument
-  real,                intent(in) :: minThickness
-  integer,             intent(in) :: N
-  real,                intent(inout) :: h(:)
+  real,               intent(in)    :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
+  integer,            intent(in)    :: nk  !< Number of layers in the grid
+  real, dimension(:), intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variable
   integer   :: k
@@ -361,42 +363,42 @@ subroutine old_inflate_layers_1d( minThickness, N, h )
 
   ! Count number of nonzero layers
   count_nonzero_layers = 0
-  do k = 1,N
-    if ( h(k) > minThickness ) then
+  do k = 1,nk
+    if ( h(k) > min_thickness ) then
       count_nonzero_layers = count_nonzero_layers + 1
-    end if
-  end do
+    endif
+  enddo
 
   ! If all layer thicknesses are greater than the threshold, exit routine
-  if ( count_nonzero_layers == N ) return
+  if ( count_nonzero_layers == nk ) return
 
   ! If all thicknesses are zero, inflate them all and exit
   if ( count_nonzero_layers == 0 ) then
-    do k = 1,N
-      h(k) = minThickness
-    end do
+    do k = 1,nk
+      h(k) = min_thickness
+    enddo
     return
-  end if
+  endif
 
   ! Inflate zero layers
   correction = 0.0
-  do k = 1,N
-    if ( h(k) <= minThickness ) then
-      delta = minThickness - h(k)
+  do k = 1,nk
+    if ( h(k) <= min_thickness ) then
+      delta = min_thickness - h(k)
       correction = correction + delta
       h(k) = h(k) + delta
-    end if
-  end do
+    endif
+  enddo
 
   ! Modify thicknesses of nonzero layers to ensure volume conservation
   maxThickness = h(1)
   k_found = 1
-  do k = 1,N
+  do k = 1,nk
     if ( h(k) > maxThickness ) then
       maxThickness = h(k)
       k_found = k
-    end if
-  end do
+    endif
+  enddo
 
   h(k_found) = h(k_found) - correction
 

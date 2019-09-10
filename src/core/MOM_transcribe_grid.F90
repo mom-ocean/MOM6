@@ -1,3 +1,5 @@
+!> Module with routines for copying information from a shared dynamic horizontal
+!! grid to an ocean-specific horizontal grid and the reverse.
 module MOM_transcribe_grid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -7,6 +9,7 @@ use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE, AGRID, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_grid, only : ocean_grid_type, set_derived_metrics
+use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
@@ -16,9 +19,10 @@ contains
 
 !> Copies information from a dynamic (shared) horizontal grid type into an
 !! ocean_grid_type.
-subroutine copy_dyngrid_to_MOM_grid(dG, oG)
+subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
   type(dyn_horgrid_type), intent(in)    :: dG  !< Common horizontal grid type
   type(ocean_grid_type),  intent(inout) :: oG  !< Ocean grid type
+  type(unit_scale_type),  intent(in)    :: US  !< A dimensional unit scaling type
 
   integer :: isd, ied, jsd, jed      ! Common data domains.
   integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
@@ -63,7 +67,6 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
     oG%dxCu(I,j) = dG%dxCu(I+ido,j+jdo)
     oG%dyCu(I,j) = dG%dyCu(I+ido,j+jdo)
     oG%dy_Cu(I,j) = dG%dy_Cu(I+ido,j+jdo)
-    oG%dy_Cu_obc(I,j) = dG%dy_Cu_obc(I+ido,j+jdo)
 
     oG%mask2dCu(I,j) = dG%mask2dCu(I+ido,j+jdo)
     oG%areaCu(I,j) = dG%areaCu(I+ido,j+jdo)
@@ -76,7 +79,6 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
     oG%dxCv(i,J) = dG%dxCv(i+ido,J+jdo)
     oG%dyCv(i,J) = dG%dyCv(i+ido,J+jdo)
     oG%dx_Cv(i,J) = dG%dx_Cv(i+ido,J+jdo)
-    oG%dx_Cv_obc(i,J) = dG%dx_Cv_obc(i+ido,J+jdo)
 
     oG%mask2dCv(i,J) = dG%mask2dCv(i+ido,J+jdo)
     oG%areaCv(i,J) = dG%areaCv(i+ido,J+jdo)
@@ -137,14 +139,13 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   call pass_vector(oG%dyCu, oG%dxCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(oG%dxCu, oG%dyCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(oG%dy_Cu, oG%dx_Cv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(oG%dy_Cu_obc, oG%dx_Cv_obc, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(oG%mask2dCu, oG%mask2dCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(oG%IareaCu, oG%IareaCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(oG%IareaCu, oG%IareaCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(oG%geoLatCu, oG%geoLatCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   call pass_var(oG%areaBu, oG%Domain, position=CORNER)
-  call pass_var(oG%geoLonBu, oG%Domain, position=CORNER)
+  call pass_var(oG%geoLonBu, oG%Domain, position=CORNER, inner_halo=oG%isc-isd)
   call pass_var(oG%geoLatBu, oG%Domain, position=CORNER)
   call pass_vector(oG%dxBu, oG%dyBu, oG%Domain, To_All+Scalar_Pair, BGRID_NE)
   call pass_var(oG%CoriolisBu, oG%Domain, position=CORNER)
@@ -155,16 +156,17 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
     call pass_vector(oG%Dopen_u, oG%Dopen_v, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
   endif
 
-  call set_derived_metrics(oG)
+  call set_derived_metrics(oG, US)
 
 end subroutine copy_dyngrid_to_MOM_grid
 
 
 !> Copies information from an ocean_grid_type into a dynamic (shared)
 !! horizontal grid type.
-subroutine copy_MOM_grid_to_dyngrid(oG, dG)
+subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   type(ocean_grid_type),  intent(in)    :: oG  !< Ocean grid type
   type(dyn_horgrid_type), intent(inout) :: dG  !< Common horizontal grid type
+  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 
   integer :: isd, ied, jsd, jed      ! Common data domains.
   integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
@@ -209,7 +211,6 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
     dG%dxCu(I,j) = oG%dxCu(I+ido,j+jdo)
     dG%dyCu(I,j) = oG%dyCu(I+ido,j+jdo)
     dG%dy_Cu(I,j) = oG%dy_Cu(I+ido,j+jdo)
-    dG%dy_Cu_obc(I,j) = oG%dy_Cu_obc(I+ido,j+jdo)
 
     dG%mask2dCu(I,j) = oG%mask2dCu(I+ido,j+jdo)
     dG%areaCu(I,j) = oG%areaCu(I+ido,j+jdo)
@@ -222,7 +223,6 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
     dG%dxCv(i,J) = oG%dxCv(i+ido,J+jdo)
     dG%dyCv(i,J) = oG%dyCv(i+ido,J+jdo)
     dG%dx_Cv(i,J) = oG%dx_Cv(i+ido,J+jdo)
-    dG%dx_Cv_obc(i,J) = oG%dx_Cv_obc(i+ido,J+jdo)
 
     dG%mask2dCv(i,J) = oG%mask2dCv(i+ido,J+jdo)
     dG%areaCv(i,J) = oG%areaCv(i+ido,J+jdo)
@@ -284,14 +284,13 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
   call pass_vector(dG%dyCu, dG%dxCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dG%dxCu, dG%dyCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dG%dy_Cu, dG%dx_Cv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dG%dy_Cu_obc, dG%dx_Cv_obc, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dG%mask2dCu, dG%mask2dCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dG%IareaCu, dG%IareaCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dG%IareaCu, dG%IareaCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dG%geoLatCu, dG%geoLatCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   call pass_var(dG%areaBu, dG%Domain, position=CORNER)
-  call pass_var(dG%geoLonBu, dG%Domain, position=CORNER)
+  call pass_var(dG%geoLonBu, dG%Domain, position=CORNER, inner_halo=dG%isc-isd)
   call pass_var(dG%geoLatBu, dG%Domain, position=CORNER)
   call pass_vector(dG%dxBu, dG%dyBu, dG%Domain, To_All+Scalar_Pair, BGRID_NE)
   call pass_var(dG%CoriolisBu, dG%Domain, position=CORNER)
@@ -302,7 +301,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
     call pass_vector(dG%Dopen_u, dG%Dopen_v, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   endif
 
-  call  set_derived_dyn_horgrid(dG)
+  call  set_derived_dyn_horgrid(dG, US)
 
 end subroutine copy_MOM_grid_to_dyngrid
 

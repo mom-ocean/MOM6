@@ -1,3 +1,5 @@
+!> Interfaces to non-domain-oriented communication subroutines, including the
+!! MOM6 reproducing sums facility
 module MOM_coms
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -23,49 +25,81 @@ public :: Set_PElist, Get_PElist
 !   This module provides interfaces to the non-domain-oriented communication
 ! subroutines.
 
-integer(kind=8), parameter :: prec=2_8**46 ! The precision of each integer.
-real, parameter :: r_prec=2.0**46  ! A real version of prec.
-real, parameter :: I_prec=1.0/(2.0**46) ! The inverse of prec.
+integer(kind=8), parameter :: prec=2_8**46 !< The precision of each integer.
+real, parameter :: r_prec=2.0**46  !< A real version of prec.
+real, parameter :: I_prec=1.0/(2.0**46) !< The inverse of prec.
 integer, parameter :: max_count_prec=2**(63-46)-1
-                              ! The number of values that can be added together
-                              ! with the current value of prec before there will
-                              ! be roundoff problems.
+                              !< The number of values that can be added together
+                              !! with the current value of prec before there will
+                              !! be roundoff problems.
 
-integer, parameter :: ni=6    ! The number of long integers to use to represent
-                              ! a real number.
+integer, parameter :: ni=6    !< The number of long integers to use to represent
+                              !< a real number.
 real, parameter, dimension(ni) :: &
   pr = (/ r_prec**2, r_prec, 1.0, 1.0/r_prec, 1.0/r_prec**2, 1.0/r_prec**3 /)
+    !< An array of the real precision of each of the integers
 real, parameter, dimension(ni) :: &
   I_pr = (/ 1.0/r_prec**2, 1.0/r_prec, 1.0, r_prec, r_prec**2, r_prec**3 /)
+    !< An array of the inverse of the real precision of each of the integers
+real, parameter :: max_efp_float = pr(1) * (2.**63 - 1.)
+                              !< The largest float with an EFP representation.
+                              !! NOTE: Only the first bin can exceed precision,
+                              !! but is bounded by the largest signed integer.
 
-logical :: overflow_error = .false., NaN_error = .false.
-logical :: debug = .false.    ! Making this true enables debugging output.
+logical :: overflow_error = .false. !< This becomes true if an overflow is encountered.
+logical :: NaN_error = .false.      !< This becomes true if a NaN is encountered.
+logical :: debug = .false.          !< Making this true enables debugging output.
 
+!> Find an accurate and order-invariant sum of distributed 2d or 3d fields
 interface reproducing_sum
   module procedure reproducing_sum_2d, reproducing_sum_3d
 end interface reproducing_sum
 
-! The Extended Fixed Point (EFP) type provides a public interface for doing
-! sums and taking differences with this type.
+!> The Extended Fixed Point (EFP) type provides a public interface for doing sums
+!! and taking differences with this type.
+!!
+!! The use of this type is documented in
+!!   Hallberg, R. & A. Adcroft, 2014: An Order-invariant Real-to-Integer Conversion Sum.
+!!   Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
 type, public :: EFP_type ; private
-  integer(kind=8), dimension(ni) :: v
+  integer(kind=8), dimension(ni) :: v !< The value in this type
 end type EFP_type
 
-interface operator (+); module procedure EFP_plus  ; end interface
-interface operator (-); module procedure EFP_minus ; end interface
+!> Add two extended-fixed-point numbers
+interface operator (+) ; module procedure EFP_plus  ; end interface
+!> Subtract one extended-fixed-point number from another
+interface operator (-) ; module procedure EFP_minus ; end interface
+!> Copy the value of one extended-fixed-point number into another
 interface assignment(=); module procedure EFP_assign ; end interface
 
 contains
 
+!> This subroutine uses a conversion to an integer representation of real numbers to give an
+!! order-invariant sum of distributed 2-D arrays that reproduces across domain decomposition.
+!! This technique is described in Hallberg & Adcroft, 2014, Parallel Computing,
+!! doi:10.1016/j.parco.2014.04.007.
 function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
                             overflow_check, err) result(sum)
-  real, dimension(:,:),     intent(in) :: array
-  integer,        optional, intent(in)  :: isr, ier, jsr, jer
-  type(EFP_type), optional, intent(out) :: EFP_sum
-  logical,        optional, intent(in)  :: reproducing
-  logical,        optional, intent(in)  :: overflow_check
-  integer,        optional, intent(out) :: err
-  real                                  :: sum  ! Result
+  real, dimension(:,:),     intent(in)  :: array    !< The array to be summed
+  integer,        optional, intent(in)  :: isr     !< The starting i-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  integer,        optional, intent(in)  :: ier     !< The ending i-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  integer,        optional, intent(in)  :: jsr     !< The starting j-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  integer,        optional, intent(in)  :: jer     !< The ending j-index of the sum, noting
+                                                   !! that the array indices starts at 1
+  type(EFP_type), optional, intent(out) :: EFP_sum  !< The result in extended fixed point format
+  logical,        optional, intent(in)  :: reproducing !< If present and false, do the sum
+                                                !! using the naive non-reproducing approach
+  logical,        optional, intent(in)  :: overflow_check !< If present and false, disable
+                                                !! checking for overflows in incremental results.
+                                                !! This can speed up calculations if the number
+                                                !! of values being summed is small enough
+  integer,        optional, intent(out) :: err  !< If present, return an error code instead of
+                                                !! triggering any fatal errors directly from
+                                                !! this routine.
+  real                                  :: sum  !< Result
 
   !   This subroutine uses a conversion to an integer representation
   ! of real numbers to give order-invariant sums that will reproduce
@@ -116,20 +150,20 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
     if (over_check) then
       if ((je+1-js)*(ie+1-is) < max_count_prec) then
         do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j), max_mag_term);
+          call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
         enddo ; enddo
         call carry_overflow(ints_sum, prec_error)
       elseif ((ie+1-is) < max_count_prec) then
         do j=js,je
           do i=is,ie
-            call increment_ints_faster(ints_sum, array(i,j), max_mag_term);
+            call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
           enddo
           call carry_overflow(ints_sum, prec_error)
         enddo
       else
         do j=js,je ; do i=is,ie
           call increment_ints(ints_sum, real_to_ints(array(i,j), prec_error), &
-                              prec_error);
+                              prec_error)
         enddo ; enddo
       endif
     else
@@ -172,7 +206,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   else
     rsum(1) = 0.0
     do j=js,je ; do i=is,ie
-      rsum(1) = rsum(1) + array(i,j);
+      rsum(1) = rsum(1) + array(i,j)
     enddo ; enddo
     call sum_across_PEs(rsum,1)
     sum = rsum(1)
@@ -202,14 +236,27 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
 
 end function reproducing_sum_2d
 
+!> This subroutine uses a conversion to an integer representation of real numbers to give an
+!! order-invariant sum of distributed 3-D arrays that reproduces across domain decomposition.
+!! This technique is described in Hallberg & Adcroft, 2014, Parallel Computing,
+!! doi:10.1016/j.parco.2014.04.007.
 function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
                             result(sum)
-  real, dimension(:,:,:),        intent(in) :: array
-  integer,    optional,          intent(in) :: isr, ier, jsr, jer
-  real, dimension(:), optional, intent(out) :: sums
-  type(EFP_type),     optional, intent(out) :: EFP_sum
-  integer,            optional, intent(out) :: err
-  real                                      :: sum  ! Result
+  real, dimension(:,:,:),       intent(in)  :: array   !< The array to be summed
+  integer,            optional, intent(in)  :: isr     !< The starting i-index of the sum, noting
+                                                       !! that the array indices starts at 1
+  integer,            optional, intent(in)  :: ier     !< The ending i-index of the sum, noting
+                                                       !! that the array indices starts at 1
+  integer,            optional, intent(in)  :: jsr     !< The starting j-index of the sum, noting
+                                                       !! that the array indices starts at 1
+  integer,            optional, intent(in)  :: jer     !< The ending j-index of the sum, noting
+                                                       !! that the array indices starts at 1
+  real, dimension(:), optional, intent(out) :: sums    !< The sums by vertical layer
+  type(EFP_type),     optional, intent(out) :: EFP_sum !< The result in extended fixed point format
+  integer,            optional, intent(out) :: err  !< If present, return an error code instead of
+                                                    !! triggering any fatal errors directly from
+                                                    !! this routine.
+  real                                      :: sum  !< Result
 
   !   This subroutine uses a conversion to an integer representation
   ! of real numbers to give order-invariant sums that will reproduce
@@ -260,21 +307,21 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
     if (jsz*isz < max_count_prec) then
       do k=1,ke
         do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term)
         enddo ; enddo
         call carry_overflow(ints_sums(:,k), prec_error)
       enddo
     elseif (isz < max_count_prec) then
       do k=1,ke ; do j=js,je
         do i=is,ie
-          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term)
         enddo
         call carry_overflow(ints_sums(:,k), prec_error)
       enddo ; enddo
     else
       do k=1,ke ; do j=js,je ; do i=is,ie
         call increment_ints(ints_sums(:,k), &
-                            real_to_ints(array(i,j,k), prec_error), prec_error);
+                            real_to_ints(array(i,j,k), prec_error), prec_error)
       enddo ; enddo ; enddo
     endif
     if (present(err)) then
@@ -318,21 +365,21 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
     if (jsz*isz < max_count_prec) then
       do k=1,ke
         do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term)
         enddo ; enddo
         call carry_overflow(ints_sum, prec_error)
       enddo
     elseif (isz < max_count_prec) then
       do k=1,ke ; do j=js,je
         do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term);
+          call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term)
         enddo
         call carry_overflow(ints_sum, prec_error)
       enddo ; enddo
     else
       do k=1,ke ; do j=js,je ; do i=is,ie
         call increment_ints(ints_sum, real_to_ints(array(i,j,k), prec_error), &
-                            prec_error);
+                            prec_error)
       enddo ; enddo ; enddo
     endif
     if (present(err)) then
@@ -365,10 +412,15 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, err) &
 
 end function reproducing_sum_3d
 
+!> Convert a real number into the array of integers constitute its extended-fixed-point representation
 function real_to_ints(r, prec_error, overflow) result(ints)
-  real,                      intent(in) :: r
-  integer(kind=8), optional, intent(in) :: prec_error
-  logical,         optional, intent(inout) :: overflow
+  real,                      intent(in) :: r  !< The real number being converted
+  integer(kind=8), optional, intent(in) :: prec_error  !< The PE-count dependent precision of the
+                                              !! integers that is safe from overflows during global
+                                              !! sums.  This will be larger than the compile-time
+                                              !! precision parameter, and is used to detect overflows.
+  logical,         optional, intent(inout) :: overflow !< Returns true if the conversion is being
+                                              !! done on a value that is too large to be represented
   integer(kind=8), dimension(ni)  :: ints
   !   This subroutine converts a real number to an equivalent representation
   ! using several long integers.
@@ -401,8 +453,10 @@ function real_to_ints(r, prec_error, overflow) result(ints)
 
 end function real_to_ints
 
+!> Convert the array of integers that constitute an extended-fixed-point
+!! representation into a real number
 function ints_to_real(ints) result(r)
-  integer(kind=8), dimension(ni), intent(in) :: ints
+  integer(kind=8), dimension(ni), intent(in) :: ints !< The array of EFP integers
   real :: r
   ! This subroutine reverses the conversion in real_to_ints.
 
@@ -412,10 +466,15 @@ function ints_to_real(ints) result(r)
   do i=1,ni ; r = r + pr(i)*ints(i) ; enddo
 end function ints_to_real
 
+!> Increment an array of integers that constitutes an extended-fixed-point
+!! representation with a another EFP number
 subroutine increment_ints(int_sum, int2, prec_error)
-  integer(kind=8), dimension(ni), intent(inout) :: int_sum
-  integer(kind=8), dimension(ni), intent(in)    :: int2
-  integer(kind=8), optional,      intent(in)    :: prec_error
+  integer(kind=8), dimension(ni), intent(inout) :: int_sum !< The array of EFP integers being incremented
+  integer(kind=8), dimension(ni), intent(in)    :: int2    !< The array of EFP integers being added
+  integer(kind=8), optional,      intent(in)    :: prec_error !< The PE-count dependent precision of the
+                                              !! integers that is safe from overflows during global
+                                              !! sums.  This will be larger than the compile-time
+                                              !! precision parameter, and is used to detect overflows.
 
   ! This subroutine increments a number with another, both using the integer
   ! representation in real_to_ints.
@@ -441,10 +500,12 @@ subroutine increment_ints(int_sum, int2, prec_error)
 
 end subroutine increment_ints
 
+!> Increment an EFP number with a real number without doing any carrying of
+!! of overflows and using only minimal error checking.
 subroutine increment_ints_faster(int_sum, r, max_mag_term)
-  integer(kind=8), dimension(ni), intent(inout) :: int_sum
-  real,                           intent(in)    :: r
-  real,                           intent(inout) :: max_mag_term
+  integer(kind=8), dimension(ni), intent(inout) :: int_sum  !< The array of EFP integers being incremented
+  real,                           intent(in)    :: r        !< The real number being added.
+  real,                           intent(inout) :: max_mag_term !< A running maximum magnitude of the r's.
 
   ! This subroutine increments a number with another, both using the integer
   ! representation in real_to_ints, but without doing any carrying of overflow.
@@ -458,6 +519,12 @@ subroutine increment_ints_faster(int_sum, r, max_mag_term)
   rs = abs(r)
   if (rs > abs(max_mag_term)) max_mag_term = r
 
+  ! Abort if the number has no EFP representation
+  if (rs > max_efp_float) then
+    overflow_error = .true.
+    return
+  endif
+
   do i=1,ni
     ival = int(rs*I_pr(i), 8)
     rs = rs - ival*pr(i)
@@ -466,14 +533,19 @@ subroutine increment_ints_faster(int_sum, r, max_mag_term)
 
 end subroutine increment_ints_faster
 
+!> This subroutine handles carrying of the overflow.
 subroutine carry_overflow(int_sum, prec_error)
-  integer(kind=8), dimension(ni), intent(inout) :: int_sum
-  integer(kind=8),                intent(in)    :: prec_error
+  integer(kind=8), dimension(ni), intent(inout) :: int_sum  !< The array of EFP integers being
+                                              !! modified by carries, but without changing value.
+  integer(kind=8),                intent(in)    :: prec_error  !< The PE-count dependent precision of the
+                                              !! integers that is safe from overflows during global
+                                              !! sums.  This will be larger than the compile-time
+                                              !! precision parameter, and is used to detect overflows.
 
   ! This subroutine handles carrying of the overflow.
   integer :: i, num_carry
 
-  do i=ni,2,-1 ; if (abs(int_sum(i)) > prec) then
+  do i=ni,2,-1 ; if (abs(int_sum(i)) >= prec) then
     num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
@@ -484,15 +556,20 @@ subroutine carry_overflow(int_sum, prec_error)
 
 end subroutine carry_overflow
 
+!> This subroutine carries the overflow, and then makes sure that
+!! all integers are of the same sign as the overall value.
 subroutine regularize_ints(int_sum)
-  integer(kind=8), dimension(ni), intent(inout) :: int_sum
+  integer(kind=8), dimension(ni), &
+    intent(inout) :: int_sum !< The array of integers being modified to take a
+                             !! regular form with all integers of the same sign,
+                             !! but without changing value.
 
   ! This subroutine carries the overflow, and then makes sure that
   ! all integers are of the same sign as the overall value.
   logical :: positive
   integer :: i, num_carry
 
-  do i=ni,2,-1 ; if (abs(int_sum(i)) > prec) then
+  do i=ni,2,-1 ; if (abs(int_sum(i)) >= prec) then
     num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
@@ -521,27 +598,34 @@ subroutine regularize_ints(int_sum)
 
 end subroutine regularize_ints
 
+!> Returns the status of the module's error flag
 function query_EFP_overflow_error()
   logical :: query_EFP_overflow_error
   query_EFP_overflow_error = overflow_error
 end function query_EFP_overflow_error
 
+!> Reset the module's error flag to false
 subroutine reset_EFP_overflow_error()
   overflow_error = .false.
 end subroutine reset_EFP_overflow_error
 
+!> Add two extended-fixed-point numbers
 function EFP_plus(EFP1, EFP2)
-  type(EFP_type)             :: EFP_plus
-  type(EFP_type), intent(in) :: EFP1, EFP2
+  type(EFP_type)             :: EFP_plus !< The result in extended fixed point format
+  type(EFP_type), intent(in) :: EFP1 !< The first extended fixed point number
+  type(EFP_type), intent(in) :: EFP2 !< The second extended fixed point number
 
   EFP_plus = EFP1
 
   call increment_ints(EFP_plus%v(:), EFP2%v(:))
 end function EFP_plus
 
+!> Subract one extended-fixed-point number from another
 function EFP_minus(EFP1, EFP2)
-  type(EFP_type)             :: EFP_minus
-  type(EFP_type), intent(in) :: EFP1, EFP2
+  type(EFP_type)             :: EFP_minus !< The result in extended fixed point format
+  type(EFP_type), intent(in) :: EFP1 !< The first extended fixed point number
+  type(EFP_type), intent(in) :: EFP2 !< The extended fixed point number being
+                        !! subtracted from the first extended fixed point number
   integer :: i
 
   do i=1,ni ; EFP_minus%v(i) = -1*EFP2%v(i) ; enddo
@@ -549,9 +633,10 @@ function EFP_minus(EFP1, EFP2)
   call increment_ints(EFP_minus%v(:), EFP1%v(:))
 end function EFP_minus
 
+!> Copy one extended-fixed-point number into another
 subroutine EFP_assign(EFP1, EFP2)
-  type(EFP_type), intent(out) :: EFP1
-  type(EFP_type), intent(in)  :: EFP2
+  type(EFP_type), intent(out) :: EFP1 !< The recipient extended fixed point number
+  type(EFP_type), intent(in)  :: EFP2 !< The source extended fixed point number
   integer i
   ! This subroutine assigns all components of the extended fixed point type
   ! variable on the RHS (EFP2) to the components of the variable on the LHS
@@ -560,17 +645,22 @@ subroutine EFP_assign(EFP1, EFP2)
   do i=1,ni ; EFP1%v(i) = EFP2%v(i) ; enddo
 end subroutine EFP_assign
 
+!> Return the real number that an extended-fixed-point number corresponds with
 function EFP_to_real(EFP1)
-  type(EFP_type), intent(inout) :: EFP1
+  type(EFP_type), intent(inout) :: EFP1 !< The extended fixed point number being converted
   real :: EFP_to_real
 
   call regularize_ints(EFP1%v)
   EFP_to_real = ints_to_real(EFP1%v)
 end function EFP_to_real
 
+!> Take the difference between two extended-fixed-point numbers (EFP1 - EFP2)
+!! and return the result as a real number
 function EFP_real_diff(EFP1, EFP2)
-  type(EFP_type), intent(in) :: EFP1, EFP2
-  real :: EFP_real_diff
+  type(EFP_type), intent(in) :: EFP1  !< The first extended fixed point number
+  type(EFP_type), intent(in) :: EFP2  !< The extended fixed point number being
+                        !! subtracted from the first extended fixed point number
+  real :: EFP_real_diff !< The real result
 
   type(EFP_type)             :: EFP_diff
 
@@ -579,9 +669,11 @@ function EFP_real_diff(EFP1, EFP2)
 
 end function EFP_real_diff
 
+!> Return the extended-fixed-point number that a real number corresponds with
 function real_to_EFP(val, overflow)
-  real,              intent(in)    :: val
-  logical, optional, intent(inout) :: overflow
+  real,              intent(in)    :: val !< The real number being converted
+  logical, optional, intent(inout) :: overflow !< Returns true if the conversion is being
+                                          !! done on a value that is too large to be represented
   type(EFP_type) :: real_to_EFP
 
   logical :: over
@@ -600,10 +692,15 @@ function real_to_EFP(val, overflow)
 
 end function real_to_EFP
 
+!>   This subroutine does a sum across PEs of a list of EFP variables,
+!! returning the sums in place, with all overflows carried.
 subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
-  type(EFP_type), dimension(:), intent(inout) :: EFPs
-  integer, intent(in) :: nval
-  logical, dimension(:), optional, intent(out) :: errors
+  type(EFP_type), dimension(:), &
+              intent(inout) :: EFPs   !< The list of extended fixed point numbers
+                                      !! being summed across PEs.
+  integer,    intent(in)    :: nval   !< The number of values being summed.
+  logical, dimension(:), &
+    optional, intent(out)   :: errors !< A list of error flags for each sum
 
   !   This subroutine does a sum across PEs of a list of EFP variables,
   ! returning the sums in place, with all overflows carried.
@@ -645,10 +742,9 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
 
 end subroutine EFP_list_sum_across_PEs
 
+!> This subroutine carries out all of the calls required to close out the infrastructure cleanly.
+!! This should only be called in ocean-only runs, as the coupler takes care of this in coupled runs.
 subroutine MOM_infra_end
-  ! This subroutine should contain all of the calls that are required
-  ! to close out the infrastructure cleanly.  This should only be called
-  ! in ocean-only runs, as the coupler takes care of this in coupled runs.
   call print_memuse_stats( 'Memory HiWaterMark', always=.TRUE. )
   call fms_end
 end subroutine MOM_infra_end

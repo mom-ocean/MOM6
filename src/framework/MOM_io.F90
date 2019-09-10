@@ -6,6 +6,7 @@ module MOM_io
 
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains,          only : get_simple_array_i_ind, get_simple_array_j_ind
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
@@ -17,7 +18,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_size, read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
-use mpp_domains_mod,      only : domain1d, mpp_get_domain_components
+use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
@@ -30,7 +31,7 @@ use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WR
 use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
 use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
-use mpp_io_mod,           only : read_field=>mpp_read, io_infra_init=>mpp_io_init
+use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 use netcdf
 
@@ -38,7 +39,7 @@ implicit none ; private
 
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, open_file, read_axis_data, read_data, read_field
+public :: get_file_times, open_file, read_axis_data, read_data
 public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
@@ -63,11 +64,13 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
+!> Indicate whether a file exists, perhaps with domain decomposition
 interface file_exists
-  module procedure file_exist
+  module procedure FMS_file_exists
   module procedure MOM_file_exists
 end interface
 
+!> Read a data field from a file
 interface MOM_read_data
   module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
@@ -75,6 +78,7 @@ interface MOM_read_data
   module procedure MOM_read_data_1d
 end interface
 
+!> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
@@ -85,7 +89,7 @@ contains
 !> Routine creates a new NetCDF file.  It also sets up
 !! structures that describe this file and variables that will
 !! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
+subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
@@ -93,7 +97,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   integer,               intent(in)    :: novars     !< number of fields written to filename
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
-  real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
+  real, optional,        intent(in)    :: timeunit   !< length of the units for time [s]. The
                                                      !! default value is 86400.0, for 1 day.
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if the new file uses any
@@ -104,6 +108,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if the new file uses any
                                                      !! vertical grid axes.
+  integer(kind=8), optional,      intent(in)    :: checksums(:,:)  !< checksums of vars
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
@@ -150,9 +155,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   endif
 
   one_file = .true.
-  if (domain_set) then
-    one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
-  endif
+  if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
@@ -215,7 +218,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
-  end do
+  enddo
 
   if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
     if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
@@ -226,8 +229,9 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
 
-! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense, domain, data, min)
-! Otherwise if optional arguments are added to mpp_write_meta the compiler may (and in case of GNU is) get confused and crash.
+! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense,
+! domain, data, min). Otherwise if optional arguments are added to mpp_write_meta the compiler may
+! (and in case of GNU does) get confused and crash.
   if (use_lath) &
     call mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
                    cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
@@ -258,13 +262,13 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     ! Set appropriate units, depending on the value.
     if (timeunit < 0.0) then
       time_units = "days" ! The default value.
-    else if ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
+    elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
       time_units = "seconds"
-    else if ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
+    elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
       time_units = "hours"
-    else if ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
+    elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
       time_units = "days"
-    else if ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
+    elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
       time_units = "years"
     else
       write(time_units,'(es8.2," s")') timeunit
@@ -321,8 +325,13 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     end select
     pack = 1
 
-    call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+    if (present(checksums)) then
+       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
+           vars(k)%longname, pack = pack, checksum=checksums(k,:))
+    else
+       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack)
+    endif
   enddo
 
   if (use_lath) call write_field(unit, axis_lath)
@@ -348,7 +357,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
   integer,               intent(in)    :: novars     !< number of fields written to filename
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
-  real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
+  real, optional,        intent(in)    :: timeunit   !< length of the units for time [s]. The
                                                      !! default value is 86400.0, for 1 day.
   type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
                                                      !! is required if a new file uses any
@@ -388,9 +397,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
     endif
 
     one_file = .true.
-    if (domain_set) then
-      one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
-    endif
+    if (domain_set) one_file = (thread == SINGLE_FILE)
 
     if (one_file) then
       call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
@@ -419,17 +426,18 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 !      call mpp_get_field_atts(fields(i),name)
 !      !if (trim(name) /= trim(vars%name) then
 !      !write (mesg,'("Reopening file ",a," variable ",a," is called ",a,".")',&
-!      !    filename,vars%name,name);
+!      !    filename,vars%name,name)
 !      !call MOM_error(NOTE,"MOM_io: "//mesg)
 !    enddo
   endif
 
 end subroutine reopen_file
 
-
+!> Read the data associated with a named axis in a file
 subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename, axis_name
-  real, dimension(:), intent(out) :: var
+  character(len=*),   intent(in)  :: filename  !< Name of the file to read
+  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
+  real, dimension(:), intent(out) :: var       !< The axis location data
 
   integer :: i,len,unit, ndim, nvar, natt, ntime
   logical :: axis_found
@@ -629,19 +637,19 @@ end function var_desc
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                  cmor_field_name, cmor_units, cmor_longname, conversion, caller)
-  type(vardesc),              intent(inout) :: vd                 !< vardesc type that is modified
-  character(len=*), optional, intent(in)    :: name               !< name of variable
-  character(len=*), optional, intent(in)    :: units              !< units of variable
-  character(len=*), optional, intent(in)    :: longname           !< long name of variable
-  character(len=*), optional, intent(in)    :: hor_grid           !< horizonal staggering of variable
-  character(len=*), optional, intent(in)    :: z_grid             !< vertical staggering of variable
-  character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1
-  character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name
-  character(len=*), optional, intent(in)    :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(in)    :: cmor_longname      !< CMOR long name
-  real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to
-                                                                  !! convert from intensive to extensive
-  character(len=*), optional, intent(in)    :: caller             !< calling routine?
+  type(vardesc),              intent(inout) :: vd              !< vardesc type that is modified
+  character(len=*), optional, intent(in)    :: name            !< name of variable
+  character(len=*), optional, intent(in)    :: units           !< units of variable
+  character(len=*), optional, intent(in)    :: longname        !< long name of variable
+  character(len=*), optional, intent(in)    :: hor_grid        !< horizonal staggering of variable
+  character(len=*), optional, intent(in)    :: z_grid          !< vertical staggering of variable
+  character(len=*), optional, intent(in)    :: t_grid          !< time description: s, p, or 1
+  character(len=*), optional, intent(in)    :: cmor_field_name !< CMOR name
+  character(len=*), optional, intent(in)    :: cmor_units      !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(in)    :: cmor_longname   !< CMOR long name
+  real            , optional, intent(in)    :: conversion      !< for unit conversions, such as needed
+                                                               !! to convert from intensive to extensive
+  character(len=*), optional, intent(in)    :: caller          !< calling routine?
 
   character(len=120) :: cllr
   cllr = "mod_vardesc"
@@ -822,16 +830,35 @@ function MOM_file_exists(filename, MOM_Domain)
 
 end function MOM_file_exists
 
+!> Returns true if the named file or its domain-decomposed variant exists.
+function FMS_file_exists(filename, domain, no_domain)
+  character(len=*), intent(in)         :: filename  !< The name of the file being inquired about
+  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
+  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
+! This function uses the fms_io function file_exist to determine whether
+! a named file (or its decomposed variant) exists.
+
+  logical :: FMS_file_exists
+
+  FMS_file_exists = file_exist(filename, domain, no_domain)
+
+end function FMS_file_exists
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel)
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before they are returned.
 
   call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    data(:) = scale*data(:)
+  endif ; endif
 
 end subroutine MOM_read_data_1d
 
@@ -839,7 +866,7 @@ end subroutine MOM_read_data_1d
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position)
+                            timelevel, position, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -847,9 +874,19 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before they are returned.
+
+  integer :: is, ie, js, je
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+    data(is:ie,js:je) = scale*data(is:ie,js:je)
+  endif ; endif
 
 end subroutine MOM_read_data_2d
 
@@ -857,7 +894,7 @@ end subroutine MOM_read_data_2d
 !! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position)
+                            timelevel, position, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
@@ -865,9 +902,19 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before they are returned.
+
+  integer :: is, ie, js, je
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+    data(is:ie,js:je,:) = scale*data(is:ie,js:je,:)
+  endif ; endif
 
 end subroutine MOM_read_data_3d
 
@@ -875,7 +922,7 @@ end subroutine MOM_read_data_3d
 !! 4-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position)
+                            timelevel, position, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
@@ -883,9 +930,19 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before they are returned.
+
+  integer :: is, ie, js, je
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+    data(is:ie,js:je,:,:) = scale*data(is:ie,js:je,:,:)
+  endif ; endif
 
 end subroutine MOM_read_data_4d
 
@@ -894,7 +951,7 @@ end subroutine MOM_read_data_4d
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair)
+                              timelevel, stagger, scalar_pair, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -905,8 +962,10 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair   !< If true, a pair of scalars are to be read.cretized
-
+  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
+                                                     !! by before they are returned.
+  integer :: is, ie, js, je
   integer :: u_pos, v_pos
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -921,6 +980,15 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=v_pos)
 
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
+    u_data(is:ie,js:je) = scale*u_data(is:ie,js:je)
+    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
+    v_data(is:ie,js:je) = scale*v_data(is:ie,js:je)
+  endif ; endif
+
 end subroutine MOM_read_vector_2d
 
 
@@ -928,7 +996,7 @@ end subroutine MOM_read_vector_2d
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair)
+                              timelevel, stagger, scalar_pair, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -939,8 +1007,11 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair   !< If true, a pair of scalars are to be read.cretized
+  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
+                                                     !! by before they are returned.
 
+  integer :: is, ie, js, je
   integer :: u_pos, v_pos
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -954,6 +1025,15 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
                  timelevel=timelevel, position=u_pos)
   call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=v_pos)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
+    u_data(is:ie,js:je,:) = scale*u_data(is:ie,js:je,:)
+    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
+    v_data(is:ie,js:je,:) = scale*v_data(is:ie,js:je,:)
+  endif ; endif
 
 end subroutine MOM_read_vector_3d
 
@@ -972,7 +1052,6 @@ subroutine MOM_io_init(param_file)
 end subroutine MOM_io_init
 
 
-
 !> \namespace mom_io
 !!
 !!   This file contains a number of subroutines that manipulate
@@ -989,7 +1068,7 @@ end subroutine MOM_io_init
 !!
 !!   * write_field: write a field to an open file.
 !!   * write_time: write a value of the time axis to an open file.
-!!   * read_field: read a field from an open file.
+!!   * read_data: read a variable from an open file.
 !!   * read_time: read a time from an open file.
 !!
 !!   * name_output_file: provide a name for an output file based on a

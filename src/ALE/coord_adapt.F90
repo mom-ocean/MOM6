@@ -12,32 +12,32 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-type, public :: adapt_CS
-  private
+!> Control structure for adaptive coordinates (coord_adapt).
+type, public :: adapt_CS ; private
 
   !> Number of layers/levels
   integer :: nk
 
-  !> Nominal near-surface resolution
+  !> Nominal near-surface resolution [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: coordinateResolution
 
   !> Ratio of optimisation and diffusion timescales
-  real :: adaptTimeRatio = 1e-1
+  real :: adaptTimeRatio
 
   !> Nondimensional coefficient determining how much optimisation to apply
-  real :: adaptAlpha     = 1.0
+  real :: adaptAlpha
 
-  !> Near-surface zooming depth
-  real :: adaptZoom      = 200.0
+  !> Near-surface zooming depth [H ~> m or kg m-2]
+  real :: adaptZoom
 
   !> Near-surface zooming coefficient
-  real :: adaptZoomCoeff = 0.0
+  real :: adaptZoomCoeff
 
   !> Stratification-dependent diffusion coefficient
-  real :: adaptBuoyCoeff = 0.0
+  real :: adaptBuoyCoeff
 
-  !> Reference density difference for stratification-dependent diffusion
-  real :: adaptDrho0     = 0.5
+  !> Reference density difference for stratification-dependent diffusion [kg m-3]
+  real :: adaptDrho0
 
   !> If true, form a HYCOM1-like mixed layet by preventing interfaces
   !! from becoming shallower than the depths set by coordinateResolution
@@ -49,22 +49,37 @@ public init_coord_adapt, set_adapt_params, build_adapt_column, end_coord_adapt
 contains
 
 !> Initialise an adapt_CS with parameters
-subroutine init_coord_adapt(CS, nk, coordinateResolution)
+subroutine init_coord_adapt(CS, nk, coordinateResolution, m_to_H)
   type(adapt_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,            intent(in) :: nk
-  real, dimension(:), intent(in) :: coordinateResolution
+  integer,            intent(in) :: nk !< Number of layers in the grid
+  real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution [m] or
+                                       !! other units specified with m_to_H
+  real,     optional, intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses
+
+  real :: m_to_H_rescale  ! A unit conversion factor.
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_adapt: CS already associated")
   allocate(CS)
   allocate(CS%coordinateResolution(nk))
 
+  m_to_H_rescale = 1.0 ; if (present(m_to_H)) m_to_H_rescale = m_to_H
+
   CS%nk = nk
   CS%coordinateResolution(:) = coordinateResolution(:)
+
+  ! Set real parameter default values
+  CS%adaptTimeRatio = 1e-1 ! Nondim.
+  CS%adaptAlpha     = 1.0  ! Nondim.
+  CS%adaptZoom = 200.0 * m_to_H_rescale
+  CS%adaptZoomCoeff = 0.0  ! Nondim.
+  CS%adaptBuoyCoeff = 0.0  ! Nondim.
+  CS%adaptDrho0     = 0.5  ! [kg m-3]
+
 end subroutine init_coord_adapt
 
 !> Clean up the coordinate control structure
 subroutine end_coord_adapt(CS)
-  type(adapt_CS), pointer :: CS
+  type(adapt_CS), pointer :: CS  !< The control structure for this module
 
   ! nothing to do
   if (.not. associated(CS)) return
@@ -72,12 +87,21 @@ subroutine end_coord_adapt(CS)
   deallocate(CS)
 end subroutine end_coord_adapt
 
+!> This subtroutine can be used to set the parameters for coord_adapt module
 subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoomCoeff, &
-     adaptBuoyCoeff, adaptDrho0, adaptDoMin)
-  type(adapt_CS),    pointer    :: CS
-  real, optional,    intent(in) :: adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoomCoeff
-  real, optional,    intent(in) :: adaptBuoyCoeff, adaptDrho0
-  logical, optional, intent(in) :: adaptDoMin
+                            adaptBuoyCoeff, adaptDrho0, adaptDoMin)
+  type(adapt_CS),    pointer    :: CS  !< The control structure for this module
+  real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales
+  real,    optional, intent(in) :: adaptAlpha     !< Nondimensional coefficient determining
+                                                  !! how much optimisation to apply
+  real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth [H ~> m or kg m-2]
+  real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient
+  real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient
+  real,    optional, intent(in) :: adaptDrho0  !< Reference density difference for
+                                               !! stratification-dependent diffusion
+  logical, optional, intent(in) :: adaptDoMin  !< If true, form a HYCOM1-like mixed layer by
+                                               !! preventing interfaces from becoming shallower than
+                                               !! the depths set by coordinateResolution
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_adapt_params: CS not associated")
 
@@ -91,14 +115,18 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
 end subroutine set_adapt_params
 
 subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
-  type(adapt_CS),                              intent(in)    :: CS
+  type(adapt_CS),                              intent(in)    :: CS   !< The control structure for this module
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
-  integer,                                     intent(in)    :: i, j
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt, tInt, sInt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext ! updated interface positions
+  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
+                                                                     !! thermodynamic variables
+  integer,                                     intent(in)    :: i    !< The i-index of the column to work on
+  integer,                                     intent(in)    :: j    !< The j-index of the column to work on
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt !< Interface heights [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext !< updated interface positions
 
   ! Local variables
   integer :: k, nz
@@ -113,7 +141,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   zNext(nz+1) = zInt(i,j,nz+1)
 
   ! local depth for scaling diffusivity
-  depth = G%bathyT(i,j) * GV%m_to_H
+  depth = G%bathyT(i,j) * GV%Z_to_H
 
   ! initialize del2sigma to zero
   del2sigma(:) = 0.
@@ -213,7 +241,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
 
     ! set vertical grid diffusivity
     kGrid(k) = (CS%adaptTimeRatio * nz**2 * depth) * &
-         (CS%adaptZoomCoeff / (CS%adaptZoom * GV%m_to_H + 0.5*(zNext(K) + zNext(K+1))) + &
+         (CS%adaptZoomCoeff / (CS%adaptZoom + 0.5*(zNext(K) + zNext(K+1))) + &
          (CS%adaptBuoyCoeff * drdz / CS%adaptDrho0) + &
          max(1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff, 0.0) / depth)
   enddo

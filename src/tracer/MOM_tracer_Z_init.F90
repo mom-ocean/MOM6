@@ -1,33 +1,14 @@
+!> Used to initialize tracers from a depth- (or z*-) space file.
 module MOM_tracer_Z_init
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, September 2009                                 *
-!*                                                                     *
-!*    This file contains a subroutine to initialize tracers into the   *
-!*  MOM vertical grid from a depth- (or z*-) space file.               *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:                                           *
-!*    j+1  > o > o >   At ^:                                           *
-!*    j    x ^ x ^ x   At >:                                           *
-!*    j    > o > o >   At o:  tr                                       *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
-use MOM_diag_to_Z, only : find_overlap, find_limited_slope
+!use MOM_diag_to_Z, only : find_overlap, find_limited_slope
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : MOM_read_data
+use MOM_unit_scaling, only : unit_scale_type
 
 use netcdf
 
@@ -37,28 +18,32 @@ implicit none ; private
 
 public tracer_Z_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 contains
 
-function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
-  logical :: tracer_Z_init
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: tr
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  character(len=*),                      intent(in)    :: filename, tr_name
-! type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for run-time parameters
-  real,                        optional, intent(in)    :: missing_val
-  real,                        optional, intent(in)    :: land_val
-!   This function initializes a tracer by reading a Z-space file, returning
-! .true. if this appears to have been successful, and false otherwise.
-! Arguments: tr - The tracer to initialize.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      filename - The name of the file to read from.
-!  (in)      tr_name - The name of the tracer in the file.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in,opt)  missing_val - The missing value for the tracer.
-!  (in,opt)  land_val - The value to use to fill in land points.
+!>   This function initializes a tracer by reading a Z-space file, returning
+!! .true. if this appears to have been successful, and false otherwise.
+function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
+  logical :: tracer_Z_init !< A return code indicating if the initialization has been successful
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(out)   :: tr   !< The tracer to initialize
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                         intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  character(len=*),      intent(in)    :: filename !< The name of the file to read from
+  character(len=*),      intent(in)    :: tr_name !< The name of the tracer in the file
+! type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
+  real,        optional, intent(in)    :: missing_val !< The missing value for the tracer
+  real,        optional, intent(in)    :: land_val !< A value to use to fill in land points
+
+  !   This function initializes a tracer by reading a Z-space file, returning true if this
+  ! appears to have been successful, and false otherwise.
+!
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -69,7 +54,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
     tr_in   ! The z-space array of tracer concentrations that is read in.
   real, allocatable, dimension(:) :: &
     z_edges, &  ! The depths of the cell edges or cell centers (depending on
-                ! the value of has_edges) in the input z* data.
+                ! the value of has_edges) in the input z* data [Z ~> m].
     tr_1d, &    ! A copy of the input tracer concentrations in a column.
     wt, &   ! The fractional weight for each layer in the range between
             ! k_top and k_bot, nondim.
@@ -77,14 +62,14 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
     z2      ! of a z-cell that contributes to a layer, relative to the cell
             ! center and normalized by the cell thickness, nondim.
             ! Note that -1/2 <= z1 <= z2 <= 1/2.
-  real    :: e(SZK_(G)+1)  ! The z-star interface heights in m.
+  real    :: e(SZK_(G)+1)  ! The z-star interface heights [Z ~> m].
   real    :: landval    ! The tracer value to use in land points.
   real    :: sl_tr      ! The normalized slope of the tracer
                         ! within the cell, in tracer units.
-  real    :: htot(SZI_(G)) ! The vertical sum of h, in m or kg m-2.
+  real    :: htot(SZI_(G)) ! The vertical sum of h [H ~> m or kg m-2].
   real    :: dilate     ! The amount by which the thicknesses are dilated to
                         ! create a z-star coordinate, nondim or in m3 kg-1.
-  real    :: missing  ! The missing value for the tracer.
+  real    :: missing    ! The missing value for the tracer.
 
   logical :: has_edges, use_missing, zero_surface
   character(len=80) :: loc_msg
@@ -103,7 +88,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
   ! Find out the number of input levels and read the depth of the edges,
   ! also modifying their sign convention to be monotonically decreasing.
-  call read_Z_edges(filename, tr_name, z_edges, nz_in, has_edges, use_missing, missing)
+  call read_Z_edges(filename, tr_name, z_edges, nz_in, has_edges, use_missing, &
+                    missing, scale=US%m_to_Z)
   if (nz_in < 1) then
     tracer_Z_init = .false.
     return
@@ -288,28 +274,24 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
 end function tracer_Z_init
 
-
+!> This subroutine reads the vertical coordinate data for a field from a NetCDF file.
+!! It also might read the missing value attribute for that same field.
 subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
-                        use_missing, missing)
-  character(len=*),                intent(in)    :: filename, tr_name
-  real, allocatable, dimension(:), intent(out)   :: z_edges
-  integer,                         intent(out)   :: nz_out
-  logical,                         intent(out)   :: has_edges
-  logical,                         intent(inout) :: use_missing
-  real,                            intent(inout) :: missing
-!   This subroutine reads the vertical coordinate data for a field from a
-! NetCDF file.  It also might read the missing value attribute for that
-! same field.
-! Arguments: filename - The file to be read from.
-!  (in)      tr_name - The name of the tracer to be read.
-!  (out)     z_edges - The depths of the vertical edges of the tracer array.
-!  (out)     nz_out - The number of vertical layers in the tracer array.
-!  (out)     has_edges - If true, the values in z_edges are the edges of the
-!                        tracer cells, otherwise they are the cell centers.
-!  (inout)   use_missing - If false on input, see whether the tracer has a
-!                          missing value, and if so return true.
-!  (inout)   missing - The missing value, if one has been found.
+                        use_missing, missing, scale)
+  character(len=*), intent(in)    :: filename !< The name of the file to read from.
+  character(len=*), intent(in)    :: tr_name !< The name of the tracer in the file.
+  real, dimension(:), allocatable, &
+                    intent(out)   :: z_edges !< The depths of the vertical edges of the tracer array
+  integer,          intent(out)   :: nz_out  !< The number of vertical layers in the tracer array
+  logical,          intent(out)   :: has_edges !< If true the values in z_edges are the edges of the
+                                             !! tracer cells, otherwise they are the cell centers
+  logical,          intent(inout) :: use_missing !< If false on input, see whether the tracer has a
+                                             !! missing value, and if so return true
+  real,             intent(inout) :: missing !< The missing value, if one has been found
+  real,             intent(in)    :: scale   !< A scaling factor for z_edges into new units.
 
+  !   This subroutine reads the vertical coordinate data for a field from a
+  ! NetCDF file.  It also might read the missing value attribute for that same field.
   character(len=32) :: mdl
   character(len=120) :: dim_name, edge_name, tr_msg, dim_msg
   logical :: monotonic
@@ -319,7 +301,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)
 
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,mdl//" Difficulties opening "//trim(filename)//&
         " - "//trim(NF90_STRERROR(status)))
@@ -415,7 +397,107 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   if (.not.monotonic) &
     call MOM_error(WARNING,mdl//" "//trim(dim_msg)//" is not monotonic.")
 
+  if (scale /= 1.0) then ; do k=1,nz_edge ; z_edges(k) = scale*z_edges(k) ; enddo ; endif
+
 end subroutine read_Z_edges
+
+!### `find_overlap` and `find_limited_slope` were previously part of
+!    MOM_diag_to_Z.F90, and are nearly identical to `find_overlap` in
+!    `midas_vertmap.F90` with some slight differences.  We keep it here for
+!    reproducibility, but the two should be merged at some point
+
+!> Determines the layers bounded by interfaces e that overlap
+!! with the depth range between Z_top and Z_bot, and the fractional weights
+!! of each layer. It also calculates the normalized relative depths of the range
+!! of each layer that overlaps that depth range.
+
+! ### TODO: Merge with midas_vertmap.F90:find_overlap()
+subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
+  real, dimension(:), intent(in)    :: e      !< Column interface heights, in arbitrary units.
+  real,               intent(in)    :: Z_top  !< Top of range being mapped to, in the units of e.
+  real,               intent(in)    :: Z_bot  !< Bottom of range being mapped to, in the units of e.
+  integer,            intent(in)    :: k_max  !< Number of valid layers.
+  integer,            intent(in)    :: k_start !< Layer at which to start searching.
+  integer,            intent(inout) :: k_top  !< Indices of top layers that overlap with the depth
+                                              !! range.
+  integer,            intent(inout) :: k_bot  !< Indices of bottom layers that overlap with the
+                                              !! depth range.
+  real, dimension(:), intent(out)   :: wt     !< Relative weights of each layer from k_top to k_bot.
+  real, dimension(:), intent(out)   :: z1     !< Depth of the top limits of the part of
+       !! a layer that contributes to a depth level, relative to the cell center and normalized
+       !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
+  real, dimension(:), intent(out)   :: z2     !< Depths of the bottom limit of the part of
+       !! a layer that contributes to a depth level, relative to the cell center and normalized
+       !! by the cell thickness [nondim].  Note that -1/2 <= z1 < z2 <= 1/2.
+  ! Local variables
+  real    :: Ih, e_c, tot_wt, I_totwt
+  integer :: k
+
+  do k=k_start,k_max ; if (e(K+1)<Z_top) exit ; enddo
+  k_top = k
+  if (k>k_max) return
+
+  ! Determine the fractional weights of each layer.
+  ! Note that by convention, e and Z_int decrease with increasing k.
+  if (e(K+1)<=Z_bot) then
+    wt(k) = 1.0 ; k_bot = k
+    Ih = 0.0 ; if (e(K) /= e(K+1)) Ih = 1.0 / (e(K)-e(K+1))
+    e_c = 0.5*(e(K)+e(K+1))
+    z1(k) = (e_c - MIN(e(K),Z_top)) * Ih
+    z2(k) = (e_c - Z_bot) * Ih
+  else
+    wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
+    if (e(K) /= e(K+1)) then
+      z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K), Z_top)) / (e(K)-e(K+1))
+    else ; z1(k) = -0.5 ; endif
+    z2(k) = 0.5
+    k_bot = k_max
+    do k=k_top+1,k_max
+      if (e(K+1)<=Z_bot) then
+        k_bot = k
+        wt(k) = e(K) - Z_bot ; z1(k) = -0.5
+        if (e(K) /= e(K+1)) then
+          z2(k) = (0.5*(e(K)+e(K+1)) - Z_bot) / (e(K)-e(K+1))
+        else ; z2(k) = 0.5 ; endif
+      else
+        wt(k) = e(K) - e(K+1) ; z1(k) = -0.5 ; z2(k) = 0.5
+      endif
+      tot_wt = tot_wt + wt(k) ! wt(k) is always > 0.
+      if (k>=k_bot) exit
+    enddo
+
+    I_totwt = 1.0 / tot_wt
+    do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
+  endif
+
+end subroutine find_overlap
+
+!> This subroutine determines a limited slope for val to be advected with
+!! a piecewise limited scheme.
+! ### TODO: Merge with midas_vertmap.F90:find_limited_slope()
+subroutine find_limited_slope(val, e, slope, k)
+  real, dimension(:), intent(in)  :: val !< A column of values that are being interpolated.
+  real, dimension(:), intent(in)  :: e   !< Column interface heights in arbitrary units
+  real,               intent(out) :: slope !< Normalized slope in the intracell distribution of val.
+  integer,            intent(in)  :: k   !< Layer whose slope is being determined.
+  ! Local variables
+  real :: d1, d2  ! Thicknesses in the units of e.
+
+  d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
+  if (((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) .or. (d1*d2 <= 0.0)) then
+    slope = 0.0 ! ; curvature = 0.0
+  else
+    slope = (d1**2*(val(k+1) - val(k)) + d2**2*(val(k) - val(k-1))) * &
+            ((e(K) - e(K+1)) / (d1*d2*(d1+d2)))
+    ! slope = 0.5*(val(k+1) - val(k-1))
+    ! This is S.J. Lin's form of the PLM limiter.
+    slope = sign(1.0,slope) * min(abs(slope), &
+        2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
+        2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
+    ! curvature = 0.0
+  endif
+
+end subroutine find_limited_slope
 
 
 end module MOM_tracer_Z_init

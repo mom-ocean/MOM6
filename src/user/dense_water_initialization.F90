@@ -11,6 +11,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_sponge,        only : sponge_CS
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
@@ -22,21 +23,23 @@ public dense_water_initialize_topography
 public dense_water_initialize_TS
 public dense_water_initialize_sponges
 
-character(len=40) :: mdl = "dense_water_initialization"
+character(len=40) :: mdl = "dense_water_initialization" !< Module name
 
-real, parameter :: default_sill  = 0.2 !< Default depth of the sill [nondim]
-real, parameter :: default_shelf = 0.4 !< Default depth of the shelf [nondim]
+real, parameter :: default_sill  = 0.2  !< Default depth of the sill [nondim]
+real, parameter :: default_shelf = 0.4  !< Default depth of the shelf [nondim]
 real, parameter :: default_mld   = 0.25 !< Default depth of the mixed layer [nondim]
 
 contains
 
 !> Initialize the topography field for the dense water experiment
 subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),           intent(in)  :: G !< Grid control structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Output topography field
-  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
-  real,                             intent(in)  :: max_depth !< Maximum depth of the model
+  type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+  type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
 
+  ! Local variables
   real, dimension(5) :: domain_params ! nondimensional widths of all domain sections
   real :: sill_frac, shelf_frac
   integer :: i, j
@@ -63,22 +66,22 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
     domain_params(i) = domain_params(i-1) + domain_params(i)
   enddo
 
-  do i = G%isc,G%iec
-    do j = G%jsc,G%jec
+  do j = G%jsc,G%jec
+    do i = G%isc,G%iec
       ! compute normalised zonal coordinate
       x = (G%geoLonT(i,j) - G%west_lon) / G%len_lon
 
       if (x <= domain_params(1)) then
         ! open ocean region
         D(i,j) = max_depth
-      else if (x <= domain_params(2)) then
+      elseif (x <= domain_params(2)) then
         ! downslope region, linear
         D(i,j) = max_depth - (1.0 - sill_frac) * max_depth * &
              (x - domain_params(1)) / (domain_params(2) - domain_params(1))
-      else if (x <= domain_params(3)) then
+      elseif (x <= domain_params(3)) then
         ! sill region
         D(i,j) = sill_frac * max_depth
-      else if (x <= domain_params(4)) then
+      elseif (x <= domain_params(4)) then
         ! upslope region
         D(i,j) = sill_frac * max_depth + (shelf_frac - sill_frac) * max_depth * &
              (x - domain_params(3)) / (domain_params(4) - domain_params(3))
@@ -88,6 +91,7 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
       endif
     enddo
   enddo
+
 end subroutine dense_water_initialize_topography
 
 !> Initialize the temperature and salinity for the dense water experiment
@@ -96,11 +100,12 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< EOS structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T, S !< Output state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
-
+  ! Local variables
   real :: mld, S_ref, S_range, T_ref
   real :: zi, zmid
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -128,7 +133,7 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
       zi = 0.
       do k = 1,nz
         ! nondimensional middle of layer
-        zmid = zi + 0.5 * h(i,j,k) / G%max_depth
+        zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_H * G%max_depth)
 
         if (zmid < mld) then
           ! use reference salinity in the mixed layer
@@ -138,7 +143,7 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
           S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
         endif
 
-        zi = zi + h(i,j,k) / G%max_depth
+        zi = zi + h(i,j,k) / (GV%Z_to_H * G%max_depth)
       enddo
     enddo
   enddo
@@ -153,7 +158,6 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
   logical,                 intent(in) :: use_ALE !< ALE flag
   type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE sponge control structure pointer
-
   ! Local variables
   real :: west_sponge_time_scale, west_sponge_width
   real :: east_sponge_time_scale, east_sponge_width
@@ -208,7 +212,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
           dist = 1. - x / west_sponge_width
           ! scale restoring by depth into sponge
           Idamp(i,j) = 1. / west_sponge_time_scale * max(0., min(1., dist))
-        else if (east_sponge_time_scale > 0. .and. x > (1. - east_sponge_width)) then
+        elseif (east_sponge_time_scale > 0. .and. x > (1. - east_sponge_width)) then
           dist = 1. - (1. - x) / east_sponge_width
           Idamp(i,j) = 1. / east_sponge_time_scale * max(0., min(1., dist))
         endif
@@ -219,9 +223,9 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
   if (use_ALE) then
     ! construct a uniform grid for the sponge
     do k = 1,nz
-      e0(k) = -GV%max_depth * (real(k - 1) / real(nz))
+      e0(k) = -G%max_depth * (real(k - 1) / real(nz))
     enddo
-    e0(nz+1) = -GV%max_depth
+    e0(nz+1) = -G%max_depth
 
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
@@ -229,12 +233,12 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
         do k = nz,1,-1
           eta1D(k) = e0(k)
 
-          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
             ! is this layer vanished?
-            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-            h(i,j,k) = GV%Angstrom_z
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
+            h(i,j,k) = GV%Angstrom_H
           else
-            h(i,j,k) = eta1D(k) - eta1D(k+1)
+            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
           endif
         enddo
       enddo
@@ -253,7 +257,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
         x = (G%geoLonT(i,j) - G%west_lon) / G%len_lon
         do k = 1,nz
           ! nondimensional middle of layer
-          zmid = zi + 0.5 * h(i,j,k) / GV%max_depth
+          zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_H * G%max_depth)
 
           if (x > (1. - east_sponge_width)) then
             !if (zmid >= 0.9 * sill_height) &
@@ -264,7 +268,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
                  S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
           endif
 
-          zi = zi + h(i,j,k) / GV%max_depth
+          zi = zi + h(i,j,k) / (GV%Z_to_H * G%max_depth)
         enddo
       enddo
     enddo
@@ -278,7 +282,7 @@ end subroutine dense_water_initialize_sponges
 
 end module dense_water_initialization
 
-!! \namespace dense_water_initialization
+!> \namespace dense_water_initialization
 !!
 !! This experiment consists of a shelf accumulating dense water, which spills
 !! over an upward slope and a sill, before flowing down a slope into an open

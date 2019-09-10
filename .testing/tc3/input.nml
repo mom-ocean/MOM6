@@ -1,0 +1,17 @@
+&MOM_input_nml
+    output_directory = './'
+    input_filename = 'n'
+    restart_input_dir = 'INPUT'
+    restart_output_dir = 'RESTART/'
+    parameter_filename =
+        'MOM_input',
+        'MOM_override'
+/
+
+&diag_manager_nml
+/
+
+&fms_nml
+    domains_stack_size = 1326000
+    stack_size = 0
+/

@@ -1,3 +1,5 @@
+!> Configures the model for the "tidal_bay" experiment.
+!! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
 module tidal_bay_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -11,7 +13,7 @@ use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_time_manager,   only : time_type, set_time, time_type_to_real
+use MOM_time_manager,   only : time_type, time_type_to_real
 
 implicit none ; private
 
@@ -75,13 +77,13 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
   character(len=40)  :: mdl = "tidal_bay_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  PI = 4.0*atan(1.0) ;
+  PI = 4.0*atan(1.0)
 
   if (.not.associated(OBC)) return
 
@@ -96,7 +98,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
   do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
     if (OBC%segnum_u(I,j) /= OBC_NONE) then
       do k=1,nz
-        my_area(1,j) = my_area(1,j) + h(I,j,k)*G%dyCu(I,j)
+        my_area(1,j) = my_area(1,j) + h(I,j,k)*G%US%L_to_m*G%dyCu(I,j)
       enddo
     endif
   enddo ; enddo
@@ -108,15 +110,11 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
 
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux/total_area
+    segment%normal_vel_bt(:,:) = G%US%m_s_to_L_T*my_flux/total_area
     segment%eta(:,:) = cff
 
   enddo ! end segment loop
 
 end subroutine tidal_bay_set_OBC_data
 
-!> \namespace tidal_bay_initialization
-!!
-!! The module configures the model for the "tidal_bay" experiment.
-!! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
 end module tidal_bay_initialization
