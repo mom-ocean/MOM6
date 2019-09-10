@@ -1416,8 +1416,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
             MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
           enddo ; enddo
         endif ! MEKE%backscatter_Ro_c
-      endif !use GME 
-      
+      endif !use GME
+
       if (CS%use_GME .and. associated(MEKE)) then
         if (associated(MEKE%GME_snk)) then
           do j=js,je ; do i=is,ie
