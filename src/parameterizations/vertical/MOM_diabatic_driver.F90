@@ -3203,6 +3203,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   real    :: Kd
   integer :: num_mode
   logical :: use_temperature, differentialDiffusion
+  real    :: H_to_MKS   !< Conversion factor from H to equivalent MKS unit
 
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
@@ -3361,8 +3362,13 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
 
   ! Register all available diagnostics for this module.
-  if (GV%Boussinesq) then ; thickness_units = "m"
-  else ; thickness_units = "kg m-2" ; endif
+  if (GV%Boussinesq) then
+    thickness_units = "m"
+    H_to_MKS = GV%H_to_m
+  else
+    thickness_units = "kg m-2"
+    H_to_MKS = GV%H_to_kg_m2
+  endif
 
   CS%id_ea_t = register_diag_field('ocean_model','ea_t',diag%axesTL,Time, &
       'Layer (heat) entrainment from above per timestep','m')
@@ -3374,9 +3380,11 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer (salt) entrainment from below per timestep', 'm')
   ! used by layer diabatic
   CS%id_ea = register_diag_field('ocean_model','ea',diag%axesTL,Time, &
-      'Layer entrainment from above per timestep','m')
+      'Layer entrainment from above per timestep','m', &
+      conversion=GV%H_to_m)
   CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
-      'Layer entrainment from below per timestep', 'm')
+      'Layer entrainment from below per timestep', 'm', &
+      conversion=GV%H_to_m)
   CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
     'Diapycnal velocity', 'm s-1')
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
@@ -3446,7 +3454,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
       'Meridional velocity before diabatic forcing', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true.)
+      'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true., &
+      conversion=H_to_MKS)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'm')
   if (use_temperature) then
@@ -3640,7 +3649,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! diagnostics for tendencies of temp and heat due to frazil
   CS%id_frazil_h = register_diag_field('ocean_model', 'frazil_h', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
+      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', &
+      v_extensive=.true., conversion=GV%H_to_m)
 
   ! diagnostic for tendency of temp due to frazil
   CS%id_frazil_temp_tend = register_diag_field('ocean_model',&
