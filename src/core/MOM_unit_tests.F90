@@ -9,7 +9,7 @@ use MOM_string_functions,          only : string_functions_unit_tests
 use MOM_remapping,                 only : remapping_unit_tests
 use MOM_neutral_diffusion,         only : neutral_diffusion_unit_tests
 use MOM_diag_vkernels,             only : diag_vkernels_unit_tests
-use MOM_boundary_lateral_mixing,   only : near_boundary_unit_tests 
+use MOM_boundary_lateral_mixing,   only : near_boundary_unit_tests
 
 implicit none ; private
 

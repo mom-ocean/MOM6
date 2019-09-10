@@ -40,7 +40,7 @@ end subroutine
 real function bulk_average(boundary, h, hBLT, phi, ppoly0_E, ppoly0_coefs, method, k_top, zeta_top, k_bot, zeta_bot)
   integer             :: boundary          !< SURFACE or BOTTOM                                         [nondim]
   integer             :: nk                !< Number of layers                                          [nondim]
-  integer             :: deg               !< Degree of polynomial                                      [nondim] 
+  integer             :: deg               !< Degree of polynomial                                      [nondim]
   real, dimension(nk) :: h                 !< Layer thicknesses                                         [m]
   real                :: hBLT              !< Depth of the mixing layer                                 [m]
   real, dimension(nk) :: phi               !< Scalar quantity
@@ -82,7 +82,7 @@ real function bulk_average(boundary, h, hBLT, phi, ppoly0_E, ppoly0_coefs, metho
   if (htot > 0.) then
       bulk_average = bulk_average / hBLT
   else
-      bulk_average = 0. 
+      bulk_average = 0.
   endif
 
 end function bulk_average
@@ -145,8 +145,8 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
 end subroutine boundary_k_range
 
 !> Calculate the near-boundary diffusive fluxes calculated from a 'bulk model'
-subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, ppoly0_coefs_R, &
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, & 
+                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
   integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
@@ -158,10 +158,10 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
                                                              !! layer (left)                            [m]
   real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [ nondim m^-3 ]
   real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [ nondim m^-3 ]
-  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)            [ nondim m^-3 ]
-  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)           [ nondim m^-3 ]
-  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ] 
-  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ] 
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [ nondim m^-3 ]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)     [ nondim m^-3 ]
+  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ]
+  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
   real, dimension(nk),       intent(in   )       :: khtr_u   !< Horizontal diffusivities at U-point     [m^2 s^-1]
   real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [trunit s^-1]
@@ -185,27 +185,22 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
   ! Calculate vertical indices containing the boundary layer
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
-  
   ! Calculate bulk averages of various quantities
-  phi_L_avg  = bulk_average(boundary, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, zeta_top_L, 
+  phi_L_avg  = bulk_average(boundary, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, zeta_top_L,
                             k_bot_L, zeta_bot_L)
-  phi_R_avg  = bulk_average(boundary, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, zeta_top_R, 
+  phi_R_avg  = bulk_average(boundary, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, zeta_top_R,
                             k_bot_R, zeta_bot_R)
   do k=1,nk
     h_u(k) = 0.5 * (h_L(k) + h_R(k))
   enddo
-  
   hbl_u = 0.5*(hbl_L + hbl_R)
-
   call boundary_k_range(boundary, nk, h_u, hbl_u, k_top_u, zeta_top_u, k_bot_u, zeta_bot_u)
-  
   khtr_avg = (h_u(k_bot) * zeta_bot) * khtr_u(k_bot)
-
   do k=k_bot,1,-1
     khtr_avg = khtr_avg + h_u(k) * khtr_u(k)
   enddo
 
-  khtr_avg  = khtr_avg / hbl_u 
+  khtr_avg  = khtr_avg / hbl_u
 
   ! Calculate the 'bulk' diffusive flux from the bulk averaged quantities
   heff = harmonic_mean(hbl_L, hbl_R)
@@ -365,14 +360,13 @@ logical function near_boundary_unit_tests( verbose )
   phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
   phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
   khtr_u = (/1.,1./)
-  ppoly0_E_L(1,1) = 0; ppoly0_E_L(1,2) = 0 
-  ppoly0_E_L(2,1) = 0; ppoly0_E_L(2,2) = 0 
-  ppoly0_E_R(1,1) = 1; ppoly0_E_R(1,2) = 1 
+  ppoly0_E_L(1,1) = 0; ppoly0_E_L(1,2) = 0
+  ppoly0_E_L(2,1) = 0; ppoly0_E_L(2,2) = 0
+  ppoly0_E_R(1,1) = 1; ppoly0_E_R(1,2) = 1
   ppoly0_E_R(2,1) = 1; ppoly0_E_R(2,2) = 1
-  method = 1 
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, ppoly0_coefs_R, &
+  method = 1
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, ppoly0_coefs_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
-  
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
 end function near_boundary_unit_tests
 
