@@ -1765,7 +1765,7 @@ subroutine post_xy_average(diag_cs, diag, field)
   staggered_in_y = diag%axes%is_v_point .or. diag%axes%is_q_point
 
   if (diag%axes%is_native) then
-    call horizontally_average_diag_field(diag_cs%G, diag_cs%h, &
+    call horizontally_average_diag_field(diag_cs%G, diag_cs%GV, diag_cs%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
                                          diag_cs%missing_value, field, &
@@ -1783,7 +1783,8 @@ subroutine post_xy_average(diag_cs, diag, field)
     call assert(IMPLIES(.not. diag%axes%is_layer, nz == remap_nz+1), &
               'post_xy_average: interface field dimension mismatch.')
 
-    call horizontally_average_diag_field(diag_cs%G, diag_cs%diag_remap_cs(coord)%h, &
+    call horizontally_average_diag_field(diag_cs%G, diag_cs%GV, &
+                                         diag_cs%diag_remap_cs(coord)%h, &
                                          staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
                                          diag_cs%missing_value, field, &
