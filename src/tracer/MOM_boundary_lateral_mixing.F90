@@ -37,7 +37,7 @@ subroutine boundary_lateral_mixing()
 end subroutine
 
 !< Calculate bulk layer value of a scalar quantity as the thickness weighted average
-real function bulk_average(boundary, h, hBLT, phi, ppoly0_E, ppoly0_coefs, method, k_top, zeta_top, k_bot, zeta_bot)
+real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coefs, method, k_top, zeta_top, k_bot, zeta_bot)
   integer             :: boundary          !< SURFACE or BOTTOM                                         [nondim]
   integer             :: nk                !< Number of layers                                          [nondim]
   integer             :: deg               !< Degree of polynomial                                      [nondim]
@@ -64,7 +64,7 @@ real function bulk_average(boundary, h, hBLT, phi, ppoly0_E, ppoly0_coefs, metho
   if (boundary == SURFACE) then
     htot = (h(k_bot) * zeta_bot)
     bulk_average = average_value_ppoly( nk, phi, ppoly0_E, ppoly0_coefs, method, k_bot, 0., zeta_bot) * htot
-    do k = kbot-1,1,-1
+    do k = k_bot-1,1,-1
       bulk_average = bulk_average + phi(k)*h(k)
       htot = htot + h(k)
     enddo
@@ -84,6 +84,7 @@ real function bulk_average(boundary, h, hBLT, phi, ppoly0_E, ppoly0_coefs, metho
   else
       bulk_average = 0.
   endif
+  write(*,*)'bulk_average:', bulk_average
 
 end function bulk_average
 
@@ -176,27 +177,28 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
   real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
                                               !                                                   [trunit m^-3 ]
   real    :: htot                 ! Total column thickness [m]
-  integer :: k
+  integer :: k, k_min, k_max
   integer :: k_top_L, k_bot_L, k_top_u
   integer :: k_top_R, k_bot_R, k_bot_u
   real    :: zeta_top_L, zeta_top_R, zeta_top_u
   real    :: zeta_bot_L, zeta_bot_R, zeta_bot_u
+  real    :: h_work_L, h_work_R  ! dummy variables
 
   ! Calculate vertical indices containing the boundary layer
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
   ! Calculate bulk averages of various quantities
-  phi_L_avg  = bulk_average(boundary, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, zeta_top_L,
+  phi_L_avg  = bulk_average(boundary, nk, deg, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, zeta_top_L,&
                             k_bot_L, zeta_bot_L)
-  phi_R_avg  = bulk_average(boundary, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, zeta_top_R,
+  phi_R_avg  = bulk_average(boundary, nk, deg, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, zeta_top_R,&
                             k_bot_R, zeta_bot_R)
   do k=1,nk
     h_u(k) = 0.5 * (h_L(k) + h_R(k))
   enddo
   hbl_u = 0.5*(hbl_L + hbl_R)
   call boundary_k_range(boundary, nk, h_u, hbl_u, k_top_u, zeta_top_u, k_bot_u, zeta_bot_u)
-  khtr_avg = (h_u(k_bot) * zeta_bot) * khtr_u(k_bot)
-  do k=k_bot,1,-1
+  khtr_avg = (h_u(k_bot_u) * zeta_bot_u) * khtr_u(k_bot_u)
+  do k=k_bot_u,1,-1
     khtr_avg = khtr_avg + h_u(k) * khtr_u(k)
   enddo
 
@@ -208,9 +210,57 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
 
   ! Calculate the layerwise sum of the vertical effective thickness. This is different than the heff calculated
   ! above, but is used as a way to decompose decompose the fluxes onto the individual layers
-  do k=1,nk
-    h_means(k) = harmonic_mean(h_L(k),h_R(k))
-  enddo
+  h_means(:) = 0.
+
+  if (boundary == SURFACE) then
+    k_min = MIN(k_bot_L, k_bot_R)
+
+    ! left hand side
+    if (k_bot_L == k_min) then
+      h_work_L = h_L(k_min) * zeta_bot_L
+    else
+      h_work_L = h_L(k_min)
+    endif
+
+    ! right hand side
+    if (k_bot_R == k_min) then
+      h_work_R = h_R(k_min) * zeta_bot_R
+    else
+      h_work_R = h_R(k_min)
+    endif
+      
+    h_means(k_min) = harmonic_mean(h_work_L,h_work_R)
+
+    do k=1,k_min-1
+      h_means(k) = harmonic_mean(h_L(k),h_R(k))
+    enddo
+  endif
+
+
+  if (boundary == BOTTOM) then
+    k_max = MAX(k_top_L, k_top_R)
+
+    ! left hand side
+    if (k_top_L == k_max) then
+      h_work_L = h_L(k_max) * zeta_top_L
+    else
+      h_work_L = h_L(k_max)
+    endif
+
+    ! right hand side
+    if (k_top_R == k_max) then
+      h_work_R = h_R(k_max) * zeta_top_R
+    else
+      h_work_R = h_R(k_max)
+    endif
+      
+    h_means(k_max) = harmonic_mean(h_work_L,h_work_R)
+
+    do k=nk,k_max+1,-1
+      h_means(k) = harmonic_mean(h_L(k),h_R(k))
+    enddo
+  endif
+
   inv_heff = 1./SUM(h_means)
   do k=1,nk
     F_layer(k) = F_bulk * (h_means(k)*inv_heff)
@@ -227,8 +277,10 @@ logical function near_boundary_unit_tests( verbose )
   integer, parameter    :: deg = 1              ! Degree of reconstruction (linear here)
   real, dimension(nk)   :: phi_L, phi_R         ! Tracer values (left and right column)             [ nondim m^-3 ]
   real, dimension(nk)   :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
-  real, dimension(nk,2) :: phi_pp_L, phi_pp_R   ! Coefficients for the linear pseudo-reconstructions
+  real, dimension(nk,deg+1) :: phi_pp_L, phi_pp_R   ! Coefficients for the linear pseudo-reconstructions
                                                 !                                                   [ nondim m^-3 ]
+
+  real, dimension(nk,2) :: ppoly0_E_L, ppoly0_E_R! Polynomial edge values (left and right)          [concentration]
   real, dimension(nk)   :: h_L, h_R             ! Layer thickness (left and right)                  [m]
   real, dimension(nk)   :: khtr_u               ! Horizontal diffusivities at U-point               [m^2 s^-1]
   real                  :: hbl_L, hbl_R       ! Depth of the boundary layer (left and right)      [m]
@@ -243,7 +295,7 @@ logical function near_boundary_unit_tests( verbose )
   real                  :: zeta_top             ! Nondimension position
   integer               :: k_bot                ! Index of cell containing bottom of boundary
   real                  :: zeta_bot             ! Nondimension position
-
+  integer               :: method               ! Polynomial method
   near_boundary_unit_tests = .false.
 
   ! Unit tests for boundary_k_range
@@ -352,6 +404,8 @@ logical function near_boundary_unit_tests( verbose )
 !  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
 !
   ! Cases where hbl < column thickness (polynomial coefficients specified for pseudo-linear reconstruction)
+
+  test_name = 'hbl < column thickness' 
   hbl_L = 2; hbl_R = 2
   h_L = (/1.,2./) ; h_R = (/1.,2./)
   phi_L = (/0.,0./) ; phi_R = (/1.,1./)
@@ -365,9 +419,9 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1; ppoly0_E_R(1,2) = 1
   ppoly0_E_R(2,1) = 1; ppoly0_E_R(2,2) = 1
   method = 1
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, ppoly0_coefs_R,&
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
-  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
 end function near_boundary_unit_tests
 
 !> Returns true if output of near-boundary unit tests does not match correct computed values
