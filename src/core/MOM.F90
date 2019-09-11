@@ -2558,7 +2558,7 @@ subroutine MOM_timing_init(CS)
    id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
 
  id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
- id_clock_BBL_visc = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
+ id_clock_BBL_visc   = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
  id_clock_pass       = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
  id_clock_MOM_init   = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
  id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
@@ -2644,6 +2644,8 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
                               "Length unit conversion factor", "L meter-1")
   call register_restart_field(US%s_to_T_restart, "s_to_T", .false., restart_CSp, &
                               "Time unit conversion factor", "T second-1")
+  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., restart_CSp, &
+                              "Density unit conversion factor", "R m3 kg-1")
 
 end subroutine set_restart_fields
 
