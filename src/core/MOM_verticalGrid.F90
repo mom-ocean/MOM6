@@ -61,6 +61,8 @@ type, public :: verticalGrid_type
   real :: H_to_Pa       !< A constant that translates the units of thickness to pressure [Pa].
   real :: H_to_Z        !< A constant that translates thickness units to the units of depth.
   real :: Z_to_H        !< A constant that translates depth units to thickness units.
+  real :: H_to_RZ       !< A constant that translates thickness units to the units of mass per unit area.
+  real :: RZ_to_H       !< A constant that translates mass per unit area units to thickness units.
 
   real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
@@ -155,6 +157,9 @@ subroutine verticalGridInit( param_file, GV, US )
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = US%Z_to_m * GV%m_to_H
   GV%Angstrom_Z = US%m_to_Z * GV%Angstrom_m
+
+  GV%H_to_RZ = GV%H_to_kg_m2 * US%kg_m3_to_R * US%m_to_Z
+  GV%RZ_to_H = GV%kg_m2_to_H * US%R_to_kg_m3 * US%Z_to_m
 
 ! Log derivative values.
   call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor)
