@@ -260,12 +260,14 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
       'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
-      'Change in interface height due to ALE regridding', 'm')
+      'Change in interface height due to ALE regridding', 'm', &
+      conversion=GV%H_to_m)
   cs%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', &
       diag%axestl, time, 'layer thicknesses after ALE regridding and remapping', 'm', &
       conversion=GV%H_to_m, v_extensive=.true.)
   cs%id_vert_remap_h_tendency = register_diag_field('ocean_model','vert_remap_h_tendency',diag%axestl,time, &
-      'Layer thicknesses tendency due to ALE regridding and remapping', 'm', v_extensive = .true.)
+      'Layer thicknesses tendency due to ALE regridding and remapping', 'm', &
+      conversion=GV%H_to_m, v_extensive = .true.)
 
 end subroutine ALE_register_diags
 

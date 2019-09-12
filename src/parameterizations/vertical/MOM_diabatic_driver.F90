@@ -3383,7 +3383,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer entrainment from below per timestep', 'm', &
       conversion=GV%H_to_m)
   CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
-    'Diapycnal velocity', 'm s-1')
+    'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m)
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
