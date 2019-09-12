@@ -22,6 +22,8 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_end
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
+use MOM_lateral_boundary_mixing, only : lateral_boundary_mixing_CS, lateral_boundary_mixing_init
+use MOM_lateral_boundary_mixing, only : lateral_boundary_mixing
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
