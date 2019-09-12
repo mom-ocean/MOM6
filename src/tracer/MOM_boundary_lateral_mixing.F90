@@ -302,133 +302,183 @@ logical function near_boundary_unit_tests( verbose )
   real                  :: zeta_top             ! Nondimension position
   integer               :: k_bot                ! Index of cell containing bottom of boundary
   real                  :: zeta_bot             ! Nondimension position
-  integer               :: method               ! Polynomial method
   near_boundary_unit_tests = .false.
 
-!!  ! Unit tests for boundary_k_range
-!!  test_name = 'Surface boundary spans the entire top cell'
-!!  h_L = (/5.,5./)
-!!  call boundary_k_range(SURFACE, nk, h_L, 5., k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 1, 1., test_name, verbose)
-!!
-!!  test_name = 'Surface boundary spans the entire column'
-!!  h_L = (/5.,5./)
-!!  call boundary_k_range(SURFACE, nk, h_L, 10., k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 1., test_name, verbose)
-!!
-!!  test_name = 'Bottom boundary spans the entire bottom cell'
-!!  h_L = (/5.,5./)
-!!  call boundary_k_range(BOTTOM, nk, h_L, 5., k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 2, 0., 2, 1., test_name, verbose)
-!!
-!!  test_name = 'Bottom boundary spans the entire column'
-!!  h_L = (/5.,5./)
-!!  call boundary_k_range(BOTTOM, nk, h_L, 10., k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 1., test_name, verbose)
-!!
-!!  test_name = 'Surface boundary intersects second layer'
-!!  h_L = (/10.,10./)
-!!  call boundary_k_range(SURFACE, nk, h_L, 17.5, k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 0.75, test_name, verbose)
-!!
-!!  test_name = 'Surface boundary intersects first layer'
-!!  h_L = (/10.,10./)
-!!  call boundary_k_range(SURFACE, nk, h_L, 2.5, k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 1, 0.25, test_name, verbose)
-!!
-!!  test_name = 'Bottom boundary intersects first layer'
-!!  h_L = (/10.,10./)
-!!  call boundary_k_range(BOTTOM, nk, h_L, 17.5, k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0.75, 2, 1., test_name, verbose)
-!!
-!!  test_name = 'Bottom boundary intersects second layer'
-!!  h_L = (/10.,10./)
-!!  call boundary_k_range(BOTTOM, nk, h_L, 2.5, k_top, zeta_top, k_bot, zeta_bot)
-!!  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 2, 0.25, 2, 1., test_name, verbose)
+  ! Unit tests for boundary_k_range
+  test_name = 'Surface boundary spans the entire top cell'
+  h_L = (/5.,5./)
+  call boundary_k_range(SURFACE, nk, h_L, 5., k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 1, 1., test_name, verbose)
 
-!  ! All cases in this section have hbl which are equal to the column thicknesses
-!  test_name = 'Equal hbl and same layer thicknesses (gradient from right to left)'
-!  hbl_L = 10; hbl_R = 10
-!  h_L = (/5.,5./) ; h_R = (/5.,5./)
-!  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-5.0,-5.0/) )
-!
-!  test_name = 'Equal hbl and same layer thicknesses (gradient from left to right)'
-!  hbl_L = 10.; hbl_R = 10.
-!  h_L = (/5.,5./) ; h_R = (/5.,5./)
-!  phi_L = (/1.,1./) ; phi_R = (/0.,0./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/5.0,5.0/) )
-!
-!  test_name = 'Equal hbl and same layer thicknesses (no gradient)'
-!  hbl_L = 10; hbl_R = 10
-!  h_L = (/5.,5./) ; h_R = (/5.,5./)
-!  phi_L = (/1.,1./) ; phi_R = (/1.,1./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
-!
-!  test_name = 'Equal hbl and different layer thicknesses (gradient right to left)'
-!  hbl_L = 16.; hbl_R = 16.
-!  h_L = (/10.,6./) ; h_R = (/6.,10./)
-!  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-8.0,-8.0/) )
-!
-!  test_name = 'Equal hbl and same layer thicknesses (diagonal tracer values)'
-!  hbl_L = 10.; hbl_R = 10.
-!  h_L = (/5.,5./) ; h_R = (/5.,5./)
-!  phi_L = (/1.,0./) ; phi_R = (/0.,1./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
-!
-!  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
-!  hbl_L = 12; hbl_R = 20
-!  h_L = (/6.,6./) ; h_R = (/10.,10./)
-!  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
-!
-!  test_name = 'Different hbl and different layer thicknesses (gradient from right to left)'
-!  hbl_L = 12; hbl_R = 20
-!  h_L = (/6.,6./) ; h_R = (/10.,10./)
-!  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-!  khtr_u = (/1.,1./)
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R,&
-!    phi_pp_L, phi_pp_R, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
-!
+  test_name = 'Surface boundary spans the entire column'
+  h_L = (/5.,5./)
+  call boundary_k_range(SURFACE, nk, h_L, 10., k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 1., test_name, verbose)
+
+  test_name = 'Bottom boundary spans the entire bottom cell'
+  h_L = (/5.,5./)
+  call boundary_k_range(BOTTOM, nk, h_L, 5., k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 2, 0., 2, 1., test_name, verbose)
+
+  test_name = 'Bottom boundary spans the entire column'
+  h_L = (/5.,5./)
+  call boundary_k_range(BOTTOM, nk, h_L, 10., k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 1., test_name, verbose)
+
+  test_name = 'Surface boundary intersects second layer'
+  h_L = (/10.,10./)
+  call boundary_k_range(SURFACE, nk, h_L, 17.5, k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 2, 0.75, test_name, verbose)
+
+  test_name = 'Surface boundary intersects first layer'
+  h_L = (/10.,10./)
+  call boundary_k_range(SURFACE, nk, h_L, 2.5, k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0., 1, 0.25, test_name, verbose)
+
+  test_name = 'Bottom boundary intersects first layer'
+  h_L = (/10.,10./)
+  call boundary_k_range(BOTTOM, nk, h_L, 17.5, k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 1, 0.75, 2, 1., test_name, verbose)
+
+  test_name = 'Bottom boundary intersects second layer'
+  h_L = (/10.,10./)
+  call boundary_k_range(BOTTOM, nk, h_L, 2.5, k_top, zeta_top, k_bot, zeta_bot)
+  near_boundary_unit_tests = test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, 2, 0.25, 2, 1., test_name, verbose)
+
+  ! All cases in this section have hbl which are equal to the column thicknesses
+  test_name = 'Equal hbl and same layer thicknesses (gradient from right to left)'
+  hbl_L = 10; hbl_R = 10
+  h_L = (/5.,5./) ; h_R = (/5.,5./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-5.0,-5.0/) )
+
+  test_name = 'Equal hbl and same layer thicknesses (gradient from left to right)'
+  hbl_L = 10.; hbl_R = 10.
+  h_L = (/5.,5./) ; h_R = (/5.,5./)
+  phi_L = (/1.,1./) ; phi_R = (/0.,0./)
+  phi_pp_L(1,1) = 1.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 1.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 0.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 0.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 1.; ppoly0_E_L(1,2) = 1.
+  ppoly0_E_L(2,1) = 1.; ppoly0_E_L(2,2) = 1.
+  ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 0.
+  ppoly0_E_R(2,1) = 0.; ppoly0_E_R(2,2) = 0.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/5.0,5.0/) )
+
+  test_name = 'Equal hbl and same layer thicknesses (no gradient)'
+  hbl_L = 10; hbl_R = 10
+  h_L = (/5.,5./) ; h_R = (/5.,5./)
+  phi_L = (/1.,1./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 1.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 1.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 1.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 1.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
+
+  test_name = 'Equal hbl and different layer thicknesses (gradient right to left)'
+  hbl_L = 16.; hbl_R = 16.
+  h_L = (/10.,6./) ; h_R = (/6.,10./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-8.0,-8.0/) )
+
+  test_name = 'Equal hbl and same layer thicknesses (diagonal tracer values)'
+  hbl_L = 10.; hbl_R = 10.
+  h_L = (/5.,5./) ; h_R = (/5.,5./)
+  phi_L = (/1.,0./) ; phi_R = (/0.,1./)
+  phi_pp_L(1,1) = 1.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 0.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 1.; ppoly0_E_L(1,2) = 1.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 0.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
+
+  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
+  hbl_L = 12; hbl_R = 20
+  h_L = (/6.,6./) ; h_R = (/10.,10./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
+
+  test_name = 'Different hbl and different layer thicknesses (gradient from right to left)'
+  hbl_L = 12; hbl_R = 20
+  h_L = (/6.,6./) ; h_R = (/10.,10./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
+
   ! Cases where hbl < column thickness (polynomial coefficients specified for pseudo-linear reconstruction)
 
-!  test_name = 'hbl < column thickness, hbl same, constant concentration each column' 
-!  hbl_L = 2; hbl_R = 2
-!  h_L = (/1.,2./) ; h_R = (/1.,2./)
-!  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-!  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
-!  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
-!  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
-!  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
-!  khtr_u = (/1.,1./)
-!  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
-!  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
-!  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
-!  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
-!  method = 1
-!  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-!                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
-!  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
+  test_name = 'hbl < column thickness, hbl same, constant concentration each column' 
+  hbl_L = 2; hbl_R = 2
+  h_L = (/1.,2./) ; h_R = (/1.,2./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  khtr_u = (/1.,1./)
+  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
 
   test_name = 'hbl < column thickness, hbl same, linear profile right' 
   hbl_L = 2; hbl_R = 2
