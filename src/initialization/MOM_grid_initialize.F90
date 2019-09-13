@@ -14,17 +14,14 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
-use MOM_io, only : FmsNetcdfDomainFile_t
+!use MOM_io, only : MOM_read_data
+use MOM_io, only : read_data, slasher, file_exists
+use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t
 use MOM_io, only : MOM_open_file, close_file, register_axis
-use MOM_io, only : get_compute_domain_dimension_indices, get_global_io_domain_indices
-use MOM_io, only : get_variable_size, get_dimension_size, get_variable_num_dimensions
-use MOM_io, only : get_variable_dimension_names
+use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE, CENTER
 use MOM_unit_scaling, only : unit_scale_type
-use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
-use mpp_domains_mod, only : mpp_get_io_domain
-use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain, domain2D
+use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 use mpp_mod, only : mpp_broadcast
 
 implicit none ; private
@@ -198,16 +195,18 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
   integer :: i, j, i2, j2
   integer :: npei,npej
+  integer :: ndims ! number of dimensions of coordinate variable
   integer, dimension(:), allocatable :: exni,exnj
   integer :: start(4), nread(4)
-  integer :: isg, ieg, jsg, jeg, isc, jsc, iec, jec, isd, ied, jsd, jed
-  integer :: num_dims, npes_io_group
+  integer, dimension(:), allocatable :: dim_sizes
   integer, dimension(2):: st_indices
-!  character(len=120) :: str_format
-  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
-  type(domain2d), pointer :: io_domain=>NULL()
+  character(len=120) :: str_format
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read 
+                                             ! returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjRead_noDD  ! FMS file object for non-domain-decomposed read 
+                                             ! returned by call to MOM_open_file
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
-
+  
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
@@ -285,7 +284,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate(exni)
   deallocate(exnj)
 
-  ! open the file
+  ! open the file for domain-decomposed read
   file_open_success = MOM_open_file(fileObjRead, filename, "read", &
                                      SGdom, .false.)
   ! tmpZ is defined on the data domain
@@ -346,8 +345,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
  
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
   !call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
-  call read_data(fileObjRead, 'dx', tmpV)
   !call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
+  call read_data(fileObjRead, 'dx', tmpV)
   call read_data(fileObjRead, 'dy', tmpU)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
@@ -377,6 +376,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   tmpT(:,:) = 0.
   !call MOM_read_data(filename, 'area', tmpT, SGdom)
   call read_data(fileObjRead, 'area', tmpT)
+  
+  ! Done with domain-decomposed read; close the file
+  call close_file(fileObjRead)
 
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
@@ -392,6 +394,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ni=SGdom%niglobal
   nj=SGdom%njglobal
+  call mpp_deallocate_domain(SGdom%mpp_domain)
+  deallocate(SGdom%mpp_domain)
 
   call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
   call pass_vector(dxCu, dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
@@ -414,34 +418,24 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).
-  !start(:) = 1 ; nread(:) = 1
-  !start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
- 
-
-!   if (is_root_PE()) &
-!    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
-!   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
-
-    ! What are the domains
-   io_domain=>mpp_get_io_domain(SGdom%mpp_domain)
-   call mpp_get_compute_domain(io_domain,isc,iec,jsc,jec, position=CORNER)
-!   str_format = "(A,I5,A,I5,A,I5,A,I5)"
-!   write(*,str_format) 'The compute domain indices are ',isc,'',iec,'',jsc,'',jec
-
-   call mpp_get_data_domain(io_domain,isd,ied,jsd,jed, position=CORNER)
-!   write(*,str_format) 'The data domain indices are ',isd,'',ied,'',jsd,'',jed
-
-   call mpp_get_global_domain(io_domain,isg,ieg,jsg,jeg, position=CORNER)
   
- !  write(*,str_format) 'The global domain indices are ',isg,'',ieg,'',jsg,'',jeg
-  start(1) = 1
-  start(2) = 2
-  nread(1) = ieg-isg+1
-  nread(2) = 2
-  start(3) = isc-iec+1
-  allocate( tmpGlbl(start(3),2) )
-   
-  call read_data(fileObjRead, 'x', tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
+  start(:) = 1 ; nread(:) = 1
+  start(2) = 2 ; nread(2) = 2
+
+  ! open the file for non-domain decomposed read
+  file_open_success = MOM_open_file(fileObjRead_noDD, filename, "read", .false.)
+  
+  ndims = get_variable_num_dimensions(fileObjRead_noDD, "x", broadcast=.true.)
+  allocate(dim_sizes(ndims))
+  call get_variable_size(fileObjRead_noDD, "x", dim_sizes, broadcast=.true.)
+  allocate(tmpGlbl(dim_sizes(1),2))
+  nread(1) = dim_sizes(1)
+
+!  allocate( tmpGlbl(ni+1,2) )
+!  if (is_root_PE()) &
+!    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+!    call broadcast(tmpGlbl, 2*(ni+1), root_PE())
+  call read_data(fileObjRead_noDD, "x", tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
@@ -456,15 +450,22 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   enddo
  
   deallocate( tmpGlbl )
-
-  allocate( tmpGlbl(1, nj+1) )
+  deallocate(dim_sizes)
   start(:) = 1 ; nread(:) = 1
-  start(1) = int(ni/4)+1 ; nread(2) = nj+1
-!  if (is_root_PE()) &
-    !call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
-!  call broadcast(tmpGlbl, nj+1, root_PE())
 
-  call read_data(fileObjRead, 'y', tmpGlbl(start(1):nread(1),start(2):nj), corner=start(1:2), edge_lengths=nread(1:2))
+  ndims = get_variable_num_dimensions(fileObjRead_noDD, "y", broadcast=.true.)
+  allocate(dim_sizes(ndims))
+  call get_variable_size(fileObjRead_noDD, "y", dim_sizes, broadcast=.true.)
+  allocate(tmpGlbl(1,dim_sizes(2)))
+  nread(2) = dim_sizes(2)
+
+! start(1) = int(ni/4)+1 ; nread(2) = nj+1
+! allocate( tmpGlbl(1, nj+1) )
+! if (is_root_PE()) &
+!   call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+!   call broadcast(tmpGlbl, nj+1, root_PE())
+
+  call read_data(fileObjRead_noDD, "y", tmpGlbl, corner=start(1:2), edge_lengths=nread(1:2))
    
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
@@ -473,11 +474,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
  
-  call close_file(fileObjRead)
+  call close_file(fileObjRead_noDD)
   deallocate( tmpGlbl )
-  
-  call mpp_deallocate_domain(SGdom%mpp_domain)
-  deallocate(SGdom%mpp_domain)
+  deallocate(dim_sizes)
 
   call callTree_leave("set_grid_metrics_from_mosaic()")
 
