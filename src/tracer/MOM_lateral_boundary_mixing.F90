@@ -157,23 +157,29 @@ subroutine lateral_boundary_mixing(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
     if ( CS%method == 1 ) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
-          call layer_fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
-            tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
-            ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), uFlx_bulk(I,j), uFlx(I,j,:))
+          if (G%mask2dCu(I,j)>0.) then
+            call layer_fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
+              tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
+              ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), uFlx_bulk(I,j), uFlx(I,j,:))
+          endif
         enddo
       enddo
       do J=G%jsc-1,G%jec
         do i=G%isc,G%iec
-          call layer_fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
-            tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
-            ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx_bulk(i,J), vFlx(i,J,:))
+          if (G%mask2dCv(i,J)>0.) then
+            call layer_fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
+              tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
+              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx_bulk(i,J), vFlx(i,J,:))
+          endif
         enddo
       enddo
     endif
 
     ! Update the tracer fluxes
     do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J,k)-vFlx(i,J+1,k) ) ))
+      endif
     enddo ; enddo ; enddo
   enddo
 
