@@ -383,6 +383,30 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
       do J=js-1,je ; do i=is,ie ; Reg%Tr(m)%df2d_y(i,J) = 0.0 ; enddo ; enddo
     endif
   enddo
+  
+  if (CS%use_lateral_boundary_mixing) then
+
+    if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary mixing (tracer_hordiff)")
+
+    call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
+
+    do J=js-1,je ; do i=is,ie
+      Coef_y(i,J) = I_numitts * khdt_y(i,J)
+    enddo ; enddo
+    do j=js,je
+      do I=is-1,ie
+        Coef_x(I,j) = I_numitts * khdt_x(I,j)
+      enddo
+    enddo
+
+    do itt=1,num_itts
+      if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary mixing (tracer_hordiff)",itt)
+      if (itt>1) then ! Update halos for subsequent iterations
+        call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
+      endif
+      call lateral_boundary_mixing(G, GV, h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%lateral_boundary_mixing_CSp)
+    enddo ! itt
+  endif
 
   if (CS%use_neutral_diffusion) then
 
