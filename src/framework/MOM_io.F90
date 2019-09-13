@@ -21,7 +21,7 @@ use fms_io_mod,           only : file_exist, field_size, old_fms_read_data => re
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
 use mpp_mod,              only : mpp_max 
-use mpp_domains_mod,      only : domain1d, domain2d, mpp_get_domain_components
+use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : mpp_open_file => mpp_open, mpp_close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
@@ -1468,7 +1468,7 @@ function MOM_open_file_unstruct_dyn_horgrid(MOMfileObj, filename, mode, G, is_re
   type(FmsNetcdfUnstructuredDomainFile_t), intent(inout) :: MOMfileObj !< netCDF unstructured grid file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
-  type(dyn_horgrid_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
+  type(domainug),         intent(in) :: G! Supergrid domain defined in MOM_grid_initialize.F90
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
 
   logical :: file_open_success !< returns .true. if the file(s) is(are) opened
@@ -1477,15 +1477,15 @@ function MOM_open_file_unstruct_dyn_horgrid(MOMfileObj, filename, mode, G, is_re
   select case (trim(mode))
      case("read")
         file_open_success = open_file(MOMfileObj, filename, "read", & 
-                                      G%Domain%mpp_domain, is_restart = is_restart)
+                                      G, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
         file_open_success = open_file(MOMfileObj, filename, "append", & 
-                                      G%Domain%mpp_domain, is_restart = is_restart)
+                                      G, is_restart = is_restart)
         if (.not.(file_open_success)) then
            ! create and open new file(s) for domain-decomposed write
            file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                         G%Domain%mpp_domain, is_restart = is_restart)
+                                         G, is_restart = is_restart)
         endif
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
