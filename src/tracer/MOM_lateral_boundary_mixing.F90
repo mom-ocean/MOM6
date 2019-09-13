@@ -178,7 +178,7 @@ subroutine lateral_boundary_mixing(G, GV, h, Coef_x, Coef_y, dt, Reg, CS)
     ! Update the tracer fluxes
     do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if (G%mask2dT(i,j)>0.) then
-        tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J,k)-vFlx(i,J+1,k) ) ))
+        tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J,k)-vFlx(i,J+1,k) ) ))*(G%IareaT(i,j)/( h(i,j,k) + GV%H_subroundoff))
       endif
     enddo ; enddo ; enddo
   enddo
