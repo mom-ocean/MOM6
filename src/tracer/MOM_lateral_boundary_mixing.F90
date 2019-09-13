@@ -334,7 +334,11 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
   real    :: zeta_top_L, zeta_top_R, zeta_top_u
   real    :: zeta_bot_L, zeta_bot_R, zeta_bot_u
   real    :: h_work_L, h_work_R  ! dummy variables
-
+  if (hbl_L == 0. .or. hbl_R == 0.) then
+    F_bulk = 0.
+    F_layer(:) = 0.
+    return
+  endif
   ! Calculate vertical indices containing the boundary layer
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
