@@ -182,6 +182,11 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       endif
     enddo ; enddo ; enddo
 
+    ! Post the tracer diagnostics
+    if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk, CS%diag) 
+    if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk, CS%diag) 
+    if (tracer%id_lbm_dfx>0)      call post_data(tracer%id_lbm_dfx, uFlx, CS%diag) 
+    if (tracer%id_lbm_dfy>0)      call post_data(tracer%id_lbm_dfy, vFlx, CS%diag) 
 
   enddo
 

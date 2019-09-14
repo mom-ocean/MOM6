@@ -56,6 +56,14 @@ type, public :: tracer_type
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: lbm_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
+                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: lbm_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
+                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:), pointer :: lbm_bulk_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
+                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:), pointer :: lbm_bulk_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
+                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
@@ -109,6 +117,7 @@ type, public :: tracer_type
   !>@{ Diagnostic IDs
   integer :: id_tr = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
+  integer :: id_lbm_bulk_dfx = -1, id_lbm_bulk_dfy = -1, id_lbm_dfx = -1, id_lbm_dfy = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
   integer :: id_adv_xy = -1, id_adv_xy_2d = -1
   integer :: id_dfxy_cont = -1, id_dfxy_cont_2d = -1, id_dfxy_conc = -1
@@ -398,7 +407,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
           diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux" , &
           trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
       Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_dfy", &
-          diag%axesCvL, Time, trim(flux_longname)//" diffusive zonal flux" , &
+          diag%axesCvL, Time, trim(flux_longname)//" diffusive merdional flux" , &
+          trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
+      Tr%id_lbm_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbm_dfx", &
+          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the near-boundary mixing scheme" , &
+          trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
+      Tr%id_lbm_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbm_dfy", &
+          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the near-boundary mixing scheme" , &
           trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
@@ -413,11 +428,19 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
       Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_diffy", &
           diag%axesCvL, Time, "Diffusive Meridional Flux of "//trim(flux_longname), &
           flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
+      Tr%id_lbm_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbm_diffx", &
+          diag%axesCuL, Time, "Boundary Diffusive Zonal Flux of "//trim(flux_longname), &
+          flux_units, v_extensive=.true., conversion=Tr%flux_scale, y_cell_method = 'sum')
+      Tr%id_lbm_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbm_diffy", &
+          diag%axesCvL, Time, "Boundary Diffusive Meridional Flux of "//trim(flux_longname), &
+          flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
     endif
     if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
     if (Tr%id_dfx > 0) call safe_alloc_ptr(Tr%df_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y,isd,ied,JsdB,JedB,nz)
+    if (Tr%id_lbm_dfx > 0) call safe_alloc_ptr(Tr%lbm_df_x,IsdB,IedB,jsd,jed,nz)
+    if (Tr%id_lbm_dfy > 0) call safe_alloc_ptr(Tr%lbm_df_y,isd,ied,JsdB,JedB,nz)
 
     Tr%id_adx_2d = register_diag_field("ocean_model", trim(shortnm)//"_adx_2d", &
         diag%axesCu1, Time, &
@@ -435,11 +458,21 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
         diag%axesCv1, Time, &
         "Vertically Integrated Diffusive Meridional Flux of "//trim(flux_longname), &
         flux_units, conversion=Tr%flux_scale, x_cell_method = 'sum')
+    Tr%id_lbm_bulk_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbm_bulk_diffx", &
+        diag%axesCu1, Time, &
+        "Total Bulk Diffusive Zonal Flux of "//trim(flux_longname), &
+        flux_units, conversion=Tr%flux_scale, y_cell_method = 'sum')
+    Tr%id_lbm_bulk_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbm_bulk_diffy", &
+        diag%axesCv1, Time, &
+        "Vertically Integrated Diffusive Meridional Flux of "//trim(flux_longname), &
+        flux_units, conversion=Tr%flux_scale, x_cell_method = 'sum')
 
     if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x,IsdB,IedB,jsd,jed)
     if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y,isd,ied,JsdB,JedB)
     if (Tr%id_dfx_2d > 0) call safe_alloc_ptr(Tr%df2d_x,IsdB,IedB,jsd,jed)
     if (Tr%id_dfy_2d > 0) call safe_alloc_ptr(Tr%df2d_y,isd,ied,JsdB,JedB)
+    if (Tr%id_lbm_bulk_dfx > 0) call safe_alloc_ptr(Tr%lbm_bulk_df_x,IsdB,IedB,jsd,jed)
+    if (Tr%id_lbm_bulk_dfy > 0) call safe_alloc_ptr(Tr%lbm_bulk_df_y,isd,ied,JsdB,JedB)
 
     Tr%id_adv_xy = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy", &
         diag%axesTL, Time, &
