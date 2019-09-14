@@ -26,6 +26,7 @@ use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_dif
 use MOM_lateral_boundary_mixing, only : lateral_boundary_mixing_CS, lateral_boundary_mixing_init
 use MOM_lateral_boundary_mixing, only : lateral_boundary_mixing
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
+use MOM_unit_scaling,          only : unit_scale_type
 use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 
@@ -101,7 +102,7 @@ contains
 !! using the diffusivity in CS%KhTr, or using space-dependent diffusivity.
 !! Multiple iterations are used (if necessary) so that there is no limit
 !! on the acceptable time increment.
-subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
+subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
@@ -109,6 +110,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
   type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
+  type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
   type(tracer_registry_type), pointer       :: Reg     !< registered tracers
   type(thermo_var_ptrs),      intent(in)    :: tv      !< A structure containing pointers to any available
@@ -383,7 +385,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
       do J=js-1,je ; do i=is,ie ; Reg%Tr(m)%df2d_y(i,J) = 0.0 ; enddo ; enddo
     endif
   enddo
-  
+
   if (CS%use_lateral_boundary_mixing) then
 
     if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary mixing (tracer_hordiff)")
@@ -404,7 +406,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      call lateral_boundary_mixing(G, GV, h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%lateral_boundary_mixing_CSp)
+      call lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%lateral_boundary_mixing_CSp)
     enddo ! itt
   endif
 
