@@ -196,7 +196,6 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                                        !! False => compute G'(1) as in LMD94
   if (associated(CS)) call MOM_error(FATAL, 'MOM_CVMix_KPP, KPP_init: '// &
            'Control structure has already been initialized')
-  allocate(CS)
 
   ! Read parameters
   call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVMix:KPP\n' // &
@@ -207,6 +206,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                  default=.false.)
   ! Forego remainder of initialization if not using this scheme
   if (.not. KPP_init) return
+  allocate(CS)
 
   call openParameterBlock(paramFile,'KPP')
   call get_param(paramFile, mdl, 'PASSIVE', CS%passiveMode,           &
