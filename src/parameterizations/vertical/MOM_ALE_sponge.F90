@@ -130,6 +130,7 @@ type, public :: ALE_sponge_CS ; private
   type(remapping_cs) :: remap_cs   !< Remapping parameters and work arrays
 
   logical :: new_sponges  !< True if using newer sponge code
+  logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
 end type ALE_sponge_CS
 
 contains
@@ -390,6 +391,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [s-1]
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
+  logical :: spongeDataOngrid = .false.
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
   if (associated(CS)) then
@@ -424,6 +426,11 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
                  "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+
+  call get_param(param_file, mdl, "SPONGE_DATA_ONGRID", CS%spongeDataOngrid, &
+                 "When defined, the incoming sponge data are "//&
+                 "assumed to be on the model grid " , &
+                 default=.false.)
 
   CS%new_sponges = .true.
   CS%nz = G%ke
@@ -636,7 +643,12 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, f_p
   ! containing time-interpolated values from an external file corresponding
   ! to the current model date.
 
-  CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
+  if (CS%spongeDataOngrid) then
+      CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname,domain=G%Domain%mpp_domain)
+  else
+      CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
+  endif
+
   fld_sz(1:4)=-1
   fld_sz = get_external_field_size(CS%Ref_val(CS%fldno)%id)
   nz_data = fld_sz(3)
@@ -891,7 +903,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       mask_z(:,:,:)=0.0
 
       call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
-                                          missing_value,.true., .false.,.false., m_to_Z=US%m_to_Z)
+                      missing_value,.true., .false.,.false., m_to_Z=US%m_to_Z,spongeOnGrid=CS%SpongeDataOngrid)
 
 !      call pass_var(sp_val,G%Domain)
 !      call pass_var(mask_z,G%Domain)
