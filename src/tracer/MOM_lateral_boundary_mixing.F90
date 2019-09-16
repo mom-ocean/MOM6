@@ -178,6 +178,9 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
           endif
         enddo
       enddo
+      ! Post tracer bulk diags
+      if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk, CS%diag)
+      if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk, CS%diag)
     endif
 
     ! Update the tracer fluxes
@@ -188,8 +191,6 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     enddo ; enddo ; enddo
 
     ! Post the tracer diagnostics
-    if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk, CS%diag)
-    if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk, CS%diag)
     if (tracer%id_lbm_dfx>0)      call post_data(tracer%id_lbm_dfx, uFlx, CS%diag)
     if (tracer%id_lbm_dfy>0)      call post_data(tracer%id_lbm_dfy, vFlx, CS%diag)
 
@@ -333,9 +334,9 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ]
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
-  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities at U-point     [m^2 s^-1]
-  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [trunit s^-1]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [trunit s^-1]
+  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
+  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^2 trunit]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 trunit]
   ! Local variables
   real, dimension(nk) :: h_means              ! Calculate the layer-wise harmonic means           [m]
   real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
