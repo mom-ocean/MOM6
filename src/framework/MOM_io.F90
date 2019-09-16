@@ -36,7 +36,8 @@ use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp
 use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
-use fms2_io_mod,          only: get_dimension_size, &
+use fms2_io_mod,          only: check_if_open, &
+                                get_dimension_size, &
                                 get_compute_domain_dimension_indices, &
                                 get_global_io_domain_indices, &
                                 get_num_variables, &
@@ -76,6 +77,7 @@ public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
 ! new FMS-IO routines and wrappers
 public :: attribute_exists
+public :: check_if_open
 public :: close_file
 public :: dimension_exists
 public :: file_exists
@@ -150,7 +152,6 @@ interface MOM_open_file
   module procedure MOM_open_file_DD_supergrid
   module procedure MOM_open_file_DD_dyn_horgrid
   module procedure MOM_open_file_noDD
-  module procedure MOM_open_file_unstruct_dyn_horgrid
 end interface
 !> Register axes to a netCDF file
 interface MOM_register_axis
@@ -1366,13 +1367,8 @@ function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) 
         endif
      case("overwrite")
         ! check if file(s) already exists and can be overwritten
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
-                                   G%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%mpp_domain, is_restart = is_restart)
-        endif
+        file_open_success = open_file(MOMfileObj, filename, "overwrite", &
+                                  G%Domain%mpp_domain, is_restart = is_restart) 
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
@@ -1408,11 +1404,6 @@ function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) r
         ! check if file(s) already exists and can be overwritten
         file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
                                    G%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%mpp_domain, is_restart = is_restart)
-        endif
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
@@ -1449,11 +1440,6 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
         ! check if file(s) already exists and can be overwritten
         file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for non-domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%Domain%mpp_domain, is_restart = is_restart)
-        endif
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
@@ -1488,11 +1474,6 @@ function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_
         ! check if file(s) already exists and can be overwritten
         file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
                                    is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for non-domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   is_restart = is_restart)
-        endif
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
