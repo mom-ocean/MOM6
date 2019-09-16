@@ -35,8 +35,8 @@ function global_area_mean(var,G)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   tmpForSumming(:,:) = 0.
-  do j=js,je ; do i=is, ie
-    tmpForSumming(i,j) = ( var(i,j) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)) )
+  do j=js,je ; do i=is,ie
+    tmpForSumming(i,j) = var(i,j) * (G%areaT(i,j) * G%mask2dT(i,j))
   enddo ; enddo
   global_area_mean = reproducing_sum( tmpForSumming ) * G%IareaT_global
 

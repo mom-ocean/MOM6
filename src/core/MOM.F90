@@ -2371,7 +2371,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%tv)
   call register_diags(Time, G, GV, US, CS%IDs, CS%diag)
   call register_transport_diags(Time, G, GV, US, CS%transport_IDs, CS%diag)
-  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
+  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, US, &
                                    CS%use_ALE_algorithm)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, US, diag, CS%ALE_CSp)
