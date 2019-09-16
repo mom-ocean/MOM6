@@ -883,8 +883,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: num_dims, total_axes
   integer :: var_periods
   logical :: file_open_success = .false.
-  logical :: axis_exists = .false.
-  logical :: variable_exists = .false.
   real :: restart_time
   character(len=16) :: restart_time_units
   character(len=64) :: checksum_char
@@ -1054,8 +1052,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         endif
         
         do i=1,num_dims
-           axis_exists = fms2_dimension_exists(fileObjWrite, dim_names(i))
-           if (.not.(axis_exists)) then
+           if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
               total_axes=total_axes+1
               call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i))
               call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
@@ -1066,9 +1063,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      ! register the axis variables and their attributes
      do i=1,total_axes
-        
-        variable_exists = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
-        if (.not.(variable_exists)) then 
+        if (.not.(fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
            if (associated(axis_data_CS%data(i)%p)) then
               if (axis_data_CS%axis(i)%is_domain_decomposed) then
                  call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
@@ -1196,8 +1191,6 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   integer :: var_periods
   integer, dimension(4) :: dim_lengths
   logical :: file_open_success = .false.
-  logical :: axis_found = .false.
-  logical :: variable_found =.false.
   character(len=200) :: base_file_name
   character(len=200) :: dim_names(4)
   character(len=20) :: time_units
@@ -1291,8 +1284,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
     ! register the variable dimensions to the file if the corresponding global axes are not registered
 
      do i=1,num_dims
-        axis_found = fms2_dimension_exists(fileObjWrite, dim_names(i))
-        if (.not.(axis_found)) then
+        if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
             total_axes=total_axes+1
             call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                    time_val=time_vals, time_units=time_units)
@@ -1303,9 +1295,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
      
      ! register and write the coordinate variables (axes) to the file
      do i=1,total_axes
-        variable_found = fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
-
-        if (.not.(variable_found)) then 
+        if (.not.(fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
            if (associated(axis_data_CS%data(i)%p)) then
               call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
