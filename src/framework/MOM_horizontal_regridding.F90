@@ -89,13 +89,12 @@ subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   call min_across_PEs(minA)
   call max_across_PEs(maxA)
   if (is_root_pe()) then
-     write(lMesg(1:120),'(2(a,es12.4),a,i3,x,a)') &
-          'init_from_Z: min=',minA,' max=',maxA,' Level=',k,trim(mesg)
-     call MOM_mesg(lMesg,2)
+    write(lMesg(1:120),'(2(a,es12.4),a,i3,x,a)') &
+         'init_from_Z: min=',minA,' max=',maxA,' Level=',k,trim(mesg)
+    call MOM_mesg(lMesg,2)
   endif
 
 end subroutine myStats
-
 
 !> Use ICE-9 algorithm to populate points (fill=1) with
 !! valid data (good=1). If no information is available,
@@ -123,7 +122,6 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
   logical,     optional, intent(in)    :: keep_bug !< Use an algorithm with a bug that dates
                                                    !! to the "sienna" code release.
   logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
-
 
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
   real, dimension(SZI_(G),SZJ_(G)) :: fill_pts, good_, good_new
@@ -339,7 +337,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   call cpu_clock_begin(id_clock_read)
 
-
   rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (rcode /= 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
                            " in hinterp_extrap")
@@ -371,7 +368,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
-
   missing_value=0.0
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
   if (rcode /= 0) call MOM_error(FATAL,"error finding missing value for "//&
@@ -383,14 +379,12 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   rcode = NF90_GET_ATT(ncid, varid, "scale_factor", scale_factor)
   if (rcode /= 0) scale_factor = 1.0
 
-
   if (allocated(lon_in)) deallocate(lon_in)
   if (allocated(lat_in)) deallocate(lat_in)
   if (allocated(z_in)) deallocate(z_in)
   if (allocated(z_edges_in)) deallocate(z_edges_in)
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
-
 
   allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
@@ -412,7 +406,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
-! extrapolate the input data to the north pole using the northerm-most latitude
+  ! extrapolate the input data to the north pole using the northerm-most latitude
 
   max_lat = maxval(lat_in)
   add_np=.false.
@@ -429,7 +423,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     jdp=jd
   endif
 
-! construct level cell boundaries as the mid-point between adjacent centers
+  ! construct level cell boundaries as the mid-point between adjacent centers
 
   z_edges_in(1) = 0.0
   do K=2,kd
@@ -458,14 +452,11 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
-
-! loop through each data level and interpolate to model grid.
-! after interpolating, fill in points which will be needed
-! to define the layers
-
   roundoff = 3.0*EPSILON(missing_value)
 
-
+  ! loop through each data level and interpolate to model grid.
+  ! after interpolating, fill in points which will be needed
+  ! to define the layers
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
 
@@ -494,7 +485,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       else
          tr_inp(:,:) = tr_in(:,:)
       endif
-
     endif
 
     call mpp_sync()
@@ -514,9 +504,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       enddo
     enddo
 
-
-! call fms routine horiz_interp to interpolate input level data to model horizontal grid
-
+!   call fms routine horiz_interp to interpolate input level data to model horizontal grid
 
     if (k == 1) then
       call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
@@ -573,9 +561,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
        endif
     endif
 
-! tr_out contains input z-space data on the model grid with missing values
-! now fill in missing values using "ICE-nine" algorithm.
-
+    ! tr_out contains input z-space data on the model grid with missing values
+    ! now fill in missing values using "ICE-nine" algorithm.
     tr_outf(:,:) = tr_out(:,:)
     if (k==1) tr_prev(:,:) = tr_outf(:,:)
     good2(:,:) = good(:,:)
@@ -732,12 +719,12 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
     allocate(last_row(id))    ; last_row(:)=0.0
   else
-      allocate(data_in(isd:ied,jsd:jed,kd))
+    allocate(data_in(isd:ied,jsd:jed,kd))
   endif
-! construct level cell boundaries as the mid-point between adjacent centers
+  ! construct level cell boundaries as the mid-point between adjacent centers
   z_edges_in(1) = 0.0
   do k=2,kd
-   z_edges_in(k) = 0.5*(z_in(k-1)+z_in(k))
+    z_edges_in(k) = 0.5*(z_in(k-1)+z_in(k))
   enddo
   z_edges_in(kd+1) = 2.0*z_in(kd) - z_in(kd-1)
 
@@ -748,15 +735,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
   if (is_root_pe()) &
-       call time_interp_external(fms_id, Time, data_in, verbose=.true.)
-! loop through each data level and interpolate to model grid.
-! after interpolating, fill in points which will be needed
-! to define the layers
-
-!  roundoff = 3.0*EPSILON(missing_value)
+    call time_interp_external(fms_id, Time, data_in, verbose=.true.)
+  
+  !  roundoff = 3.0*EPSILON(missing_value)
   roundoff = 1.e-4
 
   if (.not.spongeDataOngrid) then
+  ! loop through each data level and interpolate to model grid.
+  ! after interpolating, fill in points which will be needed
+  ! to define the layers
     do k=1,kd
       write(laynum,'(I8)') k ; laynum = adjustl(laynum)
       if (is_root_pe()) then
@@ -764,22 +751,21 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         if (add_np) then
          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
          do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
-               pole = pole+last_row(i)
-               npole = npole+1.0
-            endif
+           if (abs(tr_in(i,jd)-missing_value) > abs(roundoff*missing_value)) then
+             pole = pole+last_row(i)
+             npole = npole+1.0
+           endif
          enddo
          if (npole > 0) then
-            pole=pole/npole
+           pole=pole/npole
          else
-            pole=missing_value
+           pole=missing_value
          endif
          tr_inp(:,1:jd) = tr_in(:,:)
          tr_inp(:,jdp) = pole
         else
          tr_inp(:,:) = tr_in(:,:)
         endif
-
       endif
 
       call mpp_sync()
@@ -799,8 +785,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       ! call fms routine horiz_interp to interpolate input level data to model horizontal grid
       if (k == 1) then
-         call horiz_interp_new(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
-              interp_method='bilinear', src_modulo=.true.)
+        call horiz_interp_new(Interp, x_in, y_in, lon_out(is:ie,js:je), lat_out(is:ie,js:je), &
+                              interp_method='bilinear', src_modulo=.true.)
       endif
 
       if (debug) then
@@ -810,7 +796,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       tr_out(:,:) = 0.0
 
       call horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value, &
-                      new_missing_handle=.true.)
+                        new_missing_handle=.true.)
 
       mask_out(:,:) = 1.0
       do j=js,je ; do i=is,ie
@@ -829,8 +815,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
           varAvg = varAvg + tr_out(i,j)
         endif
         if ((G%mask2dT(i,j) == 1.0) .and. (z_edges_in(k) <= G%bathyT(i,j)) .and. &
-           (mask_out(i,j) < 1.0)) &
-         fill(i,j)=1.0
+            (mask_out(i,j) < 1.0)) &
+          fill(i,j)=1.0
       enddo ;  enddo
       call pass_var(fill, G%Domain)
       call pass_var(good, G%Domain)
@@ -849,9 +835,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         tr_out(:,:) = varAvg
       endif ; endif
 
-    ! tr_out contains input z-space data on the model grid with missing values
-    ! now fill in missing values using "ICE-nine" algorithm.
-
+      ! tr_out contains input z-space data on the model grid with missing values
+      ! now fill in missing values using "ICE-nine" algorithm.
       tr_outf(:,:) = tr_out(:,:)
       if (k==1) tr_prev(:,:) = tr_outf(:,:)
       good2(:,:) = good(:,:)
@@ -859,11 +844,11 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true.)
 
-!    if (debug) then
-!      call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI)
-!    endif
+!     if (debug) then
+!       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI)
+!     endif
 
-!    call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()')
+!     call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()')
 
       tr_z(:,:,k) = tr_outf(:,:)*G%mask2dT(:,:)
       mask_z(:,:,k) = good2(:,:) + fill2(:,:)
@@ -884,9 +869,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         enddo
       enddo
   endif
+
 end subroutine horiz_interp_and_extrap_tracer_fms_id
-
-
 
 !> Create a 2d-mesh of grid coordinates from 1-d arrays.
 subroutine meshgrid(x, y, x_T, y_T)
@@ -1009,7 +993,7 @@ subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
           bsum = real(B(i,j,1)+B(i,j,2)+B(i,j,3)+B(i,j,4))
           Isum = 1.0/bsum
           res(i,j)=Isum*(B(i,j,1)*mp(i+1,j)+B(i,j,2)*mp(i-1,j)+&
-               B(i,j,3)*mp(i,j+1)+B(i,j,4)*mp(i,j-1)) - mp(i,j)
+                   B(i,j,3)*mp(i,j+1)+B(i,j,4)*mp(i,j-1)) - mp(i,j)
         endif
       enddo
     enddo
@@ -1026,6 +1010,5 @@ subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
   enddo
 
 end subroutine smooth_heights
-
 
 end module MOM_horizontal_regridding
