@@ -163,7 +163,7 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
-            call layer_fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
+            call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
               tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
               ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), uFlx_bulk(I,j), uFlx(I,j,:))
           endif
@@ -172,7 +172,7 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do J=G%jsc-1,G%jec
         do i=G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
-            call layer_fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
+            call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
               tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
               ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx_bulk(i,J), vFlx(i,J,:))
           endif
@@ -181,6 +181,26 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       ! Post tracer bulk diags
       if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk, CS%diag)
       if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk, CS%diag)
+
+    elseif (CS%method == 2) then
+      do j=G%jsc,G%jec
+        do i=G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
+              tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
+              ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), uFlx(I,j,:))
+          endif
+        enddo
+      enddo
+      do J=G%jsc-1,G%jec
+        do i=G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
+            call fluxes_layer_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
+              tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
+              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx(i,J,:))
+          endif
+        enddo
+      enddo
     endif
 
     ! Update the tracer fluxes
@@ -315,8 +335,85 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
 
 end subroutine boundary_k_range
 
+
+!> Calculate the near-boundary diffusive fluxes calculated using the layer by layer method.
+subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
+                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
+  integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
+  integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
+  real, dimension(nk),       intent(in   )       :: h_L      !< Layer thickness (left)                  [m]
+  real, dimension(nk),       intent(in   )       :: h_R      !< Layer thickness (right)                 [m]
+  real,                      intent(in   )       :: hbl_L    !< Thickness of the boundary boundary
+                                                                       !! layer (left)                  [m]
+  real,                      intent(in   )       :: hbl_R    !< Thickness of the boundary boundary
+                                                             !! layer (left)                            [m]
+  real, dimension(nk),       intent(in   )       :: phi_L    !< Tracer values (left)                    [ nondim m^-3 ]
+  real, dimension(nk),       intent(in   )       :: phi_R    !< Tracer values (right)                   [ nondim m^-3 ]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_L !< Tracer reconstruction (left)      [ nondim m^-3 ]
+  real, dimension(nk,deg+1), intent(in   )       :: ppoly0_coefs_R !< Tracer reconstruction (right)     [ nondim m^-3 ]
+  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_L !< Polynomial edge values (left)         [ nondim ]
+  real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
+  integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
+  real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 trunit]
+  ! Local variables
+  real, dimension(nk) :: h_means              ! Calculate the layer-wise harmonic means           [m]
+  real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
+  real                :: hbl_u                ! Boundary layer Thickness at the u-point           [m]
+  real                :: khtr_avg             ! Thickness-weighted diffusivity at the u-point     [m^2 s^-1]
+  real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
+  real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
+  real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
+                                              !                                                   [trunit m^-3 ]
+  real    :: htot                 ! Total column thickness [m]
+  integer :: k, k_bot_min, k_top_max
+  integer :: k_top_L, k_bot_L, k_top_u
+  integer :: k_top_R, k_bot_R, k_bot_u
+  real    :: zeta_top_L, zeta_top_R, zeta_top_u
+  real    :: zeta_bot_L, zeta_bot_R, zeta_bot_u
+  real    :: h_work_L, h_work_R  ! dummy variables
+  real    :: hbl_min             ! minimum BLD (left and right)
+
+  F_layer(:) = 0.0
+  if (hbl_L == 0. .or. hbl_R == 0.) then
+    return
+  endif
+  hbl_min = MIN(hbl_L, hbl_R)
+  ! Calculate vertical indices containing the boundary layer
+  call boundary_k_range(boundary, nk, h_L, hbl_min, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
+  call boundary_k_range(boundary, nk, h_R, hbl_min, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
+
+  if (boundary == SURFACE) then
+    k_bot_min = MIN(k_bot_L, k_bot_R)
+    ! make sure left and right k indices span same range
+    if (k_bot_min .ne. k_bot_L) then
+      k_bot_L = k_bot_min
+      zeta_bot_L = 1.0
+    endif
+    if (k_bot_min .ne. k_bot_R) then
+      k_bot_R= k_bot_min
+      zeta_bot_R = 1.0
+    endif
+
+    h_work_L = (h_L(k_bot_L) * zeta_bot_L)
+    h_work_R = (h_R(k_bot_R) * zeta_bot_R)
+
+    phi_L_avg = average_value_ppoly( nk, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_bot_L, 0., zeta_bot_L) 
+    phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R) 
+    heff = harmonic_mean(h_work_L, h_work_R)
+    ! tracer flux where the minimum BLD intersets layer
+    F_layer(k_bot_min) = -heff * (phi_R_avg - phi_L_avg)
+    do k = k_bot_min-1,1,-1
+      heff = harmonic_mean(h_L(k), h_R(k))
+      F_layer(k) = -heff * (phi_R(k) - phi_L(k))
+    enddo
+  endif
+
+end subroutine fluxes_layer_method
+
 !> Calculate the near-boundary diffusive fluxes calculated from a 'bulk model'
-subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
+subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
@@ -441,7 +538,7 @@ subroutine layer_fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, p
     enddo
   endif
 
-end subroutine layer_fluxes_bulk_method
+end subroutine fluxes_bulk_method
 
 !> Unit tests for near-boundary horizontal mixing
 logical function near_boundary_unit_tests( verbose )
@@ -528,7 +625,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-5.0,-5.0/) )
 
@@ -545,7 +642,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 0.
   ppoly0_E_R(2,1) = 0.; ppoly0_E_R(2,2) = 0.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/5.0,5.0/) )
 
@@ -562,7 +659,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
 
@@ -579,7 +676,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-8.0,-8.0/) )
 
@@ -596,7 +693,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 0.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
 
@@ -613,7 +710,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
 
@@ -630,7 +727,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
 
@@ -645,7 +742,7 @@ logical function near_boundary_unit_tests( verbose )
   phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
   phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
   khtr_u = 1.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
 
@@ -662,7 +759,7 @@ logical function near_boundary_unit_tests( verbose )
   ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
   ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 1.
   ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 3.
-  call layer_fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
 end function near_boundary_unit_tests
