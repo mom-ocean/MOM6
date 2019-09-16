@@ -2939,33 +2939,6 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
     enddo
   endif
 
-! do n=1,OBC%number_of_segments
-!   segment => OBC%segment(n)
-!   if (.not. segment%on_pe) cycle
-
-!   if (segment%direction == OBC_DIRECTION_E) then
-!     I=segment%HI%IsdB
-!     do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-!       h(i+1,j,k) = h(i,j,k)
-!     enddo ; enddo
-!   elseif (segment%direction == OBC_DIRECTION_W) then
-!     I=segment%HI%IsdB
-!     do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-!       h(i,j,k) = h(i+1,j,k)
-!     enddo ; enddo
-!   elseif (segment%direction == OBC_DIRECTION_N) then
-!     J=segment%HI%JsdB
-!     do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-!       h(i,j+1,k) = h(i,j,k)
-!     enddo ; enddo
-!   elseif (segment%direction == OBC_DIRECTION_S) then
-!     J=segment%HI%JsdB
-!     do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-!       h(i,j,k) = h(i,j+1,k)
-!     enddo ; enddo
-!   endif
-! enddo
-
 end subroutine set_tracer_data
 
 !> Needs documentation
