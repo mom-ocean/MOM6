@@ -11,6 +11,12 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 implicit none ; private
 
 public create_dyn_horgrid, destroy_dyn_horgrid, set_derived_dyn_horgrid
+public rescale_dyn_horgrid_bathymetry
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Describes the horizontal ocean grid with only dynamic memory arrays
 type, public :: dyn_horgrid_type
@@ -61,56 +67,56 @@ type, public :: dyn_horgrid_type
                              !! during the course of the run via calls to set_first_direction.
 
   real, allocatable, dimension(:,:) :: &
-    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid. Nd.
-    geoLatT, &   !< The geographic latitude at q points in degrees of latitude or m.
-    geoLonT, &   !< The geographic longitude at q points in degrees of longitude or m.
-    dxT, &       !< dxT is delta x at h points, in m.
-    IdxT, &      !< 1/dxT in m-1.
-    dyT, &       !< dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
-    IdyT, &      !< dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
-    areaT, &     !< The area of an h-cell, in m2.
-    IareaT       !< 1/areaT, in m-2.
+    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid [nondim].
+    geoLatT, &   !< The geographic latitude at q points [degrees of latitude] or [m].
+    geoLonT, &   !< The geographic longitude at q points [degrees of longitude] or [m].
+    dxT, &       !< dxT is delta x at h points [m].
+    IdxT, &      !< 1/dxT [m-1].
+    dyT, &       !< dyT is delta y at h points [m].
+    IdyT, &      !< IdyT is 1/dyT [m-1].
+    areaT, &     !< The area of an h-cell [m2].
+    IareaT       !< 1/areaT [m-2].
   real, allocatable, dimension(:,:) :: sin_rot
                  !< The sine of the angular rotation between the local model grid's northward
-                 !! and the true northward directions.
+                 !! and the true northward directions [nondim].
   real, allocatable, dimension(:,:) :: cos_rot
                  !< The cosine of the angular rotation between the local model grid's northward
-                 !! and the true northward directions.
+                 !! and the true northward directions [nondim].
 
   real, allocatable, dimension(:,:) :: &
-    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
-    geoLatCu, &  !< The geographic latitude at u points in degrees of latitude or m.
-    geoLonCu, &  !< The geographic longitude at u points in degrees of longitude or m.
-    dxCu, &      !< dxCu is delta x at u points, in m.
-    IdxCu, &     !< 1/dxCu in m-1.
-    dyCu, &      !< dyCu is delta y at u points, in m.
-    IdyCu, &     !< 1/dyCu in m-1.
-    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell in m.
-    IareaCu, &   !< The masked inverse areas of u-grid cells in m2.
-    areaCu       !< The areas of the u-grid cells in m2.
+    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid [nondim].
+    geoLatCu, &  !< The geographic latitude at u points [degrees of latitude] or [m].
+    geoLonCu, &  !< The geographic longitude at u points [degrees of longitude] or [m].
+    dxCu, &      !< dxCu is delta x at u points [m].
+    IdxCu, &     !< 1/dxCu [m-1].
+    dyCu, &      !< dyCu is delta y at u points [m].
+    IdyCu, &     !< 1/dyCu [m-1].
+    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [m].
+    IareaCu, &   !< The masked inverse areas of u-grid cells [m2].
+    areaCu       !< The areas of the u-grid cells [m2].
 
   real, allocatable, dimension(:,:) :: &
-    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
-    geoLatCv, &  !< The geographic latitude at v points in degrees of latitude or m.
-    geoLonCv, &  !< The geographic longitude at v points in degrees of longitude or m.
-    dxCv, &      !< dxCv is delta x at v points, in m.
-    IdxCv, &     !< 1/dxCv in m-1.
-    dyCv, &      !< dyCv is delta y at v points, in m.
-    IdyCv, &     !< 1/dyCv in m-1.
-    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell in m.
-    IareaCv, &   !< The masked inverse areas of v-grid cells in m2.
-    areaCv       !< The areas of the v-grid cells in m2.
+    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid [nondim].
+    geoLatCv, &  !< The geographic latitude at v points [degrees of latitude] or [m].
+    geoLonCv, &  !< The geographic longitude at v points [degrees of longitude] or [m].
+    dxCv, &      !< dxCv is delta x at v points [m].
+    IdxCv, &     !< 1/dxCv [m-1].
+    dyCv, &      !< dyCv is delta y at v points [m].
+    IdyCv, &     !< 1/dyCv [m-1].
+    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [m].
+    IareaCv, &   !< The masked inverse areas of v-grid cells [m2].
+    areaCv       !< The areas of the v-grid cells [m2].
 
   real, allocatable, dimension(:,:) :: &
-    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
-    geoLatBu, &  !< The geographic latitude at q points in degrees of latitude or m.
-    geoLonBu, &  !< The geographic longitude at q points in degrees of longitude or m.
-    dxBu, &      !< dxBu is delta x at q points, in m.
-    IdxBu, &     !< 1/dxBu in m-1.
-    dyBu, &      !< dyBu is delta y at q points, in m.
-    IdyBu, &     !< 1/dyBu in m-1.
-    areaBu, &    !< areaBu is the area of a q-cell, in m2
-    IareaBu      !< IareaBu = 1/areaBu in m-2.
+    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
+    geoLatBu, &  !< The geographic latitude at q points [degrees of latitude] or [m].
+    geoLonBu, &  !< The geographic longitude at q points [degrees of longitude] or [m].
+    dxBu, &      !< dxBu is delta x at q points [m].
+    IdxBu, &     !< 1/dxBu [m-1].
+    dyBu, &      !< dyBu is delta y at q points [m].
+    IdyBu, &     !< 1/dyBu [m-1].
+    areaBu, &    !< areaBu is the area of a q-cell [m2]
+    IareaBu      !< IareaBu = 1/areaBu [m-2].
 
   real, pointer, dimension(:) :: gridLatT => NULL()
         !< The latitude of T points for the purpose of labeling the output axes.
@@ -130,26 +136,26 @@ type, public :: dyn_horgrid_type
     ! Except on a Cartesian grid, these are usually  some variant of "degrees".
 
   real, allocatable, dimension(:,:) :: &
-    bathyT        !< Ocean bottom depth at tracer points, in m.
+    bathyT        !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
 
   logical :: bathymetry_at_vel  !< If true, there are separate values for the
                   !! basin depths at velocity points.  Otherwise the effects of
                   !! of topography are entirely determined from thickness points.
   real, allocatable, dimension(:,:) :: &
-    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked, in m.
-    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu, in m.
+    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked [Z ~> m].
+    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu [Z ~> m].
   real, allocatable, dimension(:,:) :: &
-    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in m.
-    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in m.
+    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked [Z ~> m].
+    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv [Z ~> m].
   real, allocatable, dimension(:,:) :: &
-    CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
+    CoriolisBu    !< The Coriolis parameter at corner points [T-1 ~> s-1].
   real, allocatable, dimension(:,:) :: &
-    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
-    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
+    df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
+    df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 m-1 ~> s-1 m-1].
 
   ! These variables are global sums that are useful for 1-d diagnostics
-  real :: areaT_global  !< Global sum of h-cell area in m2
-  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) in m2
+  real :: areaT_global  !< Global sum of h-cell area [m2]
+  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m-2]
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
@@ -157,8 +163,8 @@ type, public :: dyn_horgrid_type
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
   real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
   real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 !< The radius of the planet in meters.
-  real :: max_depth     !< The maximum depth of the ocean in meters.
+  real :: Rad_Earth = 6.378e6 !< The radius of the planet [m].
+  real :: max_depth     !< The maximum depth of the ocean [Z ~> m].
 end type dyn_horgrid_type
 
 contains
@@ -271,6 +277,39 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%gridLatB(jsg-1:jeg)) ; G%gridLatB(:) = 0.0
 
 end subroutine create_dyn_horgrid
+
+!> rescale_dyn_horgrid_bathymetry permits a change in the internal units for the bathymetry on the
+!! grid, both rescaling the depths and recording the new internal depth units.
+subroutine rescale_dyn_horgrid_bathymetry(G, m_in_new_units)
+  type(dyn_horgrid_type), intent(inout) :: G !< The dynamic horizontal grid type
+  real,                   intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
+
+  ! Local variables
+  real :: rescale
+  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (m_in_new_units == 1.0) return
+  if (m_in_new_units < 0.0) &
+    call MOM_error(FATAL, "rescale_grid_bathymetry: Negative depth units are not permitted.")
+  if (m_in_new_units == 0.0) &
+    call MOM_error(FATAL, "rescale_grid_bathymetry: Zero depth units are not permitted.")
+
+  rescale = 1.0 / m_in_new_units
+  do j=jsd,jed ; do i=isd,ied
+    G%bathyT(i,j) = rescale*G%bathyT(i,j)
+  enddo ; enddo
+  if (G%bathymetry_at_vel) then ; do j=jsd,jed ; do I=IsdB,IedB
+    G%Dblock_u(I,j) = rescale*G%Dblock_u(I,j) ; G%Dopen_u(I,j) = rescale*G%Dopen_u(I,j)
+  enddo ; enddo ; endif
+  if (G%bathymetry_at_vel) then ; do J=JsdB,JedB ; do i=isd,ied
+    G%Dblock_v(i,J) = rescale*G%Dblock_v(i,J) ; G%Dopen_v(i,J) = rescale*G%Dopen_v(i,J)
+  enddo ; enddo ; endif
+  G%max_depth = rescale*G%max_depth
+
+end subroutine rescale_dyn_horgrid_bathymetry
 
 !> set_derived_dyn_horgrid calculates metric terms that are derived from other metrics.
 subroutine set_derived_dyn_horgrid(G)

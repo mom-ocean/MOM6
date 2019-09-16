@@ -27,22 +27,23 @@ use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
-use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
+use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE, CENTER
 use fms_io_mod,        only : file_exist, parse_mask_table
 
 implicit none ; private
 
-public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent
+public :: MOM_domains_init, MOM_infra_init, MOM_infra_end, get_domain_extent, get_domain_extent_dsamp2
 public :: MOM_define_domain, MOM_define_io_domain, clone_MOM_domain
-public :: pass_var, pass_vector, broadcast, PE_here, root_PE, num_PEs
-public :: pass_var_start, pass_var_complete, fill_symmetric_edges
+public :: pass_var, pass_vector, PE_here, root_PE, num_PEs
+public :: pass_var_start, pass_var_complete, fill_symmetric_edges, broadcast
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
-public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
+public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER, CENTER
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent, get_global_shape
+public :: get_simple_array_i_ind, get_simple_array_j_ind
 
 !> Do a halo update on an array
 interface pass_var
@@ -98,6 +99,8 @@ end interface clone_MOM_domain
 type, public :: MOM_domain_type
   type(domain2D), pointer :: mpp_domain => NULL() !< The FMS domain with halos
                                 !! on this processor, centered at h points.
+  type(domain2D), pointer :: mpp_domain_d2 => NULL() !< A coarse FMS domain with halos
+                                !! on this processor, centered at h points.
   integer :: niglobal           !< The total horizontal i-domain size.
   integer :: njglobal           !< The total horizontal j-domain size.
   integer :: nihalo             !< The i-halo size in memory.
@@ -118,7 +121,6 @@ type, public :: MOM_domain_type
                                 !! domain in the i-direction in a define_domain call.
   integer :: Y_FLAGS            !< Flag that specifies the properties of the
                                 !! domain in the j-direction in a define_domain call.
-  logical :: use_io_layout      !< True if an I/O layout is available.
   logical, pointer :: maskmap(:,:) => NULL() !< A pointer to an array indicating
                                 !! which logical processors are actually used for
                                 !! the ocean code. The other logical processors
@@ -179,8 +181,7 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo, &
 end subroutine pass_var_3d
 
 !> pass_var_2d does a halo update for a two-dimensional array.
-subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
-                       clock)
+subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner_halo, clock)
   real, dimension(:,:),  intent(inout) :: array    !< The array which is having its halos points
                                                    !! exchanged.
   type(MOM_domain_type), intent(inout) :: MOM_dom  !< The MOM_domain_type containing the mpp_domain
@@ -198,9 +199,18 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
                                                    !! by default.
   integer,     optional, intent(in)    :: halo     !< The size of the halo to update - the full halo
                                                    !! by default.
-  integer,      optional, intent(in)   :: clock    !< The handle for a cpu time clock that should be
+  integer,     optional, intent(in)    :: inner_halo !< The size of an inner halo to avoid updating,
+                                                   !! or 0 to avoid updating symmetric memory
+                                                   !! computational domain points.  Setting this >=0
+                                                   !! also enforces that complete=.true.
+  integer,     optional, intent(in)    :: clock    !< The handle for a cpu time clock that should be
                                                    !! started then stopped to time this routine.
 
+  ! Local variables
+  real, allocatable, dimension(:,:) :: tmp
+  integer :: pos, i_halo, j_halo
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
+  integer :: inner, i, j, isfw, iefw, isfe, iefe, jsfs, jefs, jsfn, jefn
   integer :: dirflag
   logical :: block_til_complete
 
@@ -208,8 +218,15 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
 
   dirflag = To_All ! 60
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
-  block_til_complete = .true.
-  if (present(complete)) block_til_complete = complete
+  block_til_complete = .true. ; if (present(complete)) block_til_complete = complete
+  pos = CENTER ; if (present(position)) pos = position
+
+  if (present(inner_halo)) then ; if (inner_halo >= 0) then
+    ! Store the original values.
+    allocate(tmp(size(array,1), size(array,2)))
+    tmp(:,:) = array(:,:)
+    block_til_complete = .true.
+  endif ; endif
 
   if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
@@ -219,6 +236,46 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, &
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position)
   endif
+
+  if (present(inner_halo)) then ; if (inner_halo >= 0) then
+    call mpp_get_compute_domain(MOM_dom%mpp_domain, isc, iec, jsc, jec)
+    call mpp_get_data_domain(MOM_dom%mpp_domain, isd, ied, jsd, jed)
+    ! Convert to local indices for arrays starting at 1.
+    isc = isc - (isd-1) ; iec = iec - (isd-1) ; ied = ied - (isd-1) ; isd = 1
+    jsc = jsc - (jsd-1) ; jec = jec - (jsd-1) ; jed = jed - (jsd-1) ; jsd = 1
+    i_halo = min(inner_halo, isc-1) ; j_halo = min(inner_halo, jsc-1)
+
+    ! Figure out the array index extents of the eastern, western, northern and southern regions to copy.
+    if (pos == CENTER) then
+      if (size(array,1) == ied) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for CENTER array.") ; endif
+      if (size(array,2) == jed) then
+        isfw = isc - i_halo ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for CENTER array.") ; endif
+    elseif (pos == CORNER) then
+      if (size(array,1) == ied) then
+        isfw = max(isc - (i_halo+1), 1) ; iefw = isc ; isfe = iec ; iefe = iec + i_halo
+      elseif (size(array,1) == ied+1) then
+        isfw = isc - i_halo ; iefw = isc+1 ; isfe = iec+1 ; iefe = min(iec + 1 + i_halo, ied+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong i-size for CORNER array.") ; endif
+      if (size(array,2) == jed) then
+        jsfs = max(jsc - (j_halo+1), 1) ; jefs = jsc ; jsfn = jec ; jefn = jec + j_halo
+      elseif (size(array,2) == jed+1) then
+        jsfs = jsc - j_halo ; jefs = jsc+1 ; jsfn = jec+1 ; jefn = min(jec + 1 + j_halo, jed+1)
+      else ; call MOM_error(FATAL, "pass_var_2d: wrong j-size for CORNER array.") ; endif
+    else
+      call MOM_error(FATAL, "pass_var_2d: Unrecognized position")
+    endif
+
+    ! Copy back the stored inner halo points
+    do j=jsfs,jefn ; do i=isfw,iefw ; array(i,j) = tmp(i,j) ; enddo ; enddo
+    do j=jsfs,jefn ; do i=isfe,iefe ; array(i,j) = tmp(i,j) ; enddo ; enddo
+    do j=jsfs,jefs ; do i=isfw,iefe ; array(i,j) = tmp(i,j) ; enddo ; enddo
+    do j=jsfn,jefn ; do i=isfw,iefe ; array(i,j) = tmp(i,j) ; enddo ; enddo
+
+    deallocate(tmp)
+  endif ; endif
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_end(clock) ; endif
 
@@ -1149,7 +1206,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
   character(len=40) :: nihalo_nm, njhalo_nm, layout_nm, io_layout_nm, masktable_nm
   character(len=40) :: niproc_nm, njproc_nm
-
+  integer :: xhalo_d2,yhalo_d2
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl ! This module's name.
@@ -1157,6 +1214,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
     allocate(MOM_dom%mpp_domain)
+    allocate(MOM_dom%mpp_domain_d2)
   endif
 
   pe = PE_here()
@@ -1209,7 +1267,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "If true, the domain is meridionally reentrant.", &
                  default=.false.)
   call get_param(param_file, mdl, "TRIPOLAR_N", tripolar_N, &
-                 "Use tripolar connectivity at the northern edge of the \n"//&
+                 "Use tripolar connectivity at the northern edge of the "//&
                  "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
 
@@ -1249,19 +1307,19 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$ endif
 #endif
   call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
-                 "If defined, the velocity point data domain includes \n"//&
-                 "every face of the thickness points. In other words, \n"//&
-                 "some arrays are larger than others, depending on where \n"//&
-                 "they are on the staggered grid.  Also, the starting \n"//&
-                 "index of the velocity-point arrays is usually 0, not 1. \n"//&
+                 "If defined, the velocity point data domain includes "//&
+                 "every face of the thickness points. In other words, "//&
+                 "some arrays are larger than others, depending on where "//&
+                 "they are on the staggered grid.  Also, the starting "//&
+                 "index of the velocity-point arrays is usually 0, not 1. "//&
                  "This can only be set at compile time.",&
                  layoutParam=.true.)
   call get_param(param_file, mdl, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
   call get_param(param_file, mdl, "THIN_HALO_UPDATES", MOM_dom%thin_halo_updates, &
-                 "If true, optional arguments may be used to specify the \n"//&
-                 "The width of the halos that are updated with each call.", &
+                 "If true, optional arguments may be used to specify the "//&
+                 "the width of the halos that are updated with each call.", &
                  default=.true., layoutParam=.true.)
 
   nihalo_dflt = 4 ; njhalo_dflt = 4
@@ -1269,24 +1327,24 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   if (present(NJHALO)) njhalo_dflt = NJHALO
 
   call log_param(param_file, mdl, "!STATIC_MEMORY_", is_static, &
-                 "If STATIC_MEMORY_ is defined, the principle variables \n"//&
-                 "will have sizes that are statically determined at \n"//&
-                 "compile time.  Otherwise the sizes are not determined \n"//&
-                 "until run time. The STATIC option is substantially \n"//&
-                 "faster, but does not allow the PE count to be changed \n"//&
+                 "If STATIC_MEMORY_ is defined, the principle variables "//&
+                 "will have sizes that are statically determined at "//&
+                 "compile time.  Otherwise the sizes are not determined "//&
+                 "until run time. The STATIC option is substantially "//&
+                 "faster, but does not allow the PE count to be changed "//&
                  "at run time.  This can only be set at compile time.",&
                  layoutParam=.true.)
 
   call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
-                 "The number of halo points on each side in the \n"//&
-                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
+                 "The number of halo points on each side in the "//&
+                 "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ "//&
+                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
                  default=4, static_value=nihalo_dflt, layoutParam=.true.)
   call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
-                 "The number of halo points on each side in the \n"//&
-                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
-                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
+                 "The number of halo points on each side in the "//&
+                 "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ "//&
+                 "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ "//&
                  "the default is NJHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
                  default=4, static_value=njhalo_dflt, layoutParam=.true.)
   if (present(min_halo)) then
@@ -1299,13 +1357,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
   if (is_static) then
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NIGLOBAL)
     call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NJGLOBAL)
     if (MOM_dom%niglobal /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
@@ -1321,13 +1379,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     endif
   else
     call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "x-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
     call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
-                 "The total number of thickness grid points in the \n"//&
-                 "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
+                 "The total number of thickness grid points in the "//&
+                 "y-direction in the physical domain. With STATIC_MEMORY_ "//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
   endif
@@ -1339,15 +1397,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   inputdir = slasher(inputdir)
 
   call get_param(param_file, mdl, trim(masktable_nm), mask_table, &
-                 "A text file to specify n_mask, layout and mask_list. \n"//&
-                 "This feature masks out processors that contain only land points. \n"//&
-                 "The first line of mask_table is the number of regions to be masked out.\n"//&
-                 "The second line is the layout of the model and must be \n"//&
-                 "consistent with the actual model layout.\n"//&
-                 "The following (n_mask) lines give the logical positions \n"//&
-                 "of the processors that are masked out. The mask_table \n"//&
-                 "can be created by tools like check_mask. The \n"//&
-                 "following example of mask_table masks out 2 processors, \n"//&
+                 "A text file to specify n_mask, layout and mask_list. "//&
+                 "This feature masks out processors that contain only land points. "//&
+                 "The first line of mask_table is the number of regions to be masked out. "//&
+                 "The second line is the layout of the model and must be "//&
+                 "consistent with the actual model layout. "//&
+                 "The following (n_mask) lines give the logical positions "//&
+                 "of the processors that are masked out. The mask_table "//&
+                 "can be created by tools like check_mask. The "//&
+                 "following example of mask_table masks out 2 processors, "//&
                  "(1,2) and (3,6), out of the 24 in a 4x6 layout: \n"//&
                  " 2\n 4,6\n 1,2\n 3,6\n", default="MOM_mask_table", &
                  layoutParam=.true.)
@@ -1358,7 +1416,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     layout(1) = NIPROC ; layout(2) = NJPROC
   else
     call get_param(param_file, mdl, trim(layout_nm), layout, &
-                 "The processor layout to be used, or 0, 0 to automatically \n"//&
+                 "The processor layout to be used, or 0, 0 to automatically "//&
                  "set the layout based on the number of processors.", default=0, &
                  do_not_log=.true.)
     call get_param(param_file, mdl, trim(niproc_nm), nip_parsed, &
@@ -1397,15 +1455,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     endif
   endif
   call log_param(param_file, mdl, trim(niproc_nm), layout(1), &
-                 "The number of processors in the x-direction. With \n"//&
+                 "The number of processors in the x-direction. With "//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(njproc_nm), layout(2), &
-                 "The number of processors in the x-direction. With \n"//& !### FIX THIS COMMENT
+                 "The number of processors in the y-direction. With "//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
   call log_param(param_file, mdl, trim(layout_nm), layout, &
-                 "The processor layout that was acutally used.",&
+                 "The processor layout that was actually used.",&
                  layoutParam=.true.)
 
   ! Idiot check that fewer PEs than columns have been requested
@@ -1426,7 +1484,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   ! number of PEs in each direction.
   io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
-                 "The processor layout to be used, or 0,0 to automatically \n"//&
+                 "The processor layout to be used, or 0,0 to automatically "//&
                  "set the io_layout to be the same as the layout.", default=1, &
                  layoutParam=.true.)
 
@@ -1490,7 +1548,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   MOM_dom%Y_FLAGS = Y_FLAGS
   MOM_dom%layout = layout
   MOM_dom%io_layout = io_layout
-  MOM_dom%use_io_layout = (io_layout(1) + io_layout(2) > 0)
 
   if (is_static) then
   !   A requirement of equal sized compute domains is necessary when STATIC_MEMORY_
@@ -1510,6 +1567,31 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
        call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in "//trim(inc_nm)//" to use &
            &dynamic allocation, or change processor decomposition to evenly divide the domain.')
     endif
+  endif
+
+  global_indices(1) = 1 ; global_indices(2) = int(MOM_dom%niglobal/2)
+  global_indices(3) = 1 ; global_indices(4) = int(MOM_dom%njglobal/2)
+  !For downsampled domain, recommend a halo of 1 (or 0?) since we're not doing wide-stencil computations.
+  !But that does not work because the downsampled field would not have the correct size to pass the checks, e.g., we get
+  !error: downsample_diag_indices_get: peculiar size 28 in i-direction\ndoes not match one of 24 25 26 27
+  xhalo_d2 = int(MOM_dom%nihalo/2)
+  yhalo_d2 = int(MOM_dom%njhalo/2)
+  if (mask_table_exists) then
+    call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xhalo=xhalo_d2, yhalo=yhalo_d2, &
+                symmetry = MOM_dom%symmetric, name=trim("MOMc"), &
+                maskmap=MOM_dom%maskmap )
+  else
+    call MOM_define_domain( global_indices, layout, MOM_dom%mpp_domain_d2, &
+                xflags=X_FLAGS, yflags=Y_FLAGS, &
+                xhalo=xhalo_d2, yhalo=yhalo_d2, &
+                symmetry = MOM_dom%symmetric, name=trim("MOMc"))
+  endif
+
+  if ((io_layout(1) > 0) .and. (io_layout(2) > 0) .and. &
+      (layout(1)*layout(2) > 1)) then
+    call MOM_define_io_domain(MOM_dom%mpp_domain_d2, io_layout)
   endif
 
 end subroutine MOM_domains_init
@@ -1543,6 +1625,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
     allocate(MOM_dom%mpp_domain)
+    allocate(MOM_dom%mpp_domain_d2)
   endif
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
@@ -1554,7 +1637,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, &
 
   MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
   MOM_dom%layout(:) = MD_in%layout(:) ; MOM_dom%io_layout(:) = MD_in%io_layout(:)
-  MOM_dom%use_io_layout = (MOM_dom%io_layout(1) + MOM_dom%io_layout(2) > 0)
 
   if (associated(MD_in%maskmap)) then
     mask_table_exists = .true.
@@ -1685,31 +1767,29 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
                              symmetric, local_indexing, index_offset)
   type(MOM_domain_type), &
-           intent(in)  :: Domain         !< The MOM domain from which to extract information
-  integer, intent(out) :: isc            !< The start i-index of the computational domain
-  integer, intent(out) :: iec            !< The end i-index of the computational domain
-  integer, intent(out) :: jsc            !< The start j-index of the computational domain
-  integer, intent(out) :: jec            !< The end j-index of the computational domain
-  integer, intent(out) :: isd            !< The start i-index of the data domain
-  integer, intent(out) :: ied            !< The end i-index of the data domain
-  integer, intent(out) :: jsd            !< The start j-index of the data domain
-  integer, intent(out) :: jed            !< The end j-index of the data domain
-  integer, intent(out) :: isg            !< The start i-index of the global domain
-  integer, intent(out) :: ieg            !< The end i-index of the global domain
-  integer, intent(out) :: jsg            !< The start j-index of the global domain
-  integer, intent(out) :: jeg            !< The end j-index of the global domain
-  integer, intent(out) :: idg_offset     !< The offset between the corresponding global and
-                                         !! data i-index spaces.
-  integer, intent(out) :: jdg_offset     !< The offset between the corresponding global and
-                                         !! data j-index spaces.
-  logical, intent(out) :: symmetric      !< True if symmetric memory is used.
-  logical, optional, &
-           intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
-                                         !! as in most MOM6 code.
-  integer, optional, &
-           intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
-                                         !! can be useful for some types of debugging with
-                                         !! dynamic memory allocation.
+           intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer, intent(out) :: isc    !< The start i-index of the computational domain
+  integer, intent(out) :: iec    !< The end i-index of the computational domain
+  integer, intent(out) :: jsc    !< The start j-index of the computational domain
+  integer, intent(out) :: jec    !< The end j-index of the computational domain
+  integer, intent(out) :: isd    !< The start i-index of the data domain
+  integer, intent(out) :: ied    !< The end i-index of the data domain
+  integer, intent(out) :: jsd    !< The start j-index of the data domain
+  integer, intent(out) :: jed    !< The end j-index of the data domain
+  integer, intent(out) :: isg    !< The start i-index of the global domain
+  integer, intent(out) :: ieg    !< The end i-index of the global domain
+  integer, intent(out) :: jsg    !< The start j-index of the global domain
+  integer, intent(out) :: jeg    !< The end j-index of the global domain
+  integer, intent(out) :: idg_offset !< The offset between the corresponding global and
+                                 !! data i-index spaces.
+  integer, intent(out) :: jdg_offset !< The offset between the corresponding global and
+                                 !! data j-index spaces.
+  logical, intent(out) :: symmetric  !< True if symmetric memory is used.
+  logical, optional, intent(in)  :: local_indexing !< If true, local tracer array indices start at 1,
+                                           !! as in most MOM6 code.
+  integer, optional, intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
+                                           !! can be useful for some types of debugging with
+                                           !! dynamic memory allocation.
   ! Local variables
   integer :: ind_off
   logical :: local
@@ -1740,6 +1820,107 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   symmetric = Domain%symmetric
 
 end subroutine get_domain_extent
+
+subroutine get_domain_extent_dsamp2(Domain, isc_d2, iec_d2, jsc_d2, jec_d2,&
+                                            isd_d2, ied_d2, jsd_d2, jed_d2,&
+                                            isg_d2, ieg_d2, jsg_d2, jeg_d2)
+  type(MOM_domain_type), &
+           intent(in)  :: Domain !< The MOM domain from which to extract information
+  integer, intent(out) :: isc_d2 !< The start i-index of the computational domain
+  integer, intent(out) :: iec_d2 !< The end i-index of the computational domain
+  integer, intent(out) :: jsc_d2 !< The start j-index of the computational domain
+  integer, intent(out) :: jec_d2 !< The end j-index of the computational domain
+  integer, intent(out) :: isd_d2 !< The start i-index of the data domain
+  integer, intent(out) :: ied_d2 !< The end i-index of the data domain
+  integer, intent(out) :: jsd_d2 !< The start j-index of the data domain
+  integer, intent(out) :: jed_d2 !< The end j-index of the data domain
+  integer, intent(out) :: isg_d2 !< The start i-index of the global domain
+  integer, intent(out) :: ieg_d2 !< The end i-index of the global domain
+  integer, intent(out) :: jsg_d2 !< The start j-index of the global domain
+  integer, intent(out) :: jeg_d2 !< The end j-index of the global domain
+
+  call mpp_get_compute_domain(Domain%mpp_domain_d2, isc_d2, iec_d2, jsc_d2, jec_d2)
+  call mpp_get_data_domain(Domain%mpp_domain_d2, isd_d2, ied_d2, jsd_d2, jed_d2)
+  call mpp_get_global_domain (Domain%mpp_domain_d2, isg_d2, ieg_d2, jsg_d2, jeg_d2)
+  ! This code institutes the MOM convention that local array indices start at 1.
+  isc_d2 = isc_d2-isd_d2+1 ; iec_d2 = iec_d2-isd_d2+1
+  jsc_d2 = jsc_d2-jsd_d2+1 ; jec_d2 = jec_d2-jsd_d2+1
+  ied_d2 = ied_d2-isd_d2+1 ; jed_d2 = jed_d2-jsd_d2+1
+  isd_d2 = 1 ; jsd_d2 = 1
+end subroutine get_domain_extent_dsamp2
+
+!> Return the (potentially symmetric) computational domain i-bounds for an array
+!! passed without index specifications (i.e. indices start at 1) based on an array size.
+subroutine get_simple_array_i_ind(domain, size, is, ie, symmetric)
+  type(MOM_domain_type), intent(in)  :: domain !< MOM domain from which to extract information
+  integer,               intent(in)  :: size   !< The i-array size
+  integer,               intent(out) :: is     !< The computational domain starting i-index.
+  integer,               intent(out) :: ie     !< The computational domain ending i-index.
+  logical,     optional, intent(in)  :: symmetric !< If present, indicates whether symmetric sizes
+                                               !! can be considered.
+  ! Local variables
+  logical :: sym
+  character(len=120) :: mesg, mesg2
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed
+
+  call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
+  call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
+
+  isc = isc-isd+1 ; iec = iec-isd+1 ; ied = ied-isd+1 ; isd = 1
+  sym = Domain%symmetric ; if (present(symmetric)) sym = symmetric
+
+  if (size == ied) then ; is = isc ; ie = iec
+  elseif (size == 1+iec-isc) then ; is = 1 ; ie = size
+  elseif (sym .and. (size == 1+ied)) then ; is = isc ; ie = iec+1
+  elseif (sym .and. (size == 2+iec-isc)) then ; is = 1 ; ie = size+1
+  else
+    write(mesg,'("Unrecognized size ", i6, "in call to get_simple_array_i_ind.  \")') size
+    if (sym) then
+      write(mesg2,'("Valid sizes are : ", 2i7)') ied, 1+iec-isc
+    else
+      write(mesg2,'("Valid sizes are : ", 4i7)') ied, 1+iec-isc, 1+ied, 2+iec-isc
+    endif
+    call MOM_error(FATAL, trim(mesg)//trim(mesg2))
+  endif
+
+end subroutine get_simple_array_i_ind
+
+
+!> Return the (potentially symmetric) computational domain j-bounds for an array
+!! passed without index specifications (i.e. indices start at 1) based on an array size.
+subroutine get_simple_array_j_ind(domain, size, js, je, symmetric)
+  type(MOM_domain_type), intent(in)  :: domain !< MOM domain from which to extract information
+  integer,               intent(in)  :: size   !< The j-array size
+  integer,               intent(out) :: js     !< The computational domain starting j-index.
+  integer,               intent(out) :: je     !< The computational domain ending j-index.
+  logical,     optional, intent(in)  :: symmetric !< If present, indicates whether symmetric sizes
+                                               !! can be considered.
+  ! Local variables
+  logical :: sym
+  character(len=120) :: mesg, mesg2
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed
+
+  call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
+  call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
+
+  jsc = jsc-jsd+1 ; jec = jec-jsd+1 ; jed = jed-jsd+1 ; jsd = 1
+  sym = Domain%symmetric ; if (present(symmetric)) sym = symmetric
+
+  if (size == jed) then ; js = jsc ; je = jec
+  elseif (size == 1+jec-jsc) then ; js = 1 ; je = size
+  elseif (sym .and. (size == 1+jed)) then ; js = jsc ; je = jec+1
+  elseif (sym .and. (size == 2+jec-jsc)) then ; js = 1 ; je = size+1
+  else
+    write(mesg,'("Unrecognized size ", i6, "in call to get_simple_array_j_ind.  \")') size
+    if (sym) then
+      write(mesg2,'("Valid sizes are : ", 2i7)') jed, 1+jec-jsc
+    else
+      write(mesg2,'("Valid sizes are : ", 4i7)') jed, 1+jec-jsc, 1+jed, 2+jec-jsc
+    endif
+    call MOM_error(FATAL, trim(mesg)//trim(mesg2))
+  endif
+
+end subroutine get_simple_array_j_ind
 
 !> Returns the global shape of h-point arrays
 subroutine get_global_shape(domain, niglobal, njglobal)

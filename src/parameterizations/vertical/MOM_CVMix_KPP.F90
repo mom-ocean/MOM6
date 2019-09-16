@@ -12,6 +12,7 @@ use MOM_EOS,            only : EOS_type, calculate_density
 use MOM_file_parser,    only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type, isPointInCell
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
 use MOM_domains,        only : pass_var
@@ -79,10 +80,10 @@ type, public :: KPP_CS ; private
   logical :: computeMoninObukhov       !< If True, compute Monin-Obukhov limit for OBLdepth
   logical :: passiveMode               !< If True, makes KPP passive meaning it does NOT alter the diffusivity
   real    :: deepOBLoffset             !< If non-zero, is a distance from the bottom that the OBL can not
-                                       !! penetrate through (m)
-  real    :: minOBLdepth               !< If non-zero, is a minimum depth for the OBL (m)
-  real    :: surf_layer_ext            !< Fraction of OBL depth considered in the surface layer (nondim)
-  real    :: minVtsqr                  !< Min for the squared unresolved velocity used in Rib CVMix calculation (m2/s2)
+                                       !! penetrate through [m]
+  real    :: minOBLdepth               !< If non-zero, is a minimum depth for the OBL [m]
+  real    :: surf_layer_ext            !< Fraction of OBL depth considered in the surface layer [nondim]
+  real    :: minVtsqr                  !< Min for the squared unresolved velocity used in Rib CVMix calculation [m2 s-2]
   logical :: fixedOBLdepth             !< If True, will fix the OBL depth at fixedOBLdepth_value
   real    :: fixedOBLdepth_value       !< value for the fixed OBL depth when fixedOBLdepth==True.
   logical :: debug                     !< If True, calculate checksums and write debugging information
@@ -100,7 +101,7 @@ type, public :: KPP_CS ; private
                                        !! in the vicinity of vanished layers.
   ! smg: obsolete below
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
-  real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
+  real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) [m]
   ! smg: obsolete above
   integer :: SW_METHOD                 !< Sets method for using shortwave radiation in surface buoyancy flux
   logical :: LT_K_Enhancement          !< Flags if enhancing mixing coefficients due to LT
@@ -135,30 +136,33 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_dTdt = -1
   integer :: id_NLT_temp_budget = -1
   integer :: id_NLT_saln_budget = -1
-  integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
+  integer :: id_EnhK     = -1, id_EnhVt2   = -1
+  integer :: id_EnhW     = -1
+  integer :: id_La_SL    = -1
   integer :: id_OBLdepth_original = -1
   !!@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
-  real, allocatable, dimension(:,:)   :: OBLdepth_original  !< Depth (positive) of OBL (m) without smoothing
+  real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL [m]
+  real, allocatable, dimension(:,:)   :: OBLdepth_original  !< Depth (positive) of OBL [m] without smoothing
   real, allocatable, dimension(:,:)   :: kOBL      !< Level (+fraction) of OBL extent
-  real, allocatable, dimension(:,:)   :: OBLdepthprev !< previous Depth (positive) of OBL (m)
-  real, allocatable, dimension(:,:,:) :: dRho      !< Bulk difference in density (kg/m3)
-  real, allocatable, dimension(:,:,:) :: Uz2       !< Square of bulk difference in resolved velocity (m2/s2)
+  real, allocatable, dimension(:,:)   :: OBLdepthprev !< previous Depth (positive) of OBL [m]
+  real, allocatable, dimension(:,:)   :: La_SL     !< Langmuir number used in KPP
+  real, allocatable, dimension(:,:,:) :: dRho      !< Bulk difference in density [kg m-3]
+  real, allocatable, dimension(:,:,:) :: Uz2       !< Square of bulk difference in resolved velocity [m2 s-2]
   real, allocatable, dimension(:,:,:) :: BulkRi    !< Bulk Richardson number for each layer (dimensionless)
   real, allocatable, dimension(:,:,:) :: sigma     !< Sigma coordinate (dimensionless)
-  real, allocatable, dimension(:,:,:) :: Ws        !< Turbulent velocity scale for scalars (m/s)
-  real, allocatable, dimension(:,:,:) :: N         !< Brunt-Vaisala frequency (1/s)
-  real, allocatable, dimension(:,:,:) :: N2        !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: Vt2       !< Unresolved squared turbulence velocity for bulk Ri (m2/s2)
-  real, allocatable, dimension(:,:,:) :: Kt_KPP    !< Temp diffusivity from KPP (m2/s)
-  real, allocatable, dimension(:,:,:) :: Ks_KPP    !< Scalar diffusivity from KPP (m2/s)
-  real, allocatable, dimension(:,:,:) :: Kv_KPP    !< Viscosity due to KPP (m2/s)
-  real, allocatable, dimension(:,:)   :: Tsurf     !< Temperature of surface layer (C)
-  real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
-  real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
-  real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
+  real, allocatable, dimension(:,:,:) :: Ws        !< Turbulent velocity scale for scalars [m s-1]
+  real, allocatable, dimension(:,:,:) :: N         !< Brunt-Vaisala frequency [s-1]
+  real, allocatable, dimension(:,:,:) :: N2        !< Squared Brunt-Vaisala frequency [s-2]
+  real, allocatable, dimension(:,:,:) :: Vt2       !< Unresolved squared turbulence velocity for bulk Ri [m2 s-2]
+  real, allocatable, dimension(:,:,:) :: Kt_KPP    !< Temp diffusivity from KPP [m2 s-1]
+  real, allocatable, dimension(:,:,:) :: Ks_KPP    !< Scalar diffusivity from KPP [m2 s-1]
+  real, allocatable, dimension(:,:,:) :: Kv_KPP    !< Viscosity due to KPP [m2 s-1]
+  real, allocatable, dimension(:,:)   :: Tsurf     !< Temperature of surface layer [degC]
+  real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer [ppt]
+  real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer [m s-1]
+  real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer [m s-1]
   real, allocatable, dimension(:,:,:) :: EnhK      !< Enhancement for mixing coefficient
   real, allocatable, dimension(:,:,:) :: EnhVt2    !< Enhancement for Vt2
 
@@ -170,11 +174,13 @@ contains
 
 !> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
-logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
+logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
 
   ! Arguments
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
+  type(verticalGrid_type), intent(in)    :: GV        !< Vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US        !< A dimensional unit scaling type
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
   type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
@@ -196,7 +202,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVMix:KPP\n' // &
             'See http://cvmix.github.io/')
   call get_param(paramFile, mdl, "USE_KPP", KPP_init, &
-                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "// &
                  "to calculate diffusivities and non-local transport in the OBL.",     &
                  default=.false.)
   ! Forego remainder of initialization if not using this scheme
@@ -211,22 +217,22 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   if (present(passive)) passive=CS%passiveMode ! This is passed back to the caller so
                                                ! the caller knows to not use KPP output
   call get_param(paramFile, mdl, 'APPLY_NONLOCAL_TRANSPORT', CS%applyNonLocalTrans,  &
-                 'If True, applies the non-local transport to heat and scalars.\n'//  &
-                 'If False, calculates the non-local transport and tendencies but\n'//&
+                 'If True, applies the non-local transport to heat and scalars. '//  &
+                 'If False, calculates the non-local transport and tendencies but '//&
                  'purely for diagnostic purposes.',                                   &
                  default=.not. CS%passiveMode)
   call get_param(paramFile, mdl, 'N_SMOOTH', CS%n_smooth,  &
-                 'The number of times the 1-1-4-1-1 Laplacian filter is applied on\n'//  &
+                 'The number of times the 1-1-4-1-1 Laplacian filter is applied on '//  &
                  'OBL depth.',   &
                  default=0)
   if (CS%n_smooth > 0) then
     call get_param(paramFile, mdl, 'DEEPEN_ONLY_VIA_SMOOTHING', CS%deepen_only,  &
-                   'If true, apply OBLdepth smoothing at a cell only if the OBLdepth.\n'// &
+                   'If true, apply OBLdepth smoothing at a cell only if the OBLdepth '// &
                    'gets deeper via smoothing.',   &
                    default=.false.)
   endif
   call get_param(paramFile, mdl, 'RI_CRIT', CS%Ri_crit,                            &
-                 'Critical bulk Richardson number used to define depth of the\n'// &
+                 'Critical bulk Richardson number used to define depth of the '// &
                  'surface Ocean Boundary Layer (OBL).',                            &
                  units='nondim', default=0.3)
   call get_param(paramFile, mdl, 'VON_KARMAN', CS%vonKarman, &
@@ -247,7 +253,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'If True, limit OBL depth to be no deeper than Ekman depth.', &
                  default=.False.)
   call get_param(paramFile, mdl, 'COMPUTE_MONIN_OBUKHOV', CS%computeMoninObukhov, &
-                 'If True, limit the OBL depth to be no deeper than\n'//          &
+                 'If True, limit the OBL depth to be no deeper than '//          &
                  'Monin-Obukhov depth.',                                          &
                  default=.False.)
   call get_param(paramFile, mdl, 'CS', CS%cs,                        &
@@ -257,47 +263,47 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'Parameter for computing non-local term.', &
                  units='nondim', default=6.32739901508)
   call get_param(paramFile, mdl, 'DEEP_OBL_OFFSET', CS%deepOBLoffset,                             &
-                 'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
+                 'If non-zero, the distance above the bottom to which the OBL is clipped '//     &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
                  units='m',default=0.)
   call get_param(paramFile, mdl, 'FIXED_OBLDEPTH', CS%fixedOBLdepth,       &
-                 'If True, fix the OBL depth to FIXED_OBLDEPTH_VALUE\n'//  &
-                 'rather than using the OBL depth from CVMix.\n'//         &
+                 'If True, fix the OBL depth to FIXED_OBLDEPTH_VALUE '//  &
+                 'rather than using the OBL depth from CVMix. '//         &
                  'This option is just for testing purposes.',              &
                  default=.False.)
   call get_param(paramFile, mdl, 'FIXED_OBLDEPTH_VALUE', CS%fixedOBLdepth_value,  &
-                 'Value for the fixed OBL depth when fixedOBLdepth==True. \n'//   &
-                 'This parameter is for just for testing purposes. \n'//          &
+                 'Value for the fixed OBL depth when fixedOBLdepth==True. '//   &
+                 'This parameter is for just for testing purposes. '//          &
                  'It will over-ride the OBLdepth computed from CVMix.',           &
                  units='m',default=30.0)
   call get_param(paramFile, mdl, 'SURF_LAYER_EXTENT', CS%surf_layer_ext,   &
                  'Fraction of OBL depth considered in the surface layer.', &
                  units='nondim',default=0.10)
   call get_param(paramFile, mdl, 'MINIMUM_OBL_DEPTH', CS%minOBLdepth,                            &
-                 'If non-zero, a minimum depth to use for KPP OBL depth. Independent of\n'//     &
+                 'If non-zero, a minimum depth to use for KPP OBL depth. Independent of '//     &
                  'this parameter, the OBL depth is always at least as deep as the first layer.', &
                  units='m',default=0.)
   call get_param(paramFile, mdl, 'MINIMUM_VT2', CS%minVtsqr,                                   &
-                 'Min of the unresolved velocity Vt2 used in Rib CVMix calculation.     \n'//  &
+                 'Min of the unresolved velocity Vt2 used in Rib CVMix calculation.\n'//  &
                  'Scaling: MINIMUM_VT2 = const1*d*N*ws, with d=1m, N=1e-5/s, ws=1e-6 m/s.',    &
                  units='m2/s2',default=1e-10)
 
 ! smg: for removal below
   call get_param(paramFile, mdl, 'CORRECT_SURFACE_LAYER_AVERAGE', CS%correctSurfLayerAvg,   &
-                 'If true, applies a correction step to the averaging of surface layer\n'// &
+                 'If true, applies a correction step to the averaging of surface layer '// &
                  'properties. This option is obsolete.', default=.False.)
   if (CS%correctSurfLayerAvg) &
     call MOM_error(FATAL,'Correct surface layer average disabled in code.  To recover \n'// &
                        ' feature will require code intervention.')
   call get_param(paramFile, mdl, 'FIRST_GUESS_SURFACE_LAYER_DEPTH', CS%surfLayerDepth,              &
-                 'The first guess at the depth of the surface layer used for averaging\n'//         &
-                 'the surface layer properties. If =0, the top model level properties\n'//          &
-                 'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a\n'// &
+                 'The first guess at the depth of the surface layer used for averaging '//         &
+                 'the surface layer properties. If =0, the top model level properties '//          &
+                 'will be used for the surface layer. If CORRECT_SURFACE_LAYER_AVERAGE=True, a '// &
                  'subsequent correction is applied. This parameter is obsolete', units='m', default=0.)
 ! smg: for removal above
 
   call get_param(paramFile, mdl, 'NLT_SHAPE', string, &
-                 'MOM6 method to set nonlocal transport profile.\n'//                          &
+                 'MOM6 method to set nonlocal transport profile. '//                          &
                  'Over-rides the result from CVMix.  Allowed values are: \n'//                 &
                  '\t CVMix     - Uses the profiles from CVMix specified by MATCH_TECHNIQUE\n'//&
                  '\t LINEAR    - A linear profile, 1-sigma\n'//                                &
@@ -315,7 +321,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                    "Unrecognized NLT_SHAPE option"//trim(string))
   end select
   call get_param(paramFile, mdl, 'MATCH_TECHNIQUE', CS%MatchTechnique,                                    &
-                 'CVMix method to set profile function for diffusivity and NLT,\n'//                      &
+                 'CVMix method to set profile function for diffusivity and NLT, '//                      &
                  'as well as matching across OBL base. Allowed values are: \n'//                          &
                  '\t SimpleShapes      = sigma*(1-sigma)^2 for both diffusivity and NLT\n'//              &
                  '\t MatchGradient     = sigma*(1-sigma)^2 for NLT; diffusivity profile from matching\n'//&
@@ -323,19 +329,19 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
   if (CS%MatchTechnique == 'ParabolicNonLocal') then
-     ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
-     !  May be used during CVMix initialization.
-     Cs_is_one=.true.
+    ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
+    !  May be used during CVMix initialization.
+    Cs_is_one=.true.
   endif
   if (CS%MatchTechnique == 'ParabolicNonLocal' .or. CS%MatchTechnique == 'SimpleShapes') then
-     ! if gradient won't be matched, lnoDGat1=.true.
-     lnoDGat1=.true.
+    ! if gradient won't be matched, lnoDGat1=.true.
+    lnoDGat1=.true.
   endif
 
   ! safety check to avoid negative diff/visc
   if (CS%MatchTechnique == 'MatchBoth' .and. (CS%interpType2 == 'cubic' .or. &
-     CS%interpType2 == 'quadratic')) then
-     call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
+      CS%interpType2 == 'quadratic')) then
+    call MOM_error(FATAL,"If MATCH_TECHNIQUE=MatchBoth, INTERP_TYPE2 must be set to \n"//&
                "linear or LMD94 (recommended) to avoid negative viscosity and diffusivity.\n"//&
                "Please select one of these valid options." )
   endif
@@ -344,15 +350,15 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
   call get_param(paramFile, mdl, 'KPP_IS_ADDITIVE', CS%KPPisAdditive,                &
-                 'If true, adds KPP diffusivity to diffusivity from other schemes.'//&
+                 'If true, adds KPP diffusivity to diffusivity from other schemes.\n'//&
                  'If false, KPP is the only diffusivity wherever KPP is non-zero.',  &
                  default=.True.)
   call get_param(paramFile, mdl, 'KPP_SHORTWAVE_METHOD',string,                      &
                  'Determines contribution of shortwave radiation to KPP surface '// &
                  'buoyancy flux.  Options include:\n'//                             &
                  '  ALL_SW: use total shortwave radiation\n'//                      &
-                 '  MXL_SW:  use shortwave radiation absorbed by mixing layer\n'//  &
-                 '  LV1_SW:  use shortwave radiation absorbed by top model layer',  &
+                 '  MXL_SW: use shortwave radiation absorbed by mixing layer\n'//  &
+                 '  LV1_SW: use shortwave radiation absorbed by top model layer',  &
                  default='MXL_SW')
   select case ( trim(string) )
     case ("ALL_SW") ; CS%SW_METHOD = SW_METHOD_ALL_SW
@@ -362,7 +368,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                    "Unrecognized KPP_SHORTWAVE_METHOD option"//trim(string))
   end select
   call get_param(paramFile, mdl, 'CVMix_ZERO_H_WORK_AROUND', CS%min_thickness,                           &
-                 'A minimum thickness used to avoid division by small numbers in the vicinity\n'//       &
+                 'A minimum thickness used to avoid division by small numbers in the vicinity '//       &
                  'of vanished layers. This is independent of MIN_THICKNESS used in other parts of MOM.', &
                  units='m', default=0.)
 
@@ -376,7 +382,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
        'mixing coefficient.', units="", Default=.false.)
   if (CS%LT_K_Enhancement) then
     call get_param(paramFile, mdl, 'KPP_LT_K_SHAPE', string,                 &
-                 'Vertical dependence of LT enhancement of mixing. \n'//     &
+                 'Vertical dependence of LT enhancement of mixing. '//     &
                  'Valid options are: \n'//                                   &
                  '\t CONSTANT = Constant value for full OBL\n'//             &
                  '\t SCALED   = Varies based on normalized shape function.', &
@@ -388,7 +394,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                     "Unrecognized KPP_LT_K_SHAPE option: "//trim(string))
     end select
     call get_param(paramFile, mdl, "KPP_LT_K_METHOD", string ,                   &
-                   'Method to enhance mixing coefficient in KPP. \n'//           &
+                   'Method to enhance mixing coefficient in KPP. '//           &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_K_ENH_FAC) \n'//           &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
@@ -413,7 +419,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
        'in Bulk Richardson Number.', units="", Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
     call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
-                   'Method to enhance Vt2 in KPP. \n'//                          &
+                   'Method to enhance Vt2 in KPP. '//                          &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_VT2_ENH_FAC) \n'//         &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
@@ -483,7 +489,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTL, Time, &
       'Unresolved shear turbulence used by [CVMix] KPP', 'm2/s2')
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
-      'Friction velocity, u*, as used by [CVMix] KPP', 'm/s')
+      'Friction velocity, u*, as used by [CVMix] KPP', 'm/s', conversion=US%Z_to_m)
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesTi, Time, &
       'Surface (and penetrating) buoyancy flux, as used by [CVMix] KPP', 'm2/s3')
   CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
@@ -493,7 +499,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
-      'Diffusivity passed to KPP', 'm2/s')
+      'Diffusivity passed to KPP', 'm2/s', conversion=US%Z_to_m**2)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
@@ -522,6 +528,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
       'Langmuir number enhancement to K as used by [CVMix] KPP','nondim')
   CS%id_EnhVt2 = register_diag_field('ocean_model', 'EnhVt2', diag%axesTL, Time, &
       'Langmuir number enhancement to Vt2 as used by [CVMix] KPP','nondim')
+  CS%id_La_SL = register_diag_field('ocean_model', 'KPP_La_SL', diag%axesT1, Time, &
+      'Surface-layer Langmuir number computed in [CVMix] KPP','nondim')
 
   allocate( CS%N( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%N(:,:,:) = 0.
@@ -529,11 +537,13 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%OBLdepth(:,:) = 0.
   allocate( CS%kOBL( SZI_(G), SZJ_(G) ) )
   CS%kOBL(:,:) = 0.
+  allocate( CS%La_SL( SZI_(G), SZJ_(G) ) )
+  CS%La_SL(:,:) = 0.
   allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(G) ) )
   CS%Vt2(:,:,:) = 0.
   if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) );CS%OBLdepthprev(:,:)=0.0
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) ) ; CS%OBLdepthprev(:,:) = 0.0
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
   if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -569,39 +579,43 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
 end function KPP_init
 
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
-subroutine KPP_calculate(CS, G, GV, h, uStar, &
+subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                          buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
-                         nonLocalTransScalar, Waves)
+                         nonLocalTransScalar, waves)
 
   ! Arguments
   type(KPP_CS),                               pointer       :: CS    !< Control structure
   type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
+  type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
-                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
-                                                                    !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP (m2/s)
-                                                                    !< (out) Vertical viscosity including KPP (m2/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z s-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt   !< (in)  Vertical diffusivity of heat w/o KPP
+                                                                    !! (out) Vertical diffusivity including KPP
+                                                                    !!       [Z2 s-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks   !< (in)  Vertical diffusivity of salt w/o KPP
+                                                                    !! (out) Vertical diffusivity including KPP
+                                                                    !!       [Z2 s-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv   !< (in)  Vertical viscosity w/o KPP
+                                                                    !! (out) Vertical viscosity including KPP
+                                                                    !!       [Z2 s-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport [m s-1]
 
 ! Local variables
   integer :: i, j, k                             ! Loop indices
-  real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1, 2) :: Kdiffusivity    ! Vertical diffusivity at interfaces (m2/s)
-  real, dimension( G%ke+1 )   :: Kviscosity      ! Vertical viscosity at interfaces (m2/s)
-  real, dimension( G%ke+1, 2) :: nonLocalTrans   ! Non-local transport for heat/salt at interfaces (non-dimensional)
+  real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface [m] (negative in ocean)
+  real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface [m] (negative in ocean)
+  real, dimension( G%ke+1, 2) :: Kdiffusivity    ! Vertical diffusivity at interfaces [m2 s-1]
+  real, dimension( G%ke+1 )   :: Kviscosity      ! Vertical viscosity at interfaces [m2 s-1]
+  real, dimension( G%ke+1, 2) :: nonLocalTrans   ! Non-local transport for heat/salt at interfaces [nondim]
 
   real :: surfFricVel, surfBuoyFlux
   real :: sigma, sigmaRatio
-  real :: dh    ! The local thickness used for calculating interface positions (m)
-  real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
+  real :: dh    ! The local thickness used for calculating interface positions [m]
+  real :: hcorr ! A cumulative correction arising from inflation of vanished layers [m]
 
   ! For Langmuir Calculations
   real :: LangEnhK     ! Langmuir enhancement for mixing coefficient
@@ -610,10 +624,10 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
-    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0, scale=US%Z_to_m)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=US%Z_to_m**2)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=US%Z_to_m**2)
   endif
 #endif
 
@@ -621,9 +635,7 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
-  !$OMP parallel do default(private) firstprivate(nonLocalTrans) &
-  !$OMP                shared(G,GV,CS,uStar,h,Waves,&
-  !$OMP                       buoyFlux,nonLocalTransHeat,nonLocalTransScalar,Kt,Ks,Kv)
+  !$OMP parallel do default(shared) firstprivate(nonLocalTrans)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -632,7 +644,7 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       if (G%mask2dT(i,j)==0.) cycle
 
       ! things independent of position within the column
-      surfFricVel = uStar(i,j)
+      surfFricVel = US%Z_to_m * uStar(i,j)
 
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       hcorr = 0.
@@ -668,28 +680,28 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
       ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.
       if (.not. (CS%MatchTechnique == 'MatchBoth')) then
-         Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
-         Kviscosity(:)     = 0. ! Viscosity (m2/s)
+         Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt [m2 s-1]
+         Kviscosity(:)     = 0. ! Viscosity [m2 s-1]
       else
-         Kdiffusivity(:,1) = Kt(i,j,:)
-         Kdiffusivity(:,2) = Ks(i,j,:)
-         Kviscosity(:)=Kv(i,j,:)
+         Kdiffusivity(:,1) = US%Z_to_m**2 * Kt(i,j,:)
+         Kdiffusivity(:,2) = US%Z_to_m**2 * Ks(i,j,:)
+         Kviscosity(:) = US%Z_to_m**2 * Kv(i,j,:)
       endif
 
-      call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity (m2/s)
-                            Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
-                            Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
-                            iFaceHeight,       & ! (in) Height of interfaces (m)
-                            cellHeight,        & ! (in) Height of level centers (m)
-                            Kviscosity(:),        & ! (in) Original viscosity (m2/s)
-                            Kdiffusivity(:,1), & ! (in) Original heat diffusivity (m2/s)
-                            Kdiffusivity(:,2), & ! (in) Original salt diffusivity (m2/s)
-                            CS%OBLdepth(i,j),  & ! (in) OBL depth (m)
+      call CVMix_coeffs_kpp(Kviscosity(:),        & ! (inout) Total viscosity [m2 s-1]
+                            Kdiffusivity(:,1), & ! (inout) Total heat diffusivity [m2 s-1]
+                            Kdiffusivity(:,2), & ! (inout) Total salt diffusivity [m2 s-1]
+                            iFaceHeight,       & ! (in) Height of interfaces [m]
+                            cellHeight,        & ! (in) Height of level centers [m]
+                            Kviscosity(:),        & ! (in) Original viscosity [m2 s-1]
+                            Kdiffusivity(:,1), & ! (in) Original heat diffusivity [m2 s-1]
+                            Kdiffusivity(:,2), & ! (in) Original salt diffusivity [m2 s-1]
+                            CS%OBLdepth(i,j),  & ! (in) OBL depth [m]
                             CS%kOBL(i,j),      & ! (in) level (+fraction) of OBL extent
-                            nonLocalTrans(:,1),& ! (out) Non-local heat transport (non-dimensional)
-                            nonLocalTrans(:,2),& ! (out) Non-local salt transport (non-dimensional)
-                            surfFricVel,       & ! (in) Turbulent friction velocity at surface (m/s)
-                            surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
+                            nonLocalTrans(:,1),& ! (out) Non-local heat transport [nondim]
+                            nonLocalTrans(:,2),& ! (out) Non-local salt transport [nondim]
+                            surfFricVel,       & ! (in) Turbulent friction velocity at surface [m s-1]
+                            surfBuoyFlux,      & ! (in) Buoyancy flux at surface [m2 s-3]
                             G%ke,              & ! (in) Number of levels to compute coeffs for
                             G%ke,              & ! (in) Number of levels in array shape
                             CVMix_kpp_params_user=CS%KPP_params )
@@ -708,10 +720,12 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
         if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
            LangEnhK = CS%KPP_K_ENH_FAC
         elseif (CS%LT_K_METHOD==LT_K_MODE_VR12) then
-           LangEnhK = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
-                (5.4*WAVES%LangNum(i,j))**(-4)))
+           ! Added minimum value for La_SL, so removed maximum value for LangEnhK.
+           LangEnhK = sqrt(1.+(1.5*CS%La_SL(i,j))**(-2) + &
+                (5.4*CS%La_SL(i,j))**(-4))
         elseif (CS%LT_K_METHOD==LT_K_MODE_RW16) then
-           LangEnhK = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+          !This maximum value is proposed in Reichl et al., 2016 JPO formula
+          LangEnhK = min(2.25, 1. + 1./CS%La_SL(i,j))
         else
            !This shouldn't be reached.
            !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
@@ -793,9 +807,9 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 !BGR Now computing VT2 above so can modify for LT
 !    therefore, don't repeat this operation here
 !        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
-!                    cellHeight(1:G%ke),                 & ! Depth of cell center (m)
-!                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
-!                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface (1/s)
+!                    cellHeight(1:G%ke),                 & ! Depth of cell center [m]
+!                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
+!                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
 !                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
       endif
 
@@ -814,17 +828,17 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
       if (.not. CS%passiveMode) then
         if (CS%KPPisAdditive) then
           do k=1, G%ke+1
-            Kt(i,j,k) = Kt(i,j,k) + Kdiffusivity(k,1)
-            Ks(i,j,k) = Ks(i,j,k) + Kdiffusivity(k,2)
-            Kv(i,j,k) = Kv(i,j,k) + Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            Kt(i,j,k) = Kt(i,j,k) + US%m_to_Z**2 * Kdiffusivity(k,1)
+            Ks(i,j,k) = Ks(i,j,k) + US%m_to_Z**2 * Kdiffusivity(k,2)
+            Kv(i,j,k) = Kv(i,j,k) + US%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2 * Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
-            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
-            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
-            if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k)=Kv(i,j,k)
+            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = US%m_to_Z**2 * Kdiffusivity(k,1)
+            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = US%m_to_Z**2 * Kdiffusivity(k,2)
+            if (Kviscosity(k) /= 0.) Kv(i,j,k) = US%m_to_Z**2 * Kviscosity(k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = US%Z_to_m**2 * Kv(i,j,k)
           enddo
         endif
       endif
@@ -837,8 +851,8 @@ subroutine KPP_calculate(CS, G, GV, h, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt",G%HI,haloshift=0)
-    call hchksum(Ks, "KPP out: Ks",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=US%Z_to_m**2)
+    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=US%Z_to_m**2)
   endif
 #endif
 
@@ -861,30 +875,31 @@ end subroutine KPP_calculate
 
 
 !> Compute OBL depth
-subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Waves)
+subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, EOS, uStar, buoyFlux, Waves)
 
   ! Arguments
   type(KPP_CS),                               pointer       :: CS    !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G     !< Ocean grid
+  type(ocean_grid_type),                      intent(inout) :: G     !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
-  type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses (units of H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp (deg C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity (ppt)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component (m/s)
+  type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Temp  !< potential/cons temp [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: Salt  !< Salinity [ppt]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)    :: u     !< Velocity i-component [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: v     !< Velocity j-component [m s-1]
   type(EOS_type),                             pointer       :: EOS   !< Equation of state
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z s-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [m2 s-3]
+  type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
 
   ! Local variables
   integer :: i, j, k, km1                        ! Loop indices
-  real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
-  real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
-  real, dimension( G%ke )     :: Ws_1d           ! Profile of vertical velocity scale for scalars (m/s)
+  real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface [m] (negative in ocean)
+  real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface [m] (negative in ocean)
+  real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces [s-2]
+  real, dimension( G%ke )     :: Ws_1d           ! Profile of vertical velocity scale for scalars [m s-1]
   real, dimension( G%ke )     :: deltaRho        ! delta Rho in numerator of Bulk Ri number
-  real, dimension( G%ke )     :: deltaU2         ! square of delta U (shear) in denominator of Bulk Ri (m2/s2)
+  real, dimension( G%ke )     :: deltaU2         ! square of delta U (shear) in denominator of Bulk Ri [m2 s-2]
   real, dimension( G%ke )     :: surfBuoyFlux2
   real, dimension( G%ke )     :: BulkRi_1d       ! Bulk Richardson number for each layer
 
@@ -897,16 +912,16 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   real :: surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho, pRef, rho1, rhoK, Uk, Vk, sigma, sigmaRatio
 
-  real :: zBottomMinusOffset   ! Height of bottom plus a little bit (m)
+  real :: zBottomMinusOffset   ! Height of bottom plus a little bit [m]
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
-  real :: hTot                 ! Running sum of thickness used in the surface layer average (m)
-  real :: delH                 ! Thickness of a layer (m)
+  real :: hTot                 ! Running sum of thickness used in the surface layer average [m]
+  real :: delH                 ! Thickness of a layer [m]
   real :: surfHtemp, surfTemp  ! Integral and average of temp over the surface layer
   real :: surfHsalt, surfSalt  ! Integral and average of saln over the surface layer
   real :: surfHu, surfU        ! Integral and average of u over the surface layer
   real :: surfHv, surfV        ! Integral and average of v over the surface layer
-  real :: dh    ! The local thickness used for calculating interface positions (m)
-  real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
+  real :: dh    ! The local thickness used for calculating interface positions [m]
+  real :: hcorr ! A cumulative correction arising from inflation of vanished layers [m]
   integer :: kk, ksfc, ktmp
 
   ! For Langmuir Calculations
@@ -916,7 +931,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   real :: MLD_GUESS, LA
   real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
   real :: VarUp, VarDn, M, VarLo, VarAvg
-  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
+  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct, enhvt2
   integer :: B
   real :: WST
 
@@ -931,7 +946,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 #endif
 
   ! some constants
-  GoRho = GV%g_Earth / GV%Rho0
+  GoRho = (GV%g_Earth*US%m_to_Z) / GV%Rho0
 
   ! loop over horizontal points on processor
   !$OMP parallel do default(shared)
@@ -947,9 +962,9 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
       enddo
 
       ! things independent of position within the column
-      Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
-                       +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
-      surfFricVel = uStar(i,j)
+      Coriolis = 0.25*US%s_to_T*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) + &
+                                  (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
+      surfFricVel = US%Z_to_m * uStar(i,j)
 
       ! Bullk Richardson number computed for each cell in a column,
       ! assuming OBLdepth = grid cell depth. After Rib(k) is
@@ -1057,15 +1072,10 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
       enddo ! k-loop finishes
 
       if (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) then
-        if (.not.(present(WAVES).and.associated(WAVES))) then
-          call MOM_error(FATAL,"Trying to use input WAVES information in KPP\n"//&
-               "without activating USEWAVES")
-        endif
-        !For now get Langmuir number based on prev. MLD (otherwise must compute 3d LA)
-        MLD_GUESS = max( 1., abs(CS%OBLdepthprev(i,j) ) )
-        call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
+        MLD_GUESS = max( 1.*US%m_to_Z, abs(US%m_to_Z*CS%OBLdepthprev(i,j) ) )
+        call get_Langmuir_Number( LA, G, GV, US, MLD_guess, surfFricVel, i, j, &
              H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
-        WAVES%LangNum(i,j)=LA
+        CS%La_SL(i,j)=LA
       endif
 
 
@@ -1092,17 +1102,17 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
       ! sigma=CS%surf_layer_ext for this calculation.
       call CVMix_kpp_compute_turbulent_scales( &
         CS%surf_layer_ext, & ! (in)  Normalized surface layer depth; sigma = CS%surf_layer_ext
-        -cellHeight,       & ! (in)  Assume here that OBL depth (m) = -cellHeight(k)
-        surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface (m2/s3)
-        surfFricVel,       & ! (in)  Turbulent friction velocity at surface (m/s)
-        w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile (m/s)
+        -cellHeight,       & ! (in)  Assume here that OBL depth [m] = -cellHeight(k)
+        surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface [m2 s-3]
+        surfFricVel,       & ! (in)  Turbulent friction velocity at surface [m s-1]
+        w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile [m s-1]
         CVMix_kpp_params_user=CS%KPP_params )
 
       !Compute CVMix VT2
       CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
-                      zt_cntr=cellHeight(1:G%ke),         & ! Depth of cell center (m)
-                      ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
-                      N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface (1/s)
+                      zt_cntr=cellHeight(1:G%ke),         & ! Depth of cell center [m]
+                      ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
+                      N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
                     CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
       !Modify CVMix VT2
@@ -1112,20 +1122,24 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
             LangEnhVT2(k) = CS%KPP_VT2_ENH_FAC
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_VR12) then
+          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
+          enhvt2 = sqrt(1.+(1.5*CS%La_SL(i,j))**(-2) + &
+                   (5.4*CS%La_SL(i,j))**(-4))
           do k=1,G%ke
-             LangEnhVT2(k) = min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
-                  (5.4*WAVES%LangNum(i,j))**(-4)))
+             LangEnhVT2(k) = enhvt2
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_RW16) then
+          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
+          enhvt2 = 1. + 2.3*CS%La_SL(i,j)**(-0.5)
           do k=1,G%ke
-            LangEnhVT2(k) = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+            LangEnhVT2(k) = enhvt2
           enddo
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
           CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
           do k=1,G%ke
             WST = (max(0.,-buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
             LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
-                 (1.+0.49*WAVES%LangNum(i,j)**(-2.)))  / &
+                 (1.+0.49*CS%La_SL(i,j)**(-2.)))  / &
                  (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
           enddo
         else
@@ -1144,12 +1158,12 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
-                  zt_cntr = cellHeight(1:G%ke),      & ! Depth of cell center (m)
-                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) (1/s)
-                  delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference (m2/s2)
+                  zt_cntr = cellHeight(1:G%ke),      & ! Depth of cell center [m]
+                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) [s-1]
+                  delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference [m2 s-2]
                   Vt_sqr_cntr=CS%Vt2(i,j,:),         &
-                  ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
-                  N_iface=CS%N(i,j,:))               ! Buoyancy frequency (1/s)
+                  ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
+                  N_iface=CS%N(i,j,:))               ! Buoyancy frequency [s-1]
 
 
       surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
@@ -1157,13 +1171,13 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
 
       call CVMix_kpp_compute_OBL_depth( &
         BulkRi_1d,              & ! (in) Bulk Richardson number
-        iFaceHeight,            & ! (in) Height of interfaces (m)
-        CS%OBLdepth(i,j),       & ! (out) OBL depth (m)
+        iFaceHeight,            & ! (in) Height of interfaces [m]
+        CS%OBLdepth(i,j),       & ! (out) OBL depth [m]
         CS%kOBL(i,j),           & ! (out) level (+fraction) of OBL extent
-        zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-        surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-        surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-        Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
+        zt_cntr=cellHeight,     & ! (in) Height of cell centers [m]
+        surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface [m s-1]
+        surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface [m2 s-3]
+        Coriolis=Coriolis,      & ! (in) Coriolis parameter [s-1]
         CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
       ! A hack to avoid KPP reaching the bottom. It was needed during development
@@ -1223,24 +1237,24 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
        !   enddo
 
        !   BulkRi_1d = CVMix_kpp_compute_bulk_Richardson( &
-       !               cellHeight(1:G%ke),                & ! Depth of cell center (m)
-       !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
-       !               deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
-       !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
-       !               N_iface=CS%N )                       ! Buoyancy frequency (1/s)
+       !               cellHeight(1:G%ke),                & ! Depth of cell center [m]
+       !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) [s-1]
+       !               deltaU2,                           & ! Square of resolved velocity difference [m2 s-2]
+       !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
+       !               N_iface=CS%N )                       ! Buoyancy frequency [s-1]
 
        !   surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
        !                                  ! h to Monin-Obukov (default is false, ie. not used)
 
        !   call CVMix_kpp_compute_OBL_depth( &
        !     BulkRi_1d,              & ! (in) Bulk Richardson number
-       !     iFaceHeight,            & ! (in) Height of interfaces (m)
-       !     CS%OBLdepth(i,j),       & ! (out) OBL depth (m)
+       !     iFaceHeight,            & ! (in) Height of interfaces [m]
+       !     CS%OBLdepth(i,j),       & ! (out) OBL depth [m]
        !     CS%kOBL(i,j),           & ! (out) level (+fraction) of OBL extent
-       !     zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-       !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-       !     surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-       !     Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
+       !     zt_cntr=cellHeight,     & ! (in) Height of cell centers [m]
+       !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface [m s-1]
+       !     surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface [m2 s-3]
+       !     Coriolis=Coriolis,      & ! (in) Coriolis parameter [s-1]
        !     CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
        !   if (CS%deepOBLoffset>0.) then
@@ -1265,10 +1279,10 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
       if (CS%id_Ws > 0) then
           call CVMix_kpp_compute_turbulent_scales( &
             -CellHeight/CS%OBLdepth(i,j),          & ! (in)  Normalized boundary layer coordinate
-            CS%OBLdepth(i,j),                      & ! (in)  OBL depth (m)
-            surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface (m2/s3)
-            surfFricVel,                           & ! (in)  Turbulent friction velocity at surface (m/s)
-            w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
+            CS%OBLdepth(i,j),                      & ! (in)  OBL depth [m]
+            surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface [m2 s-3]
+            surfFricVel,                           & ! (in)  Turbulent friction velocity at surface [m s-1]
+            w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile [m s-1]
             CVMix_kpp_params_user=CS%KPP_params)     !       KPP parameters
           CS%Ws(i,j,:) = Ws_1d(:)
       endif
@@ -1298,6 +1312,7 @@ subroutine KPP_compute_BLD(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, buoyFlux,
   if (CS%id_BulkUz2  > 0) call post_data(CS%id_BulkUz2,  CS%Uz2,             CS%diag)
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
+  if (CS%id_La_SL    > 0) call post_data(CS%id_La_SL,    CS%La_SL,           CS%diag)
 
   ! BLD smoothing:
   if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)
@@ -1308,20 +1323,20 @@ end subroutine KPP_compute_BLD
 !> Apply a 1-1-4-1-1 Laplacian filter one time on BLD to reduce any horizontal two-grid-point noise
 subroutine KPP_smooth_BLD(CS,G,GV,h)
   ! Arguments
-  type(KPP_CS),                           pointer       :: CS             !< Control structure
-  type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
-  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h              !< Layer/level thicknesses (units of H)
+  type(KPP_CS),                           pointer       :: CS   !< Control structure
+  type(ocean_grid_type),                  intent(inout) :: G    !< Ocean grid
+  type(verticalGrid_type),                intent(in)    :: GV   !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
 
   ! local
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_original ! Original OBL depths computed by CVMix
-  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface (m)
+  real, dimension( G%ke )          :: cellHeight        ! Cell center heights referenced to surface [m]
                                                         ! (negative in the ocean)
-  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface (m)
+  real, dimension( G%ke+1 )        :: iFaceHeight       ! Interface heights referenced to surface [m]
                                                         ! (negative in the ocean)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
-  real :: dh                 ! The local thickness used for calculating interface positions (m)
-  real :: hcorr              ! A cumulative correction arising from inflation of vanished layers (m)
+  real :: dh                 ! The local thickness used for calculating interface positions [m]
+  real :: hcorr              ! A cumulative correction arising from inflation of vanished layers [m]
   real :: pref
   integer :: i, j, k, s
 
@@ -1412,7 +1427,7 @@ subroutine KPP_get_BLD(CS, BLD, G)
   type(KPP_CS),                     pointer     :: CS  !< Control structure for
                                                        !! this module
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD!< bnd. layer depth (m)
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD!< bnd. layer depth [m]
   ! Local variables
   integer :: i,j
   do j = G%jsc, G%jec ; do i = G%isc, G%iec
@@ -1424,15 +1439,16 @@ end subroutine KPP_get_BLD
 subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
                                       dt, scalar, C_p)
 
-  type(KPP_CS),                               intent(in)    :: CS        !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G         !< Ocean grid
-  type(verticalGrid_type),                    intent(in)    :: GV        !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h         !< Layer/level thickness (units of H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of scalar (H/s * scalar)
-  real,                                       intent(in)    :: dt        !< Time-step (s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar    !< temperature
-  real,                                       intent(in)    :: C_p       !< Seawater specific heat capacity (J/(kg*K))
+  type(KPP_CS),                               intent(in)    :: CS     !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h      !< Layer/level thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport [nondim]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of scalar
+                                                                      !! [conc H s-1 ~> conc m s-1 or conc kg m-2 s-1]
+  real,                                       intent(in)    :: dt     !< Time-step [s]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar !< temperature
+  real,                                       intent(in)    :: C_p    !< Seawater specific heat capacity [J kg-1 degC-1]
 
   integer :: i, j, k
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer
@@ -1486,11 +1502,12 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
   type(KPP_CS),                               intent(in)    :: CS            !< Control structure
   type(ocean_grid_type),                      intent(in)    :: G             !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV            !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h             !< Layer/level thickness (units of H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
-  real,                                       intent(in)    :: dt            !< Time-step (s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar        !< Scalar (scalar units)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h             !< Layer/level thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport [nondim]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of scalar
+                                                                        !! [conc H s-1 ~> conc m s-1 or conc kg m-2 s-1]
+  real,                                       intent(in)    :: dt            !< Time-step [s]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar        !< Scalar (scalar units [conc])
 
   integer :: i, j, k
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer

@@ -44,27 +44,27 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                           intent(in)    :: u   !< Zonal velocity, in m/s.
+                           intent(in)    :: u   !< Zonal velocity [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                           intent(in)    :: v   !< Meridional velocity, in m/s.
+                           intent(in)    :: v   !< Meridional velocity [m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(in)    :: hin !< Initial layer thickness, in m or kg/m2.
+                           intent(in)    :: hin !< Initial layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
-                           intent(inout) :: h   !< Final layer thickness, in m or kg/m2.
+                           intent(inout) :: h   !< Final layer thickness [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: uh  !< Volume flux through zonal faces =
-                                                !! u*h*dy, in m3/s.
+                                                !! u*h*dy [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(out)   :: vh  !< Volume flux through meridional faces =
-                                                !! v*h*dx, in m3/s.
-  real,                    intent(in)    :: dt  !< Time increment, in s.
+                                                !! v*h*dx [H m2 s-1 ~> m3 s-1 or kg s-1].
+  real,                    intent(in)    :: dt  !< Time increment [s].
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
-                                                !! flux through zonal faces, in m3/s.
+                                                !! flux through zonal faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt !< The vertically summed volume
-                                                !! flux through meridional faces, in m3/s.
+                                                !! flux through meridional faces [H m2 s-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type), &
                  optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -79,22 +79,22 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that
-          !! give uhbt as the depth-integrated transport, in m/s.
+          !! give uhbt as the depth-integrated transport [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(out)   :: v_cor !< The meridional velocities that
-          !! give vhbt as the depth-integrated transport, in m/s.
+          !! give vhbt as the depth-integrated transport [m s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt_aux !< A second summed zonal
-          !! volume flux in m3/s.
+          !! volume flux [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt_aux !< A second summed meridional
-          !! volume flux in m3/s.
+          !! volume flux [H m2 s-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(inout) :: u_cor_aux !< The zonal velocities
-          !! that give uhbt_aux as the depth-integrated transport, in m/s.
+          !! that give uhbt_aux as the depth-integrated transport [m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                  optional, intent(inout) :: v_cor_aux !< The meridional velocities
-          !! that give vhbt_aux as the depth-integrated transport, in m/s.
+          !! that give vhbt_aux as the depth-integrated transport [m s-1].
   type(BT_cont_type), &
                  optional, pointer       :: BT_cont !< A structure with elements
           !! that describe the effective open face areas as a function of barotropic flow.
@@ -148,7 +148,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "CONTINUITY_SCHEME", tmpstr, &
-                 "CONTINUITY_SCHEME selects the discretization for the \n"//&
+                 "CONTINUITY_SCHEME selects the discretization for the "//&
                  "continuity solver. The only valid value currently is: \n"//&
                  "\t PPM - use a positive-definite (or monotonic) \n"//&
                  "\t       piecewise parabolic reconstruction solver.", &

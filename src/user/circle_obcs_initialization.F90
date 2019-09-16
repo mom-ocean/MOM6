@@ -20,6 +20,11 @@ implicit none ; private
 
 public circle_obcs_initialize_thickness
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 contains
 
 !> This subroutine initializes layer thicknesses for the circle_obcs experiment.
@@ -27,20 +32,21 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in m, usually !
-                           ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
-                           ! positive upward, in m.                       !
+  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in depth units [Z ~> m], usually
+                           ! negative because it is positive upward.
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
+                           ! positive upward, in depth units [Z ~> m].
+  real :: IC_amp           ! The amplitude of the initial height displacement [H ~> m or kg m-2].
   real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
   logical :: just_read
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -54,13 +60,17 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Parameters read by cartesian grid initialization
   call get_param(param_file, mdl, "DISK_RADIUS", diskrad, &
-                 "The radius of the initially elevated disk in the \n"//&
+                 "The radius of the initially elevated disk in the "//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
-                 "The x-offset of the initially elevated disk in the \n"//&
+                 "The x-offset of the initially elevated disk in the "//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  default = 0.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
+                 "Initial amplitude of interface height displacements "//&
+                 "in the circle_obcs test case.", &
+                 units='m', default=5.0, scale=GV%m_to_H, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -70,14 +80,14 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
 
   ! Uniform thicknesses for base state
   do j=js,je ; do i=is,ie                        !
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    eta1D(nz+1) = -G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
+        h(i,j,k) = GV%Angstrom_H
       else
-        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
@@ -93,12 +103,11 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
     rad = rad*(2.*asin(1.)) ! Map 0-1 to 0-pi
     if (nz==1) then
       ! The model is barotropic
-      h(i,j,k) = h(i,j,k) + GV%m_to_H * 1.0*0.5*(1.+cos(rad)) ! cosine bell
+      h(i,j,k) = h(i,j,k) + IC_amp * 0.5*(1.+cos(rad)) ! cosine bell
     else
       ! The model is baroclinic
       do k = 1, nz
-        h(i,j,k) = h(i,j,k) - GV%m_to_H * 0.5*(1.+cos(rad)) & ! cosine bell
-            * 5.0 * real( 2*k-nz )
+        h(i,j,k) = h(i,j,k) - 0.5*(1.+cos(rad)) * IC_amp * real( 2*k-nz )
       enddo
     endif
   enddo ; enddo

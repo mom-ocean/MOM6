@@ -22,9 +22,9 @@ public calculate_compress_nemo, calculate_density_nemo
 public calculate_density_derivs_nemo
 public calculate_density_scalar_nemo, calculate_density_array_nemo
 
-!> Compute the in situ density of sea water (units of kg/m^3), or its anomaly with respect to
+!> Compute the in situ density of sea water ([kg m-3]), or its anomaly with respect to
 !! a reference density, from absolute salinity (g/kg), conservative temperature (in deg C),
-!! and pressure in Pa, using the expressions derived for use with NEMO
+!! and pressure [Pa], using the expressions derived for use with NEMO
 interface calculate_density_nemo
   module procedure calculate_density_scalar_nemo, calculate_density_array_nemo
 end interface calculate_density_nemo
@@ -174,15 +174,15 @@ real, parameter :: BET003 = -2.3025968587e-04
 contains
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
-!! (T in deg C), and pressure in Pa.  It uses the expressions derived for use
+!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
+!! (T [degC]), and pressure [Pa].  It uses the expressions derived for use
 !! with NEMO.
 subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
-  real,           intent(in)  :: T        !< Conservative temperature in C.
-  real,           intent(in)  :: S        !< Absolute salinity in g/kg.
-  real,           intent(in)  :: pressure !< Pressure in Pa.
-  real,           intent(out) :: rho      !< In situ density in kg m-3.
-  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
+  real,           intent(in)  :: T        !< Conservative temperature [degC].
+  real,           intent(in)  :: S        !< Absolute salinity [g kg-1].
+  real,           intent(in)  :: pressure !< pressure [Pa].
+  real,           intent(out) :: rho      !< In situ density [kg m-3].
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
   real :: al0, p0, lambda
   integer :: j
@@ -199,17 +199,17 @@ subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
 end subroutine calculate_density_scalar_nemo
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
-!! (T in deg C), and pressure in Pa.  It uses the expressions derived for use
+!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
+!! (T [degC]), and pressure [Pa].  It uses the expressions derived for use
 !! with NEMO.
 subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_ref)
-  real, dimension(:), intent(in)  :: T        !< Conservative temperature in C.
-  real, dimension(:), intent(in)  :: S        !< Absolute salinity in g/kg
-  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
-  real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
+  real, dimension(:), intent(in)  :: T        !< Conservative temperature [degC].
+  real, dimension(:), intent(in)  :: S        !< Absolute salinity [g kg-1].
+  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
+  real, dimension(:), intent(out) :: rho      !< in situ density [kg m-3].
   integer,            intent(in)  :: start    !< the starting point in the arrays.
   integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
+  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
   ! Local variables
   real :: zp, zt, zh, zs, zr0, zn, zn0, zn1, zn2, zn3, zs0
@@ -265,13 +265,13 @@ end subroutine calculate_density_array_nemo
 !> For a given thermodynamic state, calculate the derivatives of density with conservative
 !! temperature and absolute salinity, using the expressions derived for use with NEMO.
 subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
-  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
-  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC].
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1].
+  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
   real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
-                                                 !! temperature, in kg m-3 K-1.
+                                                 !! temperature [kg m-3 degC-1].
   real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
-                                                 !! in kg m-3 psu-1.
+                                                 !! in [kg m-3 ppt-1].
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
@@ -339,13 +339,13 @@ end subroutine calculate_density_derivs_array_nemo
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
 subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
-  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
-  real,    intent(in)  :: S        !< Salinity in PSU.
-  real,    intent(in)  :: pressure !< Pressure in Pa.
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface [degC].
+  real,    intent(in)  :: S        !< Salinity [g kg-1].
+  real,    intent(in)  :: pressure !< Pressure [Pa].
   real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
-                                   !! temperature, in kg m-3 K-1.
+                                   !! temperature [kg m-3 degC-1].
   real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
-                                   !! in kg m-3 psu-1.
+                                   !! in [kg m-3 ppt-1].
   ! Local variables
   real :: al0, p0, lambda
   integer :: j
@@ -361,18 +361,18 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
   drho_ds = drds0(1)
 end subroutine calculate_density_derivs_scalar_nemo
 
-!> Compute the in situ density of sea water (rho in units of kg/m^3) and the compressibility
-!! (drho/dp = C_sound^-2, stored as drho_dp in units of s2 m-2) from absolute salinity
-!! (sal in g/kg), conservative temperature (T in deg C), and pressure in Pa, using the expressions
+!> Compute the in situ density of sea water (rho in [kg m-3]) and the compressibility
+!! (drho/dp = C_sound^-2, stored as drho_dp [s2 m-2]) from absolute salinity
+!! (sal in g/kg), conservative temperature (T [degC]), and pressure [Pa], using the expressions
 !! derived for use with NEMO.
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
-  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
-  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC].
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g/kg].
+  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
+  real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3].
   real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
                                                  !! (also the inverse of the square of sound speed)
-                                                 !! in s2 m-2.
+                                                 !! [s2 m-2].
   integer, intent(in)                :: start    !< The starting point in the arrays.
   integer, intent(in)                :: npts     !< The number of values to calculate.
 

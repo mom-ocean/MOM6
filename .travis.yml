@@ -3,47 +3,109 @@
 
 # This is a not a c-language project but we use the same environment.
 language: c
-dist: trusty
-sudo: false
+dist: xenial
 
 addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
     packages:
-    - tcsh pkg-config netcdf-bin libnetcdf-dev openmpi-bin libopenmpi-dev gfortran
+    - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev openmpi-bin libopenmpi-dev gfortran
+    - doxygen graphviz flex bison cmake
 
-# For saving time...
+# Stages occur sequentially. Within each stage jobs run concurrently.
+stages:
+  - check and compile
+  - tests
+  - cleanup
+
 cache:
   directories:
-    - MOM6-examples
-#   - build # Uncomment this line to save time building. Less robust when FMS changes version!
+    - build
 
-# Install tools and clone the configurations repository
-before_install:
- - git clone https://github.com/adcroft/house_cleaning.git
- # This line clones MOM6-examples when there is no cache
- - test -f MOM6-examples/README.md || (rm -rf MOM6-examples && git clone https://github.com/NOAA-GFDL/MOM6-examples.git)
-
+# Compilation and testing is controlled by the "configure" and "Makefile" in
+# .testing/ but they operate from the root directory. We copy them into place
+# so that they can remain hidden from users.
 install:
- # This restores all files in MOM6-examples and updates
- - (cd MOM6-examples/ && git checkout . && git pull)
- # Update submodules mkmf and FMS
- - (cd MOM6-examples/src/ && git submodule init mkmf FMS && git submodule update mkmf FMS)
+  - echo "Install step"
+  - cp .testing/{configure,Makefile} .
 
-# Build FMS
 before_script:
- - bash MOM6-examples/tools/tests/Travis-MOM6/build_fms.sh
- - bash MOM6-examples/tools/tests/Travis-MOM6/before_script.sh
+  - ls -l
+  - ls build
 
-# Tests to run
-script:
- - ./house_cleaning/trailer.py -e TEOS10 src config_src
- - bash MOM6-examples/tools/tests/Travis-MOM6/build_ocean_only.sh
- - bash MOM6-examples/tools/tests/Travis-MOM6/build_symmetric_ocean_only.sh
- - bash MOM6-examples/tools/tests/Travis-MOM6/run_tests.sh
-
+# This avoids caching files we do not need between stages
 before_cache:
-- rm -rf build/ocn build/symocn
-- (cd MOM6-examples; rm -rf ocean_only; git checkout .)
-- find MOM6-examples -type l -exec rm {} \;
+  - rm -f build/*.o build/*.mod
+
+jobs:
+  include:
+
+    # Checks and compilation ###################################################
+#   - stage: check and compile
+#     script:
+#     - echo "Blank environment - this is where we would compile if we wanted to reuse executables in multiple tests"
+#     #- touch build/comp_nothing
+    - stage: check and compile
+      env: JOB="Code style compliance"
+      script:
+      - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
+    - stage: check and compile
+      env: JOB="Doxygen"
+      script:
+      - cd docs && doxygen Doxyfile_nortd
+      - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
+      - test ! -s  doxy_errors
+    - &compile-code
+      stage: check and compile
+      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+      script:
+      - make $MAKEARGS compile
+      - touch build/comp_${MAKEARGS//\ /_}
+    - <<: *compile-code
+      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
+    - <<: *compile-code
+      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1"
+    - <<: *compile-code
+      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1"
+#   - <<: *compile-code
+#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
+
+    # Run tests ################################################################
+    # The default "test" job is automatically invoked for each of the matrix environments
+    # The "test" jobs executes "./configure && make && make test"
+#   - stage: tests
+#     script:
+#     - echo "Placeholder for generic text using blank environment"
+    - &compile
+      stage: tests
+      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+      script:
+      - ./configure && make -j && make test
+    - <<: *compile
+      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
+    - <<: *compile
+      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1"
+    - <<: *compile
+      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1"
+#   - <<: *compile
+#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"
+
+    # Clean up #################################################################
+    # We only want the cache directory to exist between stages so we manually
+    # clean out the cache, i.e. build/
+    - &clean-build
+      stage: cleanup
+      script:
+      - rm -rf build/*
+      - ls -l
+#   - <<: *clean-build
+      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric REPRO=1"
+    - <<: *clean-build
+      env: MAKEARGS="MEMORY_SHAPE=dynamic REPRO=1"
+    - <<: *clean-build
+      env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric DEBUG=1"
+    - <<: *clean-build
+      env: MAKEARGS="MEMORY_SHAPE=dynamic DEBUG=1"
+#   - <<: *clean-build
+#     env: MAKEARGS="MEMORY_SHAPE=dynamic_symmetric OPENMP=1"

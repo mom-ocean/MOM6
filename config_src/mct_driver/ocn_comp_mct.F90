@@ -24,8 +24,6 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
                                shr_file_getLogUnit, shr_file_getLogLevel, &
                                shr_file_setLogUnit, shr_file_setLogLevel
 
-use MOM_surface_forcing, only: IOB_allocate, ice_ocean_boundary_type
-
 ! MOM6 modules
 use MOM,                  only: extract_surface_state
 use MOM_variables,        only: surface
@@ -46,10 +44,10 @@ use MOM_domains,          only: AGRID, BGRID_NE, CGRID_NE, pass_vector
 use mpp_domains_mod,      only: mpp_get_compute_domain
 
 ! Previously inlined - now in separate modules
-use MOM_ocean_model,      only: ocean_public_type, ocean_state_type
-use MOM_ocean_model,      only: ocean_model_init , update_ocean_model, ocean_model_end
-use MOM_ocean_model,      only: convert_state_to_ocean_type
-use MOM_surface_forcing,  only: surface_forcing_CS, forcing_save_restart
+use MOM_ocean_model_mct,     only: ocean_public_type, ocean_state_type
+use MOM_ocean_model_mct,     only: ocean_model_init , update_ocean_model, ocean_model_end
+use MOM_ocean_model_mct,     only: convert_state_to_ocean_type
+use MOM_surface_forcing_mct, only: surface_forcing_CS, forcing_save_restart, ice_ocean_boundary_type
 use ocn_cap_methods,      only: ocn_import, ocn_export
 
 ! FMS modules
@@ -111,8 +109,9 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   type(mct_aVect)             , intent(inout) :: o2x_o       !< Fluxes from ocean to coupler, computed by ocean
   character(len=*), optional  , intent(in)    :: NLFilename  !< Namelist filename
 
-  !  local variables
-  type(time_type)         :: time0                !< Model start time
+  !  local variable
+  type(time_type)         :: time0                !< Start time of coupled model's calendar.
+  type(time_type)         :: time_start           !< The time at which to initialize the ocean model
   type(ESMF_time)         :: time_var             !< ESMF_time variable to query time
   type(ESMF_time)         :: time_in_ESMF         !< Initial time for ocean
   type(ESMF_timeInterval) :: ocn_cpl_interval     !< Ocean coupling interval
@@ -204,10 +203,15 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
-  ! Get the initial time
-  call ESMF_ClockGet(EClock, currTime=time_var, rc=rc)
+  ! Get start time
+  call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
   call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time0 = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Get current time
+  call ESMF_ClockGet(EClock, currTime=time_var, rc=rc)
+  call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  time_start = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
@@ -259,19 +263,19 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   if (glb%sw_decomp) then
     call get_param(param_file, mdl, "SW_c1", glb%c1, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "visible, direct shortwave.", units="nondim", default=0.285)
 
     call get_param(param_file, mdl, "SW_c2", glb%c2, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "visible, diffuse shortwave.", units="nondim", default=0.285)
 
     call get_param(param_file, mdl, "SW_c3", glb%c3, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "near-IR, direct shortwave.", units="nondim", default=0.215)
 
     call get_param(param_file, mdl, "SW_c4", glb%c4, &
-                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "Coeff. used to convert net shortwave rad. into "//&
                   "near-IR, diffuse shortwave.", units="nondim", default=0.215)
   else
     glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
@@ -281,7 +285,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   runtype = get_runtype()
   if (runtype == "initial") then
     ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file = 'n')
   else  ! hybrid or branch or continuos runs
     ! get output path root
     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
@@ -297,7 +301,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
       write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
     end if
     call shr_file_freeUnit(nu)
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file=trim(restartfile))
   endif
   if (is_root_pe()) then
     write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
@@ -765,7 +769,7 @@ end subroutine ocean_model_init_sfc
 !! x2o_Foxx_rof
 !!
 !! Variables in MOM6 fluxes that are **NOT** filled by the coupler:
-!! ustar_berg, frictional velocity beneath icebergs (m/s)
+!! ustar_berg, frictional velocity beneath icebergs [m s-1]
 !! area_berg, area covered by icebergs(m2/m2)
 !! mass_berg, mass of icebergs(kg/m2)
 !! runoff_hflx, heat content of liquid runoff (W/m2)
@@ -773,8 +777,6 @@ end subroutine ocean_model_init_sfc
 !! mi, mass of ice (kg/m2)
 !!
 !! Variables in the coupler that are **NOT** used in MOM6 (i.e., no corresponding field in fluxes):
-!! x2o_Fioi_melth, heat flux from snow & ice melt (W/m2)
-!! x2o_Fioi_meltw, snow melt flux (kg/m2/s)
 !! x2o_Si_ifrac, fractional ice wrt ocean
 !! x2o_So_duu10n, 10m wind speed squared (m^2/s^2)
 !! x2o_Sa_co2prog, bottom atm level prognostic CO2
@@ -804,8 +806,8 @@ end subroutine ocean_model_init_sfc
 !!
 !! Surface temperature (Kelvin)
 !! Surface salinity (psu)
-!! Surface eastward velocity (m/s)
-!! Surface northward velocity (m/s)
+!! Surface eastward velocity [m s-1]
+!! Surface northward velocity [m s-1]
 !! Zonal slope in the sea surface height
 !! Meridional slope in the sea surface height
 !!
@@ -814,5 +816,62 @@ end subroutine ocean_model_init_sfc
 !! Boundary layer depth
 !! CO2
 !! DMS
+
+!> Allocates ice-ocean boundary type containers and sets to 0.
+subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
+  type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
+  integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
+
+  allocate ( IOB% rofl_flux (isc:iec,jsc:jec),       &
+             IOB% rofi_flux (isc:iec,jsc:jec),       &
+             IOB% u_flux (isc:iec,jsc:jec),          &
+             IOB% v_flux (isc:iec,jsc:jec),          &
+             IOB% t_flux (isc:iec,jsc:jec),          &
+             IOB% seaice_melt_heat (isc:iec,jsc:jec),&
+             IOB% seaice_melt (isc:iec,jsc:jec),     &
+             IOB% q_flux (isc:iec,jsc:jec),          &
+             IOB% salt_flux (isc:iec,jsc:jec),       &
+             IOB% lw_flux (isc:iec,jsc:jec),         &
+             IOB% sw_flux_vis_dir (isc:iec,jsc:jec), &
+             IOB% sw_flux_vis_dif (isc:iec,jsc:jec), &
+             IOB% sw_flux_nir_dir (isc:iec,jsc:jec), &
+             IOB% sw_flux_nir_dif (isc:iec,jsc:jec), &
+             IOB% lprec (isc:iec,jsc:jec),           &
+             IOB% fprec (isc:iec,jsc:jec),           &
+             IOB% ustar_berg (isc:iec,jsc:jec),      &
+             IOB% area_berg (isc:iec,jsc:jec),       &
+             IOB% mass_berg (isc:iec,jsc:jec),       &
+             IOB% calving (isc:iec,jsc:jec),         &
+             IOB% runoff_hflx (isc:iec,jsc:jec),     &
+             IOB% calving_hflx (isc:iec,jsc:jec),    &
+             IOB% mi (isc:iec,jsc:jec),              &
+             IOB% p (isc:iec,jsc:jec))
+
+  IOB%rofl_flux        = 0.0
+  IOB%rofi_flux        = 0.0
+  IOB%u_flux           = 0.0
+  IOB%v_flux           = 0.0
+  IOB%t_flux           = 0.0
+  IOB%seaice_melt_heat = 0.0
+  IOB%seaice_melt      = 0.0
+  IOB%q_flux           = 0.0
+  IOB%salt_flux        = 0.0
+  IOB%lw_flux          = 0.0
+  IOB%sw_flux_vis_dir  = 0.0
+  IOB%sw_flux_vis_dif  = 0.0
+  IOB%sw_flux_nir_dir  = 0.0
+  IOB%sw_flux_nir_dif  = 0.0
+  IOB%lprec            = 0.0
+  IOB%fprec            = 0.0
+  IOB%ustar_berg       = 0.0
+  IOB%area_berg        = 0.0
+  IOB%mass_berg        = 0.0
+  IOB%calving          = 0.0
+  IOB%runoff_hflx      = 0.0
+  IOB%calving_hflx     = 0.0
+  IOB%mi               = 0.0
+  IOB%p                = 0.0
+
+end subroutine IOB_allocate
 
 end module ocn_comp_mct

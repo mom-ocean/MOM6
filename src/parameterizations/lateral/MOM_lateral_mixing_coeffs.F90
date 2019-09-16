@@ -8,11 +8,12 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
 use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type, pass_var
+use MOM_domains,       only : group_pass_type, pass_var, pass_vector
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
 use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_speed, only : wave_speed, wave_speed_CS, wave_speed_init
@@ -55,11 +56,11 @@ type, public :: VarMix_CS
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
   real, dimension(:,:), pointer :: &
-    SN_u => NULL(), &   !< S*N at u-points (s^-1)
-    SN_v => NULL(), &  !< S*N at v-points (s^-1)
-    L2u => NULL(), &   !< Length scale^2 at u-points (m^2)
-    L2v => NULL(), &   !< Length scale^2 at v-points (m^2)
-    cg1 => NULL(), &   !< The first baroclinic gravity wave speed in m s-1.
+    SN_u => NULL(), &   !< S*N at u-points [s-1]
+    SN_v => NULL(), &  !< S*N at v-points [s-1]
+    L2u => NULL(), &   !< Length scale^2 at u-points [m2]
+    L2v => NULL(), &   !< Length scale^2 at v-points [m2]
+    cg1 => NULL(), &   !< The first baroclinic gravity wave speed [m s-1].
     Res_fn_h => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
                           !! deformation radius to the grid spacing at h points.
     Res_fn_q => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
@@ -77,21 +78,35 @@ type, public :: VarMix_CS
     beta_dx2_v => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
                             !! times the grid spacing squared at v points.
     f2_dx2_h => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at h, in m2 s-2.
+                          !! spacing squared at h [m-2 s-2].
     f2_dx2_q => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at q, in m2 s-2.
+                          !! spacing squared at q [m-2 s-2].
     f2_dx2_u => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at u, in m2 s-2.
+                          !! spacing squared at u [m-2 s-2].
     f2_dx2_v => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at v, in m2 s-2.
-    Rd_dx_h => NULL()     !< Deformation radius over grid spacing (non-dim.)
+                          !! spacing squared at v [m-2 s-2].
+    Rd_dx_h => NULL()     !< Deformation radius over grid spacing [nondim]
 
   real, dimension(:,:,:), pointer :: &
-    slope_x => NULL(), &  !< Zonal isopycnal slope (non-dimensional)
-    slope_y => NULL(), &  !< Meridional isopycnal slope (non-dimensional)
-    ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with (non-dim)
+    slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
+    slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
+    N2_u => NULL(), &     !< Brunt-Vaisala frequency at u-points [s-2]
+    N2_v => NULL(), &     !< Brunt-Vaisala frequency at v-points [s-2]
+    ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+    Laplac3_const_u       !< Laplacian  metric-dependent constants [nondim]
+
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+    Laplac3_const_v       !< Laplacian  metric-dependent constants [nondim]
+
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
+    KH_u_QG               !< QG Leith GM coefficient at u-points [m2 s-1]
+
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
+    KH_v_QG               !< QG Leith GM coefficient at v-points [m2 s-1]
 
   ! Parameters
+  logical :: use_Visbeck  !< Use Visbeck formulation for thickness diffusivity
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
   real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula
   real :: Res_coef_khth   !< A non-dimensional number that determines the function
@@ -100,21 +115,25 @@ type, public :: VarMix_CS
   real :: Res_coef_visc   !< A non-dimensional number that determines the function
                           !! of resolution, used for lateral viscosity, as:
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
-  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers (m2/s)
+  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [m2 s-1]
   integer :: Res_fn_power_khth !< The power of dx/Ld in the KhTh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
   integer :: Res_fn_power_visc !< The power of dx/Ld in the Kh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
-  real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate (nondim).
+  real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate [nondim].
+
+  ! Leith parameters
+  logical :: use_QG_Leith_GM      !< If true, uses the QG Leith viscosity as the GM coefficient
+  logical :: use_beta_in_QG_Leith !< If true, includes the beta term in the QG Leith GM coefficient
 
   ! Diagnostics
   !>@{
   !! Diagnostic identifier
   integer :: id_SN_u=-1, id_SN_v=-1, id_L2u=-1, id_L2v=-1, id_Res_fn = -1
   integer :: id_N2_u=-1, id_N2_v=-1, id_S2_u=-1, id_S2_v=-1
-  integer :: id_Rd_dx=-1
+  integer :: id_Rd_dx=-1, id_KH_u_QG = -1, id_KH_v_QG = -1
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
   !>@}
@@ -125,20 +144,22 @@ type, public :: VarMix_CS
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
+public calc_QG_Leith_viscosity
 
 contains
 
 !> Calculates and stores the non-dimensional resolution functions
-subroutine calc_resoln_function(h, tv, G, GV, CS)
+subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
-  real :: cg1_q  ! The gravity wave speed interpolated to q points, in m s-1.
-  real :: cg1_u  ! The gravity wave speed interpolated to u points, in m s-1.
-  real :: cg1_v  ! The gravity wave speed interpolated to v points, in m s-1.
+  real :: cg1_q  ! The gravity wave speed interpolated to q points [m s-1].
+  real :: cg1_u  ! The gravity wave speed interpolated to u points [m s-1].
+  real :: cg1_v  ! The gravity wave speed interpolated to v points [m s-1].
   real :: dx_term
   integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -156,15 +177,16 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
         ! Both resolution fn and vertical structure are using EBT
-        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
       else
         ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
-        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
-        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, &
+                        use_ebt_mode=.true.)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
       endif
       call pass_var(CS%ebt_struct, G%Domain)
     else
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     endif
 
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
@@ -172,7 +194,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   endif
 
   ! Calculate and store the ratio between deformation radius and grid-spacing
-  ! at h-points (non-dimensional).
+  ! at h-points [nondim].
   if (CS%calculate_rd_dx) then
     if (.not. associated(CS%Rd_dx_h)) call MOM_error(FATAL, &
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
@@ -376,70 +398,66 @@ end subroutine calc_resoln_function
 
 !> Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et al.
 !! style scaling of diffusivity
-subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
+subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness (m or kg/m2)
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  real,                                     intent(in)    :: dt !< Time increment (s)
+  real,                                     intent(in)    :: dt !< Time increment [s]
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
-    e             ! The interface heights relative to mean sea level, in m.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at u-points
+    e             ! The interface heights relative to mean sea level [Z ~> m].
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [s-2]
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [s-2]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
+    call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
-      call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
+      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
-      call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-      call calc_slope_functions_using_just_e(h, G, GV, CS, e, .true.)
+      call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true.)
     endif
   endif
 
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_SN_u > 0) call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
-    if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
-    if (CS%id_L2u > 0) call post_data(CS%id_L2u, CS%L2u, CS%diag)
-    if (CS%id_L2v > 0) call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
-    if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
+    if (CS%id_SN_u > 0)     call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
+    if (CS%id_SN_v > 0)     call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
+    if (CS%id_L2u > 0)      call post_data(CS%id_L2u, CS%L2u, CS%diag)
+    if (CS%id_L2v > 0)      call post_data(CS%id_L2v, CS%L2v, CS%diag)
+    if (CS%id_N2_u > 0)     call post_data(CS%id_N2_u, CS%N2_u, CS%diag)
+    if (CS%id_N2_v > 0)     call post_data(CS%id_N2_v, CS%N2_v, CS%diag)
   endif
 
 end subroutine calc_slope_functions
 
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
-subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
+subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e  !< Interface position (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points (1/s2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points [s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points (1/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points [s-2]
   type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
+
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
-  real :: S2            ! Interface slope squared (non-dim)
-  real :: N2            ! Brunt-Vaisala frequency (1/s)
-  real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
-  real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
+  real :: S2            ! Interface slope squared [nondim]
+  real :: N2            ! Brunt-Vaisala frequency [s-1]
+  real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
+  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real :: S2max, wNE, wSE, wSW, wNW
-  real :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
-  real :: SN_v_local(SZI_(G), SZJB_(G),SZK_(G))
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
@@ -456,12 +474,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
 
   S2max = CS%Visbeck_S_max**2
 
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
-!$OMP                               S2_u,S2_v,slope_x,slope_y,   &
-!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
-!$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
-!$OMP                       wNE, wSE, wSW, wNW)
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
@@ -471,7 +484,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-!$OMP do
+  !$OMP parallel do default(shared) private(S2,H_u,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do j = js,je
     do I=is-1,ie
       CS%SN_u(I,j) = 0. ; H_u(I) = 0. ; S2_u(I,j) = 0.
@@ -517,7 +530,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OMP do
+  !$OMP parallel do default(shared) private(S2,H_v,Hdn,Hup,H_geom,N2,wNE,wSE,wSW,wNW)
   do J = js-1,je
     do i=is,ie
       CS%SN_v(i,J) = 0. ; H_v(i) = 0. ; S2_v(i,J) = 0.
@@ -563,8 +576,6 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OMP end parallel
-
 ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_S2_u > 0) call post_data(CS%id_S2_u, S2_u, CS%diag)
@@ -581,26 +592,28 @@ end subroutine calc_Visbeck_coeffs
 
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
-subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
+subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes)
   type(ocean_grid_type),                      intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                            pointer       :: CS !< Variable mixing coefficients
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                    intent(in)    :: calculate_slopes !< If true, calculate slopes internally
                                                                   !! otherwise use slopes stored in CS
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
-  real :: Khth_Loc      ! Locally calculated thickness mixing coefficient (m2/s)
-  real :: H_cutoff      ! Local estimate of a minimum thickness for masking (m)
+  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
+  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
+  real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
-  real :: S2            ! Interface slope squared (non-dim)
-  real :: N2            ! Brunt-Vaisala frequency (1/s)
-  real :: Hup, Hdn      ! Thickness from above, below (m or kg m-2)
-  real :: H_geom        ! The geometric mean of Hup*Hdn, in m or kg m-2.
-  real :: one_meter     ! One meter in thickness units of m or kg m-2.
+                        ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: S2            ! Interface slope squared [nondim]
+  real :: N2            ! Brunt-Vaisala frequency [s-1]
+  real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
+  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
+  real :: Z_to_L        ! A conversion factor between from units for e to the
+                        ! units for lateral distances.
+  real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
   integer :: i, j, k, kb_max
   real    :: SN_u_local(SZIB_(G), SZJ_(G),SZK_(G))
@@ -618,33 +631,25 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
-  H_cutoff = real(2*nz) * (GV%Angstrom + h_neglect)
-
-!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h,H_cutoff,h_neglect, &
-!$OMP                               one_meter,SN_u_local,SN_v_local,calculate_slopes)   &
-!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
-!$OMP do
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%SN_u(i,j) = 0.0
-    CS%SN_v(i,j) = 0.0
-  enddo ; enddo
+  H_cutoff = real(2*nz) * (GV%Angstrom_H + h_neglect)
+  Z_to_L = US%Z_to_m
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-!$OMP do
+  !$OMP parallel do default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
   do k=nz,CS%VarMix_Ktop,-1
 
     if (calculate_slopes) then
       ! Calculate the interface slopes E_x and E_y and u- and v- points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        E_x(I,j) = (e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
+        E_x(I,j) = Z_to_L*(e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
         ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) E_x(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        E_y(i,J) = (e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
+        E_y(i,J) = Z_to_L*(e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
         ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
       enddo ; enddo
@@ -666,10 +671,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i+1,j,k)*h(i+1,j,k-1) / (h(i+1,j,k) + h(i+1,j,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k) / (GV%H_to_m * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*US%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
-      SN_u_local(I,j,k) = (H_geom * GV%H_to_m) * S2 * N2
+      SN_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       S2 = ( E_y(i,J)**2  + 0.25*( &
@@ -677,63 +682,227 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i,j+1,k)*h(i,j+1,k-1) / (h(i,j+1,k) + h(i,j+1,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k) / (GV%H_to_m * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*US%m_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
-      SN_v_local(i,J,k) = (H_geom * GV%H_to_m) * S2 * N2
+      SN_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2
     enddo ; enddo
 
   enddo ! k
-!$OMP do
-  do j = js,je
+  !$OMP parallel do default(shared)
+  do j=js,je
+    do I=is-1,ie ; CS%SN_u(I,j) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
-      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom ) )
+      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_m ) then
-        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
+                                               (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
       else
         CS%SN_u(I,j) = 0.0
       endif
     enddo
   enddo
-!$OMP do
+  !$OMP parallel do default(shared)
   do J=js-1,je
-    do k=nz,CS%VarMix_Ktop,-1 ; do I=is,ie
+    do i=is,ie ; CS%SN_v(i,J) = 0.0 ; enddo
+    do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + SN_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
-      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom ) )
+      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_m ) then
-        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
+                                               (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
       else
         CS%SN_v(I,j) = 0.0
       endif
     enddo
   enddo
-!$OMP end parallel
 
 end subroutine calc_slope_functions_using_just_e
 
+!> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
+subroutine calc_QG_Leith_viscosity(CS, G, GV, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
+  type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
+  type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+! real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u  !< Zonal flow [m s-1]
+! real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v  !< Meridional flow [m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< Layer thickness [H ~> m or kg m-2]
+  integer,                                   intent(in)  :: k  !< Layer for which to calculate vorticity magnitude
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: div_xx_dx  !< x-derivative of horizontal divergence
+                                                                 !! (d/dx(du/dx + dv/dy)) [m-1 s-1]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: div_xx_dy  !< y-derivative of horizontal divergence
+                                                                 !! (d/dy(du/dx + dv/dy)) [m-1 s-1]
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vort_xy_dx !< x-derivative of vertical vorticity
+                                                                 !! (d/dx(dv/dx - du/dy)) [m-1 s-1]
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(inout) :: vort_xy_dy !< y-derivative of vertical vorticity
+                                                                 !! (d/dy(dv/dx - du/dy)) [m-1 s-1]
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Kh_h !< Leith Laplacian viscosity
+                                                                 !! at h-points [m2 s-1]
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Kh_q !< Leith Laplacian viscosity
+                                                                 !! at q-points [m2 s-1]
+!  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: Leith_Ah_h !< Leith bi-harmonic viscosity
+                                                                 !! at h-points [m4 s-1]
+!  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: Leith_Ah_q !< Leith bi-harmonic viscosity
+                                                                 !! at q-points [m4 s-1]
+
+  ! Local variables
+!  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) [s-1]
+!                                        dudy, & ! Meridional shear of zonal velocity [s-1]
+!                                        dvdx    ! Zonal shear of meridional velocity [s-1]
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+!    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [m-1 s-1]
+!    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [m-1 s-1]
+    dslopey_dz, & ! z-derivative of y-slope at v-points [m-1]
+    h_at_v,     & ! Thickness at v-points [H ~> m or kg m-2]
+    beta_v,     & ! Beta at v-points [m-1 s-1]
+    grad_vort_mag_v, & ! mag. of vort. grad. at v-points [s-1]
+    grad_div_mag_v     ! mag. of div. grad. at v-points [s-1]
+
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+!    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [m-1 s-1]
+!    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [m-1 s-1]
+    dslopex_dz, & ! z-derivative of x-slope at u-points (m-1)
+    h_at_u,     & ! Thickness at u-points [H ~> m or kg m-2]
+    beta_u,     & ! Beta at u-points [m-1 s-1]
+    grad_vort_mag_u, & ! mag. of vort. grad. at u-points [s-1]
+    grad_div_mag_u     ! mag. of div. grad. at u-points [s-1]
+!  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points [s-1]
+!  real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
+  real :: h_at_slope_above, h_at_slope_below, Ih, f
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
+  real :: inv_PI3
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  nz = G%ke
+
+  inv_PI3 = 1.0/((4.0*atan(1.0))**3)
+
+  ! update halos
+  call pass_var(h, G%Domain)
+
+  if ((k > 1) .and. (k < nz)) then
+
+  ! Add in stretching term for the QG Leith vsicosity
+!  if (CS%use_QG_Leith) then
+!    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+    do j=js-2,Jeq+2 ; do I=is-2,Ieq+1
+      h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
+                         ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
+                         + ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k-1) + h(i+1,j,k-1) ) + GV%H_subroundoff )
+      h_at_slope_below = 2. * ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) * h(i+1,j,k+1) ) / &
+                         ( ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) + h(i+1,j,k+1) ) &
+                         + ( h(i,j,k+1) * h(i+1,j,k+1) ) * ( h(i,j,k) + h(i+1,j,k) ) + GV%H_subroundoff )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      dslopex_dz(I,j) = 2. * ( CS%slope_x(i,j,k) - CS%slope_x(i,j,k+1) ) * Ih
+      h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
+    enddo ; enddo
+!    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+    do J=js-2,Jeq+1 ; do i=is-2,Ieq+2
+      h_at_slope_above = 2. * ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) * h(i,j+1,k) ) / &
+                         ( ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) + h(i,j+1,k) ) &
+                         + ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k-1) + h(i,j+1,k-1) ) + GV%H_subroundoff )
+      h_at_slope_below = 2. * ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) * h(i,j+1,k+1) ) / &
+                         ( ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) + h(i,j+1,k+1) ) &
+                         + ( h(i,j,k+1) * h(i,j+1,k+1) ) * ( h(i,j,k) + h(i,j+1,k) ) + GV%H_subroundoff )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      dslopey_dz(i,J) = 2. * ( CS%slope_y(i,j,k) - CS%slope_y(i,j,k+1) ) * Ih
+      h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
+    enddo ; enddo
+
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+      f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
+      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * &
+            ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
+            + ( h_at_u(I-1,j) * dslopex_dz(I-1,j) + h_at_u(I,j+1) * dslopex_dz(I,j+1) ) ) / &
+              ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
+    enddo ; enddo
+
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+      f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
+      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * &
+            ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
+            + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
+              ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
+    enddo ; enddo
+  endif ! k > 1
+
+  call pass_vector(vort_xy_dy,vort_xy_dx,G%Domain)
+
+    if (CS%use_QG_Leith_GM) then
+      if (CS%use_beta_in_QG_Leith) then
+        do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+          beta_u(I,j) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i+1,j))**2) + &
+                        (0.5*(G%dF_dy(i,j)+G%dF_dy(i+1,j))**2) )
+        enddo ; enddo
+        do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+          beta_v(i,J) = sqrt( (0.5*(G%dF_dx(i,j)+G%dF_dx(i,j+1))**2) + &
+                        (0.5*(G%dF_dy(i,j)+G%dF_dy(i,j+1))**2) )
+        enddo ; enddo
+      endif
+
+      do j=js-1,Jeq+1 ; do I=is-2,Ieq
+        grad_vort_mag_u(I,j) = SQRT(vort_xy_dy(I,j)**2  + (0.25*(vort_xy_dx(i,J) + vort_xy_dx(i+1,J) &
+                             + vort_xy_dx(i,J-1) + vort_xy_dx(i+1,J-1)))**2)
+        grad_div_mag_u(I,j) = SQRT(div_xx_dx(I,j)**2  + (0.25*(div_xx_dy(i,J) + div_xx_dy(i+1,J) &
+                             + div_xx_dy(i,J-1) + div_xx_dy(i+1,J-1)))**2)
+        if (CS%use_beta_in_QG_Leith) then
+          CS%KH_u_QG(I,j,k) = MIN(grad_vort_mag_u(I,j) + grad_div_mag_u(I,j), beta_u(I,j)*3) &
+               * CS%Laplac3_const_u(I,j) * inv_PI3
+        else
+          CS%KH_u_QG(I,j,k) = (grad_vort_mag_u(I,j) + grad_div_mag_u(I,j)) &
+               * CS%Laplac3_const_u(I,j) * inv_PI3
+        endif
+      enddo ; enddo
+
+      do J=js-2,Jeq ; do i=is-1,Ieq+1
+        grad_vort_mag_v(i,J) = SQRT(vort_xy_dx(i,J)**2  + (0.25*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j) &
+                             + vort_xy_dy(I,j+1) + vort_xy_dy(I-1,j+1)))**2)
+        grad_div_mag_v(i,J) = SQRT(div_xx_dy(i,J)**2  + (0.25*(div_xx_dx(I,j) + div_xx_dx(I-1,j) &
+                             + div_xx_dx(I,j+1) + div_xx_dx(I-1,j+1)))**2)
+        if (CS%use_beta_in_QG_Leith) then
+          CS%KH_v_QG(i,J,k) = MIN(grad_vort_mag_v(i,J) + grad_div_mag_v(i,J), beta_v(i,J)*3) &
+               * CS%Laplac3_const_v(i,J) * inv_PI3
+        else
+          CS%KH_v_QG(i,J,k) = (grad_vort_mag_v(i,J) + grad_div_mag_v(i,J)) &
+               * CS%Laplac3_const_v(i,J) * inv_PI3
+        endif
+      enddo ; enddo
+      ! post diagnostics
+      if (CS%id_KH_v_QG > 0)  call post_data(CS%id_KH_v_QG, CS%KH_v_QG, CS%diag)
+      if (CS%id_KH_u_QG > 0)  call post_data(CS%id_KH_u_QG, CS%KH_u_QG, CS%diag)
+    endif
+
+end subroutine calc_QG_Leith_viscosity
+
 !> Initializes the variables mixing coefficients container
-subroutine VarMix_init(Time, G, param_file, diag, CS)
+subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
   type(ocean_grid_type),      intent(in) :: G    !< Ocean grid structure
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
   ! Local variables
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
   real :: KhTr_passivity_coeff
-  real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
-             ! squared that is used to avoid division by 0, in s-2.  This
+  real :: absurdly_small_freq2  ! A miniscule frequency
+             ! squared that is used to avoid division by 0 [s-2].  This
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   real :: MLE_front_length
+  real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity
+  real :: grid_sp_u2, grid_sp_u3
+  real :: grid_sp_v2, grid_sp_v3 ! Intermediate quantities for Leith metrics
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
@@ -757,46 +926,50 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
   CS%calculate_Eady_growth_rate = .false.
+  absurdly_small_freq2 = 1e-34  !### Note the hard-coded dimensional parameter.
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USE_VARIABLE_MIXING", CS%use_variable_mixing,&
-                 "If true, the variable mixing code will be called.  This \n"//&
-                 "allows diagnostics to be created even if the scheme is \n"//&
-                 "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, \n"//&
-                 "this is set to true regardless of what is in the \n"//&
+                 "If true, the variable mixing code will be called.  This "//&
+                 "allows diagnostics to be created even if the scheme is "//&
+                 "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, "//&
+                 "this is set to true regardless of what is in the "//&
                  "parameter file.", default=.false.)
+  call get_param(param_file, mdl, "USE_VISBECK", CS%use_Visbeck,&
+                 "If true, use the Visbeck et al. (1997) formulation for \n"//&
+                 "thickness diffusivity.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KH", CS%Resoln_scaled_Kh, &
-                 "If true, the Laplacian lateral viscosity is scaled away \n"//&
-                 "when the first baroclinic deformation radius is well \n"//&
+                 "If true, the Laplacian lateral viscosity is scaled away "//&
+                 "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", CS%Resoln_scaled_KhTh, &
-                 "If true, the interface depth diffusivity is scaled away \n"//&
-                 "when the first baroclinic deformation radius is well \n"//&
+                 "If true, the interface depth diffusivity is scaled away "//&
+                 "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTR", CS%Resoln_scaled_KhTr, &
-                 "If true, the epipycnal tracer diffusivity is scaled \n"//&
-                 "away when the first baroclinic deformation radius is \n"//&
+                 "If true, the epipycnal tracer diffusivity is scaled "//&
+                 "away when the first baroclinic deformation radius is "//&
                  "well resolved.", default=.false.)
   call get_param(param_file, mdl, "RESOLN_USE_EBT", CS%Resoln_use_ebt, &
-                 "If true, uses the equivalent barotropic wave speed instead\n"//&
+                 "If true, uses the equivalent barotropic wave speed instead "//&
                  "of first baroclinic wave for calculating the resolution fn.",&
                  default=.false.)
   call get_param(param_file, mdl, "KHTH_USE_EBT_STRUCT", CS%khth_use_ebt_struct, &
-                 "If true, uses the equivalent barotropic structure\n"//&
+                 "If true, uses the equivalent barotropic structure "//&
                  "as the vertical structure of thickness diffusivity.",&
                  default=.false.)
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
-                 "The nondimensional coefficient in the Visbeck formula \n"//&
+                 "The nondimensional coefficient in the Visbeck formula "//&
                  "for the interface depth diffusivity", units="nondim", &
                  default=0.0)
   call get_param(param_file, mdl, "KHTR_SLOPE_CFF", KhTr_Slope_Cff, &
-                 "The nondimensional coefficient in the Visbeck formula \n"//&
+                 "The nondimensional coefficient in the Visbeck formula "//&
                  "for the epipycnal tracer diffusivity", units="nondim", &
                  default=0.0)
   call get_param(param_file, mdl, "USE_STORED_SLOPES", CS%use_stored_slopes,&
-                 "If true, the isopycnal slopes are calculated once and\n"//&
-                 "stored for re-use. This uses more memory but avoids calling\n"//&
+                 "If true, the isopycnal slopes are calculated once and "//&
+                 "stored for re-use. This uses more memory but avoids calling "//&
                  "the equation of state more times than should be necessary.", &
                  default=.false.)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", use_FGNV_streamfn, &
@@ -804,6 +977,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
   call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
                  default=.false., do_not_log=.true.)
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
   CS%calculate_Eady_growth_rate = CS%calculate_Eady_growth_rate .or. use_MEKE
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
@@ -817,7 +991,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) then
     in_use = .true.
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
-                 "The depth below which N2 is monotonized to avoid stratification\n"//&
+                 "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
                  units='m', default=2000.)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
@@ -826,8 +1000,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
     CS%calculate_Eady_growth_rate = .true.
     call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
-          "If non-zero, is an upper bound on slopes used in the\n"//       &
-          "Visbeck formula for diffusivity. This does not affect the\n"//  &
+          "If non-zero, is an upper bound on slopes used in the "//&
+          "Visbeck formula for diffusivity. This does not affect the "//&
           "isopycnal slope calculation used within thickness diffusion.",  &
           units="nondim", default=0.0)
   endif
@@ -836,10 +1010,12 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
+    allocate(CS%N2_u(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%N2_u(:,:,:) = 0.0
+    allocate(CS%N2_v(isd:ied,JsdB:JedB,G%ke+1)) ; CS%N2_v(:,:,:) = 0.0
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
-                 "A diapycnal diffusivity that is used to interpolate \n"//&
+                 "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 default=1.0e-6)
+                 default=1.0e-6, scale=US%m_to_Z**2) !### Add units argument.
   endif
 
   if (CS%calculate_Eady_growth_rate) then
@@ -851,7 +1027,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's-1')
     call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
-                 "The layer number at which to start vertical integration \n"//&
+                 "The layer number at which to start vertical integration "//&
                  "of S*N for purposes of finding the Eady growth rate.", &
                  units="nondim", default=2)
   endif
@@ -861,8 +1037,19 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
                  "The fixed length scale in the Visbeck formula.", units="m", &
                  default=0.0)
-    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = CS%Visbeck_L_scale**2
-    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = CS%Visbeck_L_scale**2
+    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = 0.0
+    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
+    if (CS%Visbeck_L_scale<0) then
+      do j=js,je ; do I=is-1,Ieq
+        CS%L2u(I,j) = CS%Visbeck_L_scale**2*G%areaCu(I,j)
+      enddo; enddo
+      do J=js-1,Jeq ; do i=is,ie
+        CS%L2v(i,J) = CS%Visbeck_L_scale**2*G%areaCv(i,J)
+      enddo; enddo
+    else
+      CS%L2u(:,:) = CS%Visbeck_L_scale**2
+      CS%L2v(:,:) = CS%Visbeck_L_scale**2
+    endif
 
     CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm2')
@@ -881,6 +1068,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
          'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
   endif
 
+  oneOrTwo = 1.0
   if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
     CS%calculate_Rd_dx = .true.
     CS%calculate_res_fns = .true.
@@ -899,39 +1087,39 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
        'Resolution function for scaling diffusivities', 'nondim')
 
     call get_param(param_file, mdl, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
-                 "A coefficient that determines how KhTh is scaled away if \n"//&
-                 "RESOLN_SCALED_... is true, as \n"//&
+                 "A coefficient that determines how KhTh is scaled away if "//&
+                 "RESOLN_SCALED_... is true, as "//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).", &
                  units="nondim", default=1.0)
     call get_param(param_file, mdl, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
-                 "The power of dx/Ld in the Kh resolution function.  Any \n"//&
-                 "positive integer may be used, although even integers \n"//&
-                 "are more efficient to calculate.  Setting this greater \n"//&
+                 "The power of dx/Ld in the Kh resolution function.  Any "//&
+                 "positive integer may be used, although even integers "//&
+                 "are more efficient to calculate.  Setting this greater "//&
                  "than 100 results in a step-function being used.", &
                  units="nondim", default=2)
     call get_param(param_file, mdl, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
-                 "A coefficient that determines how Kh is scaled away if \n"//&
-                 "RESOLN_SCALED_... is true, as \n"//&
-                 "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).\n"//&
+                 "A coefficient that determines how Kh is scaled away if "//&
+                 "RESOLN_SCALED_... is true, as "//&
+                 "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER). "//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_coef_khth)
     call get_param(param_file, mdl, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
-                 "The power of dx/Ld in the Kh resolution function.  Any \n"//&
-                 "positive integer may be used, although even integers \n"//&
-                 "are more efficient to calculate.  Setting this greater \n"//&
-                 "than 100 results in a step-function being used.\n"//&
+                 "The power of dx/Ld in the Kh resolution function.  Any "//&
+                 "positive integer may be used, although even integers "//&
+                 "are more efficient to calculate.  Setting this greater "//&
+                 "than 100 results in a step-function being used. "//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_fn_power_khth)
     call get_param(param_file, mdl, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
-                 "If true, interpolate the resolution function to the \n"//&
-                 "velocity points from the thickness points; otherwise \n"//&
-                 "interpolate the wave speed and calculate the resolution \n"//&
+                 "If true, interpolate the resolution function to the "//&
+                 "velocity points from the thickness points; otherwise "//&
+                 "interpolate the wave speed and calculate the resolution "//&
                  "function independently at each point.", default=.true.)
     call get_param(param_file, mdl, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
-                 "If true, then retain a legacy bug in the calculation of weights \n"//&
-                 "applied to isoneutral slopes. There was an erroneous k-indexing \n"//&
-                 "for layer thicknesses. In addition, masking at coastlines was not \n"//&
-                 "used which introduced potential restart issues.  This flag will be \n"//&
+                 "If true, then retain a legacy bug in the calculation of weights "//&
+                 "applied to isoneutral slopes. There was an erroneous k-indexing "//&
+                 "for layer thicknesses. In addition, masking at coastlines was not "//&
+                 "used which introduced potential restart issues.  This flag will be "//&
                  "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
@@ -941,22 +1129,21 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
+    !### Change the default of GILL_EQUATORIAL_LD to True.
     call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
-                 "If true, uses Gill's definition of the baroclinic\n"//&
-                 "equatorial deformation radius, otherwise, if false, use\n"//&
-                 "Pedlosky's definition. These definitions differ by a factor\n"//&
-                 "of 2 infront of the beta term in the denominator. Gill's"//&
-                 "is the more appropriate definition.\n", default=.false.)
+                 "If true, uses Gill's definition of the baroclinic "//&
+                 "equatorial deformation radius, otherwise, if false, use "//&
+                 "Pedlosky's definition. These definitions differ by a factor "//&
+                 "of 2 in front of the beta term in the denominator. Gill's "//&
+                 "is the more appropriate definition.", default=.false.)
     if (Gill_equatorial_Ld) then
       oneOrTwo = 2.0
-    else
-      oneOrTwo = 1.0
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
-                         max(G%CoriolisBu(I,J)**2, absurdly_small_freq2)
-      CS%beta_dx2_q(I,J) = oneOrTwo * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (sqrt(0.5 * &
+                         max(US%s_to_T**2 * G%CoriolisBu(I,J)**2, absurdly_small_freq2)
+      CS%beta_dx2_q(I,J) = oneOrTwo * (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * (US%s_to_T * sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -965,8 +1152,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 
     do j=js,je ; do I=is-1,Ieq
       CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
-          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq2)
-      CS%beta_dx2_u(I,j) = oneOrTwo * (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (sqrt( &
+          max(0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq2)
+      CS%beta_dx2_u(I,j) = oneOrTwo * (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * (US%s_to_T * sqrt( &
           0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
                   ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
                  (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2 + &
@@ -976,8 +1163,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 
     do J=js-1,Jeq ; do i=is,ie
       CS%f2_dx2_v(i,J) = (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * &
-          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq2)
-      CS%beta_dx2_v(i,J) = oneOrTwo * (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (sqrt( &
+          max(0.5*US%s_to_T**2 * (G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq2)
+      CS%beta_dx2_v(i,J) = oneOrTwo * (G%dxCv(i,J)**2 + G%dyCv(i,J)**2) * (US%s_to_T * sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
           0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
                   ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2) + &
@@ -999,10 +1186,10 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed))  ; CS%f2_dx2_h(:,:) = 0.0
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
-          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+          max(0.25 * US%s_to_T**2 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
               absurdly_small_freq2)
-      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
+      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (US%s_to_T * sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -1014,6 +1201,49 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     in_use = .true.
     allocate(CS%cg1(isd:ied,jsd:jed)); CS%cg1(:,:) = 0.0
     call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
+  endif
+
+  ! Leith parameters
+  call get_param(param_file, mdl, "USE_QG_LEITH_GM", CS%use_QG_Leith_GM, &
+               "If true, use the QG Leith viscosity as the GM coefficient.", &
+               default=.false.)
+
+  if (CS%Use_QG_Leith_GM) then
+    call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
+               "The nondimensional Laplacian Leith constant, \n"//&
+               "often set to 1.0", units="nondim", default=0.0)
+
+    call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_QG_Leith, &
+               "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
+               default=.true.)
+
+    ALLOC_(CS%Laplac3_const_u(IsdB:IedB,jsd:jed)) ; CS%Laplac3_const_u(:,:) = 0.0
+    ALLOC_(CS%Laplac3_const_v(isd:ied,JsdB:JedB)) ; CS%Laplac3_const_v(:,:) = 0.0
+    ALLOC_(CS%KH_u_QG(IsdB:IedB,jsd:jed,G%ke)) ; CS%KH_u_QG(:,:,:) = 0.0
+    ALLOC_(CS%KH_v_QG(isd:ied,JsdB:JedB,G%ke)) ; CS%KH_v_QG(:,:,:) = 0.0
+    ! register diagnostics
+
+    CS%id_KH_u_QG = register_diag_field('ocean_model', 'KH_u_QG', diag%axesCuL, Time, &
+       'Horizontal viscosity from Leith QG, at u-points', 'm2 s-1')
+    CS%id_KH_v_QG = register_diag_field('ocean_model', 'KH_v_QG', diag%axesCvL, Time, &
+       'Horizontal viscosity from Leith QG, at v-points', 'm2 s-1')
+
+    do j=Jsq,Jeq+1 ; do I=is-1,Ieq
+      ! Static factors in the Leith schemes
+      grid_sp_u2 = G%dyCu(I,j)*G%dxCu(I,j)
+      grid_sp_u3 = grid_sp_u2*sqrt(grid_sp_u2)
+      CS%Laplac3_const_u(I,j) = Leith_Lap_const * grid_sp_u3
+    enddo ; enddo
+    do j=js-1,Jeq ; do I=Isq,Ieq+1
+      ! Static factors in the Leith schemes
+      grid_sp_v2 = G%dyCv(i,J)*G%dxCu(i,J)
+      grid_sp_v3 = grid_sp_v2*sqrt(grid_sp_v2)
+      CS%Laplac3_const_v(i,J) = Leith_Lap_const * grid_sp_v3
+    enddo ; enddo
+
+    if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "USE_STORED_SLOPES must be True when using QG Leith.")
   endif
 
   ! If nothing is being stored in this class then deallocate

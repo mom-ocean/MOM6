@@ -88,11 +88,11 @@ subroutine MOM_debugging_init(param_file)
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_CHKSUMS", debug_chksums, &
-                 "If true, checksums are performed on arrays in the \n"//&
+                 "If true, checksums are performed on arrays in the "//&
                  "various vec_chksum routines.", default=debug, &
                  debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_REDUNDANT", debug_redundant, &
-                 "If true, debug redundant data points during calls to \n"//&
+                 "If true, debug redundant data points during calls to "//&
                  "the various vec_chksum routines.", default=debug, &
                  debuggingParam=.true.)
 
@@ -726,7 +726,7 @@ end subroutine chksum_vec_A2d
 function totalStuff(HI, hThick, areaT, stuff)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas [m2]
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed
   real                                         :: totalStuff !< the globally integrated amoutn of stuff
   ! Local variables
@@ -746,7 +746,7 @@ end function totalStuff
 subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas [m2]
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
   character(len=*),                   intent(in) :: mesg        !< An identifying message

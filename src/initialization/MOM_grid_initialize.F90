@@ -16,12 +16,18 @@ use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
+use MOM_unit_scaling, only : unit_scale_type
 
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 
 implicit none ; private
 
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Global positioning system (aka container for information to describe the grid)
 type, public :: GPS ; private
@@ -31,7 +37,7 @@ type, public :: GPS ; private
                    !! starting value for the x-axis.
   real :: south_lat  !< The southern latitude of the domain or the equivalent
                    !! starting value for the y-axis.
-  real :: Rad_Earth !< The radius of the Earth, in m.
+  real :: Rad_Earth !< The radius of the Earth [m].
   real :: Lat_enhance_factor  !< The amount by which the meridional resolution
                    !! is enhanced within LAT_EQ_ENHANCE of the equator.
   real :: Lat_eq_enhance !< The latitude range to the north and south of the equator
@@ -53,9 +59,10 @@ contains
 !> set_grid_metrics is used to set the primary values in the model's horizontal
 !! grid.  The bathymetry, land-sea mask and any restricted channel widths are
 !! not known yet, so these are set later.
-subroutine set_grid_metrics(G, param_file)
-  type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
+subroutine set_grid_metrics(G, param_file, US)
+  type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid type
+  type(param_file_type),           intent(in)    :: param_file !< Parameter file structure
+  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -65,7 +72,7 @@ subroutine set_grid_metrics(G, param_file)
   call callTree_enter("set_grid_metrics(), MOM_grid_initialize.F90")
   call log_version(param_file, "MOM_grid_init", version, "")
   call get_param(param_file, "MOM_grid_init", "GRID_CONFIG", config, &
-                 "A character string that determines the method for \n"//&
+                 "A character string that determines the method for "//&
                  "defining the horizontal grid.  Current options are: \n"//&
                  " \t mosaic - read the grid from a mosaic (supergrid) \n"//&
                  " \t          file set by GRID_FILE.\n"//&
@@ -183,6 +190,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   integer :: err=0, ni, nj, global_indices(4)
   type(MOM_domain_type) :: SGdom ! Supergrid domain
+  logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
   integer :: i, j, i2, j2
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
@@ -193,6 +201,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   call get_param(param_file, mdl, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
                  fail_if_missing=.true.)
+  call get_param(param_file, mdl, "USE_TRIPOLAR_GEOLONB_BUG", lon_bug, &
+                 "If true, use older code that incorrectly sets the longitude "//&
+                 "in some points along the tripolar fold to be off by 360 degrees.", &
+                 default=.true.)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(adjustl(inputdir)) // trim(adjustl(grid_file))
@@ -220,7 +232,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
   SGdom%layout(:) = G%domain%layout(:)
-  SGdom%use_io_layout = G%domain%use_io_layout
   SGdom%io_layout(:) = G%domain%io_layout(:)
   global_indices(1) = 1+SGdom%nihalo
   global_indices(2) = SGdom%niglobal+SGdom%nihalo
@@ -241,8 +252,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
             symmetry=.true., name="MOM_MOSAIC")
   endif
 
-  if (SGdom%use_io_layout) &
-    call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
+  call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
   deallocate(exni)
   deallocate(exnj)
 
@@ -250,7 +260,11 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   tmpZ(:,:) = 999.
   call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
 
-  call pass_var(tmpZ, SGdom, position=CORNER)
+  if (lon_bug) then
+    call pass_var(tmpZ, SGdom, position=CORNER)
+  else
+    call pass_var(tmpZ, SGdom, position=CORNER, inner_halo=0)
+  endif
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
@@ -429,14 +443,14 @@ subroutine set_grid_metrics_cartesian(G, param_file)
                  " \t degrees - degrees of latitude and longitude \n"//&
                  " \t m - meters \n \t k - kilometers", default="degrees")
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
-                 "The southern latitude of the domain or the equivalent \n"//&
+                 "The southern latitude of the domain or the equivalent "//&
                  "starting value for the y-axis.", units=units_temp, &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "LENLAT", G%len_lat, &
                  "The latitudinal or y-direction length of the domain.", &
                  units=units_temp, fail_if_missing=.true.)
   call get_param(param_file, mdl, "WESTLON", G%west_lon, &
-                 "The western longitude of the domain or the equivalent \n"//&
+                 "The western longitude of the domain or the equivalent "//&
                  "starting value for the x-axis.", units=units_temp, &
                  default=0.0)
   call get_param(param_file, mdl, "LENLON", G%len_lon, &
@@ -732,24 +746,24 @@ subroutine set_grid_metrics_mercator(G, param_file)
   G%west_lon = GP%west_lon ; G%len_lon = GP%len_lon
   G%Rad_Earth = GP%Rad_Earth
   call get_param(param_file, mdl, "ISOTROPIC", GP%isotropic, &
-                 "If true, an isotropic grid on a sphere (also known as \n"//&
-                 "a Mercator grid) is used. With an isotropic grid, the \n"//&
-                 "meridional extent of the domain (LENLAT), the zonal \n"//&
-                 "extent (LENLON), and the number of grid points in each \n"//&
-                 "direction are _not_ independent. In MOM the meridional \n"//&
-                 "extent is determined to fit the zonal extent and the \n"//&
+                 "If true, an isotropic grid on a sphere (also known as "//&
+                 "a Mercator grid) is used. With an isotropic grid, the "//&
+                 "meridional extent of the domain (LENLAT), the zonal "//&
+                 "extent (LENLON), and the number of grid points in each "//&
+                 "direction are _not_ independent. In MOM the meridional "//&
+                 "extent is determined to fit the zonal extent and the "//&
                  "number of grid points, while grid is perfectly isotropic.", &
                  default=.false.)
   call get_param(param_file, mdl, "EQUATOR_REFERENCE", GP%equator_reference, &
-                 "If true, the grid is defined to have the equator at the \n"//&
+                 "If true, the grid is defined to have the equator at the "//&
                  "nearest q- or h- grid point to (-LOWLAT*NJGLOBAL/LENLAT).", &
                  default=.true.)
   call get_param(param_file, mdl, "LAT_ENHANCE_FACTOR", GP%Lat_enhance_factor, &
-                 "The amount by which the meridional resolution is \n"//&
+                 "The amount by which the meridional resolution is "//&
                  "enhanced within LAT_EQ_ENHANCE of the equator.", &
                  units="nondim", default=1.0)
   call get_param(param_file, mdl, "LAT_EQ_ENHANCE", GP%Lat_eq_enhance, &
-                 "The latitude range to the north and south of the equator \n"//&
+                 "The latitude range to the north and south of the equator "//&
                  "over which the resolution is enhanced.", units="degrees", &
                  default=0.0)
 
@@ -1207,25 +1221,30 @@ end function Adcroft_reciprocal
 !! are 0.0 at any points adjacent to a land point.  mask2dBu is 0.0 at
 !! any land or boundary point.  For points in the interior, mask2dCu,
 !! mask2dCv, and mask2dBu are all 1.0.
-subroutine initialize_masks(G, PF)
-  type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)     :: PF  !< Parameter file structure
+subroutine initialize_masks(G, PF, US)
+  type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid type
+  type(param_file_type),           intent(in)    :: PF !< Parameter file structure
+  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
-  real :: Dmin, min_depth, mask_depth
+  real :: m_to_Z_scale ! A unit conversion factor from m to Z.
+  real :: Dmin       ! The depth for masking in the same units as G%bathyT [Z ~> m].
+  real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT [Z ~> m].
+  real :: mask_depth ! The depth shallower than which to mask a point as land [Z ~> m].
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
   integer :: i, j
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
+  m_to_Z_scale = 1.0 ; if (present(US)) m_to_Z_scale = US%m_to_Z
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
-                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
-                 "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
+                 "If MASKING_DEPTH is unspecified, then anything shallower than "//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than "//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
-                 units="m", default=0.0)
+                 units="m", default=0.0, scale=m_to_Z_scale)
   call get_param(PF, mdl, "MASKING_DEPTH", mask_depth, &
-                 "The depth below which to mask points as land points, for which all\n"//&
+                 "The depth below which to mask points as land points, for which all "//&
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
-                 units="m", default=-9999.0)
+                 units="m", default=-9999.0, scale=m_to_Z_scale)
 
   Dmin = min_depth
   if (mask_depth>=0.) Dmin = mask_depth

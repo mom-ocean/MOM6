@@ -19,6 +19,11 @@ implicit none ; private
 public allocate_surface_state, deallocate_surface_state, MOM_thermovar_chksum
 public ocean_grid_type, alloc_BT_cont_type, dealloc_BT_cont_type
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+
 !> A structure for creating arrays of pointers to 3D arrays
 type, public :: p3d
   real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array
@@ -32,38 +37,38 @@ end type p2d
 !! will be returned to a the calling program
 type, public :: surface
   real, allocatable, dimension(:,:) :: &
-    SST, &         !< The sea surface temperature in C.
-    SSS, &         !< The sea surface salinity in psu.
-    sfc_density, & !< The mixed layer density in kg m-3.
-    Hml, &      !< The mixed layer depth in m.
-    u, &        !< The mixed layer zonal velocity in m s-1.
-    v, &        !< The mixed layer meridional velocity in m s-1.
-    sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
+    SST, &         !< The sea surface temperature [degC].
+    SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
+    sfc_density, & !< The mixed layer density [kg m-3].
+    Hml, &      !< The mixed layer depth [m].
+    u, &        !< The mixed layer zonal velocity [m s-1].
+    v, &        !< The mixed layer meridional velocity [m s-1].
+    sea_lev, &  !< The sea level [m].  If a reduced surface gravity is
                 !! used, that is compensated for in sea_lev.
-    melt_potential, & !< instantaneous amount of heat that can be used to melt sea ice,
-                      !! in J m-2. This is computed w.r.t. surface freezing temperature.
-    ocean_mass, &  !< The total mass of the ocean in kg m-2.
-    ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
-    ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
+    melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [J m-2].
+                      !! This is computed w.r.t. surface freezing temperature.
+    ocean_mass, &  !< The total mass of the ocean [kg m-2].
+    ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
+    ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
     salt_deficit   !< The salt needed to maintain the ocean column at a minimum
-                   !! salinity of 0.01 PSU over the call to step_MOM, in kgSalt m-2.
+                   !! salinity of 0.01 PSU over the call to step_MOM [kgSalt m-2].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
-                   !! conservative temperature, in degC.
+                   !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
-                   !! absolute salinity, in g/kg.
+                   !! absolute salinity in [g/kg].
   real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), & !< The zonal stresses on the ocean under shelves, in Pa.
-    tauy_shelf => NULL()    !< The meridional stresses on the ocean under shelves, in Pa.
+    taux_shelf => NULL(), & !< The zonal stresses on the ocean under shelves [Pa].
+    tauy_shelf => NULL()    !< The meridional stresses on the ocean under shelves [Pa].
   real, pointer, dimension(:,:) :: frazil => NULL()
                 !< The energy needed to heat the ocean column to the freezing point during the call
-                !! to step_MOM, in J m-2.
+                !! to step_MOM [J m-2].
   real, pointer, dimension(:,:) :: TempxPmE => NULL()
                 !< The net inflow of water into the ocean times the temperature at which this inflow
-                !! occurs during the call to step_MOM, in deg C kg m-2. This should be prescribed in the
+                !! occurs during the call to step_MOM [degC kg m-2]. This should be prescribed in the
                 !! forcing fields, but as it often is not, this is a useful heat budget diagnostic.
   real, pointer, dimension(:,:) :: internal_heat => NULL()
                 !< Any internal or geothermal heat sources that are applied to the ocean integrated
-                !! over the call to step_MOM, in deg C kg m-2.
+                !! over the call to step_MOM [degC kg m-2].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -75,42 +80,42 @@ end type surface
 !> Pointers to an assortment of thermodynamic fields that may be available, including
 !! potential temperature, salinity, heat capacity, and the equation of state control structure.
 type, public :: thermo_var_ptrs
-!   If allocated, the following variables have nz layers.
-  real, pointer :: T(:,:,:) => NULL() !< Potential temperature in C.
-  real, pointer :: S(:,:,:) => NULL() !< Salnity in psu or ppt.
+  ! If allocated, the following variables have nz layers.
+  real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
+  real, pointer :: S(:,:,:) => NULL() !< Salnity [PSU] or [gSalt/kg], generically [ppt].
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
                          !! equation of state to use.
-  real :: P_Ref          !<   The coordinate-density reference pressure in Pa.
+  real :: P_Ref          !<   The coordinate-density reference pressure [Pa].
                          !! This is the pressure used to calculate Rml from
                          !! T and S when eqn_of_state is associated.
-  real :: C_p            !<   The heat capacity of seawater, in J K-1 kg-1.
+  real :: C_p            !<   The heat capacity of seawater [J degC-1 kg-1].
                          !! When conservative temperature is used, this is
-                         !! constant and exactly 3991.86795711963 J K kg-1.
+                         !! constant and exactly 3991.86795711963 J degC-1 kg-1.
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
-                         !! actually the conservative temperature, in degC.
+                         !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity, in g/kg.
-!  These arrays are accumulated fluxes for communication with other components.
+                         !! actually the absolute salinity in units of [gSalt/kg].
+  real :: min_salinity = 0.01 !< The minimum value of salinity when BOUND_SALINITY=True [ppt].
+                         !! The default is 0.01 for backward compatibility but should be 0.
+  ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
-                         !! freezing point since calculate_surface_state was
-                         !! last called, in units of J m-2.
+                         !! freezing point since calculate_surface_state was2
+                         !! last called [J m-2].
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
-                         !! at a minumum salinity of 0.01 PSU since the last time
-                         !! that calculate_surface_state was called, in units
-                         !! of gSalt m-2.
+                         !! at a minimum salinity of MIN_SALINITY since the last time
+                         !! that calculate_surface_state was called, [gSalt m-2].
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
                          !! temperature at which this inflow occurs since the
-                         !! last call to calculate_surface_state, in units of
-                         !! deg C kg m-2. This should be prescribed in the
-                         !! forcing fields, but as it often is not, this is a
-                         !! useful heat budget diagnostic.
+                         !! last call to calculate_surface_state [degC kg m-2].
+                         !! This should be prescribed in the forcing fields, but
+                         !! as it often is not, this is a useful heat budget diagnostic.
   real, dimension(:,:), pointer :: internal_heat => NULL()
                          !< Any internal or geothermal heat sources that
                          !! have been applied to the ocean since the last call to
-                         !! calculate_surface_state, in units of deg C kg m-2.
+                         !! calculate_surface_state [degC kg m-2].
 end type thermo_var_ptrs
 
 !> Pointers to all of the prognostic variables allocated in MOM_variables.F90 and MOM.F90.
@@ -120,29 +125,30 @@ end type thermo_var_ptrs
 !! they refer to in MOM.F90.
 type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
-    T => NULL(), & !< Pointer to the temperature state variable, in deg C
-    S => NULL(), & !< Pointer to the salinity state variable, in PSU or g/kg
-    u => NULL(), & !< Pointer to the zonal velocity, in m s-1
-    v => NULL(), & !< Pointer to the meridional velocity, in m s-1
-    h => NULL()    !< Pointer to the layer thicknesses, in H (often m or kg m-2)
+    T => NULL(), & !< Pointer to the temperature state variable [degC]
+    S => NULL(), & !< Pointer to the salinity state variable [ppt ~> PSU or g/kg]
+    u => NULL(), & !< Pointer to the zonal velocity [m s-1]
+    v => NULL(), & !< Pointer to the meridional velocity [m s-1]
+    h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), & !<  Pointer to zonal transports, in H m2 s-1
-    vh => NULL()    !<  Pointer to meridional transports, in H m2 s-1
+    uh => NULL(), & !<  Pointer to zonal transports [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vh => NULL()    !<  Pointer to meridional transports [H m2 s-1 ~> m3 s-1 or kg s-1]
   real, pointer, dimension(:,:,:) :: &
-    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration, in m s-2
-    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration, in m s-2
-    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration, in m s-2
-    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration, in m s-2
-    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity, in m s-2
-    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity, in m s-2
-    pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement, in s-2
-    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration, in m s-2
-    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration, in m s-2
+    CAu => NULL(), & !< Pointer to the zonal Coriolis and Advective acceleration [m s-2]
+    CAv => NULL(), & !< Pointer to the meridional Coriolis and Advective acceleration [m s-2]
+    PFu => NULL(), & !< Pointer to the zonal Pressure force acceleration [m s-2]
+    PFv => NULL(), & !< Pointer to the meridional Pressure force acceleration [m s-2]
+    diffu => NULL(), & !< Pointer to the zonal acceleration due to lateral viscosity [m s-2]
+    diffv => NULL(), & !< Pointer to the meridional acceleration due to lateral viscosity [m s-2]
+    pbce => NULL(), &  !< Pointer to the baroclinic pressure force dependency on free surface movement
+                       !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2]
+    u_accel_bt => NULL(), & !< Pointer to the zonal barotropic-solver acceleration [m s-2]
+    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [m s-2]
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep, in m s-1
-    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep, in m s-1
-    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep, in m s-1
-    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep, in m s-1
+    u_av => NULL(), &  !< Pointer to zonal velocity averaged over the timestep [m s-1]
+    v_av => NULL(), &  !< Pointer to meridional velocity averaged over the timestep [m s-1]
+    u_prev => NULL(), & !< Pointer to zonal velocity at the end of the last timestep [m s-1]
+    v_prev => NULL()   !< Pointer to meridional velocity at the end of the last timestep [m s-1]
 end type ocean_internal_state
 
 !> Pointers to arrays with accelerations, which can later be used for derived diagnostics, like energy balances.
@@ -150,28 +156,28 @@ type, public :: accel_diag_ptrs
 
   ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
-    diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity, in m s-2.
-    diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity, in m s-2.
-    CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations, in m s-2.
-    CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations, in m s-2.
-    PFu => NULL(), &       !< Zonal acceleration due to pressure forces, in m s-2.
-    PFv => NULL(), &       !< Meridional acceleration due to pressure forces, in m s-2.
-    du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity, in m s-2.
-    dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity, in m s-2.
-    du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing, in m s-2.
-    dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing, in m s-2.
+    diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [m s-2]
+    diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [m s-2]
+    CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [m s-2]
+    CAv => NULL(), &       !< Meridional Coriolis and momentum advection accelerations [m s-2]
+    PFu => NULL(), &       !< Zonal acceleration due to pressure forces [m s-2]
+    PFv => NULL(), &       !< Meridional acceleration due to pressure forces [m s-2]
+    du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [m s-2]
+    dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [m s-2]
+    du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [m s-2]
+    dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing [m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
-                           !! not due to any explicit accelerations, in m s-1.
+                           !! not due to any explicit accelerations [m s-1].
   real, pointer, dimension(:,:,:) :: dv_other => NULL()
                            !< Meridional velocity changes  due to any other processes that are
-                           !! not due to any explicit accelerations, in m s-1.
+                           !! not due to any explicit accelerations [m s-1].
 
   ! These accelerations are sub-terms included in the accelerations above.
-  real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2), in m s-2.
-  real, pointer :: gradKEv(:,:,:) => NULL()  !< gradKEv = - d/dy(u2), in m s-2.
-  real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u, in m s-2.
-  real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v, in m s-2.
+  real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [m s-2]
+  real, pointer :: gradKEv(:,:,:) => NULL()  !< gradKEv = - d/dy(u2) [m s-2]
+  real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u [m s-2]
+  real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v [m s-2]
 
 end type accel_diag_ptrs
 
@@ -180,109 +186,108 @@ type, public :: cont_diag_ptrs
 
 ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
-    uh => NULL(), &   !< Resolved zonal layer thickness fluxes, in m3 s-1 or kg s-1
-    vh => NULL(), &   !< Resolved meridional layer thickness fluxes, in m3 s-1 or kg s-1
-    uhGM => NULL(), & !< Isopycnal height diffusion induced zonal volume fluxes in m3 s-1 or kg s-1
-    vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes in m3 s-1 or kg s-1
+    uh => NULL(), &   !< Resolved zonal layer thickness fluxes, [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vh => NULL(), &   !< Resolved meridional layer thickness fluxes, [H m2 s-1 ~> m3 s-1 or kg s-1]
+    uhGM => NULL(), & !< Isopycnal height diffusion induced zonal volume fluxes [H m2 s-1 ~> m3 s-1 or kg s-1]
+    vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes [H m2 s-1 ~> m3 s-1 or kg s-1]
 
 ! Each of the following fields is found at nz+1 interfaces.
-  real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity, in m s-1 or kg m-2 s-1
+  real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity [H s-1 ~> m s-1 or kg m-2 s-1]
 
 end type cont_diag_ptrs
 
 !> Vertical viscosities, drag coefficients, and related fields.
 type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
-                             !! that is captured in Kd_shear.
+                             !! that is captured in Kd_shear [nondim].
   real, pointer, dimension(:,:) :: &
-    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points, in m.
-    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points, in m.
-    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points, in m2 s-1.
-    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points, in m2 s-1.
-    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points, in m s-1.
+    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points [Z ~> m].
+    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points [Z ~> m].
+    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points [Z2 s-1 ~> m2 s-1].
+    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points [Z2 s-1 ~> m2 s-1].
+    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points [Z s-1 ~> m s-1].
   real, pointer, dimension(:,:) :: TKE_BBL => NULL()
                              !< A term related to the bottom boundary layer source of turbulent kinetic
-                             !! energy, currently in units of m3 s-3, but will later be changed to W m-2.
+                             !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
+                             !! to [kg Z3 m-3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves, in Pa.
-    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves, in Pa.
+    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [Pa].
+    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [Pa].
   real, pointer, dimension(:,:) :: tbl_thick_shelf_u => NULL()
-                !< Thickness of the viscous top boundary layer under ice shelves at u-points, in m.
+                !< Thickness of the viscous top boundary layer under ice shelves at u-points [Z ~> m].
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
-                !< Thickness of the viscous top boundary layer under ice shelves at v-points, in m.
+                !< Thickness of the viscous top boundary layer under ice shelves at v-points [Z ~> m].
   real, pointer, dimension(:,:) :: kv_tbl_shelf_u => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at u-points, in m2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at u-points [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
-                !< Viscosity in the viscous top boundary layer under ice shelves at v-points, in m2 s-1.
+                !< Viscosity in the viscous top boundary layer under ice shelves at v-points [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
-                !< The number of layers in the viscous surface mixed layer at u-points (nondimensional).
+                !< The number of layers in the viscous surface mixed layer at u-points [nondim].
                 !! This is not an integer because there may be fractional layers, and it is stored in
                 !! terms of layers, not depth, to facilitate the movement of the viscous boundary layer
                 !! with the flow.
   real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
-                !< The number of layers in the viscous surface mixed layer at v-points (nondimensional).
+                !< The number of layers in the viscous surface mixed layer at v-points [nondim].
   real, pointer, dimension(:,:) :: &
-    MLD => NULL()       !< Instantaneous active mixing layer depth (H units).
+    MLD => NULL()      !< Instantaneous active mixing layer depth [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:) :: &
-    Ray_u => NULL(), &  !< The Rayleigh drag velocity to be applied to each layer at u-points, in m s-1.
-    Ray_v => NULL()     !< The Rayleigh drag velocity to be applied to each layer at v-points, in m s-1.
+    Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points [Z s-1 ~> m s-1].
+    Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points [Z s-1 ~> m s-1].
   real, pointer, dimension(:,:,:) :: Kd_extra_T => NULL()
                 !< The extra diffusivity of temperature due to double diffusion relative to the
-                !! diffusivity of density, in m2 s-1.
+                !! diffusivity of density [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kd_extra_S => NULL()
                 !< The extra diffusivity of salinity due to double diffusion relative to the
-                !! diffusivity of density, in m2 s-1.
+                !! diffusivity of density [Z2 s-1 ~> m2 s-1].
   ! One of Kd_extra_T and Kd_extra_S is always 0. Kd_extra_S is positive for salt fingering;
   ! Kd_extra_T is positive for double diffusive convection.  They are only allocated if
   ! DOUBLE_DIFFUSION is true.
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
-                !! in tracer columns, in m2 s-1.
+                !! in tracer columns [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
-                !! in tracer columns, in m2 s-1.
+                !! in tracer columns [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kv_shear_Bu => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers in
-                !! corner columns, in m2 s-1.
+                !! corner columns [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc).
+                !! background, convection etc) [Z2 s-1 ~> m2 s-1].
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
-                !< The turbulent kinetic energy per unit mass at the interfaces, in m2 s-2.
+                !< The turbulent kinetic energy per unit mass at the interfaces [m2 s-2].
                 !! This may be at the tracer or corner points
-  logical :: add_Kv_slow !< If True, add Kv_slow when calculating the 'coupling coefficient' (a[k])
-                         !! at the interfaces. This is done in find_coupling_coef.
 end type vertvisc_type
 
 !> Container for information about the summed layer transports
 !! and how they will vary as the barotropic velocity is changed.
 type, public :: BT_cont_type
   real, allocatable :: FA_u_EE(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from locations far to the east, in H m.
+                                    !! drawing from locations far to the east [H m ~> m2 or kg m-1].
   real, allocatable :: FA_u_E0(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from nearby to the east, in H m.
+                                    !! drawing from nearby to the east [H m ~> m2 or kg m-1].
   real, allocatable :: FA_u_W0(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from nearby to the west, in H m.
+                                    !! drawing from nearby to the west [H m ~> m2 or kg m-1].
   real, allocatable :: FA_u_WW(:,:) !< The effective open face area for zonal barotropic transport
-                                    !! drawing from locations far to the west, in H m.
-  real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity, in m s-1, beyond which the marginal
+                                    !! drawing from locations far to the west [H m ~> m2 or kg m-1].
+  real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity [m s-1], beyond which the marginal
                                     !! open face area is FA_u_WW.  uBT_WW must be non-negative.
-  real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity, in m s-1, beyond which the marginal
+  real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity [m s-1], beyond which the marginal
                                     !! open face area is FA_u_EE. uBT_EE must be non-positive.
   real, allocatable :: FA_v_NN(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from locations far to the north, in H m.
+                                    !! drawing from locations far to the north [H m ~> m2 or kg m-1].
   real, allocatable :: FA_v_N0(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from nearby to the north, in H m.
+                                    !! drawing from nearby to the north [H m ~> m2 or kg m-1].
   real, allocatable :: FA_v_S0(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from nearby to the south, in H m.
+                                    !! drawing from nearby to the south [H m ~> m2 or kg m-1].
   real, allocatable :: FA_v_SS(:,:) !< The effective open face area for meridional barotropic transport
-                                    !! drawing from locations far to the south, in H m.
-  real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, in m s-1, beyond which the marginal
+                                    !! drawing from locations far to the south [H m ~> m2 or kg m-1].
+  real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, [m s-1], beyond which the marginal
                                     !! open face area is FA_v_SS. vBT_SS must be non-negative.
-  real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, in m s-1, beyond which the marginal
+  real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, [m s-1], beyond which the marginal
                                     !! open face area is FA_v_NN.  vBT_NN must be non-positive.
-  real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces, in H.
-  real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces, in H.
+  real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces [H ~> m or kg m-2].
+  real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces [H ~> m or kg m-2].
   type(group_pass_type) :: pass_polarity_BT !< Structure for polarity group halo updates
   type(group_pass_type) :: pass_FA_uv !< Structure for face area group halo updates
 end type BT_cont_type
@@ -348,7 +353,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
   if (present(gas_fields_ocn)) &
     call coupler_type_spawn(gas_fields_ocn, sfc_state%tr_fields, &
-                            (/isd,is,ie,ied/), (/jsd,js,je,jed/), as_needed=.true.)
+                            (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   sfc_state%arrays_allocated = .true.
 
