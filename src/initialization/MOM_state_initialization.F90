@@ -1732,7 +1732,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  pres(:) = 0.0 ; eta(:,:,:) = 0.0 ; tmp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
+  pres(:) = 0.0 ; tmp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -1789,7 +1789,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
-    allocate(eta(isd:ied,jsd:jed,nz+1))
+    allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     do j=js,je ; do i=is,ie
