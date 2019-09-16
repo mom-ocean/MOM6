@@ -1301,8 +1301,8 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
 
   if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
 
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
+  if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
+  if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
 !  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 !  call write_field(unit, fields(1), ds)

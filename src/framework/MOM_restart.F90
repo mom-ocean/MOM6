@@ -1161,8 +1161,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      call fms2_close_file(fileObjWrite)
     
      if(allocated(time_vals)) deallocate(time_vals)     
-     deallocate(axis_data_CS%axis)
-     deallocate(axis_data_CS%data)
+     if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
+     if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
      num_files = num_files+1
   enddo
@@ -1374,8 +1374,8 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   call fms2_close_file(fileObjWrite)
 
   if(allocated(time_vals)) deallocate(time_vals)
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
+  if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
+  if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
 end subroutine write_initial_conditions
 
