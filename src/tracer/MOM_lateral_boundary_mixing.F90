@@ -785,6 +785,41 @@ logical function near_boundary_unit_tests( verbose )
   call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
+
+  ! unit tests for layer by layer method
+  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
+  hbl_L = 12; hbl_R = 20
+  h_L = (/6.,6./) ; h_R = (/10.,10./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
+  khtr_u = 1.
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-3.75,0.0/) )
+
+  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
+  hbl_L = 15; hbl_R = 6
+  h_L = (/10.,10./) ; h_R = (/12.,10./)
+  phi_L = (/0.,0./) ; phi_R = (/1.,3./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 0.; phi_pp_R(1,2) = 2.
+  phi_pp_R(2,1) = 2.; phi_pp_R(2,2) = 2.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 2.
+  ppoly0_E_R(2,1) = 2.; ppoly0_E_R(2,2) = 4.
+  khtr_u = 1.
+  call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-3.75,0.0/) )
 end function near_boundary_unit_tests
 
 !> Returns true if output of near-boundary unit tests does not match correct computed values
