@@ -206,7 +206,8 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! Update the tracer fluxes
     do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if (G%mask2dT(i,j)>0.) then
-        tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))*(G%IareaT(i,j)/( h(i,j,k) + GV%H_subroundoff))
+        tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
+                          (G%IareaT(i,j)/( h(i,j,k) + GV%H_subroundoff))
       endif
     enddo ; enddo ; enddo
 
@@ -219,7 +220,8 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 end subroutine lateral_boundary_mixing
 
 !< Calculate bulk layer value of a scalar quantity as the thickness weighted average
-real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coefs, method, k_top, zeta_top, k_bot, zeta_bot)
+real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coefs, method, k_top, zeta_top, k_bot, &
+                           zeta_bot)
   integer             :: boundary          !< SURFACE or BOTTOM                                         [nondim]
   integer             :: nk                !< Number of layers                                          [nondim]
   integer             :: deg               !< Degree of polynomial                                      [nondim]
@@ -483,10 +485,10 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, 
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
   ! Calculate bulk averages of various quantities
-  phi_L_avg  = bulk_average(boundary, nk, deg, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, zeta_top_L,&
-                            k_bot_L, zeta_bot_L)
-  phi_R_avg  = bulk_average(boundary, nk, deg, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, zeta_top_R,&
-                            k_bot_R, zeta_bot_R)
+  phi_L_avg  = bulk_average(boundary, nk, deg, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, &
+                            zeta_top_L, k_bot_L, zeta_bot_L)
+  phi_R_avg  = bulk_average(boundary, nk, deg, h_R, hbl_R, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, &
+                            zeta_top_R, k_bot_R, zeta_bot_R)
   do k=1,nk
     h_u(k) = 0.5 * (h_L(k) + h_R(k))
   enddo
