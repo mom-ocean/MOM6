@@ -738,11 +738,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   roundoff = 1.e-4
 
   if (.not.spongeDataOngrid) then
-
     if (is_root_pe()) &
       call time_interp_external(fms_id, Time, data_in, verbose=.true.)
-
-
     ! loop through each data level and interpolate to model grid.
     ! after interpolating, fill in points which will be needed
     ! to define the layers
