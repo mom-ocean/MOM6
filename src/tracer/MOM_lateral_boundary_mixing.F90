@@ -399,8 +399,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     h_work_L = (h_L(k_bot_L) * zeta_bot_L)
     h_work_R = (h_R(k_bot_R) * zeta_bot_R)
 
-    phi_L_avg = average_value_ppoly( nk, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_bot_L, 0., zeta_bot_L) 
-    phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R) 
+    phi_L_avg = average_value_ppoly( nk, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_bot_L, 0., zeta_bot_L)
+    phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_bot_R, 0., zeta_bot_R)
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
     F_layer(k_bot_min) = -heff * (phi_R_avg - phi_L_avg)
@@ -410,6 +410,31 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     enddo
   endif
 
+  if (boundary == BOTTOM) then
+    k_top_max = MAX(k_top_L, k_top_R)
+    ! make sure left and right k indices span same range
+    if (k_top_max .ne. k_top_L) then
+      k_top_L = k_top_max
+      zeta_top_L = 1.0
+    endif
+    if (k_top_max .ne. k_top_R) then
+      k_top_R= k_top_max
+      zeta_top_R = 1.0
+    endif
+
+    h_work_L = (h_L(k_top_L) * zeta_top_L)
+    h_work_R = (h_R(k_top_R) * zeta_top_R)
+
+    phi_L_avg = average_value_ppoly( nk, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, 1.0-zeta_top_L, 1.0)
+    phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, 1.0-zeta_top_R, 1.0)
+    heff = harmonic_mean(h_work_L, h_work_R)
+    ! tracer flux where the minimum BLD intersets layer
+    F_layer(k_top_max) = -heff * (phi_R_avg - phi_L_avg)
+    do k = k_top_max+1,nk
+      heff = harmonic_mean(h_L(k), h_R(k))
+      F_layer(k) = -heff * (phi_R(k) - phi_L(k))
+    enddo
+  endif
 end subroutine fluxes_layer_method
 
 !> Calculate the near-boundary diffusive fluxes calculated from a 'bulk model'
@@ -499,11 +524,9 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, 
     do k=1,k_min-1
       h_means(k) = harmonic_mean(h_L(k),h_R(k))
     enddo
-  endif
 
-  if (boundary == BOTTOM) then
+  elseif (boundary == BOTTOM) then
     k_max = MAX(k_top_L, k_top_R)
-
     ! left hand side
     if (k_top_L == k_max) then
       h_work_L = h_L(k_max) * zeta_top_L
