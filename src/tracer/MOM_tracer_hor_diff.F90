@@ -1414,7 +1414,7 @@ end subroutine tracer_epipycnal_ML_diff
 
 
 !> Initialize lateral tracer diffusion module
-subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, diabatic_CSp, CS)
+subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp, CS)
   type(time_type), target,    intent(in)    :: Time       !< current model time
   type(ocean_grid_type),      intent(in)    :: G          !< ocean grid structure
   type(unit_scale_type),      intent(in)    :: US         !< A dimensional unit scaling type

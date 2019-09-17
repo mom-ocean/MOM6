@@ -2864,8 +2864,8 @@ end subroutine layered_diabatic
 
 !> Returns pointers or values of members within the diabatic_CS type. For extensibility,
 !! each returned argument is an optional argument
-subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
-                                   evap_CFL_limit, minimum_forcing_depth, KPP_CSp, energetic_PBL_CSp)
+subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, &
+                                   minimum_forcing_depth, KPP_CSp, energetic_PBL_CSp, diabatic_aux_CSp)
   type(diabatic_CS), intent(in   )           :: CS !< module control structure
   ! All output arguments are optional
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
