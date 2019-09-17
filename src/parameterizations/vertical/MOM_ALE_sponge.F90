@@ -902,7 +902,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       sp_val(:,:,:)=0.0
       mask_z(:,:,:)=0.0
 
-      call horiz_interp_and_extrap_tracer(CS%Ref_val(CS%fldno)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id,Time, 1.0,G,sp_val,mask_z,z_in,z_edges_in, &
                       missing_value,.true., .false.,.false., m_to_Z=US%m_to_Z,spongeOnGrid=CS%SpongeDataOngrid)
 
 !     call pass_var(sp_val,G%Domain)

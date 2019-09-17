@@ -734,16 +734,18 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
-  if (is_root_pe()) &
-    call time_interp_external(fms_id, Time, data_in, verbose=.true.)
-  
   !  roundoff = 3.0*EPSILON(missing_value)
   roundoff = 1.e-4
 
   if (.not.spongeDataOngrid) then
-  ! loop through each data level and interpolate to model grid.
-  ! after interpolating, fill in points which will be needed
-  ! to define the layers
+
+    if (is_root_pe()) &
+      call time_interp_external(fms_id, Time, data_in, verbose=.true.)
+
+
+    ! loop through each data level and interpolate to model grid.
+    ! after interpolating, fill in points which will be needed
+    ! to define the layers
     do k=1,kd
       write(laynum,'(I8)') k ; laynum = adjustl(laynum)
       if (is_root_pe()) then
@@ -860,6 +862,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
+      call time_interp_external(fms_id, Time, data_in, verbose=.true.)
       do k=1,kd
         do j=js,je
           do i=is,ie
