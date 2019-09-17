@@ -379,10 +379,9 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   if (hbl_L == 0. .or. hbl_R == 0.) then
     return
   endif
-  hbl_min = MIN(hbl_L, hbl_R)
   ! Calculate vertical indices containing the boundary layer
-  call boundary_k_range(boundary, nk, h_L, hbl_min, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
-  call boundary_k_range(boundary, nk, h_R, hbl_min, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
+  call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
+  call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
 
   if (boundary == SURFACE) then
     k_bot_min = MIN(k_bot_L, k_bot_R)
@@ -802,9 +801,10 @@ logical function near_boundary_unit_tests( verbose )
   khtr_u = 1.
   call fluxes_layer_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
-  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-3.75,0.0/) )
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,0.0/) )
 
-  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
+  test_name = 'Different hbl and different column thicknesses (linear profile right)'
+
   hbl_L = 15; hbl_R = 6
   h_L = (/10.,10./) ; h_R = (/12.,10./)
   phi_L = (/0.,0./) ; phi_R = (/1.,3./)
