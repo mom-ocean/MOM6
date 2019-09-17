@@ -1669,7 +1669,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
          dataPtr_xcen(i1,j1)  = ocean_grid%geolonT(ig,jg)
          dataPtr_ycen(i1,j1)  = ocean_grid%geolatT(ig,jg)
          if(grid_attach_area) then
-           dataPtr_area(i1,j1)  = ocean_grid%areaT(ig,jg)
+           dataPtr_area(i1,j1) = ocean_grid%US%L_to_m**2 * ocean_grid%areaT(ig,jg)
          endif
        enddo
      enddo

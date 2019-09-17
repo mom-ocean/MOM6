@@ -78,7 +78,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   inputdir = slasher(inputdir)
 
   ! Set up the parameters of the physical domain (i.e. the grid), G
-  call set_grid_metrics(G, PF)
+  call set_grid_metrics(G, PF, US)
 
   ! Set up the bottom depth, G%bathyT either analytically or from file
   ! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
@@ -99,7 +99,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call initialize_masks(G, PF, US)
 
   ! Make OBC mask consistent with land mask
-  call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv)
+  call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv, US)
 
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1, scale=US%Z_to_m)
@@ -124,9 +124,9 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
                  default="none")
   select case ( trim(config) )
     case ("none")
-    case ("list") ; call reset_face_lengths_list(G, PF)
-    case ("file") ; call reset_face_lengths_file(G, PF)
-    case ("global_1deg") ; call reset_face_lengths_named(G, PF, trim(config))
+    case ("list") ; call reset_face_lengths_list(G, PF, US)
+    case ("file") ; call reset_face_lengths_file(G, PF, US)
+    case ("global_1deg") ; call reset_face_lengths_named(G, PF, trim(config), US)
     case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
       "Unrecognized channel configuration "//trim(config))
   end select
@@ -152,8 +152,8 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G, US=US)
   if (debug) then
     call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI, scale=US%s_to_T)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, scale=US%s_to_T)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, scale=US%s_to_T)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, scale=US%m_to_L*US%s_to_T)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, scale=US%m_to_L*US%s_to_T)
   endif
 
   call initialize_grid_rotation_angle(G, PF)

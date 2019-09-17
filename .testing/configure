@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-
-echo "Configured!" $MAKEARGS
-touch build/test_${MAKEARGS//\ /_}
