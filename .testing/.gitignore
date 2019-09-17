@@ -1,0 +1,13 @@
+available_diags.*
+CPU_stats
+chksum_diag
+exitcode
+logfile.*.out
+MOM_parameter_doc.*
+ocean_geometry.nc
+ocean.stats
+ocean.stats.nc
+RESTART/
+time_stamp.out
+Vertical_coordinate.nc
+GOLD_IC.nc

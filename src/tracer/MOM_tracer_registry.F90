@@ -771,7 +771,7 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   do m=1,ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%areaT(i,j)*G%mask2dT(i,j)
+      tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)*G%mask2dT(i,j)
     enddo ; enddo ; enddo
     total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg

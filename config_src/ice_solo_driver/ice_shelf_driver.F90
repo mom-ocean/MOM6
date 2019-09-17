@@ -148,7 +148,7 @@ program SHELF_main
 
   namelist /ice_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
 
-  !#######################################################################
+  !=======================================================================
 
   call write_cputime_start_clock(write_CPU_CSp)
 

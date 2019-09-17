@@ -67,7 +67,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_kg_m2 * (US%m_to_Z * Z_to_eta)
-  I_gEarth = Z_to_eta / GV%g_Earth
+  I_gEarth = Z_to_eta /  (US%Z_to_m * GV%mks_g_Earth)
 
 !$OMP parallel default(shared) private(dilate,htot)
 !$OMP do
@@ -174,7 +174,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_kg_m2 * (US%m_to_Z * Z_to_eta)
-  I_gEarth = Z_to_eta / GV%g_Earth
+  I_gEarth = Z_to_eta / (US%Z_to_m * GV%mks_g_Earth)
 
 !$OMP parallel default(shared) private(htot)
 !$OMP do
