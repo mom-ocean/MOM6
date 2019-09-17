@@ -1365,58 +1365,58 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           enddo ; enddo
         endif
       endif
-      if (MEKE%backscatter_Ro_c /= 0.) then
-        do j=js,je ; do i=is,ie
-          FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                        (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
-          Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
-            0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
-                  (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
-          if (CS%answers_2018) then
-            FatH = (US%s_to_T*FatH)**MEKE%backscatter_Ro_pow ! f^n
-            ! Note the hard-coded dimensional constant in the following line that can not
-            ! be rescaled for dimensional consistency.
-            Shear_mag = ( ( (US%s_to_T*Shear_mag)**MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
-                        * MEKE%backscatter_Ro_c ! c * D^n
-            ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
-            ! RoScl = 1 - g(Ro)
-            RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
-          else
-            if (FatH <= backscat_subround*Shear_mag) then
-              RoScl = 1.0
-            else
-              Sh_F_pow = MEKE%backscatter_Ro_c * (Shear_mag / FatH)**MEKE%backscatter_Ro_pow
-              RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
-            endif
-          endif
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
-                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
-                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
-         +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
-                     (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)                               &
-                    +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )                             &
-                +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
-                     (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
-                    +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
-               +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
-                     (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
-                    +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
-                +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
-                     (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
-                    +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
-        enddo ; enddo
-      endif ! MEKE%backscatter
-
       if (CS%use_GME) then
         do j=js,je ; do i=is,ie
           ! MEKE%mom_src now is sign definite because it only uses the dissipation
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
         enddo ; enddo
-      else
-        do j=js,je ; do i=is,ie
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
-        enddo ; enddo
-      endif ! CS%use_GME
+      else ! use_GME
+        if (MEKE%backscatter_Ro_c /= 0.) then
+          do j=js,je ; do i=is,ie
+            FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                          (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
+            Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
+              0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
+                    (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
+            if (CS%answers_2018) then
+              FatH = (US%s_to_T*FatH)**MEKE%backscatter_Ro_pow ! f^n
+              ! Note the hard-coded dimensional constant in the following line that can not
+              ! be rescaled for dimensional consistency.
+              Shear_mag = ( ( (US%s_to_T*Shear_mag)**MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
+                          * MEKE%backscatter_Ro_c ! c * D^n
+              ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
+              ! RoScl = 1 - g(Ro)
+              RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
+            else
+              if (FatH <= backscat_subround*Shear_mag) then
+                RoScl = 1.0
+              else
+                Sh_F_pow = MEKE%backscatter_Ro_c * (Shear_mag / FatH)**MEKE%backscatter_Ro_pow
+                RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
+              endif
+            endif
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
+                  ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
+                  -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
+           +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
+                       (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)                               &
+                      +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )                             &
+                  +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
+                       (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
+                      +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
+                  +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
+                       (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
+                      +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
+                  +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
+                       (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
+                      +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+          enddo ; enddo
+        else ! MEKE%backscatter_Ro_c
+          do j=js,je ; do i=is,ie
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
+          enddo ; enddo
+        endif ! MEKE%backscatter_Ro_c
+      endif !use GME
 
       if (CS%use_GME .and. associated(MEKE)) then
         if (associated(MEKE%GME_snk)) then

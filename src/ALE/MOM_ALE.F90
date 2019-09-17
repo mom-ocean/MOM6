@@ -246,9 +246,9 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   ! These diagnostics of the state variables before ALE are useful for
   ! debugging the ALE code.
   CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
-      'Zonal velocity before remapping', 'm s-1')
+      'Zonal velocity before remapping', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
-      'Meridional velocity before remapping', 'm s-1')
+      'Meridional velocity before remapping', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
       'Layer Thickness before remapping', get_thickness_units(GV), v_extensive=.true.)
   CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &

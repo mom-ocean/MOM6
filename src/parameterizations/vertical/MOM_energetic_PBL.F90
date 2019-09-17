@@ -1772,16 +1772,16 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
 
     if (CS%answers_2018) then
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
-      MStar_S = CS%MStar_coef*sqrt(max(0.0,Buoyancy_Flux) / Ustar**2 / &
+      MStar_S = CS%MStar_coef*sqrt(max(0.0,Buoyancy_Flux) / UStar**2 / &
                     (Abs_Coriolis + 1.e-10*US%T_to_s) )
       ! The limit for rotation (Ekman length) limited mixing
-      MStar_N =  CS%C_Ek * log( max( 1., Ustar / (Abs_Coriolis + 1.e-10*US%T_to_s) / BLD ) )
+      MStar_N =  CS%C_Ek * log( max( 1., UStar / (Abs_Coriolis + 1.e-10*US%T_to_s) / BLD ) )
     else
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
-      mstar_S = CS%MSTAR_COEF*sqrt(max(0.0, Buoyancy_Flux) / (Ustar**2 * max(Abs_Coriolis, 1.e-20*US%T_to_s)))
+      MStar_S = CS%MSTAR_COEF*sqrt(max(0.0, Buoyancy_Flux) / (UStar**2 * max(Abs_Coriolis, 1.e-20*US%T_to_s)))
       ! The limit for rotation (Ekman length) limited mixing
-      mstar_N = 0.0
-      if (Ustar > Abs_Coriolis * BLD) mstar_N = CS%C_EK * log(Ustar / (Abs_Coriolis * BLD))
+      MStar_N = 0.0
+      if (UStar > Abs_Coriolis * BLD) Mstar_N = CS%C_EK * log(UStar / (Abs_Coriolis * BLD))
     endif
 
     ! Here 1.25 is about .5/von Karman, which gives the Obukhov limit.
@@ -1792,11 +1792,11 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
       MStar_N = CS%RH18_MStar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_MStar_cn2 * &
                 exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar) ) )
     else
-      MSN_term = CS%RH18_MStar_cn2 * exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / Ustar)
+      MSN_term = CS%RH18_MStar_cn2 * exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar)
       MStar_N = (CS%RH18_MStar_cn1 *  MSN_term) / ( 1. + MSN_term)
     endif
     MStar_S = CS%RH18_MStar_CS1 * ( max(0.0, Buoyancy_Flux)**2 * BLD / &
-             ( Ustar**5 * max(Abs_Coriolis,1.e-20*US%T_to_s) ) )**CS%RH18_mstar_cs2
+             ( UStar**5 * max(Abs_Coriolis,1.e-20*US%T_to_s) ) )**CS%RH18_mstar_cs2
     MStar = MStar_N + MStar_S
   endif
 
@@ -1804,11 +1804,15 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   if (CS%answers_2018) then
     MStar_Conv_Red = 1. - CS%MStar_Convect_coef * (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) / &
                          ( (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) + &
-                         2.0 *MStar * Ustar**3 / BLD )
+                         2.0 *MStar * UStar**3 / BLD )
   else
     MSCR_term1 = -BLD * min(0.0, Buoyancy_Flux)
-    MSCR_term2 = 2.0*MStar * Ustar**3
-    MStar_Conv_Red = ((1.-CS%mstar_convect_coef) * MSCR_term1 + MSCR_term2) / (MSCR_term1 + MSCR_term2)
+    MSCR_term2 = 2.0*MStar * UStar**3
+    if ( abs(MSCR_term2) > 0.0) then
+      MStar_Conv_Red = ((1.-CS%mstar_convect_coef) * MSCR_term1 + MSCR_term2) / (MSCR_term1 + MSCR_term2)
+    else
+      MStar_Conv_Red = 1.-CS%mstar_convect_coef
+    endif
   endif
 
   !/3. Combine various mstar terms to get final value
@@ -1816,15 +1820,15 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
 
   if (present(Langmuir_Number)) then
     !### In this call, ustar was previously ustar_mean.  Is this change deliberate?
-    call mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langmuir_number, mstar, &
-                        mstar_LT, Convect_Langmuir_Number)
+    call mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, MStar, &
+                        MStar_LT, Convect_Langmuir_Number)
   endif
 
 end subroutine Find_Mstar
 
 !> This subroutine modifies the Mstar value if the Langmuir number is present
-subroutine Mstar_Langmuir(CS, US, abs_Coriolis, buoyancy_flux, ustar, BLD, Langmuir_Number, &
-                          mstar, mstar_LT, Convect_Langmuir_Number)
+subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, &
+                          Mstar, MStar_LT, Convect_Langmuir_Number)
   type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: Abs_Coriolis !< Absolute value of the Coriolis parameter [T-1 ~> s-1]
