@@ -44,7 +44,6 @@ extensions = [
     'sphinxfortran.fortran_domain',
 ]
 
-
 autosummary_generate = ['api/modules.rst', 'api/pages.rst']
 doxygen_xml = 'xml'
 
