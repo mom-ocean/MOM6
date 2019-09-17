@@ -22,7 +22,10 @@ import subprocess
 #sys.path.insert(0, os.path.abspath('.'))
 
 # Create API documentation
-doxygenize = 'doxygen Doxyfile_rtd'
+if os.environ.get('NCAR_FORK'):
+    doxygenize = 'doxygen Doxyfile_ncar_rtd'
+else:
+    doxygenize = 'doxygen Doxyfile_rtd'
 if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxygenize
 return_code = subprocess.call(doxygenize, shell=True)
 if return_code != 0: sys.exit(return_code)
@@ -40,6 +43,7 @@ extensions = [
     'sphinxcontrib.autodoc_doxygen',
     'sphinxfortran.fortran_domain',
 ]
+
 
 autosummary_generate = ['api/modules.rst', 'api/pages.rst']
 doxygen_xml = 'xml'
