@@ -180,8 +180,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_GME_coeff_h = -1, id_GME_coeff_q = -1
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
-  integer :: id_FrictWorkMax = -1
-  integer :: id_FrictWork_diss = -1, id_FrictWork_GME = -1
+  integer :: id_FrictWork_GME = -1
   !!@}
 
 
@@ -301,8 +300,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     target_diss_rate_GME, & ! the maximum theoretical dissipation plus the amount spuriously dissipated
                      ! by friction [m2 s-3]
     FrictWork, &     ! work done by MKE dissipation mechanisms [W m-2]
-    FrictWork_diss, &  ! negative definite work done by MKE dissipation mechanisms [W m-2]
-    FrictWorkMax, &     ! maximum possible work done by MKE dissipation mechanisms [W m-2]
     FrictWork_GME, &  ! work done by GME [W m-2]
     div_xx_h         ! horizontal divergence [s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -1283,8 +1280,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   if (CS%id_diffu>0)     call post_data(CS%id_diffu, diffu, CS%diag)
   if (CS%id_diffv>0)     call post_data(CS%id_diffv, diffv, CS%diag)
   if (CS%id_FrictWork>0) call post_data(CS%id_FrictWork, FrictWork, CS%diag)
-  if (CS%id_FrictWorkMax>0) call post_data(CS%id_FrictWorkMax, FrictWorkMax, CS%diag)
-  if (CS%id_FrictWork_diss>0) call post_data(CS%id_FrictWork_diss, FrictWork_diss, CS%diag)
   if (CS%id_FrictWork_GME>0) call post_data(CS%id_FrictWork_GME, FrictWork_GME, CS%diag)
   if (CS%id_Ah_h>0)      call post_data(CS%id_Ah_h, Ah_h, CS%diag)
   if (CS%id_div_xx_h>0)  call post_data(CS%id_div_xx_h, div_xx_h, CS%diag)
@@ -2076,18 +2071,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
       'Integral work done by lateral friction terms', 'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
-
-  CS%id_FrictWork_diss = register_diag_field('ocean_model','FrictWork_diss',diag%axesTL,Time,&
-      'Integral work done by lateral friction terms (excluding diffusion of energy)', &
-      'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
-
-  if (associated(MEKE)) then
-    if (associated(MEKE%mom_src)) then
-      CS%id_FrictWorkMax = register_diag_field('ocean_model', 'FrictWorkMax', diag%axesTL, Time,&
-          'Maximum possible integral work done by lateral friction terms', &
-          'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
-    endif
-  endif
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
       'Depth integrated work done by lateral friction', 'W m-2', conversion=US%s_to_T**3*US%L_to_m**2, &
