@@ -1,4 +1,5 @@
 import netCDF4 as nc
+from netCDF4 import stringtochar
 import numpy as np
 
 
@@ -26,15 +27,15 @@ x,y=np.meshgrid(x_,y_)
 dx=np.zeros((2*ny+1,2*nx))
 dy=np.zeros((2*ny,2*nx+1))
 rad_deg=np.pi/180.
-dx[:]=rad_deg*Re*(x[:,1:]-x[:,0:-1])*np.cos(rad_deg*y[:,1:])
-dy[:]=rad_deg*Re*(y[1::,:]-y[0:-1,:])
+dx[:]=rad_deg*Re*(x[:,1:]-x[:,0:-1])*np.cos(0.5*rad_deg*(y[:,0:-1]+y[:,1:]))
+dy[:]=rad_deg*Re*(y[1:,:]-y[0:-1,:])
 
 f_sg=nc.Dataset('ocean_hgrid.nc','w',format='NETCDF3_CLASSIC')
 f_sg.createDimension('ny',ny*2)
 f_sg.createDimension('nx',nx*2)
 f_sg.createDimension('nyp',ny*2+1)
 f_sg.createDimension('nxp',nx*2+1)
-f_sg.createDimension('string',255)
+f_sg.createDimension('string',5)
 f_sg.createVariable('y','f8',('nyp','nxp'))
 f_sg.createVariable('x','f8',('nyp','nxp'))
 dyv=f_sg.createVariable('dy','f8',('ny','nxp'))
@@ -55,12 +56,9 @@ f_sg.variables['y'][:]=y
 f_sg.variables['x'][:]=x
 f_sg.variables['dx'][:]=dx
 f_sg.variables['dy'][:]=dy
-f_sg.variables['area'][:]=0.25*(dx[0:-1,:]+dx[1:,:])*(dy[:,0:-1]+dy[:,1:])
+f_sg.variables['area'][:]=0.25*((dx[0:-1,:]+dx[1:,:])*(dy[:,0:-1]+dy[:,1:]))
 f_sg.variables['angle_dx'][:]=0.
-f_sg.variables['tile'][0] = 't'  ## This is stupid
-f_sg.variables['tile'][1] = 'i'
-f_sg.variables['tile'][2] = 'l'
-f_sg.variables['tile'][3] = 'e'
-f_sg.variables['tile'][4] = '1'
+str_=stringtochar(np.array(['tile1'],dtype='S5'))
+f_sg.variables['tile'][:] = str_
 f_sg.sync()
 f_sg.close()
