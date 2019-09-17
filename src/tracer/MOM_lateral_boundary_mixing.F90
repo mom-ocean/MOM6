@@ -32,6 +32,7 @@ integer, parameter :: SURFACE = -1 !< Set a value that corresponds to the surfac
 integer, parameter :: BOTTOM  = 1  !< Set a value that corresponds to the bottom boundary
 #include <MOM_memory.h>
 
+!> Sets parameters for lateral boundary mixing module.
 type, public :: lateral_boundary_mixing_CS ; private
   integer :: method                                               !< Determine which of the three methods calculate
                                                                   !! and apply near boundary layer fluxes
@@ -50,7 +51,7 @@ end type lateral_boundary_mixing_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40) :: mdl = "MOM_lateral_boundary_mixing"
+character(len=40) :: mdl = "MOM_lateral_boundary_mixing"          !< Name of this module
 
 contains
 
