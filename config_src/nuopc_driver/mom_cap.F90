@@ -1,5 +1,5 @@
 !>
-!! @mainpage MOM NUOPC Cap
+!! @subpage MOM NUOPC Cap
 !! @author Fei Liu (fei.liu@gmail.com)
 !! @date 5/10/13 Original documentation
 !! @author Rocky Dunlap (rocky.dunlap@noaa.gov)
