@@ -20,9 +20,10 @@ use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
-use MOM_io, only : get_global_io_domain_indices
+use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_string_functions, only : lowercase
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>)
 use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=), operator(<=), operator(>=), operator(<)
@@ -139,6 +140,18 @@ type, public :: sum_output_CS ; private
              fields             !< fieldtype variables for the output fields.
   character(len=200) :: energyfile  !< The name of the energy file with path.
 end type sum_output_CS
+
+type dim_counter
+   integer, pointer, dimension(:) :: &
+   dim_start => NULL(), &  !< A 1d array of start indices for each dimension of a variable
+   dim_length => NULL()   !< A 1d array of lengths for each dimension of a variable
+   integer :: num_dims !< number of variable dimensions
+end type dim_counter
+
+type var_type
+   type(dim_counter), pointer, dimension(:) :: var_num => NULL()
+end type var_type
+
 
 contains
 
@@ -403,7 +416,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                                  ! in the search for the entry in lH to use.
   integer :: start_of_day, num_days
   integer :: isg, ieg ! global start and end indices for writing axis data
-  integer :: num_dims ! counter for variable dimensions
+  integer, allocatable, dimension(:) :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
   real    :: reday, var
@@ -429,8 +442,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
-  type(FmsNetcdfFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to MOM_open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
+  !integer, allocatable,dimension(:,:) :: st_index
+  !integer, allocatable,dimension(:,:) :: dim_len
 
   ! write_energy_time is the next integral multiple of energysavedays.
   dt_force = set_time(seconds=2) ; if (present(dt_forcing)) dt_force = dt_forcing
@@ -904,67 +919,78 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
      endif
   endif
  
-  if (reday .gt. 0) then
-     call write_data(fileObjWrite, 'Time', (/reday/)) 
-  else
-        !allocate the axis data and attribute types for the file
-        !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-        !! more than 20 axes.
-        allocate(axis_data_CS%axis(20))
-        allocate(axis_data_CS%data(20))
+  if (reday .eq. 0.0) then
+     !allocate the axis data and attribute types for the file
+     !>@NOTE the user may need to increase the allocated array sizes to accommodate 
+     !! more than 20 axes.
+     allocate(axis_data_CS%axis(20))
+     allocate(axis_data_CS%data(20))
+  endif
 
-        ! loop through the variables, and get the global dimension names and lengths for the file
-        total_axes=0
-        do i=1,num_nc_fields 
-           num_dims=0
+  !allocate(st_index(num_nc_fields,4))
+  !allocate(dim_len(num_nc_fields,4))
+  allocate(num_dims(num_nc_fields))
+  ! loop through the variables, and get the global dimension names and lengths for the file
+  total_axes=0
+  do i=1,num_nc_fields 
+     num_dims(i)=0
     
-           call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
-                                           dim_names, dim_lengths, num_dims,G=G, GV=GV)
-           if (num_dims <= 0) call MOM_error(FATAL, &
-                                  "MOM_sum_output:write_energy: num_dims is an invalid value.")
-           ! register the variable dimensions to the file if the corresponding global axes are not registered
-           do j=1,num_dims
-              if (.not.(dimension_exists(fileObjWrite, dim_names(j)))) then
-                 total_axes=total_axes+1
-                 call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, G=G, GV=GV, &
-                                        time_val=(/reday/), time_units='days')
-                 call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
-              endif
-           enddo
-  
-           ! register the fields and attributes for non-coordinate variable 'i'
-           if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
-               call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
-               call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
-               call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
-           endif
-        enddo
-        ! register and write the coordinate variables (axes) to the file
-        do i=1,total_axes
-           if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                           dim_names, dim_lengths, num_dims(i),G=G, GV=GV)
+     if (num_dims(i) <= 0) call MOM_error(FATAL, &
+                                       "MOM_sum_output:write_energy: num_dims is an invalid value.")
+         
+     do j=1,num_dims(i)
+
+        call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, G=G, GV=GV, &
+                                  time_val=(/reday/), time_units='days')
+        ! register the variable dimensions to the file if the corresponding global axes are not registered
+        if (.not.(dimension_exists(fileObjWrite, dim_names(j)))) then
+            total_axes=total_axes+1
+            call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+        endif
+            
+           ! get the dimension start and length indices for the non-coordinate variable 'i'
+           !if (lowercase(trim(dim_names(j))) .eq. "time") then
+           !    st_index(i,j) = iday
+           !    dim_len(i,j) = iday
+           !else
+            !   st_index(i,j)  = 1
+            !   dim_len(i,j) = dim_lengths(j)
+           !endif 
+     enddo
+           
+     ! register the fields and attributes for non-coordinate variable 'i'
+     if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
+         call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims(i)))
+         call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+         call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+     endif
+  enddo
+  ! register and write the coordinate variables (axes) to the file
+  if (reday .eq. 0.0) then
+     do i=1,total_axes
+       if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
               if (associated(axis_data_CS%data(i)%p)) then
                  call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                         "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-
-             ! if (axis_data_CS%axis(i)%is_domain_decomposed) then
-              !   call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), isg, ieg)
-               !  call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(isg:ieg))
-              !else
                  call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-              !endif
+
                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                      'long_name',axis_data_CS%axis(i)%longname)
 
                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                      'units',trim(axis_data_CS%axis(i)%units))
               endif
-           endif
-        enddo
-   endif
-
-   ! write the fields that are not coordinate variables to the energy netcdf file 
-   var = real(CS%ntrunc)
-     !call write_field(CS%fileenergy_nc, CS%fields(1), var, reday)
+        endif
+     enddo
+  else
+     ! append the next value to the time coordinate variable
+     call write_data(fileObjWrite, 'Time', (/reday/), corner=(/iday/), edge_lengths=(/iday/)) 
+  endif
+  ! write the fields that are not coordinate variables to the energy netcdf file 
+  var = real(CS%ntrunc)
+   !call write_field(CS%fileenergy_nc, CS%fields(1), var, reday)
      !call write_field(CS%fileenergy_nc, CS%fields(2), toten, reday)
      !call write_field(CS%fileenergy_nc, CS%fields(3), PE, reday)
      !call write_field(CS%fileenergy_nc, CS%fields(4), KE, reday)
@@ -976,19 +1002,19 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
      !call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
      !call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday) !>@bug max_CFL index correctly set in new write call
 
-   call write_data(fileObjWrite, vars(1)%name, var)
-     call write_data(fileObjWrite, vars(2)%name, toten)
-     call write_data(fileObjWrite, vars(3)%name, PE)
-     call write_data(fileObjWrite, vars(4)%name, KE)
-     call write_data(fileObjWrite, vars(5)%name, H_0APE)
-     call write_data(fileObjWrite, vars(6)%name, mass_lay)
-     call write_data(fileObjWrite, vars(7)%name, mass_tot)
-     call write_data(fileObjWrite, vars(8)%name, mass_chg)
-     call write_data(fileObjWrite, vars(9)%name, mass_anom)
-     call write_data(fileObjWrite, vars(10)%name, max_CFL(1))
-     call write_data(fileObjWrite, vars(11)%name, max_CFL(2))
+  call write_data(fileObjWrite, vars(1)%name, var)
+  call write_data(fileObjWrite, vars(2)%name, toten)
+  call write_data(fileObjWrite, vars(3)%name, PE)
+  call write_data(fileObjWrite, vars(4)%name, KE)
+  call write_data(fileObjWrite, vars(5)%name, H_0APE)
+  call write_data(fileObjWrite, vars(6)%name, mass_lay)
+  call write_data(fileObjWrite, vars(7)%name, mass_tot)
+  call write_data(fileObjWrite, vars(8)%name, mass_chg)
+  call write_data(fileObjWrite, vars(9)%name, mass_anom)
+  call write_data(fileObjWrite, vars(10)%name, max_CFL(1))
+  call write_data(fileObjWrite, vars(11)%name, max_CFL(2))
 
-     if (CS%use_temperature) then
+  if (CS%use_temperature) then
         !call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
         !call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
         !call write_field(CS%fileenergy_nc, CS%fields(14), 0.001*salt_anom, reday)
@@ -1005,14 +1031,13 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
           !call write_field(CS%fileenergy_nc, CS%fields(17+m), Tr_stocks(m), reday)
           call write_data(fileObjWrite, vars(17+m)%name, Tr_stocks(m))
         enddo
-     else
+  else
+        
         do m=1,nTr_stocks
            !call write_field(CS%fileenergy_nc, CS%fields(11+m), Tr_stocks(m), reday)
            call write_data(fileObjWrite, vars(11+m)%name, Tr_stocks(m))
         enddo
-     endif
-
-
+  endif
   !call flush_file(CS%fileenergy_nc)
 
   ! The second (impossible-looking) test looks for a NaN in En_mass.
@@ -1046,7 +1071,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
- 
+  
 end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, salt and heat, through
