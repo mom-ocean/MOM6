@@ -200,53 +200,235 @@
 !!
 !! @subsection ImportFields Import Fields
 !!
-!! Standard Name             | Units      | Model Variable  | Description                           | Notes
-!! --------------------------|------------|-----------------|---------------------------------------|-------------------
-!! inst_pres_height_surface  | Pa         | p               | pressure of overlying sea ice and atmosphere
-!! mass_of_overlying_sea_ice | kg         | mi              | mass of overlying sea ice          | |
-!! seaice_melt_heat          | W m-2      | seaice_melt_heat| sea ice and snow melt heat flux    | |
-!! seaice_melt               | kg m-2 s-1 | seaice_melt     | water flux due to sea ice and snow melting    | |
-!! mean_calving_heat_flx     | W m-2      | calving_hflx    | heat flux, relative to 0C, of frozen land water into ocean
-!! mean_calving_rate         | kg m-2 s-1 | calving         | mass flux of frozen runoff         | |
-!! mean_evap_rate            | kg m-2 s-1 | q_flux          | specific humidity flux             |
-!! mean_fprec_rate           | kg m-2 s-1 | fprec           | mass flux of frozen precip         | |
-!! mean_merid_moment_flx     | Pa         | v_flux          | j-directed wind stress into ocean
-!!                                        | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
-!! mean_net_lw_flx           | W m-2      | lw_flux         | long wave radiation                | |
-!! mean_net_sw_ir_dif_flx    | W m-2      | sw_flux_nir_dif | diffuse near IR shortwave radiation| |
-!! mean_net_sw_ir_dir_flx    | W m-2      | sw_flux_nir_dir | direct near IR shortwave radiation | |
-!! mean_net_sw_vis_dif_flx   | W m-2      | sw_flux_vis_dif | diffuse visible shortware radiation| |
-!! mean_net_sw_vis_dir_flx   | W m-2      | sw_flux_vis_dir | direct visible shortware radiation | |
-!! mean_prec_rate            | kg m-2 s-1 | lprec           | mass flux of liquid precip         | |
-!! mean_runoff_heat_flx      | W m-2      | runoff_hflx     | heat flux, relative to 0C, of liquid land water into ocean
-!! mean_runoff_rate          | kg m-2 s-1 | runoff          | mass flux of liquid runoff         | |
-!! mean_salt_rate            | kg m-2 s-1 | salt_flux       | salt flux                          | |
-!! mean_sensi_heat_flx       | W m-2      | t_flux          | sensible heat flux into ocean      |
-!! mean_zonal_moment_flx     | Pa         | u_flux          | i-directed wind stress into ocean
-!!                                        | [vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar
-!!
+!! <table>
+!!     <thead>
+!!         <tr>
+!!             <th>Standard Name</th>
+!!             <th>Units</th>
+!!             <th>Model Variable</th>
+!!             <th>Description</th>
+!!             <th>Notes</th>
+!!         </tr>
+!!     </thead>
+!!     <tbody>
+!!         <tr>
+!!             <td>inst_pres_height_surface</td>
+!!             <td>Pa</td>
+!!             <td>p</td>
+!!             <td>pressure of overlying sea ice and atmosphere</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mass_of_overlying_sea_ice</td>
+!!             <td>kg</td>
+!!             <td>mi</td>
+!!             <td>mass of overlying sea ice</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>seaice_melt_heat</td>
+!!             <td>W m-2</td>
+!!             <td>seaice_melt_heat</td>
+!!             <td>sea ice and snow melt heat flux</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>seaice_melt</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>seaice_melt</td>
+!!             <td>water flux due to sea ice and snow melting</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_calving_heat_flx</td>
+!!             <td>W m-2</td>
+!!             <td>calving_hflx</td>
+!!             <td>heat flux, relative to 0C, of frozen land water into ocean</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_calving_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>calving</td>
+!!             <td>mass flux of frozen runoff</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_evap_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>q_flux</td>
+!!             <td>specific humidity flux</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_fprec_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>fprec</td>
+!!             <td>mass flux of frozen precip</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_merid_moment_flx</td>
+!!             <td>Pa</td>
+!!             <td>v_flux</td>
+!!             <td>j-directed wind stress into ocean</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_lw_flx</td>
+!!             <td>W m-2</td>
+!!             <td>lw_flux</td>
+!!             <td>long wave radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_ir_dif_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_nir_dif</td>
+!!             <td>diffuse near IR shortwave radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_ir_dir_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_nir_dir</td>
+!!             <td>direct near IR shortwave radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_vis_dif_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_vis_dif</td>
+!!             <td>diffuse visible shortware radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_vis_dir_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_vis_dir</td>
+!!             <td>direct visible shortware radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_prec_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>lprec</td>
+!!             <td>mass flux of liquid precip</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_runoff_heat_flx</td>
+!!             <td>W m-2</td>
+!!             <td>runoff_hflx</td>
+!!             <td>heat flux, relative to 0C, of liquid land water into ocean</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_runoff_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>runoff</td>
+!!             <td>mass flux of liquid runoff</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_salt_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>salt_flux</td>
+!!             <td>salt flux</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_sensi_heat_flx</td>
+!!             <td>W m-2</td>
+!!             <td>t_flux</td>
+!!             <td>sensible heat flux into ocean</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_zonal_moment_flx</td>
+!!             <td>Pa</td>
+!!             <td>u_flux</td>
+!!             <td>i-directed wind stress into ocean</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar</td>
+!!         </tr>
+!!     </tbody>
+!! </table>
 !!
 !! @subsection ExportField Export Fields
 !!
 !! Export fields are populated from the `ocean_public` parameter (type `ocean_public_type`)
 !! after the call to `update_ocean_model()`.
 !!
-!! Standard Name              | Units | Model Variable | Description                               | Notes
-!! ---------------------------|-------|----------------|-------------------------------------------|--------------------
-!! freezing_melting_potential | W m-2 | combination of frazil and melt_potential
-!!                                                     | cap converts model units (J m-2) to (W m-2) for export
-!! ocean_mask                 |       |                | ocean mask                                | |
-!! ocn_current_merid          | m s-1 | v_surf         | j-directed surface velocity on u-cell
-!!                                                     | [vector rotation] (@ref VectorRotations) applied
-!!                                                     |   - tripolar to lat-lon
-!! ocn_current_zonal          | m s-1 | u_surf         | i-directed surface velocity on u-cell
-!!                                                     | [vector rotation] (@ref VectorRotations) applied
-!!                                                     |  - tripolar to lat-lon
-!! s_surf                     | psu   | s_surf         | sea surface salinity on t-cell            | |
-!! sea_surface_temperature    | K     | t_surf         | sea surface temperature on t-cell         | |
-!! sea_surface_slope_zonal    ! unitless | created from ssh | sea surface zonal slope
-!! sea_surface_slope_merid    ! unitless | created from ssh | sea surface meridional slope
-!! so_bldepth                 ! m        ! obld | ocean surface boundary layer depth
+!! <table>
+!!     <thead>
+!!         <tr>
+!!             <th>Standard Name</th>
+!!             <th>Units</th>
+!!             <th>Model Variable</th>
+!!             <th>Description</th>
+!!             <th>Notes</th>
+!!         </tr>
+!!     </thead>
+!!     <tbody>
+!!         <tr>
+!!             <td>freezing_melting_potential</td>
+!!             <td>W m-2</td>
+!!             <td>combination of frazil and melt_potential</td>
+!!             <td>cap converts model units (J m-2) to (W m-2) for export</td>
+!!         </tr>
+!!         <tr>
+!!             <td>ocean_mask</td>
+!!             <td></td>
+!!             <td></td>
+!!             <td>ocean mask</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>ocn_current_merid</td>
+!!             <td>m s-1</td>
+!!             <td>v_surf</td>
+!!             <td>j-directed surface velocity on u-cell</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon</td>
+!!         </tr>
+!!         <tr>
+!!             <td>ocn_current_zonal</td>
+!!             <td>m s-1</td>
+!!             <td>u_surf</td>
+!!             <td>i-directed surface velocity on u-cell</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon</td>
+!!         </tr>
+!!         <tr>
+!!             <td>s_surf</td>
+!!             <td>psu</td>
+!!             <td>s_surf</td>
+!!             <td>sea surface salinity on t-cell</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>sea_surface_temperature</td>
+!!             <td>K</td>
+!!             <td>t_surf</td>
+!!             <td>sea surface temperature on t-cell</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>sea_surface_slope_zonal</td>
+!!             <td>unitless</td>
+!!             <td>created from ssh</td>
+!!             <td>sea surface zonal slope</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>sea_surface_slope_merid</td>
+!!             <td>unitless</td>
+!!             <td>created from ssh</td>
+!!             <td>sea surface meridional slope</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>so_bldepth</td>
+!!             <td>m</td>
+!!             <td>obld</td>
+!!             <td>ocean surface boundary layer depth</td>
+!!             <td></td>
+!!         </tr>
+!!     </tbody>
+!! </table>
 !!
 !! @subsection MemoryManagement Memory Management
 !!
