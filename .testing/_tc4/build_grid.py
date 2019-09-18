@@ -56,7 +56,18 @@ f_sg.variables['y'][:]=y
 f_sg.variables['x'][:]=x
 f_sg.variables['dx'][:]=dx
 f_sg.variables['dy'][:]=dy
-f_sg.variables['area'][:]=0.25*((dx[0:-1,:]+dx[1:,:])*(dy[:,0:-1]+dy[:,1:]))
+#Compute the area bounded by lines of constant
+#latitude-longitud on a sphere in m2.
+dlon=x_[1:]-x_[:-1]
+dlon=np.tile(dlon[np.newaxis,:],(2*ny,1))
+y1_=y_[:-1]
+y1_=y1_[:,np.newaxis]*rad_deg
+y2_=y_[1:]
+y2_=y2_[:,np.newaxis]*rad_deg
+y1_=np.tile(y1_,(1,2*nx))
+y2_=np.tile(y2_,(1,2*nx))
+area=(rad_deg*Re*Re)*(np.sin(y2_)-np.sin(y1_)) * dlon
+f_sg.variables['area'][:]=area
 f_sg.variables['angle_dx'][:]=0.
 str_=stringtochar(np.array(['tile1'],dtype='S5'))
 f_sg.variables['tile'][:] = str_
