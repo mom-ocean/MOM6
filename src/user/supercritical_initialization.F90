@@ -31,7 +31,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
   type(param_file_type),  intent(in) :: param_file !< Parameter file structure
   ! Local variables
   character(len=40)  :: mdl = "supercritical_set_OBC_data" ! This subroutine's name.
-  real :: zonal_flow
+  real :: zonal_flow ! Inflow speed [L T-1 ~> m s-1]
   integer :: i, j, k, l
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -41,7 +41,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
 
   call get_param(param_file, mdl, "SUPERCRITICAL_ZONAL_FLOW", zonal_flow, &
                  "Constant zonal flow imposed at upstream open boundary.", &
-                 units="m/s", default=8.57)
+                 units="m/s", default=8.57, scale=G%US%m_s_to_L_T)
 
   do l=1, OBC%number_of_segments
     segment => OBC%segment(l)

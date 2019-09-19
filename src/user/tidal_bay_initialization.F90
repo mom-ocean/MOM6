@@ -98,7 +98,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
   do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
     if (OBC%segnum_u(I,j) /= OBC_NONE) then
       do k=1,nz
-        my_area(1,j) = my_area(1,j) + h(I,j,k)*G%dyCu(I,j)
+        my_area(1,j) = my_area(1,j) + h(I,j,k)*G%US%L_to_m*G%dyCu(I,j)
       enddo
     endif
   enddo ; enddo
@@ -110,7 +110,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
 
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux/total_area
+    segment%normal_vel_bt(:,:) = G%US%m_s_to_L_T*my_flux/total_area
     segment%eta(:,:) = cff
 
   enddo ! end segment loop

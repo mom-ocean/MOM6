@@ -210,7 +210,7 @@ program MOM_main
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
                             ocean_nthreads, ncores_per_node, use_hyper_thread
 
-  !#######################################################################
+  !=====================================================================
 
   call write_cputime_start_clock(write_CPU_CSp)
 
@@ -488,7 +488,7 @@ program MOM_main
 
     if (use_ice_shelf) then
       call shelf_calc_flux(sfc_state, fluxes, Time, dt_forcing, ice_shelf_CSp)
-      call add_shelf_forces(grid, Ice_shelf_CSp, forces)
+      call add_shelf_forces(grid, US, Ice_shelf_CSp, forces)
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
