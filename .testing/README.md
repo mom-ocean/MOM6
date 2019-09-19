@@ -56,7 +56,7 @@ Model state is currently defined by the `ocean.stats` output file, which
 reports the total energy (per unit mass) at machine precision alongside similar
 global metrics, such as mass or mean sea level, at lower precision.
 
-Clhecksums for every available diagnostic are also compared and the Makefile
+Checksums for every available diagnostic are also compared and the Makefile
 will report any differences, but such differences are not yet considered a fail
 condition.
 
@@ -138,7 +138,7 @@ This will run through the following tests:
 - `test.restarts`: Resubmission by restarts
 - `test.repros`: Optimized (REPRO) and unoptimized (DEBUG) compilation
 - `test.nans`: NaN initialization of allocated arrays
-- `test.dims`: Dimensional scaling (length, time, thichkness, depth)
+- `test.dims`: Dimensional scaling (length, time, thickness, depth)
 
 To enable the regression tests, use `DO_REGRESSION_TEST=true`.
 ```
@@ -170,7 +170,7 @@ The following test configurations (TCs) are supported:
 Code coverage reports the lines of code which have been tested, and can
 explicitly demonstrate when a particular operation is untested.
 
-Coverage is measued using `gcov` and is reported for TCs using the `symmetric`
+Coverage is measured using `gcov` and is reported for TCs using the `symmetric`
 executable.
 
 Coverage reporting is optionally sent to the `codecov.io` site.
