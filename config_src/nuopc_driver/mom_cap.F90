@@ -1,499 +1,7 @@
-!>
-!! @subpage MOM NUOPC Cap
-!! @author Fei Liu (fei.liu@gmail.com)
-!! @date 5/10/13 Original documentation
-!! @author Rocky Dunlap (rocky.dunlap@noaa.gov)
-!! @date 1/12/17 Moved to doxygen
-!! @date 2/28/19 Rewrote for unified cap
-!!
-!! @tableofcontents
-!!
-!! @section Overview Overview
-!!
-!! **This MOM cap has been tested with MOM6.**
-!!
-!! This document describes the MOM NUOPC "cap", which is a light weight software layer that is
-!! required when the [MOM ocean model](https://github.com/NOAA-GFDL/MOM6/tree/dev/master)
-!! is used in [National Unified Operation Prediction Capability]
-!! (http://www.earthsystemcog.org/projects/nuopc) (NUOPC) coupled systems. Also see the
-!! [MOM wiki](https://github.com/NOAA-GFDL/MOM6-Examples/wiki) for more documentation.
-!!
-!! NUOPC is a software layer built on top of the [Earth System Modeling
-!! Framework] (https://www.earthsystemcog.org/projects/esmf) (ESMF).
-!! ESMF is a high-performance modeling framework that provides
-!! data structures, interfaces, and operations suited for building coupled models
-!! from a set of components. NUOPC refines the capabilities of ESMF by providing
-!! a more precise definition of what it means for a model to be a component and
-!! how components should interact and share data in a coupled system. The NUOPC
-!! Layer software is designed to work with typical high-performance models in the
-!! Earth sciences domain, most of which are written in Fortran and are based on a
-!! distributed memory model of parallelism (MPI).
-!!
-!! A NUOPC "cap" is a Fortran module that serves as the interface to a model
-!! when it's used in a NUOPC-based coupled system.
-!! The term "cap" is used because it is a light weight software layer that sits on top
-!! of model code, making calls into it and exposing model data structures in a
-!! standard way.
-!!
-!! The MOM cap package includes the cap code itself (MOM_cap.F90, MOM_cap_methods.F90
-!! and MOM_cap_time.F90), a set of time utilities (time_utils.F90) for converting between ESMF and FMS
-!! time type and two modules MOM_ocean_model_nuopc.F90 and MOM_surface_forcing_nuopc.F90. MOM_surface_forcing_nuopc.F90
-!! converts the input ESMF data (import data) to a MOM-specific data type (surface_forcing_CS).
-!! MOM_ocean_model_nuopc.F90 contains routines for initialization, update and finalization of the ocean model state.
-!!
-!! @subsection CapSubroutines Cap Subroutines
-!!
-!! The MOM cap modules contains a set of subroutines that are required
-!! by NUOPC.  These subroutines are called by the NUOPC infrastructure according
-!! to a predefined calling sequence.  Some subroutines are called during
-!! initialization of the coupled system, some during the run of the coupled
-!! system, and some during finalization of the coupled system.
-!!
-!! The initialization sequence is the most complex and is governed by the NUOPC technical rules.
-!! Details about the initialization sequence can be found in the [NUOPC Reference Manual]
-!! (http://www.earthsystemmodeling.org/esmf_releases/last_built/NUOPC_refdoc/).
-!! The cap requires beta snapshot ESMF v8.0.0bs16 or later.
-!!
-!! The following table summarizes the NUOPC-required subroutines that appear in the
-!! MOM cap.  The "Phase" column says whether the subroutine is called during the
-!! initialization, run, or finalize part of the coupled system run.
-!!
-!! Phase    | MOM Cap Subroutine                                                 |  Description
-!! ---------|--------------------------------------------------------------------|--------------------------------------
-!! Init     | [InitializeP0] (@ref MOM_cap_mod::initializep0)                    | Sets the Initialize Phase Definition
-!!                                                                               |  (IPD) version to use
-!! Init     | [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise)      | Advertises standard names of import
-!!                                                                               |  and export fields
-!! Init     | [InitializeRealize] (@ref MOM_cap_mod::initializerealize)          | Creates an ESMF_Grid or ESMF_Mesh
-!!                                                                               |  as well as ESMF_Fields for import
-!!                                                                               |  and export fields
-!! Run      | [ModelAdvance] (@ref MOM_cap_mod::modeladvance)                    | Advances the model by a timestep
-!! Final    | [Finalize] (@ref MOM_cap_mod::ocean_model_finalize)                | Cleans up
-!!
-!! @section UnderlyingModelInterfaces Underlying Model Interfaces
-!!
-!!
-!! @subsection DomainCreation Domain Creation
-!!
-!! The cap can accomodate a MOM tripolar grid which is represented either as a 2D `ESMF_Grid` or
-!! as a 1D `ESMF_Mesh`. Other MOM grids (e.g. a bipolar grid) can be represented as a 1d `ESMF_Mesh` only.
-!! Coupling fields are placed on either the `ESMF_Grid` or `ESMF_Mesh`.
-!! Note that for either the `ESMF_Grid` or `ESMF_Mesh` representation, the fields are translated into
-!! a 2D MOM specific surface boundary type and the distinction between the two is no longer there.
-!! Calls related to creating the grid are located in the [InitializeRealize]
-!! (@ref MOM_cap_mod::initializerealize) subroutine, which is called by the NUOPC infrastructure
-!! during the intialization sequence.
-!!
-!! The cap determines parameters for setting up the grid by calling subroutines in the
-!! `mpp_domains_mod` module. The global domain size is determined by calling `mpp_get_global_domain()`.
-!! A check is in place to ensure that there is only a single tile in the domain (the
-!! cap is currently limited to one tile; multi-tile mosaics are not supported).  The
-!! decomposition across processors is determined via calls to `mpp_get_compute_domains()`
-!! (to retrieve decomposition block indices) and `mpp_get_pelist()` (to determine how
-!! blocks are assigned to processors).
-!!
-!! The `ESMF_Grid` is created in several steps:
-!!  - an `ESMF_DELayout` is created based on the pelist from MOM
-!!  - an `ESMF_DistGrid` is created over the global index space. Connections are set
-!!    up so that the index space is periodic in the first dimension and has a
-!!    fold at the top for the bipole. The decompostion blocks are also passed in
-!!    along with the `ESMF_DELayout` mentioned above.
-!!  - an `ESMF_Grid` is then created by passing in the above `ESMF_DistGrid`.
-!!  - masks, areas, center (tlat, tlon), and corner (ulat, ulon) coordinates are then added to the `ESMF_Grid`
-!!    by retrieving those fields from the MOM datatype `ocean_grid` elements.
-!!
-!! The `ESMF_Mesh` is also created in several steps:
-!!   - the target mesh is generated offline.
-!!   - a temporary mesh is created from an input file specified by the config variable `mesh_ocn`.
-!!     the mesh has a distribution that is automatically generated by ESMF when reading in the mesh
-!!   - an `ESMF_DistGrid` is created from the global index space for the computational domain.
-!!   - the final `ESMF_Mesh` is then created by distributing the temporary mesh using the created `ESMF_DistGrid`.
-!!
-!!
-!! @subsection Initialization Initialization
-!!
-!! During the [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise) phase, calls are
-!! made to MOM's native initialization subroutines, including `fms_init()`, `constants_init()`,
-!! `field_manager_init()`, `diag_manager_init()`, and `set_calendar_type()`.  The MPI communicator
-!! is pulled in through the ESMF VM object for the MOM component. The dt and start time are set
-!! from parameters from the incoming ESMF clock with calls to `set_time()` and `set_date().`
-!!
-!!
-!! @subsection Run Run
-!!
-!! The [ModelAdvance] (@ref MOM_cap_mod::modeladvance) subroutine is called by the NUOPC
-!! infrastructure when it's time for MOM to advance in time. During this subroutine, there is a
-!! call into the MOM update routine:
-!!
-!!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled)
-!!
-!! Priori to the call to `update_ocean_model()`, the cap performs these steps
-!! - the `Time` and `Time_step_coupled` parameters, based on FMS types, are derived from the incoming ESMF clock
-!! - diagnostics are optionally written to files `field_ocn_import_*`, one for each import field
-!! - mom_import is called and translates to the ESMF input data to a MOM specific data type
-!!    - momentum flux vectors are rotated to internal grid
-!!
-!! After the call to `update_ocean_model()`, the cap performs these steps:
-!! - mom_export is called
-!!   - the `ocean_mask` export is set to match that of the internal MOM mask
-!!   - the `freezing_melting_potential` export is converted from J m-2 to W m-2 by dividing by the coupling interval
-!!   - vector rotations are applied to the `ocean_current_zonal` and `ocean_current_merid` exports, back to lat-lon grid
-!!   - diagnostics are optionally written to files `field_ocn_export_*`, one for each export field
-!!   - optionally, a call is made to `ocean_model_restart()` at the interval `restart_interval`
-!!
-!! @subsubsection VectorRotations Vector Rotations
-!!
-!! Vector rotations are applied to incoming momentum fluxes (from regular lat-lon to tripolar grid) and
-!! outgoing ocean currents (from tripolar to regular lat-lon). The rotation angles are provided
-!! from the native MOM grid by a call to `get_ocean_grid(Ocean_grid)`.
-!! The cosine and sine of the rotation angle are:
-!!
-!!     ocean_grid%cos_rot(i,j)
-!!     ocean_grid%sin_rot(i,j)
-!!
-!! The rotation of momentum flux from regular lat-lon to tripolar is:
-!! \f[
-!! \begin{bmatrix}
-!! \tau_x' \\
-!! \tau_y'
-!! \end{bmatrix} =
-!! \begin{bmatrix}
-!!  cos \theta   & sin \theta \\
-!!  -sin \theta  & cos \theta
-!! \end{bmatrix} *
-!! \begin{bmatrix}
-!! \tau_x \\
-!! \tau_y
-!! \end{bmatrix}
-!! \f]
-!!
-!! The rotation of ocean current from tripolar to regular lat-lon is:
-!! \f[
-!! \begin{bmatrix}
-!! u' \\
-!! v'
-!! \end{bmatrix} =
-!! \begin{bmatrix}
-!!  cos \theta   & -sin \theta \\
-!!  sin \theta  & cos \theta
-!! \end{bmatrix} *
-!! \begin{bmatrix}
-!! u \\
-!! v
-!! \end{bmatrix}
-!! \f]
-!! @subsection Finalization Finalization
-!!
-!! NUOPC infrastructure calls [ocean_model_finalize] (@ref MOM_cap_mod::ocean_model_finalize)
-!! at the end of the run. This subroutine is a hook to call into MOM's native shutdown
-!! procedures:
-!!
-!!     call ocean_model_end (ocean_public, ocean_State, Time)
-!!     call diag_manager_end(Time )
-!!     call field_manager_end
-!!     call fms_io_exit
-!!     call fms_end
-!!
-!! @section ModelFields Model Fields
-!!
-!! The following tables list the import and export fields currently set up in the MOM cap.
-!!
-!! @subsection ImportFields Import Fields
-!!
-!! <table>
-!!     <thead>
-!!         <tr>
-!!             <th>Standard Name</th>
-!!             <th>Units</th>
-!!             <th>Model Variable</th>
-!!             <th>Description</th>
-!!             <th>Notes</th>
-!!         </tr>
-!!     </thead>
-!!     <tbody>
-!!         <tr>
-!!             <td>inst_pres_height_surface</td>
-!!             <td>Pa</td>
-!!             <td>p</td>
-!!             <td>pressure of overlying sea ice and atmosphere</td>
-!!         </tr>
-!!         <tr>
-!!             <td>mass_of_overlying_sea_ice</td>
-!!             <td>kg</td>
-!!             <td>mi</td>
-!!             <td>mass of overlying sea ice</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>seaice_melt_heat</td>
-!!             <td>W m-2</td>
-!!             <td>seaice_melt_heat</td>
-!!             <td>sea ice and snow melt heat flux</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>seaice_melt</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>seaice_melt</td>
-!!             <td>water flux due to sea ice and snow melting</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_calving_heat_flx</td>
-!!             <td>W m-2</td>
-!!             <td>calving_hflx</td>
-!!             <td>heat flux, relative to 0C, of frozen land water into ocean</td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_calving_rate</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>calving</td>
-!!             <td>mass flux of frozen runoff</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_evap_rate</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>q_flux</td>
-!!             <td>specific humidity flux</td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_fprec_rate</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>fprec</td>
-!!             <td>mass flux of frozen precip</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_merid_moment_flx</td>
-!!             <td>Pa</td>
-!!             <td>v_flux</td>
-!!             <td>j-directed wind stress into ocean</td>
-!!             <td>[vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar</td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_net_lw_flx</td>
-!!             <td>W m-2</td>
-!!             <td>lw_flux</td>
-!!             <td>long wave radiation</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_net_sw_ir_dif_flx</td>
-!!             <td>W m-2</td>
-!!             <td>sw_flux_nir_dif</td>
-!!             <td>diffuse near IR shortwave radiation</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_net_sw_ir_dir_flx</td>
-!!             <td>W m-2</td>
-!!             <td>sw_flux_nir_dir</td>
-!!             <td>direct near IR shortwave radiation</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_net_sw_vis_dif_flx</td>
-!!             <td>W m-2</td>
-!!             <td>sw_flux_vis_dif</td>
-!!             <td>diffuse visible shortware radiation</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_net_sw_vis_dir_flx</td>
-!!             <td>W m-2</td>
-!!             <td>sw_flux_vis_dir</td>
-!!             <td>direct visible shortware radiation</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_prec_rate</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>lprec</td>
-!!             <td>mass flux of liquid precip</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_runoff_heat_flx</td>
-!!             <td>W m-2</td>
-!!             <td>runoff_hflx</td>
-!!             <td>heat flux, relative to 0C, of liquid land water into ocean</td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_runoff_rate</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>runoff</td>
-!!             <td>mass flux of liquid runoff</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_salt_rate</td>
-!!             <td>kg m-2 s-1</td>
-!!             <td>salt_flux</td>
-!!             <td>salt flux</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_sensi_heat_flx</td>
-!!             <td>W m-2</td>
-!!             <td>t_flux</td>
-!!             <td>sensible heat flux into ocean</td>
-!!         </tr>
-!!         <tr>
-!!             <td>mean_zonal_moment_flx</td>
-!!             <td>Pa</td>
-!!             <td>u_flux</td>
-!!             <td>i-directed wind stress into ocean</td>
-!!             <td>[vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar</td>
-!!         </tr>
-!!     </tbody>
-!! </table>
-!!
-!! @subsection ExportField Export Fields
-!!
-!! Export fields are populated from the `ocean_public` parameter (type `ocean_public_type`)
-!! after the call to `update_ocean_model()`.
-!!
-!! <table>
-!!     <thead>
-!!         <tr>
-!!             <th>Standard Name</th>
-!!             <th>Units</th>
-!!             <th>Model Variable</th>
-!!             <th>Description</th>
-!!             <th>Notes</th>
-!!         </tr>
-!!     </thead>
-!!     <tbody>
-!!         <tr>
-!!             <td>freezing_melting_potential</td>
-!!             <td>W m-2</td>
-!!             <td>combination of frazil and melt_potential</td>
-!!             <td>cap converts model units (J m-2) to (W m-2) for export</td>
-!!         </tr>
-!!         <tr>
-!!             <td>ocean_mask</td>
-!!             <td></td>
-!!             <td></td>
-!!             <td>ocean mask</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>ocn_current_merid</td>
-!!             <td>m s-1</td>
-!!             <td>v_surf</td>
-!!             <td>j-directed surface velocity on u-cell</td>
-!!             <td>[vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon</td>
-!!         </tr>
-!!         <tr>
-!!             <td>ocn_current_zonal</td>
-!!             <td>m s-1</td>
-!!             <td>u_surf</td>
-!!             <td>i-directed surface velocity on u-cell</td>
-!!             <td>[vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon</td>
-!!         </tr>
-!!         <tr>
-!!             <td>s_surf</td>
-!!             <td>psu</td>
-!!             <td>s_surf</td>
-!!             <td>sea surface salinity on t-cell</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>sea_surface_temperature</td>
-!!             <td>K</td>
-!!             <td>t_surf</td>
-!!             <td>sea surface temperature on t-cell</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>sea_surface_slope_zonal</td>
-!!             <td>unitless</td>
-!!             <td>created from ssh</td>
-!!             <td>sea surface zonal slope</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>sea_surface_slope_merid</td>
-!!             <td>unitless</td>
-!!             <td>created from ssh</td>
-!!             <td>sea surface meridional slope</td>
-!!             <td></td>
-!!         </tr>
-!!         <tr>
-!!             <td>so_bldepth</td>
-!!             <td>m</td>
-!!             <td>obld</td>
-!!             <td>ocean surface boundary layer depth</td>
-!!             <td></td>
-!!         </tr>
-!!     </tbody>
-!! </table>
-!!
-!! @subsection MemoryManagement Memory Management
-!!
-!! The MOM cap has an internal state type with pointers to three
-!! types defined by MOM. There is also a small wrapper derived type
-!! required to associate an internal state instance
-!! with the ESMF/NUOPC component:
-!!
-!!     type ocean_internalstate_type
-!!        type(ocean_public_type),       pointer :: ocean_public_type_ptr
-!!        type(ocean_state_type),        pointer :: ocean_state_type_ptr
-!!        type(ice_ocean_boundary_type), pointer :: ice_ocean_boundary_type_ptr
-!!     end type
-!!
-!!     type ocean_internalstate_wrapper
-!!        type(ocean_internalstate_type), pointer :: ptr
-!!     end type
-!!
-!! The member of type `ocean_public_type` stores ocean surface fields used during the coupling.
-!! The member of type `ocean_state_type` is required by the ocean driver,
-!! although its internals are private (not to be used by the coupling directly).
-!! This type is passed to the ocean init and update routines
-!! so that it can maintain state there if desired.
-!! The member of type `ice_ocean_boundary_type` is populated by this cap
-!! with incoming coupling fields from other components. These three derived types are allocated during the
-!! [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise) phase.  Also during that
-!! phase, the `ice_ocean_boundary` type members are all allocated using bounds retrieved
-!! from `mpp_get_compute_domain()`.
-!!
-!! During the [InitializeRealize] (@ref MOM_cap_mod::initializerealize) phase,
-!! `ESMF_Field`s are created for each of the coupling fields in the `ice_ocean_boundary`
-!! and `ocean_public_type` members of the internal state. These fields directly reference into the members of
-!! the `ice_ocean_boundary` and `ocean_public_type` so that memory-to-memory copies are not required to move
-!! data from the cap's import and export states to the memory areas used internally
-!! by MOM.
-!!
-!! @subsection IO I/O
-!!
-!! The cap can optionally output coupling fields for diagnostic purposes if the ESMF attribute
-!! "DumpFields" has been set to "true". In this case the cap will write out NetCDF files
-!! with names "field_ocn_import_<fieldname>.nc" and "field_ocn_export_<fieldname>.nc".
-!! Additionally, calls will be made to the cap subroutine [dumpMomInternal]
-!! (@ref MOM_cap_mod::dumpmominternal) to write out model internal fields to files
-!! named "field_ocn_internal_<fieldname>.nc".  In all cases these NetCDF files will
-!! contain a time series of field data.
-!!
-!! @section RuntimeConfiguration Runtime Configuration
-!!
-!! At runtime, the MOM cap can be configured with several options provided
-!! as ESMF attributes.  Attributes can be set in the cap by the NUOPC Driver
-!! above this cap, or in some systems ESMF attributes are set by
-!! reading in from a configuration file.  The available attributes are:
-!!
-!! * `DumpFields` - when set to "true", write out diagnostic NetCDF files for import/export/internal fields
-!! * `ProfileMemory` - when set to "true", write out memory usage information to the ESMF log files; this
-!!    information is written when entering and leaving the [ModelAdvance]
-!!    (@ref MOM_cap_mod::modeladvance) subroutine and before and after the call to
-!!   `update_ocean_model()`.
-!! * `restart_interval` - integer number of seconds indicating the interval at
-!!    which to call `ocean_model_restart()`; no restarts written if set to 0
-!!
-!!
-
 !> This module contains a set of subroutines that are required by NUOPC.
+
 module MOM_cap_mod
+
 use constants_mod,            only: constants_init
 use diag_manager_mod,         only: diag_manager_init, diag_manager_end
 use field_manager_mod,        only: field_manager_init, field_manager_end
@@ -2815,5 +2323,497 @@ subroutine shr_file_getLogUnit(nunit)
   ! having cppdefs in the main program
 end subroutine shr_file_getLogUnit
 #endif
+
+!>
+!! @subpage MOM NUOPC Cap
+!! @author Fei Liu (fei.liu@gmail.com)
+!! @date 5/10/13 Original documentation
+!! @author Rocky Dunlap (rocky.dunlap@noaa.gov)
+!! @date 1/12/17 Moved to doxygen
+!! @date 2/28/19 Rewrote for unified cap
+!!
+!! @tableofcontents
+!!
+!! @section Overview Overview
+!!
+!! **This MOM cap has been tested with MOM6.**
+!!
+!! This document describes the MOM NUOPC "cap", which is a light weight software layer that is
+!! required when the [MOM ocean model](https://github.com/NOAA-GFDL/MOM6/tree/dev/master)
+!! is used in [National Unified Operation Prediction Capability]
+!! (http://www.earthsystemcog.org/projects/nuopc) (NUOPC) coupled systems. Also see the
+!! [MOM wiki](https://github.com/NOAA-GFDL/MOM6-Examples/wiki) for more documentation.
+!!
+!! NUOPC is a software layer built on top of the [Earth System Modeling
+!! Framework] (https://www.earthsystemcog.org/projects/esmf) (ESMF).
+!! ESMF is a high-performance modeling framework that provides
+!! data structures, interfaces, and operations suited for building coupled models
+!! from a set of components. NUOPC refines the capabilities of ESMF by providing
+!! a more precise definition of what it means for a model to be a component and
+!! how components should interact and share data in a coupled system. The NUOPC
+!! Layer software is designed to work with typical high-performance models in the
+!! Earth sciences domain, most of which are written in Fortran and are based on a
+!! distributed memory model of parallelism (MPI).
+!!
+!! A NUOPC "cap" is a Fortran module that serves as the interface to a model
+!! when it's used in a NUOPC-based coupled system.
+!! The term "cap" is used because it is a light weight software layer that sits on top
+!! of model code, making calls into it and exposing model data structures in a
+!! standard way.
+!!
+!! The MOM cap package includes the cap code itself (MOM_cap.F90, MOM_cap_methods.F90
+!! and MOM_cap_time.F90), a set of time utilities (time_utils.F90) for converting between ESMF and FMS
+!! time type and two modules MOM_ocean_model_nuopc.F90 and MOM_surface_forcing_nuopc.F90. MOM_surface_forcing_nuopc.F90
+!! converts the input ESMF data (import data) to a MOM-specific data type (surface_forcing_CS).
+!! MOM_ocean_model_nuopc.F90 contains routines for initialization, update and finalization of the ocean model state.
+!!
+!! @subsection CapSubroutines Cap Subroutines
+!!
+!! The MOM cap modules contains a set of subroutines that are required
+!! by NUOPC.  These subroutines are called by the NUOPC infrastructure according
+!! to a predefined calling sequence.  Some subroutines are called during
+!! initialization of the coupled system, some during the run of the coupled
+!! system, and some during finalization of the coupled system.
+!!
+!! The initialization sequence is the most complex and is governed by the NUOPC technical rules.
+!! Details about the initialization sequence can be found in the [NUOPC Reference Manual]
+!! (http://www.earthsystemmodeling.org/esmf_releases/last_built/NUOPC_refdoc/).
+!! The cap requires beta snapshot ESMF v8.0.0bs16 or later.
+!!
+!! The following table summarizes the NUOPC-required subroutines that appear in the
+!! MOM cap.  The "Phase" column says whether the subroutine is called during the
+!! initialization, run, or finalize part of the coupled system run.
+!!
+!! Phase    | MOM Cap Subroutine                                                 |  Description
+!! ---------|--------------------------------------------------------------------|--------------------------------------
+!! Init     | [InitializeP0] (@ref MOM_cap_mod::initializep0)                    | Sets the Initialize Phase Definition
+!!                                                                               |  (IPD) version to use
+!! Init     | [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise)      | Advertises standard names of import
+!!                                                                               |  and export fields
+!! Init     | [InitializeRealize] (@ref MOM_cap_mod::initializerealize)          | Creates an ESMF_Grid or ESMF_Mesh
+!!                                                                               |  as well as ESMF_Fields for import
+!!                                                                               |  and export fields
+!! Run      | [ModelAdvance] (@ref MOM_cap_mod::modeladvance)                    | Advances the model by a timestep
+!! Final    | [Finalize] (@ref MOM_cap_mod::ocean_model_finalize)                | Cleans up
+!!
+!! @section UnderlyingModelInterfaces Underlying Model Interfaces
+!!
+!!
+!! @subsection DomainCreation Domain Creation
+!!
+!! The cap can accomodate a MOM tripolar grid which is represented either as a 2D `ESMF_Grid` or
+!! as a 1D `ESMF_Mesh`. Other MOM grids (e.g. a bipolar grid) can be represented as a 1d `ESMF_Mesh` only.
+!! Coupling fields are placed on either the `ESMF_Grid` or `ESMF_Mesh`.
+!! Note that for either the `ESMF_Grid` or `ESMF_Mesh` representation, the fields are translated into
+!! a 2D MOM specific surface boundary type and the distinction between the two is no longer there.
+!! Calls related to creating the grid are located in the [InitializeRealize]
+!! (@ref MOM_cap_mod::initializerealize) subroutine, which is called by the NUOPC infrastructure
+!! during the intialization sequence.
+!!
+!! The cap determines parameters for setting up the grid by calling subroutines in the
+!! `mpp_domains_mod` module. The global domain size is determined by calling `mpp_get_global_domain()`.
+!! A check is in place to ensure that there is only a single tile in the domain (the
+!! cap is currently limited to one tile; multi-tile mosaics are not supported).  The
+!! decomposition across processors is determined via calls to `mpp_get_compute_domains()`
+!! (to retrieve decomposition block indices) and `mpp_get_pelist()` (to determine how
+!! blocks are assigned to processors).
+!!
+!! The `ESMF_Grid` is created in several steps:
+!!  - an `ESMF_DELayout` is created based on the pelist from MOM
+!!  - an `ESMF_DistGrid` is created over the global index space. Connections are set
+!!    up so that the index space is periodic in the first dimension and has a
+!!    fold at the top for the bipole. The decompostion blocks are also passed in
+!!    along with the `ESMF_DELayout` mentioned above.
+!!  - an `ESMF_Grid` is then created by passing in the above `ESMF_DistGrid`.
+!!  - masks, areas, center (tlat, tlon), and corner (ulat, ulon) coordinates are then added to the `ESMF_Grid`
+!!    by retrieving those fields from the MOM datatype `ocean_grid` elements.
+!!
+!! The `ESMF_Mesh` is also created in several steps:
+!!   - the target mesh is generated offline.
+!!   - a temporary mesh is created from an input file specified by the config variable `mesh_ocn`.
+!!     the mesh has a distribution that is automatically generated by ESMF when reading in the mesh
+!!   - an `ESMF_DistGrid` is created from the global index space for the computational domain.
+!!   - the final `ESMF_Mesh` is then created by distributing the temporary mesh using the created `ESMF_DistGrid`.
+!!
+!!
+!! @subsection Initialization Initialization
+!!
+!! During the [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise) phase, calls are
+!! made to MOM's native initialization subroutines, including `fms_init()`, `constants_init()`,
+!! `field_manager_init()`, `diag_manager_init()`, and `set_calendar_type()`.  The MPI communicator
+!! is pulled in through the ESMF VM object for the MOM component. The dt and start time are set
+!! from parameters from the incoming ESMF clock with calls to `set_time()` and `set_date().`
+!!
+!!
+!! @subsection Run Run
+!!
+!! The [ModelAdvance] (@ref MOM_cap_mod::modeladvance) subroutine is called by the NUOPC
+!! infrastructure when it's time for MOM to advance in time. During this subroutine, there is a
+!! call into the MOM update routine:
+!!
+!!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled)
+!!
+!! Priori to the call to `update_ocean_model()`, the cap performs these steps
+!! - the `Time` and `Time_step_coupled` parameters, based on FMS types, are derived from the incoming ESMF clock
+!! - diagnostics are optionally written to files `field_ocn_import_*`, one for each import field
+!! - mom_import is called and translates to the ESMF input data to a MOM specific data type
+!!    - momentum flux vectors are rotated to internal grid
+!!
+!! After the call to `update_ocean_model()`, the cap performs these steps:
+!! - mom_export is called
+!!   - the `ocean_mask` export is set to match that of the internal MOM mask
+!!   - the `freezing_melting_potential` export is converted from J m-2 to W m-2 by dividing by the coupling interval
+!!   - vector rotations are applied to the `ocean_current_zonal` and `ocean_current_merid` exports, back to lat-lon grid
+!!   - diagnostics are optionally written to files `field_ocn_export_*`, one for each export field
+!!   - optionally, a call is made to `ocean_model_restart()` at the interval `restart_interval`
+!!
+!! @subsubsection VectorRotations Vector Rotations
+!!
+!! Vector rotations are applied to incoming momentum fluxes (from regular lat-lon to tripolar grid) and
+!! outgoing ocean currents (from tripolar to regular lat-lon). The rotation angles are provided
+!! from the native MOM grid by a call to `get_ocean_grid(Ocean_grid)`.
+!! The cosine and sine of the rotation angle are:
+!!
+!!     ocean_grid%cos_rot(i,j)
+!!     ocean_grid%sin_rot(i,j)
+!!
+!! The rotation of momentum flux from regular lat-lon to tripolar is:
+!! \f[
+!! \begin{bmatrix}
+!! \tau_x' \\
+!! \tau_y'
+!! \end{bmatrix} =
+!! \begin{bmatrix}
+!!  cos \theta   & sin \theta \\
+!!  -sin \theta  & cos \theta
+!! \end{bmatrix} *
+!! \begin{bmatrix}
+!! \tau_x \\
+!! \tau_y
+!! \end{bmatrix}
+!! \f]
+!!
+!! The rotation of ocean current from tripolar to regular lat-lon is:
+!! \f[
+!! \begin{bmatrix}
+!! u' \\
+!! v'
+!! \end{bmatrix} =
+!! \begin{bmatrix}
+!!  cos \theta   & -sin \theta \\
+!!  sin \theta  & cos \theta
+!! \end{bmatrix} *
+!! \begin{bmatrix}
+!! u \\
+!! v
+!! \end{bmatrix}
+!! \f]
+!! @subsection Finalization Finalization
+!!
+!! NUOPC infrastructure calls [ocean_model_finalize] (@ref MOM_cap_mod::ocean_model_finalize)
+!! at the end of the run. This subroutine is a hook to call into MOM's native shutdown
+!! procedures:
+!!
+!!     call ocean_model_end (ocean_public, ocean_State, Time)
+!!     call diag_manager_end(Time )
+!!     call field_manager_end
+!!     call fms_io_exit
+!!     call fms_end
+!!
+!! @section ModelFields Model Fields
+!!
+!! The following tables list the import and export fields currently set up in the MOM cap.
+!!
+!! @subsection ImportFields Import Fields
+!!
+!! <table>
+!!     <thead>
+!!         <tr>
+!!             <th>Standard Name</th>
+!!             <th>Units</th>
+!!             <th>Model Variable</th>
+!!             <th>Description</th>
+!!             <th>Notes</th>
+!!         </tr>
+!!     </thead>
+!!     <tbody>
+!!         <tr>
+!!             <td>inst_pres_height_surface</td>
+!!             <td>Pa</td>
+!!             <td>p</td>
+!!             <td>pressure of overlying sea ice and atmosphere</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mass_of_overlying_sea_ice</td>
+!!             <td>kg</td>
+!!             <td>mi</td>
+!!             <td>mass of overlying sea ice</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>seaice_melt_heat</td>
+!!             <td>W m-2</td>
+!!             <td>seaice_melt_heat</td>
+!!             <td>sea ice and snow melt heat flux</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>seaice_melt</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>seaice_melt</td>
+!!             <td>water flux due to sea ice and snow melting</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_calving_heat_flx</td>
+!!             <td>W m-2</td>
+!!             <td>calving_hflx</td>
+!!             <td>heat flux, relative to 0C, of frozen land water into ocean</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_calving_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>calving</td>
+!!             <td>mass flux of frozen runoff</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_evap_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>q_flux</td>
+!!             <td>specific humidity flux</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_fprec_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>fprec</td>
+!!             <td>mass flux of frozen precip</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_merid_moment_flx</td>
+!!             <td>Pa</td>
+!!             <td>v_flux</td>
+!!             <td>j-directed wind stress into ocean</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_lw_flx</td>
+!!             <td>W m-2</td>
+!!             <td>lw_flux</td>
+!!             <td>long wave radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_ir_dif_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_nir_dif</td>
+!!             <td>diffuse near IR shortwave radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_ir_dir_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_nir_dir</td>
+!!             <td>direct near IR shortwave radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_vis_dif_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_vis_dif</td>
+!!             <td>diffuse visible shortware radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_net_sw_vis_dir_flx</td>
+!!             <td>W m-2</td>
+!!             <td>sw_flux_vis_dir</td>
+!!             <td>direct visible shortware radiation</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_prec_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>lprec</td>
+!!             <td>mass flux of liquid precip</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_runoff_heat_flx</td>
+!!             <td>W m-2</td>
+!!             <td>runoff_hflx</td>
+!!             <td>heat flux, relative to 0C, of liquid land water into ocean</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_runoff_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>runoff</td>
+!!             <td>mass flux of liquid runoff</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_salt_rate</td>
+!!             <td>kg m-2 s-1</td>
+!!             <td>salt_flux</td>
+!!             <td>salt flux</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_sensi_heat_flx</td>
+!!             <td>W m-2</td>
+!!             <td>t_flux</td>
+!!             <td>sensible heat flux into ocean</td>
+!!         </tr>
+!!         <tr>
+!!             <td>mean_zonal_moment_flx</td>
+!!             <td>Pa</td>
+!!             <td>u_flux</td>
+!!             <td>i-directed wind stress into ocean</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - lat-lon to tripolar</td>
+!!         </tr>
+!!     </tbody>
+!! </table>
+!!
+!! @subsection ExportField Export Fields
+!!
+!! Export fields are populated from the `ocean_public` parameter (type `ocean_public_type`)
+!! after the call to `update_ocean_model()`.
+!!
+!! <table>
+!!     <thead>
+!!         <tr>
+!!             <th>Standard Name</th>
+!!             <th>Units</th>
+!!             <th>Model Variable</th>
+!!             <th>Description</th>
+!!             <th>Notes</th>
+!!         </tr>
+!!     </thead>
+!!     <tbody>
+!!         <tr>
+!!             <td>freezing_melting_potential</td>
+!!             <td>W m-2</td>
+!!             <td>combination of frazil and melt_potential</td>
+!!             <td>cap converts model units (J m-2) to (W m-2) for export</td>
+!!         </tr>
+!!         <tr>
+!!             <td>ocean_mask</td>
+!!             <td></td>
+!!             <td></td>
+!!             <td>ocean mask</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>ocn_current_merid</td>
+!!             <td>m s-1</td>
+!!             <td>v_surf</td>
+!!             <td>j-directed surface velocity on u-cell</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon</td>
+!!         </tr>
+!!         <tr>
+!!             <td>ocn_current_zonal</td>
+!!             <td>m s-1</td>
+!!             <td>u_surf</td>
+!!             <td>i-directed surface velocity on u-cell</td>
+!!             <td>[vector rotation] (@ref VectorRotations) applied - tripolar to lat-lon</td>
+!!         </tr>
+!!         <tr>
+!!             <td>s_surf</td>
+!!             <td>psu</td>
+!!             <td>s_surf</td>
+!!             <td>sea surface salinity on t-cell</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>sea_surface_temperature</td>
+!!             <td>K</td>
+!!             <td>t_surf</td>
+!!             <td>sea surface temperature on t-cell</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>sea_surface_slope_zonal</td>
+!!             <td>unitless</td>
+!!             <td>created from ssh</td>
+!!             <td>sea surface zonal slope</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>sea_surface_slope_merid</td>
+!!             <td>unitless</td>
+!!             <td>created from ssh</td>
+!!             <td>sea surface meridional slope</td>
+!!             <td></td>
+!!         </tr>
+!!         <tr>
+!!             <td>so_bldepth</td>
+!!             <td>m</td>
+!!             <td>obld</td>
+!!             <td>ocean surface boundary layer depth</td>
+!!             <td></td>
+!!         </tr>
+!!     </tbody>
+!! </table>
+!!
+!! @subsection MemoryManagement Memory Management
+!!
+!! The MOM cap has an internal state type with pointers to three
+!! types defined by MOM. There is also a small wrapper derived type
+!! required to associate an internal state instance
+!! with the ESMF/NUOPC component:
+!!
+!!     type ocean_internalstate_type
+!!        type(ocean_public_type),       pointer :: ocean_public_type_ptr
+!!        type(ocean_state_type),        pointer :: ocean_state_type_ptr
+!!        type(ice_ocean_boundary_type), pointer :: ice_ocean_boundary_type_ptr
+!!     end type
+!!
+!!     type ocean_internalstate_wrapper
+!!        type(ocean_internalstate_type), pointer :: ptr
+!!     end type
+!!
+!! The member of type `ocean_public_type` stores ocean surface fields used during the coupling.
+!! The member of type `ocean_state_type` is required by the ocean driver,
+!! although its internals are private (not to be used by the coupling directly).
+!! This type is passed to the ocean init and update routines
+!! so that it can maintain state there if desired.
+!! The member of type `ice_ocean_boundary_type` is populated by this cap
+!! with incoming coupling fields from other components. These three derived types are allocated during the
+!! [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise) phase.  Also during that
+!! phase, the `ice_ocean_boundary` type members are all allocated using bounds retrieved
+!! from `mpp_get_compute_domain()`.
+!!
+!! During the [InitializeRealize] (@ref MOM_cap_mod::initializerealize) phase,
+!! `ESMF_Field`s are created for each of the coupling fields in the `ice_ocean_boundary`
+!! and `ocean_public_type` members of the internal state. These fields directly reference into the members of
+!! the `ice_ocean_boundary` and `ocean_public_type` so that memory-to-memory copies are not required to move
+!! data from the cap's import and export states to the memory areas used internally
+!! by MOM.
+!!
+!! @subsection IO I/O
+!!
+!! The cap can optionally output coupling fields for diagnostic purposes if the ESMF attribute
+!! "DumpFields" has been set to "true". In this case the cap will write out NetCDF files
+!! with names "field_ocn_import_<fieldname>.nc" and "field_ocn_export_<fieldname>.nc".
+!! Additionally, calls will be made to the cap subroutine [dumpMomInternal]
+!! (@ref MOM_cap_mod::dumpmominternal) to write out model internal fields to files
+!! named "field_ocn_internal_<fieldname>.nc".  In all cases these NetCDF files will
+!! contain a time series of field data.
+!!
+!! @section RuntimeConfiguration Runtime Configuration
+!!
+!! At runtime, the MOM cap can be configured with several options provided
+!! as ESMF attributes.  Attributes can be set in the cap by the NUOPC Driver
+!! above this cap, or in some systems ESMF attributes are set by
+!! reading in from a configuration file.  The available attributes are:
+!!
+!! * `DumpFields` - when set to "true", write out diagnostic NetCDF files for import/export/internal fields
+!! * `ProfileMemory` - when set to "true", write out memory usage information to the ESMF log files; this
+!!    information is written when entering and leaving the [ModelAdvance]
+!!    (@ref MOM_cap_mod::modeladvance) subroutine and before and after the call to
+!!   `update_ocean_model()`.
+!! * `restart_interval` - integer number of seconds indicating the interval at
+!!    which to call `ocean_model_restart()`; no restarts written if set to 0
 
 end module MOM_cap_mod
