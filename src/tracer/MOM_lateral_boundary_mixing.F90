@@ -133,9 +133,11 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
   real, dimension(SZK_(G),CS%deg+1)                    :: ppoly_S      !< Slopes from reconstruction (placeholder)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        ! Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
-  real, dimension(SZI_(G),SZJ_(G))          :: uFLx_bulk   ! Total calculated bulk-layer u-flux for the tracer
+  real, dimension(SZIB_(G),SZJ_(G))         :: uFLx_bulk   ! Total calculated bulk-layer u-flux for the tracer
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        ! Meridional flux of tracer
   real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   ! Total calculated bulk-layer v-flux for the tracer
+  real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    ! Layer summed u-flux transport
+  real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    ! Layer summed v-flux transport
   type(tracer_type), pointer                :: Tracer => NULL() ! Pointer to the current tracer
   integer :: remap_method !< Reconstruction method
   integer :: i,j,k,m
@@ -215,7 +217,21 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! Post the tracer diagnostics
     if (tracer%id_lbm_dfx>0)      call post_data(tracer%id_lbm_dfx, uFlx, CS%diag)
     if (tracer%id_lbm_dfy>0)      call post_data(tracer%id_lbm_dfy, vFlx, CS%diag)
+    if (tracer%id_lbm_dfx_2d>0) then
+      uwork_2d(:,:) = 0.
+      do k=1,GV%ke; do j=G%jsc,G%jec; do I=G%isc-1,G%iec
+        uwork_2d(I,j) = uwork_2d(I,j) + uFlx(I,j,k)
+      enddo; enddo; enddo
+    endif
+    call post_data(tracer%id_lbm_dfx_2d, uwork_2d, CS%diag)
 
+    if (tracer%id_lbm_dfy_2d>0) then
+      vwork_2d(:,:) = 0.
+      do k=1,GV%ke; do J=G%jsc-1,G%jec; do i=G%isc,G%iec
+        vwork_2d(i,J) = vwork_2d(i,J) + vFlx(i,J,k)
+      enddo; enddo; enddo
+    endif
+    call post_data(tracer%id_lbm_dfy_2d, vwork_2d, CS%diag)
   enddo
 
 end subroutine lateral_boundary_mixing
