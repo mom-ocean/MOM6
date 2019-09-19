@@ -431,10 +431,10 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, 1.0-zeta_top_R, 1.0)
     heff = harmonic_mean(h_work_L, h_work_R)
     ! tracer flux where the minimum BLD intersets layer
-    F_layer(k_top_max) = -heff * (phi_R_avg - phi_L_avg)
+    F_layer(k_top_max) = (-heff * khtr_u) * (phi_R_avg - phi_L_avg)
     do k = k_top_max+1,nk
       heff = harmonic_mean(h_L(k), h_R(k))
-      F_layer(k) = -heff * (phi_R(k) - phi_L(k))
+      F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
     enddo
   endif
 end subroutine fluxes_layer_method
