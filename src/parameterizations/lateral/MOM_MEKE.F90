@@ -45,6 +45,8 @@ type, public :: MEKE_CS ; private
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
+  real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of the
+                        !! GEOMETRIC thickness diffusion.
   logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
                         !! equilibrium value of MEKE.
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
@@ -747,7 +749,13 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
       EKE = 0.
     endif
     if (CS%MEKE_equilibrium_alt) then
-      MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+      if (CS%MEKE_GEOMETRIC) then
+        ! Equation 1 of Jansen et al. (2015), balancing the GEOMETRIC GM coefficient against
+        ! bottom drag (Equations 3 and 12)
+        MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * MIN(SN,1.0e-7))**2 / ((I_H * CS%cdrag)**2 * (bottomFac2**3))
+      else
+        MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+      endif
     else
       MEKE%MEKE(i,j) = EKE
     endif
@@ -978,6 +986,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
                  "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation "//&
                  "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+  call get_param(param_file, mdl, "MEKE_GEOMETRIC_ALPHA", CS%MEKE_GEOMETRIC_alpha, &
+                 "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
+                 "thickness diffusion.", units="nondim", default=0.05)
   call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
                  "If true, use an alternative formula for computing the (equilibrium)"//&
                  "initial value of MEKE.", default=.false.)
