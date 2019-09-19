@@ -218,13 +218,20 @@ else
 MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
 endif
 
+# Rule to build <tc>/ocean.stats.<tag>
+# $(1) - <tag>
+# $(2) - <executable-label>
+# $(3) - report to codecov
+# $(4) - Parameter line for MOM_override
+# $(5) - Environment for MPIRUN
+# $(6) - Number of PEs
 define STAT_RULE
 $$(BASE)/.testing/%/ocean.stats.$(1): $$(BUILD)/$(2)/MOM6
 	if [ $(3) ]; then find $$(BUILD) -name *.gcda -exec rm -f '{}' \; ; fi
 	mkdir -p $$(@D)/RESTART
 	echo $(4) > $$(@D)/MOM_override
-	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) $$< 2> debug.out \
-		|| ! cat debug.out
+	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) $$< 2> debug.out > std.out \
+		|| ! sed 's/^/$$*.$(1): /' std.out debug.out && sed 's/^/$$*.$(1): /' std.out
 	cp $$(@D)/ocean.stats $$@
 	> $$(@D)/MOM_override
 	if [ $(3) ]; then cd $$(BASE) && bash <(curl -s https://codecov.io/bash) -n $$@; fi
@@ -264,13 +271,15 @@ $(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
 		&& printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml \
 		&& echo $${daymax} $${timeunit}
 	# Run the first half-period
-	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
+	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out > std.out \
+		|| ! sed 's/^/$*.restart1: /' std.out debug.out && sed 's/^/$*.restart1: /' std.out
 	# Setup the next inputs
 	rm -rf $(@D)/INPUT && mv $(@D)/RESTART $(@D)/INPUT
 	mkdir $(@D)/RESTART
 	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
+	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out > std.out \
+		|| ! sed 's/^/$*.restart2: /' std.out debug.out && sed 's/^/$*.restart2: /' std.out
 	# Archive the results and cleanup
 	cp $(@D)/ocean.stats $@
 	rm -rf $(@D)/INPUT
