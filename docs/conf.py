@@ -23,7 +23,7 @@ import subprocess
 
 # Create API documentation
 if os.environ.get('NCAR_FORK'):
-    doxygenize = 'doxygen Doxyfile_ncar_rtd'
+    doxygenize = 'doxygen ncar/Doxyfile_ncar_rtd'
 else:
     doxygenize = 'doxygen Doxyfile_rtd'
 if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxygenize

@@ -267,9 +267,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
                             ! inner edge of the inflow.
-  real :: g_prime_tot       ! The reduced gravity across all layers [m2 Z-1 s-2 ~> m s-2].
+  real :: g_prime_tot       ! The reduced gravity across all layers [L2 Z-1 T-2 ~> m s-2].
   real :: Def_Rad           ! The deformation radius, based on fluid of
-                            ! thickness D_edge, in the same units as lat.
+                            ! thickness D_edge, in the same units as lat [m].
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
@@ -290,9 +290,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
-  Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
-  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%Z_to_H
+  g_prime_tot = (GV%g_Earth / GV%Rho0)*2.0
+  Def_Rad = US%L_to_m*sqrt(D_edge*g_prime_tot) / (1.0e-4*US%T_to_s * 1000.0)
+  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*US%m_to_L*Def_Rad) * GV%Z_to_H
 
   if (OBC%number_of_segments /= 1) then
     call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)

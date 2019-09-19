@@ -163,13 +163,13 @@ end subroutine Rossby_front_initialize_temperature_salinity
 subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
-  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                              intent(out) :: u  !< i-component of velocity [m s-1]
+                              intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                              intent(out) :: v  !< j-component of velocity [m s-1]
+                              intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
                               intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
+  type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)  :: param_file !< A structure indicating the open file
                                                 !! to parse for model parameter values.
   logical,          optional, intent(in)  :: just_read_params !< If present and true, this call
@@ -177,11 +177,11 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
 
   real    :: y            ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range      ! Range of salinities and temperatures over the vertical
-  real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f
+  real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f [L2 Z-1 T-1 degC-1 ~> m s-1 degC-1]
   real    :: dRho_dT
   real    :: Dml, zi, zc, zm ! Depths [Z ~> m].
   real    :: f            ! The local Coriolis parameter [T-1 ~> s-1]
-  real    :: Ty
+  real    :: Ty           ! The meridional temperature gradient [degC L-1 ~> degC m-1]
   real    :: hAtU         ! Interpolated layer thickness [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -205,9 +205,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5* (G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
-      dUdT = ( GV%g_Earth * dRho_dT ) / ( US%s_to_T * f * GV%Rho0 )
+      dUdT = ( GV%g_Earth*dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
-    Ty = dTdy( G, T_range, G%geoLatT(i,j) )
+    Ty = US%L_to_m*dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
     do k = 1, nz
       hAtU = 0.5*(h(i,j,k)+h(i+1,j,k)) * GV%H_to_Z
