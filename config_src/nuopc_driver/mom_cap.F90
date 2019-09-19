@@ -2325,13 +2325,12 @@ end subroutine shr_file_getLogUnit
 #endif
 
 !>
-!! @subpage MOM NUOPC Cap
+!! @page nuopc_cap NUOPC Cap
 !! @author Fei Liu (fei.liu@gmail.com)
 !! @date 5/10/13 Original documentation
 !! @author Rocky Dunlap (rocky.dunlap@noaa.gov)
 !! @date 1/12/17 Moved to doxygen
 !! @date 2/28/19 Rewrote for unified cap
-!!
 !! @tableofcontents
 !!
 !! @section Overview Overview
@@ -2384,17 +2383,30 @@ end subroutine shr_file_getLogUnit
 !! MOM cap.  The "Phase" column says whether the subroutine is called during the
 !! initialization, run, or finalize part of the coupled system run.
 !!
-!! Phase    | MOM Cap Subroutine                                                 |  Description
-!! ---------|--------------------------------------------------------------------|--------------------------------------
-!! Init     | [InitializeP0] (@ref MOM_cap_mod::initializep0)                    | Sets the Initialize Phase Definition
-!!                                                                               |  (IPD) version to use
-!! Init     | [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise)      | Advertises standard names of import
-!!                                                                               |  and export fields
-!! Init     | [InitializeRealize] (@ref MOM_cap_mod::initializerealize)          | Creates an ESMF_Grid or ESMF_Mesh
-!!                                                                               |  as well as ESMF_Fields for import
-!!                                                                               |  and export fields
-!! Run      | [ModelAdvance] (@ref MOM_cap_mod::modeladvance)                    | Advances the model by a timestep
-!! Final    | [Finalize] (@ref MOM_cap_mod::ocean_model_finalize)                | Cleans up
+!!<table>
+!!<tr><th> Phase  <th> MOM Cap Subroutine  <th> Description
+!!<tr>
+!!  <td> Init
+!!  <td> [InitializeP0] (@ref MOM_cap_mod::initializep0)
+!!  <td> Sets the Initialize Phase Definition (IPD) version to use
+!!<tr>
+!!  <td> Init
+!!  <td> [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise)
+!!  <td> Advertises standard names of import and export fields
+!!<tr>
+!!  <td> Init
+!!  <td> [InitializeRealize] (@ref MOM_cap_mod::initializerealize)
+!!  <td> Creates an ESMF_Grid or ESMF_Mesh as well as ESMF_Fields for import and export fields
+!!<tr>
+!!  <td> Run
+!!  <td> [ModelAdvance] (@ref MOM_cap_mod::modeladvance)
+!!  <td> Advances the model by a timestep
+!!<tr>
+!!  <td> Final
+!!  <td> [Finalize] (@ref MOM_cap_mod::ocean_model_finalize)
+!!  <td> Cleans up
+!!</table>
+!!
 !!
 !! @section UnderlyingModelInterfaces Underlying Model Interfaces
 !!
