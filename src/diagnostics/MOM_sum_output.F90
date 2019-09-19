@@ -977,16 +977,16 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
        if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
            if (associated(axis_data_CS%data(i)%p)) then
               if (is_root_pe()) then
-              call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                  call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
 
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                'long_name',axis_data_CS%axis(i)%longname)
 
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                               'units',trim(axis_data_CS%axis(i)%units))
-              endif
+                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                               'units',trim(axis_data_CS%axis(i)%units))            
+               endif
+               call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
            endif
         endif
      enddo
@@ -1004,7 +1004,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   !call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
   !call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
   !call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday) !>@bug max_CFL index correctly set in new write call
-  if (is_root_pe()) then
+  !if (is_root_pe()) then
   call write_data(fileObjWrite, vars(1)%name, var)
   call write_data(fileObjWrite, vars(2)%name, toten)
   call write_data(fileObjWrite, vars(3)%name, PE)
@@ -1040,7 +1040,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         call write_data(fileObjWrite, vars(11+m)%name, Tr_stocks(m))
      enddo
   endif
-  endif
+  !endif
   !call flush_file(CS%fileenergy_nc)
 
   ! The second (impossible-looking) test looks for a NaN in En_mass.
@@ -1069,7 +1069,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
   
   ! close the file
-  if (check_if_open(fileObjWrite) .and. is_root_pe()) call close_file(fileObjWrite)
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
 
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
