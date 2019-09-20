@@ -162,6 +162,7 @@ The following test configurations (TCs) are supported:
 - tc0: Unit testing of various model components, based on `unit_tests`
 - tc1: A low-resolution version of the `benchmark` configuration
   - tc1.a: Use the un-split mode with Runge-Kutta 3 time integration
+  - tc1.b: Use the un-split mode with Runge-Kutta 2 time integration
 - tc2: An ALE configuration based on tc1
 - tc3: An open-boundary condition (OBC) test based on `circle_obcs`
 
