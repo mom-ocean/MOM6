@@ -66,6 +66,7 @@ else
 	TARGET_CODEBASE =
 endif
 
+SOURCE = $(wildcard $(BASE)/src/*/*.F90 $(BASE)/src/*/*/*.F90 $(BASE)/config_src/solo_driver/*.F90)
 
 #---
 # Rules
@@ -110,7 +111,7 @@ $(BUILD)/target/path_names: $(LIST_PATHS) $(TARGET_CODEBASE)
 		$(TARGET_CODEBASE)/config_src/solo_driver \
 		$(TARGET_CODEBASE)/$(GRID_SRC)
 
-$(BUILD)/%/path_names: $(LIST_PATHS)
+$(BUILD)/%/path_names: $(LIST_PATHS) $(SOURCE)
 	mkdir -p $(@D)
 	cd $(@D) && $(LIST_PATHS) -l \
 		$(BASE)/src \

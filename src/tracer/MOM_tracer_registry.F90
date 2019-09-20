@@ -392,18 +392,20 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
     if (Tr%diag_form == 1) then
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, trim(flux_longname)//" advective zonal flux" , &
-          trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., y_cell_method = 'sum', &
+          conversion=Tr%flux_scale)
       Tr%id_ady = register_diag_field("ocean_model", trim(shortnm)//"_ady", &
           diag%axesCvL, Time, trim(flux_longname)//" advective meridional flux" , &
-          trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
+          conversion=Tr%flux_scale)
       Tr%id_dfx = register_diag_field("ocean_model", trim(shortnm)//"_dfx", &
           diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux" , &
-          trim(flux_units), v_extensive = .true., conversion=US%L_to_m**2, &
-          y_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., y_cell_method = 'sum', &
+          conversion=(US%L_to_m**2)*Tr%flux_scale)
       Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_dfy", &
           diag%axesCvL, Time, trim(flux_longname)//" diffusive zonal flux" , &
-          trim(flux_units), v_extensive = .true., conversion=US%L_to_m**2, &
-          x_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
+          conversion=(US%L_to_m**2)*Tr%flux_scale)
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, "Advective (by residual mean) Zonal Flux of "//trim(flux_longname), &
@@ -508,9 +510,11 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendprefix) == 0) then
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
-          diag%axesTL, Time, var_lname, conv_units, v_extensive=.true.)
+          diag%axesTL, Time, var_lname, conv_units, v_extensive=.true., &
+          conversion=Tr%conv_scale)
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
-          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units)
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
+          conversion=Tr%conv_scale)
     else
       cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//&
                         trim(flux_longname)//" Content"
