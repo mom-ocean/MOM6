@@ -202,16 +202,8 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 #---
 # Test run output files
 
-#(1): Configuration name
-#(2): Executable type
-#(3): Enable coverage flag
-#(4): MOM_override configuration
-#(5): Environment variables
-#(6): Number of MPI ranks
-
-# Simple function for generalised Slurm (srun) and OpenMPI (mpirun) support
-# (1): Environment variables
-
+# Simple function for generalized Slurm (srun) and OpenMPI (mpirun) support
+# $(1): Environment variables
 ifeq ($(MPIRUN), srun)
 MPIRUN_CMD=$(1) $(MPIRUN)
 else
@@ -219,12 +211,12 @@ MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
 endif
 
 # Rule to build <tc>/ocean.stats.<tag>
-# $(1) - <tag>
-# $(2) - <executable-label>
-# $(3) - report to codecov
-# $(4) - Parameter line for MOM_override
-# $(5) - Environment for MPIRUN
-# $(6) - Number of PEs
+# $(1): Test configuration name <tag>
+# $(2): Executable type
+# $(3): Enable coverage flag
+# $(4): MOM_override configuration
+# $(5): Environment variables
+# $(6): Number of MPI ranks
 define STAT_RULE
 $$(BASE)/.testing/%/ocean.stats.$(1): $$(BUILD)/$(2)/MOM6
 	if [ $(3) ]; then find $$(BUILD) -name *.gcda -exec rm -f '{}' \; ; fi
@@ -254,7 +246,7 @@ $(eval $(call STAT_RULE,dim.l,symmetric,,L_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 
-# Restart tests require signicant preprocessing, and are handled separately.
+# Restart tests require significant preprocessing, and are handled separately.
 $(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
 	# Cleanup
 	mkdir -p $(@D)/RESTART
