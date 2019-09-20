@@ -13,3 +13,4 @@ GOLD_IC.nc
 debug.out
 chksum_diag.*
 config.mk
+std.out*
