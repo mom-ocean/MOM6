@@ -163,7 +163,8 @@ The following test configurations (TCs) are supported:
 - tc1: A low-resolution version of the `benchmark` configuration
   - tc1.a: Use the un-split mode with Runge-Kutta 3 time integration
   - tc1.b: Use the un-split mode with Runge-Kutta 2 time integration
-- tc2: An ALE configuration based on tc1
+- tc2: An ALE configuration based on tc1 with tides
+  - tc2.a: Use sigma, PPM_H4 and no tides
 - tc3: An open-boundary condition (OBC) test based on `circle_obcs`
 
 
