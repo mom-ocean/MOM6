@@ -623,6 +623,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket [m2 s-2].
   logical :: useSecant, debugIteration
 
+  real :: Lgrid, Ldeform, Lfrict
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   debugIteration = .false.
@@ -750,9 +752,18 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     endif
     if (CS%MEKE_equilibrium_alt) then
       if (CS%MEKE_GEOMETRIC) then
+        Lgrid = sqrt(G%areaT(i,j))               ! Grid scale
+        Ldeform =Lgrid * MIN(1.0,MEKE%Rd_dx_h(i,j))          ! Deformation scale
+        Lfrict = (US%Z_to_m * G%bathyT(i,j)) / CS%cdrag  ! Frictional arrest scale
+        ! gamma_b^2 is the ratio of bottom eddy energy to mean column eddy energy
+        ! used in calculating bottom drag
+        bottomFac2 = CS%MEKE_CD_SCALE**2
+        if (Lfrict*CS%MEKE_Cb>0.) bottomFac2 = bottomFac2 + 1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
+        bottomFac2 = max(bottomFac2, CS%MEKE_min_gamma)
         ! Equation 1 of Jansen et al. (2015), balancing the GEOMETRIC GM coefficient against
         ! bottom drag (Equations 3 and 12)
-        MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * MIN(SN,1.0e-7))**2 / ((I_H * CS%cdrag)**2 * (bottomFac2**3))
+        ! TODO: create a run time parameter for limitting SN.
+        MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * MIN(SN,1.e-5) * US%Z_to_m*G%bathyT(i,j))**2 / (CS%cdrag**2 * bottomFac2**3)
       else
         MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
       endif
