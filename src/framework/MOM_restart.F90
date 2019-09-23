@@ -981,7 +981,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      endif 
 
      ! append to restart file if it exists
-     file_open_success = fms2_open_file(fileObjWrite, trim(restartpath),"append", &
+     file_open_success = fms2_open_file(fileObjWrite, trim(restartpath),"overwrite", &
                                        G%Domain%mpp_domain, is_restart = .true.)
      ! else, open a new restart file for writing
      if (.not. (file_open_success)) then
@@ -1096,71 +1096,72 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      next_var = m
      
      do m=start_var,next_var-1
-        units=''
-        longname=''
-        call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                           z_grid=z_grid, t_grid=t_grid, longname=longname, &
-                           units=units, caller="save_restart")
-        horgrid_position = get_horizontal_grid_position(hor_grid)  
-        
-        call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
-        
-        num_dims = 0
+        if (.not.(fms2_variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then 
+           units=''
+           longname=''
+           call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                              z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                              units=units, caller="save_restart")
 
-        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                        dim_names, dim_lengths, num_dims, G=G, GV=GV)
+           horgrid_position = get_horizontal_grid_position(hor_grid)  
         
-        ! register and write the restart variables to the file
-        if (associated(CS%var_ptr3d(m)%p)) then
-           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
-               dimensions=dim_names(1:num_dims))
+           call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
+        
+           num_dims = 0
+
+           call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                           dim_names, dim_lengths, num_dims, G=G, GV=GV)
+        
+           ! register and write the restart variables to the file
+           if (associated(CS%var_ptr3d(m)%p)) then
+              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
+                   dimensions=dim_names(1:num_dims))
 
            ! prepare the restart field checksum
            !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-        elseif (associated(CS%var_ptr2d(m)%p)) then
+           elseif (associated(CS%var_ptr2d(m)%p)) then
 
-           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
-               dimensions=dim_names(1:num_dims))
+              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
+                      dimensions=dim_names(1:num_dims))
 
-           ! prepare the restart field checksum
-           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-        elseif (associated(CS%var_ptr4d(m)%p)) then
+              ! prepare the restart field checksum
+              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+           elseif (associated(CS%var_ptr4d(m)%p)) then
 
-           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
-               dimensions=dim_names(1:num_dims))
+              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
+                      dimensions=dim_names(1:num_dims))
 
-           ! prepare the restart field checksum
-           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-        elseif (associated(CS%var_ptr1d(m)%p)) then
-           ! need to explicitly define dim_names array for 1-D variable
-           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
-               dimensions=(/dim_names(1:num_dims)/))
+              ! prepare the restart field checksum
+              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+           elseif (associated(CS%var_ptr1d(m)%p)) then
+              ! need to explicitly define dim_names array for 1-D variable
+              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
+                      dimensions=(/dim_names(1:num_dims)/))
 
-           ! prepare the restart field checksum
-           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
-        elseif (associated(CS%var_ptr0d(m)%p)) then
-           ! need to explicitly define axis_names array for scalar variable
-           call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
-               dimensions=(/dim_names(1:num_dims)/))
-
-           ! prepare the restart field checksum
-           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+              ! prepare the restart field checksum
+              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+           elseif (associated(CS%var_ptr0d(m)%p)) then
+                 ! need to explicitly define axis_names array for scalar variable
+              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
+                      dimensions=(/dim_names(1:num_dims)/))
+              ! prepare the restart field checksum
+              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
+           endif
+           ! convert the checksum to a string
+           !checksum_char = ''
+           !checksum_char = convert_checksum_to_string(check_val(m,1))
+           !! register the variable attributes
+           !call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
+           call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
+           call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+          
         endif
-        ! convert the checksum to a string
-        !checksum_char = ''
-        !checksum_char = convert_checksum_to_string(check_val(m,1))
-        ! register the variable attributes
-
-        call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
-        call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
-        !call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
-        
      enddo
     
      call fms2_write_restart(fileObjWrite)
      call fms2_close_file(fileObjWrite)
     
-     if(allocated(time_vals)) deallocate(time_vals)     
+     if (allocated(time_vals)) deallocate(time_vals)     
      if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
      if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
