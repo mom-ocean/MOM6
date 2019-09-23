@@ -107,13 +107,13 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
   else
     do j=js,je ; do i=is,ie
       ! 3D setup
-      ! #### TEST #######
+      ! ===== TEST =====
       !if (G%geoLonT(i,j)<500.) then
       !  xtil = 500.*1.0e3/xbar
       !else
       !  xtil = G%geoLonT(i,j)*1.0e3/xbar
       !endif
-      ! ##### TEST #####
+      ! ===== TEST =====
 
       xtil = G%geoLonT(i,j)*1.0e3/xbar
 

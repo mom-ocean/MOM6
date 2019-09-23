@@ -69,8 +69,8 @@ subroutine PressureForce_blk_AFV(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm,
   type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(inout) :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration [m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [m s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_blk_AFV_CS),            pointer       :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer       :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
@@ -105,8 +105,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   type(unit_scale_type),                     intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness [H ~> kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration [m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [m s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_blk_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [Pa].
@@ -191,7 +191,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
-  g_Earth_z = GV%g_Earth
+  g_Earth_z = US%L_T_to_m_s**2 * GV%g_Earth
   I_gEarth = 1.0 / g_Earth_z
 
   if (use_p_atm) then
@@ -307,14 +307,14 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
 
         do i=Isq,Ieq+1
           dM(i,j) = (CS%GFS_scale - 1.0) * &
-            (p(i,j,1)*(1.0/rho_in_situ(i) - alpha_ref) + za(i,j))
+            US%m_s_to_L_T**2*(p(i,j,1)*(1.0/rho_in_situ(i) - alpha_ref) + za(i,j))
         enddo
       enddo
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * &
-          (p(i,j,1)*(1.0/GV%Rlay(1) - alpha_ref) + za(i,j))
+          US%m_s_to_L_T**2*(p(i,j,1)*(1.0/GV%Rlay(1) - alpha_ref) + za(i,j))
       enddo ; enddo
     endif
 !  else
@@ -365,8 +365,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                      (za_bk(ib+1,jb)*dp_bk(ib+1,jb) + intp_dza(i+1,j,k))) + &
                      ((dp_bk(ib+1,jb) - dp_bk(ib,jb)) * intx_za_bk(Ib,jb) - &
                      (p(i+1,j,K) - p(i,j,K)) * intx_dza(I,j,k))) * &
-                     (2.0*G%IdxCu(I,j) / ((dp_bk(ib,jb) + dp_bk(ib+1,jb)) + &
-                     dp_neglect))
+                     (US%m_s_to_L_T**2 * 2.0*G%IdxCu(I,j) / &
+                     ((dp_bk(ib,jb) + dp_bk(ib+1,jb)) + dp_neglect))
       enddo ; enddo
       do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
         i = ib+ioff_bk ; J = Jb+joff_bk
@@ -375,8 +375,8 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
                      (za_bk(ib,jb+1)*dp_bk(ib,jb+1) + intp_dza(i,j+1,k))) + &
                      ((dp_bk(ib,jb+1) - dp_bk(ib,jb)) * inty_za_bk(ib,Jb) - &
                      (p(i,j+1,K) - p(i,j,K)) * inty_dza(i,J,k))) * &
-                     (2.0*G%IdyCv(i,J) / ((dp_bk(ib,jb) + dp_bk(ib,jb+1)) + &
-                     dp_neglect))
+                     (US%m_s_to_L_T**2 * 2.0*G%IdyCv(i,J) / &
+                     ((dp_bk(ib,jb) + dp_bk(ib,jb+1)) + dp_neglect))
       enddo ; enddo
 
       if (CS%GFS_scale < 1.0) then
@@ -392,7 +392,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   enddo
 
   if (present(pbce)) then
-    call set_pbce_nonBouss(p, tv_tmp, G, GV, CS%GFS_scale, pbce)
+    call set_pbce_nonBouss(p, tv_tmp, G, GV, US, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
@@ -429,8 +429,8 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   type(unit_scale_type),                     intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [m s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_blk_AFV_CS),            pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
@@ -447,7 +447,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading, in depth units [Z ~> m].
     dM          ! The barotropic adjustment to the Montgomery potential to
-                ! account for a reduced gravity model [m2 s-2].
+                ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G)) :: &
     Rho_cv_BL   !   The coordinate potential density in the deepest variable
                 ! density near-surface layer [kg m-3].
@@ -482,7 +482,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   real :: p0(SZI_(G))   ! An array of zeros to use for pressure [Pa].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: I_Rho0        ! 1/Rho0 [m3 kg-1].
+  real :: I_Rho0        ! 1/Rho0 times unit scaling factors [L2 m kg-1 s2 T-2 ~> m3 kg-1].
   real :: g_Earth_z     ! A scaled version of g_Earth [m2 Z-1 s-2 ~> m s-2].
   real :: G_Rho0        ! G_Earth / Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
   real :: Rho_ref       ! The reference density [kg m-3].
@@ -515,9 +515,9 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
-  I_Rho0 = 1.0/GV%Rho0
-  g_Earth_z = GV%g_Earth
-  G_Rho0 = g_Earth_z / GV%Rho0
+  I_Rho0 = US%m_s_to_L_T**2 / GV%Rho0
+  g_Earth_z = US%L_T_to_m_s**2 * GV%g_Earth
+  G_Rho0 = GV%g_Earth / GV%Rho0
   rho_ref = CS%Rho0
 
   if (CS%tides) then
@@ -749,7 +749,7 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   enddo
 
   if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, GV, CS%Rho0, CS%GFS_scale, pbce)
+    call set_pbce_Bouss(e, tv_tmp, G, GV, US, CS%Rho0, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then

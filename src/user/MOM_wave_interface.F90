@@ -104,7 +104,7 @@ type, public :: wave_parameters_CS ; private
                           !! Horizontal -> V points
                           !! 3rd dimension -> Freq/Wavenumber
   real, allocatable, dimension(:,:,:), public :: &
-       KvS                !< Viscosity for Stokes Drift shear [Z2/s ~> m2 s-1]
+       KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
 
   ! Pointers to auxiliary fields
   type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
@@ -483,7 +483,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
        intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
-       intent(in)    :: ustar !< Wind friction velocity [Z s-1 ~> m s-1].
+       intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
   ! Local Variables
   real    :: Top, MidPoint, Bottom, one_cm
   real    :: DecayScale
@@ -562,11 +562,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*US%m_to_Z**2))
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%g_Earth))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*US%m_to_Z**2) !bgr bug-fix missing g
+                WN = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth) !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -606,11 +606,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/(GV%g_Earth*US%m_to_Z**2))
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%g_Earth))
               elseif (CS%StkLevelMode==1) then
                 ! Use a numerical integration and then
                 ! divide by layer thickness
-                WN = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*US%m_to_Z**2)
+                WN = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth)
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
             endif
@@ -683,7 +683,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   do ii = G%isc,G%iec
     do jj = G%jsc, G%jec
       Top = h(ii,jj,1)*GV%H_to_Z
-      call get_Langmuir_Number( La, G, GV, US, Top, US%Z_to_m*ustar(ii,jj), ii, jj, &
+      call get_Langmuir_Number( La, G, GV, US, Top, ustar(ii,jj), ii, jj, &
              H(ii,jj,:),Override_MA=.false.,WAVES=CS)
       CS%La_turb(ii,jj) = La
     enddo
@@ -700,7 +700,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     call post_data(CS%id_3dstokes_x, CS%us_x, CS%diag)
   if (CS%id_La_turb>0) &
     call post_data(CS%id_La_turb, CS%La_turb, CS%diag)
-  return
+
 end subroutine Update_Stokes_Drift
 
 !> A subroutine to fill the Stokes drift from a NetCDF file
@@ -824,7 +824,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       endif
       NUMBANDS = ID
       do B = 1,NumBands
-        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / (GV%g_Earth*US%m_to_Z**2)
+        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth)
       enddo
     endif
 
@@ -881,7 +881,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   integer, intent(in) :: i      !< Meridional index of h-point
   integer, intent(in) :: j      !< Zonal index of h-point
-  real, intent(in)    :: ustar  !< Friction velocity [Z s-1 ~> m s-1].
+  real, intent(in)    :: ustar  !< Friction velocity [Z T-1 ~> m s-1].
   real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer [Z ~> m].
   logical, optional,       intent(in) :: Override_MA !< Override to use misalignment in LA
                                 !! calculation. This can be used if diagnostic
@@ -901,7 +901,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
 !Local Variables
   real :: Top, bottom, midpoint
   real :: Dpt_LASL, ShearDirection, WaveDirection
-  real :: LA_STKx, LA_STKy, LA_STK
+  real :: LA_STKx, LA_STKy, LA_STK ! Stokes velocities in [m s-1]
   logical :: ContinueLoop, USE_MA
   real, dimension(SZK_(G)) :: US_H, VS_H
   real, dimension(NumBands) :: StkBand_X, StkBand_Y
@@ -971,12 +971,13 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     ! there is also no good reason to cap it here other then
     ! to prevent large enhancements in unconstrained parts of
     ! the curve fit parameterizations.
-    LA = max(WAVES%La_min, sqrt(US%Z_to_m*ustar / (LA_STK+1.e-10)))
+    ! Note the dimensional constant background Stokes velocity of 10^-10 m s-1.
+    LA = max(WAVES%La_min, sqrt(US%Z_to_m*US%s_to_T*ustar / (LA_STK+1.e-10)))
   endif
 
   if (Use_MA) then
     WaveDirection = atan2(LA_STKy, LA_STKx)
-    LA = LA / sqrt(max(1.e-8,cos( WaveDirection - ShearDirection)))
+    LA = LA / sqrt(max(1.e-8, cos( WaveDirection - ShearDirection)))
   endif
 
   return
@@ -999,7 +1000,7 @@ end subroutine get_Langmuir_Number
 !! - BGR remove u10 input
 !! - BGR note: fixed parameter values should be changed to "get_params"
 subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
-  real, intent(in)  :: ustar !< water-side surface friction velocity [Z s-1 ~> m s-1].
+  real, intent(in)  :: ustar !< water-side surface friction velocity [Z T-1 ~> m s-1].
   real, intent(in)  :: hbl   !< boundary layer depth [Z ~> m].
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
@@ -1023,7 +1024,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
 
   if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
-    call ust_2_u10_coare3p5(US%Z_to_m*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
+    call ust_2_u10_coare3p5(US%Z_to_m*US%s_to_T*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
     ! surface Stokes drift
     UStokes = us_to_u10*u10
     !
@@ -1033,7 +1034,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     !
     ! peak frequency (PM, Bouws, 1998)
     tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * (GV%g_Earth*US%m_to_Z) / tmp
+    fp = 0.877 * GV%mks_g_Earth / tmp
     !
     ! mean frequency
     fm = fm_into_fp * fp
@@ -1068,7 +1069,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
          sqrt( 2.0 * PI *kstar * z0) * &
          erfc( sqrt( 2.0 * kstar * z0 ) )
     UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
-    LA = sqrt(US%Z_to_m*ustar / UStokes_sl)
+    LA = sqrt(US%Z_to_m*US%s_to_T*ustar / UStokes_sl)
   else
     UStokes_sl = 0.0
     LA=1.e8
@@ -1166,15 +1167,15 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   !/
   omega_min = 0.1 ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 10. ! ~sqrt(0.2*(GV%g_Earth*US%m_to_Z)*2*pi/0.3)
+  omega_max = 10. ! ~sqrt(0.2*GV%mks_g_Earth*2*pi/0.3)
   NOmega = 1000
   domega = (omega_max-omega_min)/real(NOmega)
 
   !
   if (WaveAgePeakFreq) then
-    omega_peak = (GV%g_Earth*US%m_to_Z) / (WA * u10)
+    omega_peak = GV%mks_g_Earth / (WA * u10)
   else
-    omega_peak = 2. * pi * 0.13 * (GV%g_Earth*US%m_to_Z) / U10
+    omega_peak = 2. * pi * 0.13 * GV%mks_g_Earth / U10
   endif
   !/
   Ann = 0.006 * WaveAge**(-0.55)
@@ -1190,11 +1191,11 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   do oi = 1,nomega-1
     Dnn = exp ( -0.5 * (omega-omega_peak)**2 / (Snn**2 * omega_peak**2) )
     ! wavespec units = m2s
-    wavespec = (Ann * (GV%g_Earth*US%m_to_Z)**2 / (omega_peak*omega**4 ) ) * &
+    wavespec = (Ann * GV%mks_g_Earth**2 / (omega_peak*omega**4 ) ) * &
                exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
     ! Stokes units m  (multiply by frequency range for units of m/s)
     Stokes = 2.0 * wavespec * omega**3 * &
-         exp( 2.0 * omega**2 * zpt/(GV%g_Earth*US%m_to_Z)) / (GV%g_Earth*US%m_to_Z)
+         exp( 2.0 * omega**2 * zpt / GV%mks_g_Earth) / GV%mks_g_Earth
     UStokes = UStokes + Stokes*domega
     omega = omega + domega
   enddo
@@ -1204,12 +1205,12 @@ end subroutine DHH85_mid
 
 !> Explicit solver for Stokes mixing.
 !! Still in development do not use.
-subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
+subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
        intent(in)    :: GV    !< Ocean vertical grid
-  real, intent(in)   :: Dt    !< Time step of MOM6 [s] for explicit solver
+  real, intent(in)   :: dt    !< Time step of MOM6 [T ~> s] for explicit solver
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1219,7 +1220,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, Waves )
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables
-  real :: dTauUp, dTauDn
+  real :: dTauUp, dTauDn ! Vertical momentum fluxes [Z T-1 m s-1]
   real :: h_Lay  ! The layer thickness at a velocity point [Z ~> m].
   integer :: i,j,k
 
@@ -1343,7 +1344,7 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
     CT=CT+1
     u10a = u10
     alpha = min(0.028, 0.0017 * u10 - 0.005)
-    z0rough = alpha * USTair**2 / GV%g_Earth ! Compute z0rough from ustar guess
+    z0rough = alpha * (US%m_s_to_L_T*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
     z0 = z0sm + z0rough
     CD = ( vonkar / log(10.*US%m_to_Z / z0) )**2 ! Compute CD from derived roughness
     u10 = USTair/sqrt(CD)  ! Compute new u10 from derived CD, while loop

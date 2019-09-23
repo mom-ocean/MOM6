@@ -170,9 +170,9 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
       cos_wt = cos(ll*x - omega*time_sec)
       sin_ky = sin(kk * y)
       cos_ky = cos(kk * y)
-      segment%normal_vel_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * &
+      segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * exp(- alpha * y) * cos_wt * &
            (alpha * sin_ky + kk * cos_ky)
-!     segment%tangential_vel_bt(I,j) = my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
+!     segment%tangential_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
 !     segment%vorticity_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * sin_ky&
 !           (ll*ll + kk*kk + alpha*alpha)
     enddo ; enddo
