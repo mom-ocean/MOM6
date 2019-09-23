@@ -56,13 +56,13 @@ type, public :: tracer_type
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbm_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
+  real, dimension(:,:,:), pointer :: lbm_dfx       => NULL() !< diagnostic array for x-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbm_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
+  real, dimension(:,:,:), pointer :: lbm_dfy       => NULL() !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbm_df_x_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
+  real, dimension(:,:), pointer :: lbm_dfx_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbm_df_y_2d       => NULL() !< diagnostic array for y-diffusive tracer flux
+  real, dimension(:,:), pointer :: lbm_dfy_2d       => NULL() !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbm_bulk_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
@@ -458,10 +458,10 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
     if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
     if (Tr%id_dfx > 0) call safe_alloc_ptr(Tr%df_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_lbm_dfx > 0) call safe_alloc_ptr(Tr%lbm_df_x,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_lbm_dfy > 0) call safe_alloc_ptr(Tr%lbm_df_y,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_lbm_dfx_2d > 0) call safe_alloc_ptr(Tr%lbm_df_x_2d,IsdB,IedB,jsd,jed)
-    if (Tr%id_lbm_dfy_2d > 0) call safe_alloc_ptr(Tr%lbm_df_y_2d,isd,ied,JsdB,JedB)
+    if (Tr%id_lbm_dfx > 0) call safe_alloc_ptr(Tr%lbm_dfx,IsdB,IedB,jsd,jed,nz)
+    if (Tr%id_lbm_dfy > 0) call safe_alloc_ptr(Tr%lbm_dfy,isd,ied,JsdB,JedB,nz)
+    if (Tr%id_lbm_dfx_2d > 0) call safe_alloc_ptr(Tr%lbm_dfx_2d,IsdB,IedB,jsd,jed)
+    if (Tr%id_lbm_dfy_2d > 0) call safe_alloc_ptr(Tr%lbm_dfy_2d,isd,ied,JsdB,JedB)
 
     Tr%id_adx_2d = register_diag_field("ocean_model", trim(shortnm)//"_adx_2d", &
         diag%axesCu1, Time, &

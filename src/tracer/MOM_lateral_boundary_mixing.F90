@@ -222,16 +222,16 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do k=1,GV%ke; do j=G%jsc,G%jec; do I=G%isc-1,G%iec
         uwork_2d(I,j) = uwork_2d(I,j) + uFlx(I,j,k)
       enddo; enddo; enddo
+      call post_data(tracer%id_lbm_dfx_2d, uwork_2d, CS%diag)
     endif
-    call post_data(tracer%id_lbm_dfx_2d, uwork_2d, CS%diag)
 
     if (tracer%id_lbm_dfy_2d>0) then
       vwork_2d(:,:) = 0.
       do k=1,GV%ke; do J=G%jsc-1,G%jec; do i=G%isc,G%iec
         vwork_2d(i,J) = vwork_2d(i,J) + vFlx(i,J,k)
       enddo; enddo; enddo
+      call post_data(tracer%id_lbm_dfy_2d, vwork_2d, CS%diag)
     endif
-    call post_data(tracer%id_lbm_dfy_2d, vwork_2d, CS%diag)
   enddo
 
 end subroutine lateral_boundary_mixing
