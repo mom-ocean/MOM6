@@ -141,7 +141,9 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(tracer_type), pointer                :: Tracer => NULL() ! Pointer to the current tracer
   integer :: remap_method !< Reconstruction method
   integer :: i,j,k,m
+  real    :: Idt !< inverse of the time step [s-1]
 
+  Idt = 1./dt
   hbl(:,:) = 0.
   if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G)
   if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US)
@@ -182,8 +184,8 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         enddo
       enddo
       ! Post tracer bulk diags
-      if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk, CS%diag)
-      if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk, CS%diag)
+      if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk*Idt, CS%diag)
+      if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk*Idt, CS%diag)
 
     elseif (CS%method == 2) then
       do j=G%jsc,G%jec
@@ -215,12 +217,12 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     enddo ; enddo ; enddo
 
     ! Post the tracer diagnostics
-    if (tracer%id_lbm_dfx>0)      call post_data(tracer%id_lbm_dfx, uFlx, CS%diag)
-    if (tracer%id_lbm_dfy>0)      call post_data(tracer%id_lbm_dfy, vFlx, CS%diag)
+    if (tracer%id_lbm_dfx>0)      call post_data(tracer%id_lbm_dfx, uFlx*Idt, CS%diag)
+    if (tracer%id_lbm_dfy>0)      call post_data(tracer%id_lbm_dfy, vFlx*Idt, CS%diag)
     if (tracer%id_lbm_dfx_2d>0) then
       uwork_2d(:,:) = 0.
       do k=1,GV%ke; do j=G%jsc,G%jec; do I=G%isc-1,G%iec
-        uwork_2d(I,j) = uwork_2d(I,j) + uFlx(I,j,k)
+        uwork_2d(I,j) = uwork_2d(I,j) + (uFlx(I,j,k) * Idt)
       enddo; enddo; enddo
       call post_data(tracer%id_lbm_dfx_2d, uwork_2d, CS%diag)
     endif
@@ -228,7 +230,7 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     if (tracer%id_lbm_dfy_2d>0) then
       vwork_2d(:,:) = 0.
       do k=1,GV%ke; do J=G%jsc-1,G%jec; do i=G%isc,G%iec
-        vwork_2d(i,J) = vwork_2d(i,J) + vFlx(i,J,k)
+        vwork_2d(i,J) = vwork_2d(i,J) + (vFlx(i,J,k) * Idt)
       enddo; enddo; enddo
       call post_data(tracer%id_lbm_dfy_2d, vwork_2d, CS%diag)
     endif
@@ -804,6 +806,22 @@ logical function near_boundary_unit_tests( verbose )
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.,-1./) )
 
+  test_name = 'hbl < column thickness, hbl same, linear profile right, khtr=2'
+  hbl_L = 2; hbl_R = 2
+  h_L = (/1.,2./) ; h_R = (/1.,2./)
+  phi_L = (/0.,0./) ; phi_R = (/0.5,2./)
+  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
+  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
+  phi_pp_R(1,1) = 0.; phi_pp_R(1,2) = 1.
+  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 2.
+  khtr_u = 2.
+  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
+  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
+  ppoly0_E_R(1,1) = 0.; ppoly0_E_R(1,2) = 1.
+  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 3.
+  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
+                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
+  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-2.,-2./) )
   ! unit tests for layer by layer method
   test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
   hbl_L = 12; hbl_R = 20
