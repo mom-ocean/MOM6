@@ -309,15 +309,15 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
                                        CS%T_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
         call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), S(i,j,:), CS%ppoly_coeffs_S(i,j,:,:), &
                                        CS%S_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
+        ! In the current ALE formulation, interface values are not exactly at the 0. or 1. of the
+        ! polynomial reconstructions
+        do k=1,G%ke
+           CS%T_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 0. )
+           CS%T_i(i,j,k,2) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 1. )
+           CS%S_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_S(i,j,k,:), CS%deg+1, 0. )
+           CS%S_i(i,j,k,2) = evaluation_polynomial( CS%ppoly_coeffs_S(i,j,k,:), CS%deg+1, 1. )
+        enddo
       endif
-    enddo
-    ! In the current ALE formulation, interface values are not exactly at the 0. or 1. of the
-    ! polynomial reconstructions
-    do k=1,G%ke
-       CS%T_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 0. )
-       CS%T_i(i,j,k,2) = evaluation_polynomial( CS%ppoly_coeffs_T(i,j,k,:), CS%deg+1, 1. )
-       CS%S_i(i,j,k,1) = evaluation_polynomial( CS%ppoly_coeffs_S(i,j,k,:), CS%deg+1, 0. )
-       CS%S_i(i,j,k,2) = evaluation_polynomial( CS%ppoly_coeffs_S(i,j,k,:), CS%deg+1, 1. )
     enddo
 
     ! Continuous reconstruction
