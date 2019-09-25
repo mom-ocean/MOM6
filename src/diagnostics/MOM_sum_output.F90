@@ -32,7 +32,7 @@ use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use mpp_mod, only : mpp_chksum
+use mpp_mod, only : mpp_chksum, mpp_pe
 
 use netcdf
 
@@ -964,53 +964,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   !call flush_file(CS%fileenergy_nc)
 
-  !allocate the axis data and attribute types for the file
-  if (CS%previous_calls .eq. 0) then
-     !>@NOTE the user may need to increase the allocated array sizes to accommodate 
-     !! more than 20 axes.
-     allocate(axis_data_CS%axis(20))
-     allocate(axis_data_CS%data(20))
-     ! allocate the output data variable dimension attributes 
-     allocate(output_data%num_dims(num_nc_fields))
-     allocate(output_data%dim_lengths(num_nc_fields,4))
-     allocate(output_data%dim_names(num_nc_fields,4))
-     allocate(output_data%var_ptr0d(num_nc_fields))
-     allocate(output_data%var_ptr1d(num_nc_fields))
-     allocate(output_data%var_ptr2d(num_nc_fields))
-  endif
-     
-  ! Assign output variables to the appropriate pointers in the data structure
-  var = real(CS%ntrunc)
-  call associate_data(output_data,var,1)
-  call associate_data(output_data,toten,2)  
-  call associate_data(output_data,PE,3)
-  call associate_data(output_data,KE,4)
-  call associate_data(output_data,H_0APE,5)
-  call associate_data(output_data,mass_lay,6)  
-  call associate_data(output_data,mass_tot,7)
-  call associate_data(output_data,mass_chg,8)
-  call associate_data(output_data,mass_anom,9)
-  call associate_data(output_data,max_CFL(1),10)
-  call associate_data(output_data,max_CFL(2),11)
-  if (CS%use_temperature) then
-     call associate_data(output_data,0.001*Salt,12)
-     call associate_data(output_data,0.001*salt_chg,13)
-     call associate_data(output_data,0.001*salt_anom,14)
-     call associate_data(output_data,Heat,15)
-     call associate_data(output_data,heat_chg,16)
-     call associate_data(output_data,heat_anom,17)
-     do m=1,nTr_stocks
-        call associate_data(output_data,Tr_stocks(m),17+m)   
-     enddo
-  else     
-     do m=1,nTr_stocks
-        call associate_data(output_data,Tr_stocks(m),11+m)  
-     enddo
-  endif
-
+ 
+  ! allocate the output data variable dimension attributes 
+  allocate(output_data%num_dims(num_nc_fields))
+  allocate(output_data%dim_lengths(num_nc_fields,4))
+  allocate(output_data%dim_names(num_nc_fields,4))
+ 
   ! open the file
   if (.not.(check_if_open(fileObjWrite))) then
-     file_open_success = MOM_open_file(fileObjWrite, trim(energypath_nc), "write", &
+     if (is_root_pe()) file_open_success = MOM_open_file(fileObjWrite, trim(energypath_nc), "write", &
                                              is_restart=.false.)
     ! else
     !    file_open_success = MOM_open_file(fileObjWrite, trim(energypath_nc), "overwrite", &
@@ -1019,15 +981,58 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   
   !! write stats to netCDF file if past initial time step;
   !! otherwise, register the axes and variables, and write coordinate data
-  
-  if (reday .gt. re_init_day) then 
-     if (fileObjWrite%is_root) then
+  WRITE(mpp_pe()+2000, '(A,F2.1)') "sum_output: reday is ", reday
+  call flush(mpp_pe()+2000)
+  if (CS%previous_calls .ge. 1) then
+     if (is_root_pe()) ntsteps = ntsteps+1
+     WRITE(mpp_pe()+2000, '(A,I1)') "sum_output: ntsteps is ", ntsteps
+     call flush(mpp_pe()+2000)
+     !if (fileObjWrite%is_root) then
+     ! Assign output variables to the appropriate pointers in the data structure
+     allocate(output_data%var_ptr0d(num_nc_fields))
+     allocate(output_data%var_ptr1d(num_nc_fields))
+     allocate(output_data%var_ptr2d(num_nc_fields))
+     
+     var = real(CS%ntrunc)
+     call associate_data(output_data,var,1)
+     call associate_data(output_data,toten,2)  
+     call associate_data(output_data,PE,3)
+     call associate_data(output_data,KE,4)
+     call associate_data(output_data,H_0APE,5)
+     call associate_data(output_data,mass_lay,6)  
+     call associate_data(output_data,mass_tot,7)
+     call associate_data(output_data,mass_chg,8)
+     call associate_data(output_data,mass_anom,9)
+     call associate_data(output_data,max_CFL(1),10)
+     call associate_data(output_data,max_CFL(2),11)
+     if (CS%use_temperature) then
+        call associate_data(output_data,0.001*Salt,12)
+        call associate_data(output_data,0.001*salt_chg,13)
+        call associate_data(output_data,0.001*salt_anom,14)
+        call associate_data(output_data,Heat,15)
+        call associate_data(output_data,heat_chg,16)
+        call associate_data(output_data,heat_anom,17)
+        do m=1,nTr_stocks
+           call associate_data(output_data,Tr_stocks(m),17+m)   
+        enddo
+     else     
+        do m=1,nTr_stocks
+           call associate_data(output_data,Tr_stocks(m),11+m)  
+        enddo
+     endif
        
-        ntsteps = CS%previous_calls
         ! append the next value to the time coordinate variable
         call write_data(fileObjWrite, 'Time', (/reday/), corner=(/ntsteps/), edge_lengths=(/ntsteps/))
 
         do i=1, num_nc_fields
+           output_data%num_dims(i)=0
+    
+           call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                        output_data%dim_names(i,:), output_data%dim_lengths(i,:), & 
+                                        output_data%num_dims(i),G=G, GV=GV)
+           if (output_data%num_dims(i) .le. 0) call MOM_error(FATAL, &
+                                       "MOM_sum_output:write_energy: num_dims is an invalid value.")
+
            if (associated(output_data%var_ptr0d(i)%p)) then
               call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr0d(i)%p)
 
@@ -1038,7 +1043,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                   call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr1d(i)%p, &
                                corner=(/ntsteps/), edge_lengths=(/ntsteps/))
               else
-                  call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr0d(i)%p) 
+                  call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr1d(i)%p) 
                   
               endif
 
@@ -1094,11 +1099,20 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                endif
            endif
         enddo 
-     endif
+     !endif
 
   else
   ! loop through the variables, get the global dimension names and lengths, 
   ! and register the dimensions to the file
+
+     ! allocate the axis data and attribute types for the file
+     !>@NOTE the user may need to increase the allocated array sizes to accommodate 
+     !! more than 10 axes.
+     allocate(axis_data_CS%axis(10))
+     allocate(axis_data_CS%data(10))
+
+     ntsteps=1
+
      total_axes=0
      do i=1,num_nc_fields
         output_data%num_dims(i)=0
@@ -1142,8 +1156,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                                                'long_name',axis_data_CS%axis(i)%longname)
 
                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                               'units',trim(axis_data_CS%axis(i)%units))            
-                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+                                               'units',trim(axis_data_CS%axis(i)%units))
+                 if (lowercase(trim(axis_data_CS%axis(i)%name)) .ne. 'time') then     
+                    call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
+                 endif
               endif
            endif
      enddo
@@ -1151,7 +1167,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif     
 
   ! close the file
-  if (check_if_open(fileObjWrite) .and. fileObjWrite%is_root) call close_file(fileObjWrite)
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
 
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
