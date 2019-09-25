@@ -168,9 +168,10 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
-            call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,j,:), h(i+1,j,:), hbl(i,j), hbl(i+1,j), &
-              tracer%t(i,j,:), tracer%t(i+1,j,:), ppoly0_coefs(i,j,:,:), ppoly0_coefs(i+1,j,:,:), ppoly0_E(i,j,:,:), &
-              ppoly0_E(i+1,j,:,:), remap_method, Coef_x(I,j), G%areaT(I,j), G%areaT(I+1,j), uFlx_bulk(I,j), uFlx(I,j,:))
+            call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(I,j,:), h(I+1,j,:), hbl(I,j), hbl(I+1,j), &
+              G%areaT(I,j), G%areaT(I+1,j), tracer%t(I,j,:), tracer%t(I+1,j,:),                         &
+              ppoly0_coefs(I,j,:,:), ppoly0_coefs(I+1,j,:,:), ppoly0_E(I,j,:,:),                        &
+              ppoly0_E(I+1,j,:,:), remap_method, Coef_x(I,j), uFlx_bulk(I,j), uFlx(I,j,:))
           endif
         enddo
       enddo
@@ -178,8 +179,9 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         do i=G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
             call fluxes_bulk_method(SURFACE, GV%ke, CS%deg, h(i,J,:), h(i,J+1,:), hbl(i,J), hbl(i,J+1), &
-              tracer%t(i,J,:), tracer%t(i,J+1,:), ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:), &
-              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), G%areaT(i,J), G%areaT(i,J+1), vFlx_bulk(i,J), vFlx(i,J,:))
+              G%areaT(i,J), G%areaT(i,J+1), tracer%t(i,J,:), tracer%t(i,J+1,:),                         &
+              ppoly0_coefs(i,J,:,:), ppoly0_coefs(i,J+1,:,:), ppoly0_E(i,J,:,:),                        &
+              ppoly0_E(i,J+1,:,:), remap_method, Coef_y(i,J), vFlx_bulk(i,J), vFlx(i,J,:))
           endif
         enddo
       enddo
@@ -459,7 +461,7 @@ end subroutine fluxes_layer_method
 
 !> Calculate the near-boundary diffusive fluxes calculated from a 'bulk model'
 subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, ppoly0_coefs_L, &
-                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
+                                   ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit)
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
   integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
@@ -501,6 +503,8 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real    :: h_work_L, h_work_R  ! dummy variables
   real    :: F_max !< The maximum amount of flux that can leave a cell
   logical :: limited !< True if the flux limiter was applied
+  real    :: hfrac, hremain
+
   if (hbl_L == 0. .or. hbl_R == 0.) then
     F_bulk = 0.
     F_layer(:) = 0.
@@ -576,6 +580,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   if ( SUM(h_means) == 0. ) then
     return
   else
+    hremain = 1.
     inv_heff = 1./SUM(h_means)
     ! Decompose the bulk flux onto the individual layers
     do k=1,nk
@@ -589,8 +594,16 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
         else ! The above quantities are always positive, so we can use F_max < -1 to see if we don't need to limit
           F_max = -1.
         endif
+        ! Initialize remaining thickness
+        hfrac = h_means(k)*inv_heff 
         ! Distribute bulk flux onto layers
-        F_layer(k) = F_bulk * (h_means(k)*inv_heff)
+        if ( ((boundary == SURFACE) .and. (k == k_min)) .or. ((boundary == BOTTOM) .and. (k == nk)) ) then
+          F_layer(k) = F_bulk * hremain
+        else
+          F_layer(k) = F_bulk * hfrac
+        endif
+        hremain = MAX(0.,hremain-hfrac)
+
         ! Apply flux limiter calculated above
         if (F_max > 0.) then
           if (F_layer(k) > 0.) then
@@ -599,11 +612,11 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
             F_layer(k) = MAX(F_layer(k),F_max)
           endif
         endif
-        if (PRESENT(F_limiter)) then
+        if (PRESENT(F_limit)) then
           if (limited) then
-            F_limiter(k) = F_layer(k) - F_max
+            F_limit(k) = F_layer(k) - F_max
           else
-            F_limiter(k) = 0.
+            F_limit(k) = 0.
           endif
         endif
       else
