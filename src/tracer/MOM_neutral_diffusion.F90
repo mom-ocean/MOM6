@@ -1177,6 +1177,9 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, Pres_l, hcol_l, 
     p_init_L = zeta_bot_L; p_init_R = zeta_bot_R
     lastP_left = zeta_bot_L; lastP_right = zeta_bot_R
     kl_left = k_bot_L; kl_right = k_bot_R
+  else
+    k_init_L = 1  ; k_init_R = 1
+    p_init_L = 0. ; p_init_R = 0.
   endif
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, ns
