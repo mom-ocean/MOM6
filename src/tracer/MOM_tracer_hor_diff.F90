@@ -62,6 +62,8 @@ type, public :: tracer_hor_diff_CS ; private
                                    !! tracer_hor_diff.
   logical :: use_lateral_boundary_mixing !< If true, use the lateral_boundary_mixing module from within
                                          !! tracer_hor_diff.
+  logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
+                                   !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
   type(lateral_boundary_mixing_CS), pointer :: lateral_boundary_mixing_CSp => NULL() !< Control structure for lateral
                                                                                      !! boundary mixing.
@@ -435,6 +437,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
+        if (CS%recalc_neutral_surf) then
+          call neutral_diffusion_calc_coeffs(G, GV, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+        endif
       endif
       call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, I_numitts*dt, Reg, US, CS%neutral_diffusion_CSp)
     enddo ! itt
@@ -1478,6 +1483,10 @@ subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp
                  "below this value.  The number of diffusive iterations "//&
                  "is often this value or the next greater integer.", &
                  units="nondim", default=-1.0)
+  call get_param(param_File, mdl, "RECALC_NEUTRAL_SURF", CS%recalc_neutral_surf, &
+                 "If true, then recalculate the neutral surfaces if the \n"//&
+                 "diffusive CFL is exceeded. If false, assume that the  \n"//&
+                 "positions of the surfaces do not change \n", default = .false.)
   CS%ML_KhTR_scale = 1.0
   if (CS%Diffuse_ML_interior) then
     call get_param(param_file, mdl, "ML_KHTR_SCALE", CS%ML_KhTR_scale, &
