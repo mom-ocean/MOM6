@@ -43,7 +43,8 @@ use fms2_io_mod,          only: check_if_open, &
                                 get_num_variables, &
                                 get_variable_dimension_names, &
                                 get_variable_num_dimensions, &
-                                get_variable_size, &                                                          
+                                get_variable_size, &
+                                get_variable_unlimited_dimension_index, &                                                          
                                 read_data, &
                                 register_restart_field, &
                                 register_axis, &
@@ -94,6 +95,7 @@ public :: get_variable_dimension_names
 public :: get_variable_byte_size
 public :: get_variable_num_dimensions
 public :: get_variable_size
+public :: get_variable_unlimited_dimension_index
 public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_axis
