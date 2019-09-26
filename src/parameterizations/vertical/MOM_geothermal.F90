@@ -11,7 +11,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, slasher
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -116,9 +116,9 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   real :: Idt           ! inverse of the timestep [s-1]
 
   logical :: do_i(SZI_(G))
+  logical :: compute_h_old, compute_T_old
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
   integer :: isj, iej, num_start, num_left, nkmb, k_tgt
-
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (present(halo)) then
@@ -151,6 +151,18 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 !$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
 !$OMP                                  wt_in_place,dTemp,dRcv,h_transfer,heating, &
 !$OMP                                  I_h)
+
+  ! Conditionals for tracking diagnostic depdendencies
+  compute_h_old = CS%id_internal_heat_h_tendency > 0 &
+                  .or. CS%id_internal_heat_heat_tendency > 0 &
+                  .or. CS%id_internal_heat_temp_tendency > 0
+
+  compute_T_old = CS%id_internal_heat_heat_tendency > 0 &
+                  .or. CS%id_internal_heat_temp_tendency > 0
+
+  if (CS%id_internal_heat_heat_tendency > 0) work_3d(:,:,:) = 0.0
+  if (compute_h_old) h_old(:,:,:) = 0.0
+  if (compute_T_old) T_old(:,:,:) = 0.0
 
   do j=js,je
     ! 1. Only work on columns that are being heated.
@@ -192,16 +204,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
       do i=isj,iej ; if (do_i(i)) then
 
         ! Save temperature and thickness before any changes are made (for diagnostic)
-        if (CS%id_internal_heat_h_tendency > 0 &
-             .or. CS%id_internal_heat_heat_tendency > 0 &
-             .or. CS%id_internal_heat_temp_tendency > 0 ) then
+        if (compute_h_old) then
           h_old(i,j,k) = h(i,j,k)
         endif
-        if (CS%id_internal_heat_heat_tendency > 0 &
-             .or. CS%id_internal_heat_temp_tendency > 0) then
+        if (compute_T_old) then
           T_old(i,j,k) = tv%T(i,j,k)
         endif
-
 
         if (h(i,j,k) > Angstrom) then
           if ((h(i,j,k)-Angstrom) >= h_geo_rem(i)) then
@@ -340,19 +348,19 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 
   ! Post diagnostic of 3D tendencies (heat, temperature, and thickness) due to internal heat
   if (CS%id_internal_heat_heat_tendency > 0) then
-    call post_data(CS%id_internal_heat_heat_tendency, work_3d, CS%diag, alt_h = h_old)
+    call post_data(CS%id_internal_heat_heat_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
   if (CS%id_internal_heat_temp_tendency > 0) then
     do j=js,je; do i=is,ie; do k=nz,1,-1
       work_3d(i,j,k) = Idt * (tv%T(i,j,k) - T_old(i,j,k))
     enddo; enddo; enddo
-    call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h = h_old)
+    call post_data(CS%id_internal_heat_temp_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
   if (CS%id_internal_heat_h_tendency > 0) then
     do j=js,je; do i=is,ie; do k=nz,1,-1
       work_3d(i,j,k) = Idt * (h(i,j,k) - h_old(i,j,k))
     enddo; enddo; enddo
-    call post_data(CS%id_internal_heat_h_tendency, work_3d, CS%diag, alt_h = h_old)
+    call post_data(CS%id_internal_heat_h_tendency, work_3d, CS%diag, alt_h=h_old)
   endif
 
 !  do i=is,ie ; do j=js,je
@@ -363,9 +371,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 end subroutine geothermal
 
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
-subroutine geothermal_init(Time, G, param_file, diag, CS)
+subroutine geothermal_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
@@ -374,6 +383,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_geothermal"  ! module name
+  character(len=48)  :: thickness_units
   ! Local variables
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
   real :: scale
@@ -434,6 +444,8 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   endif
   call pass_var(CS%geo_heat, G%domain)
 
+  thickness_units = get_thickness_units(GV)
+
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
         'Geothermal heat flux into ocean', 'W m-2',                    &
@@ -447,15 +459,15 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   CS%id_internal_heat_heat_tendency=register_diag_field('ocean_model', &
         'internal_heat_heat_tendency', diag%axesTL, Time,              &
         'Heat tendency (in 3D) due to internal (geothermal) sources',  &
-        'W m-2', v_extensive = .true.)
+        'W m-2', v_extensive=.true.)
   CS%id_internal_heat_temp_tendency=register_diag_field('ocean_model', &
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
-        'degC s-1', v_extensive = .true.)
+        'degC s-1', v_extensive=.true.)
   CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
-        'm OR kg m-2', v_extensive = .true.)
+        trim(thickness_units), conversion=GV%H_to_MKS, v_extensive=.true.)
 
 end subroutine geothermal_init
 

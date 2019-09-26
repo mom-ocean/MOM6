@@ -20,6 +20,7 @@ use MOM_io,            only : vardesc, query_vardesc, cmor_long_std
 use MOM_restart,       only : register_restart_field, MOM_restart_CS
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
@@ -53,13 +54,13 @@ type, public :: tracer_type
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
 
   real, dimension(:,:,:), pointer :: df_x           => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
-                                                              !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_conc_x    => NULL() !< diagnostic vertical sum x-diffusive content flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_conc_y    => NULL() !< diagnostic vertical sum y-diffusive content flux
@@ -320,9 +321,10 @@ end subroutine lock_tracer_registry
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
-subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
+subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in) :: h    !< Layer thicknesses
@@ -390,16 +392,20 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
     if (Tr%diag_form == 1) then
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, trim(flux_longname)//" advective zonal flux" , &
-          trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., y_cell_method = 'sum', &
+          conversion=Tr%flux_scale)
       Tr%id_ady = register_diag_field("ocean_model", trim(shortnm)//"_ady", &
           diag%axesCvL, Time, trim(flux_longname)//" advective meridional flux" , &
-          trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
+          conversion=Tr%flux_scale)
       Tr%id_dfx = register_diag_field("ocean_model", trim(shortnm)//"_dfx", &
           diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux" , &
-          trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., y_cell_method = 'sum', &
+          conversion=(US%L_to_m**2)*Tr%flux_scale)
       Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_dfy", &
           diag%axesCvL, Time, trim(flux_longname)//" diffusive zonal flux" , &
-          trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
+          trim(flux_units), v_extensive = .true., x_cell_method = 'sum', &
+          conversion=(US%L_to_m**2)*Tr%flux_scale)
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, "Advective (by residual mean) Zonal Flux of "//trim(flux_longname), &
@@ -409,10 +415,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
           flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
       Tr%id_dfx = register_diag_field("ocean_model", trim(shortnm)//"_diffx", &
           diag%axesCuL, Time, "Diffusive Zonal Flux of "//trim(flux_longname), &
-          flux_units, v_extensive=.true., conversion=Tr%flux_scale, y_cell_method = 'sum')
+          flux_units, v_extensive=.true., conversion=(US%L_to_m**2)*Tr%flux_scale, &
+          y_cell_method='sum')
       Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_diffy", &
           diag%axesCvL, Time, "Diffusive Meridional Flux of "//trim(flux_longname), &
-          flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
+          flux_units, v_extensive=.true., conversion=(US%L_to_m**2)*Tr%flux_scale, &
+          x_cell_method='sum')
     endif
     if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
@@ -430,11 +438,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
     Tr%id_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_diffx_2d", &
         diag%axesCu1, Time, &
         "Vertically Integrated Diffusive Zonal Flux of "//trim(flux_longname), &
-        flux_units, conversion=Tr%flux_scale, y_cell_method = 'sum')
+        flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale, &
+        y_cell_method='sum')
     Tr%id_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_diffy_2d", &
         diag%axesCv1, Time, &
         "Vertically Integrated Diffusive Meridional Flux of "//trim(flux_longname), &
-        flux_units, conversion=Tr%flux_scale, x_cell_method = 'sum')
+        flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale, &
+        x_cell_method='sum')
 
     if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x,IsdB,IedB,jsd,jed)
     if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y,isd,ied,JsdB,JedB)
@@ -500,9 +510,11 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendprefix) == 0) then
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
-          diag%axesTL, Time, var_lname, conv_units, v_extensive=.true.)
+          diag%axesTL, Time, var_lname, conv_units, v_extensive=.true., &
+          conversion=Tr%conv_scale)
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
-          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units)
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
+          conversion=Tr%conv_scale)
     else
       cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//&
                         trim(flux_longname)//" Content"

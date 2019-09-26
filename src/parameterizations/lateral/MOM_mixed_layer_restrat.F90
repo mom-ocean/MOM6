@@ -514,6 +514,13 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   enddo ; enddo ; enddo
 !$OMP end parallel
 
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  if (CS%id_uhml > 0 .or. CS%id_vhml > 0) &
+    ! Remapped uhml and vhml require east/north halo updates of h
+    call pass_var(h, G%domain, To_West+To_South+Omit_Corners, halo=1)
+  call diag_update_remap_grids(CS%diag)
+
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_urestrat_time > 0) call post_data(CS%id_urestrat_time, utimescale_diag, CS%diag)
@@ -877,30 +884,30 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 
   CS%diag => diag
 
-  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0*US%L_to_m**2*US%s_to_T
-  else ; flux_to_kg_per_s = US%L_to_m**2*US%s_to_T ; endif
+  flux_to_kg_per_s = GV%H_to_kg_m2 * US%L_to_m**2 * US%s_to_T
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
-      y_cell_method='sum', v_extensive=.true.)
+      'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', &
+      conversion=flux_to_kg_per_s, y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
-      x_cell_method='sum', v_extensive=.true.)
+      'Meridional Thickness Flux to Restratify Mixed Layer', 'kg s-1', &
+      conversion=flux_to_kg_per_s, x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 's', conversion=US%T_to_s)
   CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 's', conversion=US%T_to_s)
   CS%id_MLD = register_diag_field('ocean_model', 'MLD_restrat', diag%axesT1, Time, &
-      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'm')
+      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'm', &
+      conversion=GV%H_to_m)
   CS%id_Rml = register_diag_field('ocean_model', 'ML_buoy_restrat', diag%axesT1, Time, &
       'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', &
-      'm s2', conversion=US%m_to_Z*US%L_to_m**2*US%s_to_T**2)
+      'm s2', conversion=US%m_to_Z*(US%L_to_m**2)*(US%s_to_T**2))
   CS%id_uDml = register_diag_field('ocean_model', 'udml_restrat', diag%axesCu1, Time, &
       'Transport stream function amplitude for zonal restratification of mixed layer', &
-      'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+      'm3 s-1', conversion=GV%H_to_m*(US%L_to_m**2)*US%s_to_T)
   CS%id_vDml = register_diag_field('ocean_model', 'vdml_restrat', diag%axesCv1, Time, &
       'Transport stream function amplitude for meridional restratification of mixed layer', &
-      'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+      'm3 s-1', conversion=GV%H_to_m*(US%L_to_m**2)*US%s_to_T)
   CS%id_uml = register_diag_field('ocean_model', 'uml_restrat', diag%axesCu1, Time, &
       'Surface zonal velocity component of mixed layer restratification', &
       'm s-1', conversion=US%L_T_to_m_s)
