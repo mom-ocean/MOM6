@@ -1323,7 +1323,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_massout_flux = register_diag_field('ocean_model', 'massout_flux', diag%axesT1, Time, &
         'Net mass flux of freshwater out of the ocean (used in the boundary flux calculation)', &
-         'kg m-2')
+         'kg m-2', conversion=diag%GV%H_to_kg_m2)
 
   handles%id_massin_flux  = register_diag_field('ocean_model', 'massin_flux', diag%axesT1, Time, &
         'Net mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kg m-2')

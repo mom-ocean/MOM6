@@ -1845,7 +1845,7 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       'm s-1', v_extensive=.true., conversion=GV%H_to_m)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive=.true.)
+      'm s-1', v_extensive=.true., conversion=GV%H_to_m)
 
 end subroutine register_transport_diags
 

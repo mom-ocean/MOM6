@@ -63,6 +63,8 @@ type, public :: verticalGrid_type
   real :: Z_to_H        !< A constant that translates depth units to thickness units.
   real :: H_to_RZ       !< A constant that translates thickness units to the units of mass per unit area.
   real :: RZ_to_H       !< A constant that translates mass per unit area units to thickness units.
+  real :: H_to_MKS      !< A constant that translates thickness units to its
+                        !! MKS unit (m or kg m-2) based on GV%Boussinesq
 
   real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
@@ -145,11 +147,13 @@ subroutine verticalGridInit( param_file, GV, US )
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
     GV%Angstrom_H = GV%m_to_H * GV%Angstrom_m
+    GV%H_to_MKS = GV%H_to_m
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = GV%Rho0 * GV%kg_m2_to_H
     GV%H_to_m = GV%H_to_kg_m2 / GV%Rho0
     GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
+    GV%H_to_MKS = GV%H_to_kg_m2
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
   GV%H_to_Pa = GV%mks_g_Earth * GV%H_to_kg_m2
