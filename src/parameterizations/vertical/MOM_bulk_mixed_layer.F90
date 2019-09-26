@@ -468,22 +468,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
       p_ref(i) = p_ref(i) + 0.5*GV%H_to_Pa*h(i,k)
     enddo ; enddo
     call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, &
-                                  is, ie-is+1, tv%eqn_of_state)
+                                  is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
     call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, &
-                                  is, ie-is+1, tv%eqn_of_state)
-    if (US%R_to_kg_m3 /= 1.0) then ; do i=is,ie
-      dR0_dT(i) = US%kg_m3_to_R * dR0_dT(i) ; dR0_dS(i) = US%kg_m3_to_R * dR0_dS(i)
-      dRcv_dT(i) = US%kg_m3_to_R * dRcv_dT(i) ; dRcv_dS(i) = US%kg_m3_to_R * dRcv_dS(i)
-    enddo ; endif
+                                  is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
     do k=1,nz
       call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), is, ie-is+1, &
-                             tv%eqn_of_state)
+                             tv%eqn_of_state, scale=US%kg_m3_to_R)
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
-                             ie-is+1, tv%eqn_of_state)
-      if (US%kg_m3_to_R /= 1.0) then ; do i=is,ie
-        R0(i,k) = US%kg_m3_to_R * R0(i,k)
-        Rcv(i,k) = US%kg_m3_to_R * Rcv(i,k)
-      enddo ; endif
+                             ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
     enddo
     if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 
