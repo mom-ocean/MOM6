@@ -590,9 +590,9 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
         hfrac = h_means(k)*inv_heff
         F_layer(k) = F_bulk * hfrac
         if ( SIGN(1.,F_bulk) == SIGN(1., F_layer(k))) then
-          if (F_bulk < 0. .and. phi_R(k) > 0.) then
+          if (F_bulk < 0. .and. phi_R(k) >= 0.) then
             F_max = 0.25 * (area_R*(phi_R(k)*h_R(k)))
-          elseif (F_bulk > 0. .and. phi_L(k) > 0.) then
+          elseif (F_bulk > 0. .and. phi_L(k) >= 0.) then
             F_max = 0.25 * (area_L*(phi_L(k)*h_L(k)))
           else ! The above quantities are always positive, so we can use F_max < -1 to see if we don't need to limit
             F_max = -1.
@@ -603,7 +603,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
           endif
           F_bulk_remain = F_bulk_remain - F_layer(k)
           ! Apply flux limiter calculated above
-          if (F_max > 0.) then
+          if (F_max >= 0.) then
             if (F_layer(k) > 0.) then
               limited = F_layer(k) > F_max
               F_layer(k) = MIN(F_layer(k),F_max)
