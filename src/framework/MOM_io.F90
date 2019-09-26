@@ -105,6 +105,7 @@ public :: register_field
 public :: register_variable_attribute
 public :: variable_exists
 public :: write_data
+public :: unlimited
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
