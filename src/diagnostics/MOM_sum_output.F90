@@ -20,7 +20,8 @@ use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
-use MOM_io, only : get_variable_size, get_variable_num_dimensions, unlimited
+use MOM_io, only : get_variable_size, get_variable_num_dimensions
+use MOM_io, only : get_variable_unlimited_dimension_index
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : lowercase
@@ -162,7 +163,6 @@ type data_struct
    type(p2d), pointer :: var_ptr2d(:) => NULL() !< array of pointers to 2d arrays
    integer, allocatable, dimension(:) :: num_dims !< number of dimensions
    integer, allocatable, dimension(:,:) :: dim_lengths !< variable dimension lengths
-   integer, allocatable, dimension(:,:) :: start !< starting indices for netCDF write buffer
    character(len=200), allocatable, dimension(:,:) :: dim_names !< variable dimension names
 end type data_struct
 
@@ -439,6 +439,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   integer :: total_axes ! counter for all coordinate axes in file
   integer :: ntsteps=0 ! counter for time step to reference for time axis index
   integer :: tr_index ! index for the tracer data
+  integer :: dim_unlim ! index of the unlimited dimension for a variable
   real    :: reday, var, re_init_day
   character(len=240) :: energypath_nc
   character(len=200) :: mesg
@@ -974,38 +975,13 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
      allocate(output_data%num_dims(num_nc_fields))
      allocate(output_data%dim_lengths(num_nc_fields,4))
      allocate(output_data%dim_names(num_nc_fields,4))
-     allocate(output_data%start(num_nc_fields,4))
- 
+
      !! write stats to netCDF file if past initial time step;
      !! otherwise, register the axes and variables, and write coordinate data
 
      if (CS%previous_calls .ge. 1) then
         ntsteps = ntsteps+1
-        WRITE(mpp_pe()+2000, '(A,I1)') "sum_output: ntsteps is ", ntsteps
-        call flush(mpp_pe()+2000)
 
-        do i=1, num_nc_fields
-           output_data%num_dims(i)=0
-    
-           call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
-                                        output_data%dim_names(i,:), output_data%dim_lengths(i,:), & 
-                                        output_data%num_dims(i),G=G, GV=GV)
-           if (output_data%num_dims(i) .le. 0) call MOM_error(FATAL, &
-                                       "MOM_sum_output:write_energy: num_dims is an invalid value.")
-           do j=1,output_data%num_dims(i)
-             output_data%start(i,j) = 1
-             if (lowercase(trim(output_data%dim_names(i,j))) .eq. 'time') then
-                
-                output_data%start(i,j) = ntsteps
-             !else
-                !if (ntsteps .gt. 1) then
-                   !output_data%start(i,j) = (ntsteps-1)*output_data%dim_lengths(i,j)
-                !endif
-             endif
-           enddo
-       
-        enddo
-     
         ! Assign output variables to the appropriate pointers in the data structure
         allocate(output_data%var_ptr0d(num_nc_fields))
         allocate(output_data%var_ptr1d(num_nc_fields))
@@ -1042,105 +1018,51 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         ! append the next value to the time coordinate variable
         call write_data(fileObjWrite, 'Time', (/reday/), corner=(/ntsteps/),edge_lengths=(/1/))
 
-        do i=1, num_nc_fields 
+        do i=1, num_nc_fields
+           dim_unlim = 0
+           dim_unlim = get_variable_unlimited_dimension_index(fileObjWrite, trim(vars(i)%name))
+
+           output_data%num_dims(i)=0
+    
+           call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                           output_data%dim_names(i,:), output_data%dim_lengths(i,:), & 
+                                           output_data%num_dims(i),G=G, GV=GV)
+
            if (associated(output_data%var_ptr0d(i)%p)) then
               if (lowercase(trim(output_data%dim_names(i,1))) .eq. 'time') then
                  call write_data(fileObjWrite, trim(vars(i)%name), (/output_data%var_ptr0d(i)%p/), &
-                               corner=(/output_data%start(i,1)/),edge_lengths=(/1/))
+                               corner=(/ntsteps/),edge_lengths=(/1/))
               else
                  call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr0d(i)%p)
               endif
               nullify(output_data%var_ptr0d(i)%p)
 
            elseif (associated(output_data%var_ptr1d(i)%p)) then
-             
-              if (lowercase(trim(output_data%dim_names(i,1))) .eq. 'time') then
-                 call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr1d(i)%p, &
-                               corner=output_data%start(i,1:2), &
-                               edge_lengths=(/1,output_data%dim_lengths(i,2)/))
-
-              elseif (lowercase(trim(output_data%dim_names(i,2))) .eq. 'time') then
-                 call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr1d(i)%p, &
-                               corner=output_data%start(i,1:2), &
-                               edge_lengths=(/output_data%dim_lengths(i,1),1/))
+            
+              if (dim_unlim .eq. 2) then
+                 call write_data(fileObjWrite, trim(vars(i)%name), &
+                                output_data%var_ptr1d(i)%p(1:output_data%dim_lengths(i,1)), &
+                                unlim_dim_level=ntsteps)
               else
-                 call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr1d(i)%p) 
+                 call write_data(fileObjWrite, trim(vars(i)%name), &
+                                 output_data%var_ptr1d(i)%p(1:output_data%dim_lengths(i,1))) 
               endif
 
               nullify(output_data%var_ptr1d(i)%p)
 
            elseif (associated(output_data%var_ptr2d(i)%p)) then
-               if (lowercase(trim(output_data%dim_names(i,1))) .eq. 'time') then
+               if (dim_unlim .eq. 3) then
  
-                   call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr2d(i)%p, &
-                                   corner=output_data%start(i,2:3), &
-                                   edge_lengths=output_data%dim_lengths(i,2:3))
-               elseif (lowercase(trim(output_data%dim_names(i,3))) .eq. 'time') then
- 
-                   call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr2d(i)%p, &
-                                   corner=output_data%start(i,1:2), &
-                                   edge_lengths=output_data%dim_lengths(i,1:2))
+                   call write_data(fileObjWrite, trim(vars(i)%name), &
+                                   output_data%var_ptr2d(i)%p(1:output_data%dim_lengths(i,1),1:output_data%dim_lengths(i,2)), &
+                                   unlim_dim_level=ntsteps)
                else
                    call write_data(fileObjWrite, trim(vars(i)%name), output_data%var_ptr2d(i)%p)
                endif
                nullify(output_data%var_ptr2d(i)%p)
            endif
         enddo
-        ! write the tracer data      
-        do m=1,nTr_stocks
-           if (CS%use_temperature) then
-              tr_index=17+m
-           else
-              tr_index=11+m
-           endif
-
-           if (associated(output_data%var_ptr0d(tr_index)%p)) then
-              if (lowercase(trim(output_data%dim_names(tr_index,1))) .eq. 'time') then
-                 call write_data(fileObjWrite, trim(vars(tr_index)%name), (/output_data%var_ptr0d(tr_index)%p/), &
-                                 corner=(/output_data%start(tr_index,1)/), &
-                                 edge_lengths=(/1/))
-              else
-                 call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr0d(tr_index)%p) 
-              endif
-              nullify(output_data%var_ptr0d(tr_index)%p)
-
-           elseif (associated(output_data%var_ptr1d(tr_index)%p)) then
-               if (lowercase(trim(output_data%dim_names(tr_index,1))) .eq. 'time') then
-
-                  call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr1d(tr_index)%p, &
-                               corner=(/output_data%start(tr_index,1:2)/), &
-                               edge_lengths=(/1,output_data%dim_lengths(tr_index,2)/))
-
-               elseif (lowercase(trim(output_data%dim_names(tr_index,2))) .eq. 'time') then
-                  call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr1d(tr_index)%p, &
-                                 corner=(/output_data%start(tr_index,1:2)/), &
-                                 edge_lengths=(/output_data%dim_lengths(tr_index,1),1/))
-
-               else
-                  call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr0d(tr_index)%p) 
-                  
-               endif
-               nullify(output_data%var_ptr1d(tr_index)%p)
-
-           elseif (associated(output_data%var_ptr2d(tr_index)%p)) then
-               if (lowercase(trim(output_data%dim_names(tr_index,1))) .eq. 'time') then
- 
-                   call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr2d(tr_index)%p, &
-                                   corner=output_data%start(tr_index,2:3), &
-                                   edge_lengths=output_data%dim_lengths(tr_index,2:3))
-
-               elseif (lowercase(trim(output_data%dim_names(tr_index,3))) .eq. 'time') then
- 
-                   call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr2d(tr_index)%p, &
-                                   corner=output_data%start(tr_index,1:2), &
-                                   edge_lengths=output_data%dim_lengths(tr_index,1:2))
-            
-               else
-                   call write_data(fileObjWrite, trim(vars(tr_index)%name), output_data%var_ptr2d(tr_index)%p)
-               endif
-               nullify(output_data%var_ptr2d(tr_index)%p)
-           endif
-        enddo 
+        
   
         deallocate(output_data%var_ptr0d)
         deallocate(output_data%var_ptr1d)
@@ -1191,38 +1113,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
            endif
         enddo
 
-        do m=1,nTr_stocks
-           if (CS%use_temperature) then
-              tr_index=17+m
-           else
-              tr_index=11+m
-           endif
-
-           output_data%num_dims(tr_index)=0
-    
-           call get_var_dimension_features(vars(tr_index)%hor_grid, vars(tr_index)%z_grid, vars(tr_index)%t_grid, &
-                                           output_data%dim_names(tr_index,:), output_data%dim_lengths(tr_index,:), & 
-                                           output_data%num_dims(tr_index),G=G, GV=GV)
-           do j=1,output_data%num_dims(tr_index)
-              ! register the variable dimensions to the file if the corresponding global axes are not registered
-              if (.not.(dimension_exists(fileObjWrite, output_data%dim_names(tr_index,j)))) then
-                 total_axes=total_axes+1
-                 call MOM_get_axis_data(axis_data_CS, output_data%dim_names(tr_index,j), total_axes, G=G, GV=GV, &
-                                     time_val=(/reday/), time_units='days')
-                 call MOM_register_axis(fileObjWrite, trim(output_data%dim_names(tr_index,j)), &
-                                                               output_data%dim_lengths(tr_index,j))
-              endif
-           enddo
-         ! register the fields and attributes for non-coordinate variable 'tr_index'
-           if (.not.(variable_exists(fileObjWrite, trim(vars(tr_index)%name)))) then
-           
-              call register_field(fileObjWrite, vars(tr_index)%name, "double", &
-                                  dimensions=output_data%dim_names(tr_index,1:output_data%num_dims(tr_index)))
-              call register_variable_attribute(fileObjWrite, vars(tr_index)%name, 'units', vars(tr_index)%units)
-              call register_variable_attribute(fileObjWrite, vars(tr_index)%name, 'long_name', vars(tr_index)%longname)
-           
-           endif
-        enddo
         ! register and write the coordinate variables (axes) to the file
         do i=1,total_axes
            if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
@@ -1255,7 +1145,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   if (allocated(output_data%num_dims)) deallocate(output_data%num_dims)
   if (allocated(output_data%dim_lengths)) deallocate(output_data%dim_lengths)
   if (allocated(output_data%dim_names)) deallocate(output_data%dim_names)
-  if (allocated(output_data%start)) deallocate(output_data%start)
   
   ! The second (impossible-looking) test looks for a NaN in En_mass.
   if ((En_mass>CS%max_Energy) .or. &
@@ -1870,16 +1759,6 @@ subroutine associate_data_1d(DS,data_array,data_index)
   DS%var_ptr2d(data_index)%p => NULL()
   DS%var_ptr1d(data_index)%p => data_array
   DS%var_ptr0d(data_index)%p => NULL()
- 
-  ! place the 1D data in a 2d array if there is a time dimension,
-  ! since the appended values will create a 2D array in the file
- !do i=1,DS%num_dims(data_index)
-   ! if (i .eq. unlimited) then  
-     !    call associate_data(DS,(/0.0,data_array/),data_index)
-       !  DS%var_ptr1d(data_index)%p => NULL()
-       !dif   
-  !enddo 
-     
 end subroutine associate_data_1d
 
 !> Associate 0d (scalar) pointer with data value
