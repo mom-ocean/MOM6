@@ -503,7 +503,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real    :: h_work_L, h_work_R  ! dummy variables
   real    :: F_max !< The maximum amount of flux that can leave a cell
   logical :: limited !< True if the flux limiter was applied
-  real    :: hfrac, hremain
+  real    :: hfrac, F_bulk_remain
 
   if (hbl_L == 0. .or. hbl_R == 0.) then
     F_bulk = 0.
@@ -527,7 +527,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   ! Calculate the 'bulk' diffusive flux from the bulk averaged quantities
   heff = harmonic_mean(hbl_L, hbl_R)
   F_bulk = -(khtr_u * heff) * (phi_R_avg - phi_L_avg)
-  if (F_bulk .ne. F_bulk) print *, khtr_avg, heff, phi_R_avg, phi_L_avg, hbl_L, hbl_R
+  F_bulk_remain = F_bulk
   ! Calculate the layerwise sum of the vertical effective thickness. This is different than the heff calculated
   ! above, but is used as a way to decompose decompose the fluxes onto the individual layers
   h_means(:) = 0.
@@ -581,14 +581,15 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
     return
   else
     ! Initialize remaining thickness
-    hremain = 1.
     inv_heff = 1./SUM(h_means)
     ! Decompose the bulk flux onto the individual layers
     do k=1,nk
       if (h_means(k) > 0.) then
         ! Limit the tracer flux so that the donor cell with positive concentration can't go negative
         ! If a tracer can go negative, it is unclear what the limiter should be. BOB ALISTAIR?!
-        if ( SIGN(1.,F_bulk) == SIGN(1., -(phi_R(k)-phi_L(k))) ) then
+        hfrac = h_means(k)*inv_heff
+        F_layer(k) = F_bulk * hfrac
+        if ( SIGN(1.,F_bulk) == SIGN(1., F_layer(k))) then
           if (F_bulk < 0. .and. phi_R(k) > 0.) then
             F_max = 0.25 * (area_R*(phi_R(k)*h_R(k)))
           elseif (F_bulk > 0. .and. phi_L(k) > 0.) then
@@ -596,21 +597,18 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
           else ! The above quantities are always positive, so we can use F_max < -1 to see if we don't need to limit
             F_max = -1.
           endif
-          hfrac = h_means(k)*inv_heff
           ! Distribute bulk flux onto layers
           if ( ((boundary == SURFACE) .and. (k == k_min)) .or. ((boundary == BOTTOM) .and. (k == nk)) ) then
-            F_layer(k) = F_bulk * hremain
-            hremain = 0.
-          else
-            F_layer(k) = F_bulk * hfrac
-            hremain = MAX(0.,hremain-hfrac)
+            F_layer(k) = F_bulk_remain
           endif
-
+          F_bulk_remain = F_bulk_remain - F_layer(k)
           ! Apply flux limiter calculated above
           if (F_max > 0.) then
             if (F_layer(k) > 0.) then
+              limited = F_layer(k) > F_max
               F_layer(k) = MIN(F_layer(k),F_max)
             elseif (F_layer(k) < 0.) then
+              limited = F_layer(k) < -F_max
               F_layer(k) = MAX(F_layer(k),-F_max) ! Note negative to make the sign of flux consistent
             endif
           endif
@@ -622,6 +620,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
             endif
           endif
         else
+          F_bulk_remain = F_bulk_remain - F_layer(k)
           F_layer(k) = 0.
         endif
       else
