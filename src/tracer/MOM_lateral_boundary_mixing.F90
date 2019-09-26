@@ -26,10 +26,10 @@ use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 implicit none ; private
 
 public near_boundary_unit_tests, lateral_boundary_mixing, lateral_boundary_mixing_init
-
+public boundary_k_range
 ! Private parameters to avoid doing string comparisons for bottom or top boundary layer
-integer, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface bopundary
-integer, parameter :: BOTTOM  = 1  !< Set a value that corresponds to the bottom boundary
+integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface bopundary
+integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to the bottom boundary
 #include <MOM_memory.h>
 
 !> Sets parameters for lateral boundary mixing module.
