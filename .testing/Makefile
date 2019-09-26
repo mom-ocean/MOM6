@@ -175,12 +175,12 @@ test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d
 
 # NOTE: chksum_diag return code of cmp is currently ignored since many fail!
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(2),$(BASE)/.testing/%/ocean.stats.$(b))
-%.$(1): $(foreach b,$(2),$(BASE)/.testing/%/ocean.stats.$(b))
+.PRECIOUS: $(foreach b,$(2),results/%/ocean.stats.$(b))
+%.$(1): $(foreach b,$(2),results/%/ocean.stats.$(b))
 	cmp $$^
 
-.PRECIOUS: $(foreach b,$(2),$(BASE)/.testing/%/chksum_diag.$(b))
-%.$(1).diag: $(foreach b,$(2),$(BASE)/.testing/%/chksum_diag.$(b))
+.PRECIOUS: $(foreach b,$(2),results/%/chksum_diag.$(b))
+%.$(1).diag: $(foreach b,$(2),results/%/chksum_diag.$(b))
 	cmp $$^ || true
 endef
 
@@ -192,8 +192,8 @@ $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
 # Restart tests only compare the final stat record
-.PRECIOUS: $(foreach b,symmetric restart,$(BASE)/.testing/%/ocean.stats.$(b))
-%.restart: $(foreach b,symmetric restart,$(BASE)/.testing/%/ocean.stats.$(b))
+.PRECIOUS: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
+%.restart: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
 	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1))
 
 # TODO: chksum_diag parsing of restart files
@@ -202,35 +202,38 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 #---
 # Test run output files
 
-#(1): Configuration name
-#(2): Executable type
-#(3): Enable coverage flag
-#(4): MOM_override configuration
-#(5): Environment variables
-#(6): Number of MPI ranks
-
-# Simple function for generalised Slurm (srun) and OpenMPI (mpirun) support
-# (1): Environment variables
-
+# Simple function for generalized Slurm (srun) and OpenMPI (mpirun) support
+# $(1): Environment variables
 ifeq ($(MPIRUN), srun)
 MPIRUN_CMD=$(1) $(MPIRUN)
 else
 MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
 endif
 
+# Rule to build results/<tc>/{ocean.stats,chksum_diag}.<tag>
+# $(1): Test configuration name <tag>
+# $(2): Executable type
+# $(3): Enable coverage flag
+# $(4): MOM_override configuration
+# $(5): Environment variables
+# $(6): Number of MPI ranks
 define STAT_RULE
-$$(BASE)/.testing/%/ocean.stats.$(1): $$(BUILD)/$(2)/MOM6
-	if [ $(3) ]; then find $$(BUILD) -name *.gcda -exec rm -f '{}' \; ; fi
-	mkdir -p $$(@D)/RESTART
-	echo $(4) > $$(@D)/MOM_override
-	cd $$(@D) && $$(call MPIRUN_CMD,$(5)) -n $(6) $$< 2> debug.out \
-		|| ! cat debug.out
-	cp $$(@D)/ocean.stats $$@
-	> $$(@D)/MOM_override
-	if [ $(3) ]; then cd $$(BASE) && bash <(curl -s https://codecov.io/bash) -n $$@; fi
+results/%/ocean.stats.$(1): ../build/$(2)/MOM6
+	if [ $(3) ]; then find ../build/$(2) -name *.gcda -exec rm -f '{}' \; ; fi
+	mkdir -p work/$$*/$(1)
+	cp -rL $$*/* work/$$*/$(1)
+	mkdir -p work/$$*/$(1)/RESTART
+	echo $(4) > work/$$*/$(1)/MOM_override
+	cd work/$$*/$(1) && $$(call MPIRUN_CMD,$(5)) -n $(6) ../../../$$< 2> debug.out > std.out \
+		|| ! sed 's/^/$$*.$(1): /' std.out debug.out \
+		&& sed 's/^/$$*.$(1): /' std.out
+	mkdir -p $$(@D)
+	cp work/$$*/$(1)/ocean.stats $$@
+	if [ $(3) ]; then cd .. && bash <(curl -s https://codecov.io/bash) -n $$@; fi
 
-$$(BASE)/.testing/%/chksum_diag.$(1): $$(BASE)/.testing/%/ocean.stats.$(1)
-	cp $$(@D)/chksum_diag $$@
+results/%/chksum_diag.$(1): results/%/ocean.stats.$(1)
+	mkdir -p $$(@D)
+	cp work/$$*/$(1)/chksum_diag $$@
 endef
 
 # Define $(,) as comma escape character
@@ -247,15 +250,15 @@ $(eval $(call STAT_RULE,dim.l,symmetric,,L_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 
-# Restart tests require signicant preprocessing, and are handled separately.
-$(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
-	# Cleanup
-	mkdir -p $(@D)/RESTART
-	git checkout $(@D)/input.nml
-	> $(@D)/MOM_override
+# Restart tests require significant preprocessing, and are handled separately.
+results/%/ocean.stats.restart: ../build/symmetric/MOM6
+	rm -rf work/$*/restart
+	mkdir -p work/$*/restart
+	cp -rL $*/* work/$*/restart
+	mkdir work/$*/restart/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes runtime set by DAYMAX, will fail if set by input.nml
-	cd $(@D) \
+	cd work/$*/restart \
 		&& daymax=$$(grep DAYMAX MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 		&& timeunit=$$(grep TIMEUNIT MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 		&& if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
@@ -264,17 +267,20 @@ $(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
 		&& printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml \
 		&& echo $${daymax} $${timeunit}
 	# Run the first half-period
-	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
+	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug.out > std.out \
+		|| ! sed 's/^/$*.restart1: /' std.out debug.out \
+		&& sed 's/^/$*.restart1: /' std.out
 	# Setup the next inputs
-	rm -rf $(@D)/INPUT && mv $(@D)/RESTART $(@D)/INPUT
-	mkdir $(@D)/RESTART
-	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
+	cd work/$*/restart && rm -rf INPUT && mv RESTART INPUT
+	mkdir work/$*/restart/RESTART
+	cd work/$*/restart && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd $(@D) && $(MPIRUN) -n 1 $< 2> debug.out
+	cd work/$*/restart && $(MPIRUN) -n 1 ../../../$< 2> debug.out > std.out \
+		|| ! sed 's/^/$*.restart2: /' std.out debug.out \
+		&& sed 's/^/$*.restart2: /' std.out
 	# Archive the results and cleanup
-	cp $(@D)/ocean.stats $@
-	rm -rf $(@D)/INPUT
-	git checkout $(@D)/input.nml
+	mkdir -p $(@D)
+	cp work/$*/restart/ocean.stats $@
 
 # TODO: Restart checksum diagnostics
 
@@ -282,9 +288,12 @@ $(BASE)/.testing/%/ocean.stats.restart: $(BUILD)/symmetric/MOM6
 #----
 .PHONY: clean
 clean: clean.stats
-	rm -rf $(BUILD)
+	@# Assert that we are in .testing for recursive delete
+	@[ $$(basename $$(pwd)) = .testing ]
+	rm -rf ../build
 
 .PHONY: clean.stats
 clean.stats:
-	find $(BASE)/.testing -name ocean.stats* -exec rm {} \;
-	find $(BASE)/.testing -name chksum_diag* -exec rm {} \;
+	@# Assert that we are in .testing for recursive delete
+	@[ $$(basename $$(pwd)) = .testing ]
+	rm -rf work results
