@@ -661,20 +661,19 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     else
       !### Consider different combinations of these estimates of topographic beta, and the use
       !    of the water column thickness instead of the bathymetric depth.
-      beta_topo_x = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                   (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-               / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
-           +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-               / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
-      !### There is a bug in the 4th lne below, where IdxCu should be IdyCv.
-      beta_topo_y = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                   (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-               / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
-                   (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdxCu(i,J-1) &
-               / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
+      beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                    (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
+                / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
+            +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
+                / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
+      beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                    (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
+                / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
+                    (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
+                / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
     endif
-    beta =  sqrt((G%dF_dx(i,j) - beta_topo_x)**2 + &
-                 (G%dF_dy(i,j) - beta_topo_y)**2 )
+    beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
+                 (G%dF_dy(i,j) + beta_topo_y)**2 )
 
     I_H = US%L_to_m*GV%Rho0 * I_mass(i,j)
 
@@ -808,20 +807,19 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
       else
         !### Consider different combinations of these estimates of topographic beta, and the use
         !    of the water column thickness instead of the bathymetric depth.
-        beta_topo_x = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                     (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-                / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
-             +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-                / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
-        !### There is a bug in the 4th lne below, where IdxCu should be IdyCv.
-        beta_topo_y = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                     (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-                / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
-                     (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdxCu(i,J-1) &
-                / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
+        beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                      (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
+                 / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
+              +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
+                 / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
+        beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                      (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
+                 / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
+                      (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
+                 / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
       endif
-      beta =  sqrt((G%dF_dx(i,j) - beta_topo_x)**2 + &
-                   (G%dF_dy(i,j) - beta_topo_y)**2 )
+      beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
+                   (G%dF_dy(i,j) + beta_topo_y)**2 )
 
     else
       beta = 0.
@@ -1148,7 +1146,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
      'MEKE derived barotropic eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
   if (.not. associated(MEKE%MEKE)) CS%id_Ut = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
-     'MEKE energy source', 'm2 s-3')
+     'MEKE energy source', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
      'MEKE decay rate', 's-1', conversion=US%s_to_T)
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &

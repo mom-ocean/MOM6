@@ -41,6 +41,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   integer, optional, intent(in) :: ensemble_num !< The ensemble id of the current member
   ! Local variables
   integer, parameter :: npf = 5 ! Maximum number of parameter files
+
   character(len=240) :: &
     parameter_filename(npf), & ! List of files containing parameters.
     output_directory,        & ! Directory to use to write the model output.

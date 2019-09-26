@@ -26,6 +26,7 @@ use MOM_open_boundary, only : open_boundary_query
 use MOM_open_boundary, only : set_tracer_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments
+use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
@@ -565,6 +566,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   ! This controls user code for setting open boundary data
   if (associated(OBC)) then
+    ! Call this once to fill boundary arrays from fixed values
+    if (.not. OBC%needs_IO_for_data)  &
+      call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
+
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&
@@ -1727,7 +1732,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  pres(:) = 0.0 ; eta(:,:,:) = 0.0 ; tmp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
+  pres(:) = 0.0 ; tmp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -1784,7 +1789,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
-    allocate(eta(isd:ied,jsd:jed,nz+1))
+    allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     do j=js,je ; do i=is,ie

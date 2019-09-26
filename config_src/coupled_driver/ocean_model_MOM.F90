@@ -33,10 +33,10 @@ use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
-use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
-use MOM_surface_forcing, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
-use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
-use MOM_surface_forcing, only : forcing_save_restart
+use MOM_surface_forcing_gfdl, only : surface_forcing_init, convert_IOB_to_fluxes
+use MOM_surface_forcing_gfdl, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
+use MOM_surface_forcing_gfdl, only : ice_ocean_boundary_type, surface_forcing_CS
+use MOM_surface_forcing_gfdl, only : forcing_save_restart
 use MOM_time_manager, only : time_type, operator(>), operator(+), operator(-)
 use MOM_time_manager, only : operator(*), operator(/), operator(/=)
 use MOM_time_manager, only : operator(<=), operator(>=), operator(<)
