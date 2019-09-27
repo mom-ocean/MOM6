@@ -438,9 +438,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   integer :: isg, ieg ! global start and end indices for writing axis data
   integer :: total_axes ! counter for all coordinate axes in file
   integer :: ntsteps=0 ! counter for time step to reference for time axis index
-  integer :: tr_index ! index for the tracer data
   integer :: dim_unlim ! index of the unlimited dimension for a variable
-  real    :: reday, var, re_init_day
+  real    :: reday, var
   character(len=240) :: energypath_nc
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
@@ -671,15 +670,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
   energypath_nc = trim(CS%energyfile) // ".nc"
-  !if (day > CS%Start_time) then
-    !  call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-    !                   num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-    !                   G=G, GV=GV)
-  !else
-    !  call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-    !                   num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-    !                   G=G, GV=GV)
-  !endif
 
   if (CS%do_APE_calc) then
     lbelow = 1 ; volbelow = 0.0
@@ -839,14 +829,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     call get_date(day, iyear, imonth, iday, ihour, iminute, isecond, itick)
   if (abs(CS%timeunit - 86400.0) < 1.0) then
     reday = REAL(num_days)+ (REAL(start_of_day)/86400.0)
-    re_init_day = REAL(init_day)+ (REAL(init_sec)/86400.0)
     mesg_intro = "MOM Day "
   else
     reday = REAL(num_days)*(86400.0/CS%timeunit) + &
             REAL(start_of_day)/abs(CS%timeunit)
   
-    re_init_day = REAL(init_day)*(86400.0/CS%timeunit) + &
-            REAL(init_sec)/abs(CS%timeunit)
     mesg_intro = "MOM Time "
   endif
   if (reday < 1.0e8) then ;      write(day_str, '(F12.3)') reday
@@ -932,36 +919,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       enddo
     endif
   endif
-
-  ! write the fields that are not coordinate variables to the energy netcdf file 
-  !call write_field(CS%fileenergy_nc, CS%fields(1), var, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(2), toten, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(3), PE, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(4), KE, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(5), H_0APE, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(6), mass_lay, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(7), mass_tot, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(8), mass_chg, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
-  !call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday) !>@bug max_CFL index correctly set in new write call
-  !if (CS%use_temperature) then
-      !call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
-      !call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
-      !call write_field(CS%fileenergy_nc, CS%fields(14), 0.001*salt_anom, reday)
-      !call write_field(CS%fileenergy_nc, CS%fields(15), Heat, reday)
-      !call write_field(CS%fileenergy_nc, CS%fields(16), heat_chg, reday)
-      !call write_field(CS%fileenergy_nc, CS%fields(17), heat_anom, reday)
-  !    do m=1,nTr_stocks
-  !       call write_field(CS%fileenergy_nc, CS%fields(17+m), Tr_stocks(m), reday)
-  !    enddo
-  !else     
-  !    do m=1,nTr_stocks
-  !       call write_field(CS%fileenergy_nc, CS%fields(11+m), Tr_stocks(m), reday)    
-  !    enddo
-  !endif
-
-  !call flush_file(CS%fileenergy_nc)
 
   ! open the file for writing
   if (.not.(check_if_open(fileObjWrite)) .and. is_root_pe()) then
