@@ -157,7 +157,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, diabatic
                  "That is, the algorithm will exclude the surface and bottom"//&
                  "boundary layers.",default = .false.)
 
-  if (CS%continuous_reconstruction == .true. .and. CS%interior_only) then
+  if (CS%continuous_reconstruction .and. CS%interior_only) then
     call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY=True only works with discontinuous" //&
                  "reconstruction.")
   endif
