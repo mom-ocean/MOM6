@@ -189,6 +189,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk*Idt, CS%diag)
       if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk*Idt, CS%diag)
 
+      ! TODO: this is where we would filter vFlx and uFlux to get rid of checkerboard noise
+
     elseif (CS%method == 2) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
@@ -630,6 +632,190 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   endif
 
 end subroutine fluxes_bulk_method
+
+! TODO: GMM,  this is a placeholder for the pressure reconstruction.
+! get rid of all the T/S related variables below. We need to use the
+! continuous version since pressure will be continuous. However,
+! for tracer we will need to use a discontinuous reconstruction.
+! Mimic the neutral diffusion driver to calculate and apply sub-layer
+! fluxes.
+
+!> Returns positions within left/right columns of combined interfaces using continuous reconstructions of T/S
+!subroutine find_neutral_surface_positions_continuous(nk, Pl, Pr, PoL, PoR, KoL, KoR, hEff)
+!   integer,                    intent(in)    :: nk    !< Number of levels
+!  real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure [Pa]
+!  real, dimension(2*nk+2),    intent(inout) :: PoL   !< Fractional position of neutral surface within
+!                                                     !! layer KoL of left column
+!  real, dimension(2*nk+2),    intent(inout) :: PoR   !< Fractional position of neutral surface within
+!                                                     !! layer KoR of right column
+!  integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
+!  integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
+!  real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces [Pa]
+!
+!  ! Local variables
+!  integer :: ns                     ! Number of neutral surfaces
+!  integer :: k_surface              ! Index of neutral surface
+!  integer :: kl                     ! Index of left interface
+!  integer :: kr                     ! Index of right interface
+!  real    :: dRdT, dRdS             ! dRho/dT and dRho/dS for the neutral surface
+!  logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
+!  logical :: searching_right_column ! True if searching for the position of a left interface in the right column
+!  logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
+!  integer :: krm1, klm1
+!  real    :: dRho, dRhoTop, dRhoBot, hL, hR
+!  integer :: lastK_left, lastK_right
+!  real    :: lastP_left, lastP_right
+!
+!  ns = 2*nk+2
+!  ! Initialize variables for the search
+!  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
+!  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
+!  reached_bottom = .false.
+!
+!  ! Loop over each neutral surface, working from top to bottom
+!  neutral_surfaces: do k_surface = 1, ns
+!    klm1 = max(kl-1, 1)
+!    if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
+!    krm1 = max(kr-1, 1)
+!    if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
+!
+!    ! TODO: GMM, instead of dRho we need dP (pressure at right - pressure at left)
+!
+!    ! Potential density difference, rho(kr) - rho(kl)
+!    dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
+!                 + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
+!    ! Which column has the lighter surface for the current indexes, kr and kl
+!    if (.not. reached_bottom) then
+!      if (dRho < 0.) then
+!        searching_left_column = .true.
+!        searching_right_column = .false.
+!      elseif (dRho > 0.) then
+!        searching_right_column = .true.
+!        searching_left_column = .false.
+!      else ! dRho == 0.
+!        if (kl + kr == 2) then ! Still at surface
+!          searching_left_column = .true.
+!          searching_right_column = .false.
+!        else ! Not the surface so we simply change direction
+!          searching_left_column = .not.  searching_left_column
+!          searching_right_column = .not.  searching_right_column
+!        endif
+!      endif
+!    endif
+!
+!    if (searching_left_column) then
+!      ! Interpolate for the neutral surface position within the left column, layer klm1
+!      ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
+!      dRhoTop = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
+!                     + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
+!      ! Potential density difference, rho(kl) - rho(kr) (will be positive)
+!      dRhoBot = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
+!                      + ( dRdSl(klm1+1) + dRdSr(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
+!
+!      ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
+!      ! unless we are still at the top of the left column (kl=1)
+!      if (dRhoTop > 0. .or. kr+kl==2) then
+!        PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
+!      elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
+!        PoL(k_surface) = 1.
+!      else
+!        ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
+!        ! between right and left is zero.
+!
+!        ! TODO: GMM, write the linear solution instead of using interpolate_for_nondim_position
+!        PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
+!      endif
+!      if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
+!        klm1 = klm1 + 1
+!        PoL(k_surface) = PoL(k_surface) - 1.
+!      endif
+!      if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
+!        PoL(k_surface) = lastP_left
+!        klm1 = lastK_left
+!      endif
+!      KoL(k_surface) = klm1
+!      if (kr <= nk) then
+!        PoR(k_surface) = 0.
+!        KoR(k_surface) = kr
+!      else
+!        PoR(k_surface) = 1.
+!        KoR(k_surface) = nk
+!      endif
+!      if (kr <= nk) then
+!        kr = kr + 1
+!      else
+!        reached_bottom = .true.
+!        searching_right_column = .true.
+!        searching_left_column = .false.
+!      endif
+!    elseif (searching_right_column) then
+!      ! Interpolate for the neutral surface position within the right column, layer krm1
+!      ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
+!      dRhoTop = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
+!                     + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
+!      ! Potential density difference, rho(kr) - rho(kl) (will be positive)
+!      dRhoBot = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
+!                   + ( dRdSr(krm1+1) + dRdSl(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
+!
+!      ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
+!      ! unless we are still at the top of the right column (kr=1)
+!      if (dRhoTop >= 0. .or. kr+kl==2) then
+!        PoR(k_surface) = 0. ! The left surface is lighter than anything in layer krm1
+!      elseif (dRhoTop >= dRhoBot) then ! Right layer is unstratified
+!        PoR(k_surface) = 1.
+!      else
+!        ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
+!        ! between right and left is zero.
+!        PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
+!      endif
+!      if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
+!        krm1 = krm1 + 1
+!        PoR(k_surface) = PoR(k_surface) - 1.
+!      endif
+!      if (real(krm1-lastK_right)+(PoR(k_surface)-lastP_right)<0.) then
+!        PoR(k_surface) = lastP_right
+!        krm1 = lastK_right
+!      endif
+!      KoR(k_surface) = krm1
+!      if (kl <= nk) then
+!        PoL(k_surface) = 0.
+!        KoL(k_surface) = kl
+!      else
+!        PoL(k_surface) = 1.
+!        KoL(k_surface) = nk
+!      endif
+!      if (kl <= nk) then
+!        kl = kl + 1
+!      else
+!        reached_bottom = .true.
+!        searching_right_column = .false.
+!        searching_left_column = .true.
+!      endif
+!    else
+!      stop 'Else what?'
+!    endif
+!
+!    lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
+!    lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
+!
+!    ! Effective thickness
+!    ! NOTE: This would be better expressed in terms of the layers thicknesses rather
+!    ! than as differences of position - AJA
+!
+!    ! TODO: GMM, we need to import absolute_position from neutral diffusion. This gives us  the depth of the interface on the left and right side.
+!
+!    if (k_surface>1) then
+!      hL = absolute_position(nk,ns,Pl,KoL,PoL,k_surface) - absolute_position(nk,ns,Pl,KoL,PoL,k_surface-1)
+!      hR = absolute_position(nk,ns,Pr,KoR,PoR,k_surface) - absolute_position(nk,ns,Pr,KoR,PoR,k_surface-1)
+!      if ( hL + hR > 0.) then
+!        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean of layer thicknesses
+!      else
+!        hEff(k_surface-1) = 0.
+!      endif
+!    endif
+!
+!  enddo neutral_surfaces
+!end subroutine find_neutral_surface_positions_continuous
 
 !> Unit tests for near-boundary horizontal mixing
 logical function near_boundary_unit_tests( verbose )
