@@ -35,11 +35,12 @@ contains
 !! This case is set up in such a way that the temperature of the topmost layer is equal to the SST at the
 !! southern edge of the domain. The temperatures are then converted to densities of the top and bottom layers
 !! and linearly interpolated for the intermediate layers.
-subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-  real, dimension(NKMEM_), intent(out) :: Rlay !< Layer potential density.
+subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file, eqn_of_state)
+  real, dimension(NKMEM_), intent(out) :: Rlay !< Layer potential density [R ~> kg m-3].
   real, dimension(NKMEM_), intent(out) :: g_prime !< The reduced gravity at
                                                   !! each interface [L2 Z-1 T-2 ~> m s-2].
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
                                                      !! equation of state.
@@ -50,19 +51,19 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 
   call get_param(param_file, mdl, "DRHO_DT", drho_dt, &
           "Rate of change of density with temperature.", &
-           units="kg m-3 K-1", default=-0.2)
+           units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "SST_S", SST_s, &
           "SST at the suothern edge of the domain.", units="C", default=20.0)
   call get_param(param_file, mdl, "T_BOT", T_bot, &
                  "Bottom Temp", units="C", default=5.0)
-  rho_top = GV%rho0 + drho_dt*SST_s
-  rho_bot = GV%rho0 + drho_dt*T_bot
+  rho_top = US%kg_m3_to_R*GV%rho0 + drho_dt*SST_s
+  rho_bot = US%kg_m3_to_R*GV%rho0 + drho_dt*T_bot
   nz = GV%ke
 
   do k = 1,nz
     Rlay(k) = (rho_bot - rho_top)/(nz-1)*real(k-1) + rho_top
     if (k >1) then
-      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth/GV%rho0
+      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth / (US%kg_m3_to_R*GV%rho0)
     else
       g_prime(k) = GV%g_Earth
     endif
