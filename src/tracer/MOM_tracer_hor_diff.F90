@@ -482,7 +482,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
-    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, GV, &
+    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, GV, US, &
                                   CS, tv, num_itts)
     call cpu_clock_end(id_clock_epimix)
   endif
@@ -541,7 +541,7 @@ end subroutine tracer_hordiff
 !! Multiple iterations are used (if necessary) so that there is no limit on the
 !! acceptable time increment.
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
-                                    GV, CS, tv, num_itts)
+                                    GV, US, CS, tv, num_itts)
   type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness [H ~> m or kg m-2]
@@ -554,6 +554,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: khdt_epi_y !< Meridional epipycnal diffusivity times
                                                            !! a time step and the ratio of the open face width over
                                                            !! the distance between adjacent tracer points [L2 ~> m2]
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),                 intent(inout) :: CS         !< module control structure
   type(thermo_var_ptrs),                    intent(in)    :: tv         !< thermodynamic structure
   integer,                                  intent(in)    :: num_itts   !< number of iterations (usually=1)
@@ -680,14 +681,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,GV,Rml_max,max_kRho) &
 !$OMP                          private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
-    if (Rml_max(i,j) > GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
-    elseif (Rml_max(i,j) <= GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
+    if (Rml_max(i,j) > US%R_to_kg_m3*GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
+    elseif (Rml_max(i,j) <= US%R_to_kg_m3*GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
     else
       k_min = nkmb+2 ; k_max = nz
       do
         k_test = (k_min + k_max) / 2
-        if (Rml_max(i,j) <= GV%Rlay(k_test-1)) then ; k_max = k_test-1
-        elseif (GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
+        if (Rml_max(i,j) <= US%R_to_kg_m3*GV%Rlay(k_test-1)) then ; k_max = k_test-1
+        elseif (US%R_to_kg_m3*GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
         else ; max_kRho(i,j) = k_test ; exit ; endif
 
         if (k_min == k_max) then ; max_kRho(i,j) = k_max ; exit ; endif
@@ -721,7 +722,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
         num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
         k0_srt(i,ns,j) = k
-        rho_srt(i,ns,j) = GV%Rlay(k)
+        rho_srt(i,ns,j) = US%R_to_kg_m3*GV%Rlay(k)
         h_srt(i,ns,j) = h(i,j,k)
       endif
     endif ; enddo ; enddo

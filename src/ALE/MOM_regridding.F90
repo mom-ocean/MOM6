@@ -311,11 +311,11 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     allocate(dz(ke))
     if (ke==1) then
-      dz(:) = uniformResolution(ke, coord_mode, tmpReal, GV%Rlay(1), GV%Rlay(1))
+      dz(:) = uniformResolution(ke, coord_mode, tmpReal, US%R_to_kg_m3*GV%Rlay(1), US%R_to_kg_m3*GV%Rlay(1))
     else
       dz(:) = uniformResolution(ke, coord_mode, tmpReal, &
-                   GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
-                   GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1)) )
+                   US%R_to_kg_m3*(GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2))), &
+                   US%R_to_kg_m3*(GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1))) )
     endif
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                    trim(message), units=trim(coord_units))
@@ -491,7 +491,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
   ! \todo This line looks like it would overwrite the target densities set just above?
   elseif (coordinateMode(coord_mode) == REGRIDDING_RHO) then
-    call set_target_densities_from_GV(GV, CS)
+    call set_target_densities_from_GV(GV, US, CS)
     call log_param(param_file, mdl, "!TARGET_DENSITIES", CS%target_density, &
              'RHO target densities for interfaces', units=coordinateUnits(coord_mode))
   endif
@@ -1991,15 +1991,16 @@ subroutine setCoordinateResolution( dz, CS, scale )
 end subroutine setCoordinateResolution
 
 !> Set target densities based on the old Rlay variable
-subroutine set_target_densities_from_GV( GV, CS )
+subroutine set_target_densities_from_GV( GV, US, CS )
   type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
   ! Local variables
   integer :: k, nz
 
   nz = CS%nk
-  CS%target_density(1)    = GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2))
-  CS%target_density(nz+1) = GV%Rlay(nz)+0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
+  CS%target_density(1)    = US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)))
+  CS%target_density(nz+1) = US%R_to_kg_m3*(GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)))
   do k = 2,nz
     CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
   enddo

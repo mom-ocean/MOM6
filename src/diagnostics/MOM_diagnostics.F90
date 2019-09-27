@@ -471,7 +471,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo
     else ! Rcv should not be used much in this case, so fill in sensible values.
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-        Rcv(i,j,k) = GV%Rlay(k)
+        Rcv(i,j,k) = US%R_to_kg_m3*GV%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
@@ -489,7 +489,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%h_Rlay(i,j,k) = h(i,j,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
-          call find_weights(GV%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
+          call find_weights(US%R_to_kg_m3*GV%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
           CS%h_Rlay(i,j,k_list)   = CS%h_Rlay(i,j,k_list)   + h(i,j,k)*wt
           CS%h_Rlay(i,j,k_list+1) = CS%h_Rlay(i,j,k_list+1) + h(i,j,k)*wt_p
         enddo ; enddo
@@ -511,7 +511,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         enddo ; enddo
         k_list = nz/2
         do k=1,nkmb ; do I=Isq,Ieq
-          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
+          call find_weights(US%R_to_kg_m3*GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
           CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
           CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
         enddo ; enddo
@@ -532,7 +532,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%vh_Rlay(i,J,k) = vh(i,J,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
-          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
+          call find_weights(US%R_to_kg_m3*GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
           CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + vh(i,J,k)*wt
           CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + vh(i,J,k)*wt_p
         enddo ; enddo
@@ -553,7 +553,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%uhGM_Rlay(I,j,k) = CDp%uhGM(I,j,k)
         enddo ; enddo
         do k=1,nkmb ; do I=Isq,Ieq
-          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
+          call find_weights(US%R_to_kg_m3*GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
           CS%uhGM_Rlay(I,j,k_list)   = CS%uhGM_Rlay(I,j,k_list)   + CDp%uhGM(I,j,k)*wt
           CS%uhGM_Rlay(I,j,k_list+1) = CS%uhGM_Rlay(I,j,k_list+1) + CDp%uhGM(I,j,k)*wt_p
         enddo ; enddo
@@ -574,7 +574,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
           CS%vhGM_Rlay(i,J,k) = CDp%vhGM(i,J,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
-          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
+          call find_weights(US%R_to_kg_m3*GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
           CS%vhGM_Rlay(i,J,k_list)   = CS%vhGM_Rlay(i,J,k_list)   + CDp%vhGM(i,J,k)*wt
           CS%vhGM_Rlay(i,J,k_list+1) = CS%vhGM_Rlay(i,J,k_list+1) + CDp%vhGM(i,J,k)*wt_p
         enddo ; enddo
@@ -850,7 +850,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
         enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          mass(i,j) = mass(i,j) + (GV%H_to_m*GV%Rlay(k))*h(i,j,k)
+          mass(i,j) = mass(i,j) + (GV%H_to_m*US%R_to_kg_m3*GV%Rlay(k))*h(i,j,k)
         enddo ; enddo ; enddo
       endif
     else

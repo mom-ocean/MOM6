@@ -194,7 +194,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     if (use_temperature) then ; do k=1,nz ; do i=is,ie
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
     enddo ; enddo ; else ; do k=1,nz ; do i=is,ie
-      rho_2d(i,k) = GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
+      rho_2d(i,k) = US%R_to_kg_m3*GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do i=is,ie
       kappa_2d(i,K) = kappa_io(i,j,K)
@@ -492,7 +492,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 !                   (h(i+1,j,k)**2 + h(i,j+1,k)**2))*GV%H_to_Z * I_hwt
     enddo ; enddo
     if (.not.use_temperature) then ; do k=1,nz ; do I=IsB,IeB
-      rho_2d(I,k) = GV%Rlay(k)
+      rho_2d(I,k) = US%R_to_kg_m3*GV%Rlay(k)
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do I=IsB,IeB
       kappa_2d(I,K,J2) = kv_io(I,J,K) * I_Prandtl

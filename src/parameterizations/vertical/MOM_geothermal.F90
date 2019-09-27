@@ -5,14 +5,15 @@ module MOM_geothermal
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
-use MOM_domains,             only : pass_var
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : MOM_read_data, slasher
-use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_io,            only : MOM_read_data, slasher
+use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type, get_thickness_units
+use MOM_EOS,           only : calculate_density, calculate_density_derivs
 
 implicit none ; private
 
@@ -49,7 +50,7 @@ contains
 !! the partial derivative of the coordinate density with temperature is positive
 !! or very small, the layers are simply heated in place.  Any heat that can not
 !! be applied to the ocean is returned (WHERE)?
-subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
+subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2]
@@ -66,6 +67,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
                                                                 !! into a layer; this should be
                                                                 !! increased due to mixed layer
                                                                 !! entrainment [H ~> m or kg m-2].
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
                                                                 !! a previous call to
                                                                 !! geothermal_init.
@@ -227,14 +229,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
-          elseif ((k==nkmb+1) .or. (GV%Rlay(k-1) < Rcv_BL(i))) then
+          elseif ((k==nkmb+1) .or. (US%R_to_kg_m3*GV%Rlay(k-1) < Rcv_BL(i))) then
             ! Add enough heat to match the lowest buffer layer density.
             k_tgt = nkmb
             Rcv_tgt = Rcv_BL(i)
           else
             ! Add enough heat to match the target density of layer k-1.
             k_tgt = k-1
-            Rcv_tgt = GV%Rlay(k-1)
+            Rcv_tgt = US%R_to_kg_m3*GV%Rlay(k-1)
           endif
 
           if (k<=nkmb .or. nkmb<=0) then
@@ -256,13 +258,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
           elseif (dRcv_dT <= CS%dRcv_dT_inplace) then
             ! This is the option that usually applies in isopycnal coordinates.
             heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * &
-                                            ((GV%Rlay(k)-Rcv) / dRcv_dT)))
+                                            ((US%R_to_kg_m3*GV%Rlay(k)-Rcv) / dRcv_dT)))
             heat_trans = heat_avail - heat_in_place
           else
             ! wt_in_place should go from 0 to 1.
             wt_in_place = (CS%dRcv_dT_inplace - dRcv_dT) / CS%dRcv_dT_inplace
             heat_in_place = max(wt_in_place*heat_avail, &
-                                h(i,j,k) * ((GV%Rlay(k)-Rcv) / dRcv_dT) )
+                                h(i,j,k) * ((US%R_to_kg_m3*GV%Rlay(k)-Rcv) / dRcv_dT) )
             heat_trans = heat_avail - heat_in_place
           endif
 

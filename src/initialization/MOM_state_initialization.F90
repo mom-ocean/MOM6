@@ -351,12 +351,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              fail_if_missing=new_sim, do_not_log=just_read)
 !            " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
       select case (trim(config))
-        case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, &
+        case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, US, PF, &
                                eos, tv%P_Ref, just_read_params=just_read)
         case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, &
                                 PF, just_read_params=just_read)
         case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                     G, GV, PF, eos, tv%P_Ref, just_read_params=just_read)
+                                     G, GV, US, PF, eos, tv%P_Ref, just_read_params=just_read)
         case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, &
                                        G, PF, just_read_params=just_read)
         case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF, &
@@ -364,7 +364,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
                                   tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
-                                  tv%S, h, G, GV, PF, eos, just_read_params=just_read)
+                                  tv%S, h, G, GV, US, PF, eos, just_read_params=just_read)
         case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
@@ -993,9 +993,9 @@ subroutine convert_thickness(h, G, GV, US, tv)
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = (h(i,j,k) * GV%Rlay(k)) * Hm_rho_to_Pa * GV%kg_m2_to_H**2
+        h(i,j,k) = (h(i,j,k) * US%R_to_kg_m3*GV%Rlay(k)) * Hm_rho_to_Pa * GV%kg_m2_to_H**2
         ! This is mathematically equivalent to
-        !  h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
+        !  h(i,j,k) = h(i,j,k) * (US%R_to_kg_m3*GV%Rlay(k) / GV%Rho0)
       enddo ; enddo ; enddo
     endif
   endif
@@ -1530,13 +1530,14 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
 end subroutine initialize_temp_salt_from_profile
 
 !> Initializes temperature and salinity by fitting to density
-subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref, just_read_params)
+subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: T !< The potential temperature that is
                                                        !! being initialized [degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: S !< The salinity that is being
                                                        !! initialized [ppt].
+  type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters.
   type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the equatio of state.
@@ -1587,26 +1588,26 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   if (fit_salin) then
     ! A first guess of the layers' temperatures.
     do k=nz,1,-1
-      S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
+      S0(k) = max(0.0, S0(1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
     enddo
     ! Refine the guesses for each layer.
     do itt=1,6
       call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
       do k=1,nz
-        S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
+        S0(k) = max(0.0, S0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
       enddo
     enddo
   else
     ! A first guess of the layers' temperatures.
     do k=nz,1,-1
-      T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
+      T0(k) = T0(1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
     enddo
     do itt=1,6
       call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
       do k=1,nz
-        T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+        T0(k) = T0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
       enddo
     enddo
   endif
@@ -2284,8 +2285,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
     ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
-    do k=2,nz ; Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
-    Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
+    do k=2,nz ; Rb(k) = 0.5*US%R_to_kg_m3*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
+    Rb(1) = 0.0 ;  Rb(nz+1) = US%R_to_kg_m3*( 2.0*GV%Rlay(nz) - GV%Rlay(nz-1) )
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                                         nlevs(is:ie,js:je), nkml, nkbl, min_depth, eps_z=eps_z)
@@ -2359,7 +2360,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
+            US%R_to_kg_m3*GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
 
   endif
 

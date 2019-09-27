@@ -150,7 +150,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
 
   I_gEarth = 1.0 / (US%L_T_to_m_s**2 * GV%g_Earth)
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
-  do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
+  do k=1,nz ; alpha_Lay(k) = 1.0 / (US%R_to_kg_m3*GV%Rlay(k)) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
 
   if (use_p_atm) then
@@ -235,7 +235,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (GV%Rlay(k) < Rho_cv_BL(i)) then
+          if (US%R_to_kg_m3*GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -491,7 +491,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (GV%Rlay(k) < Rho_cv_BL(i)) then
+          if (US%R_to_kg_m3*GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -745,7 +745,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
   dP_dH = US%m_s_to_L_T**2*GV%H_to_Pa
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
 
-  do k=1,nz ; alpha_Lay(k) = 1.0 / GV%Rlay(k) ; enddo
+  do k=1,nz ; alpha_Lay(k) = 1.0 / (US%R_to_kg_m3*GV%Rlay(k)) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
 
   if (use_EOS) then

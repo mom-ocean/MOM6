@@ -152,7 +152,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
 
 ! A first guess of the layers' temperatures.
   do k=1,nz
-    T0(k) = T0(k1) + (GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    T0(k) = T0(k1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
   enddo
 
 ! Refine the guesses for each layer.
@@ -160,7 +160,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
     call calculate_density(T0, S0, pres, rho_guess, 1, nz, eqn_of_state)
     call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, 1, nz, eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 
@@ -208,7 +208,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
 end subroutine benchmark_initialize_thickness
 
 !> Initializes layer temperatures and salinities for benchmark
-subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
+subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
                eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
@@ -216,6 +216,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                                                                    !! that is being initialized.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S      !< The salinity that is being
                                                                    !! initialized.
+  type(unit_scale_type),                     intent(in)  :: US     !< A dimensional unit scaling type
   type(param_file_type),               intent(in)  :: param_file   !< A structure indicating the
                                                                    !! open file to parse for
                                                                    !! model parameter values.
@@ -256,7 +257,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
 
 ! A first guess of the layers' temperatures.                         !
   do k=1,nz
-    T0(k) = T0(k1) + (GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    T0(k) = T0(k1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
   enddo
 
 ! Refine the guesses for each layer.                                 !
@@ -264,7 +265,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 

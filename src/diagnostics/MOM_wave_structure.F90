@@ -229,10 +229,10 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then

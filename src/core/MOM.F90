@@ -2795,7 +2795,7 @@ subroutine extract_surface_state(CS, sfc_state)
           sfc_state%SST(i,j) = sfc_state%SST(i,j) + dh * CS%tv%T(i,j,k)
           sfc_state%SSS(i,j) = sfc_state%SSS(i,j) + dh * CS%tv%S(i,j,k)
         else
-          sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) + dh * GV%Rlay(k)
+          sfc_state%sfc_density(i,j) = sfc_state%sfc_density(i,j) + dh * US%R_to_kg_m3*GV%Rlay(k)
         endif
         depth(i) = depth(i) + dh
       enddo ; enddo

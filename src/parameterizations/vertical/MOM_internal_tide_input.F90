@@ -219,7 +219,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
       enddo
     else
       do K=2,nz ; do i=is,ie
-        dRho_int(i,K) = GV%Rlay(k) - GV%Rlay(k-1)
+        dRho_int(i,K) = US%R_to_kg_m3*(GV%Rlay(k) - GV%Rlay(k-1))
       enddo ; enddo
     endif
 

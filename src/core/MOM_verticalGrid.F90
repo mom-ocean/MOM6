@@ -49,7 +49,7 @@ type, public :: verticalGrid_type
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   real, allocatable, dimension(:) :: &
     g_prime, &          !< The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
-    Rlay                !< The target coordinate value (potential density) in each layer [kg m-3].
+    Rlay                !< The target coordinate value (potential density) in each layer [R ~> kg m-3].
   integer :: nkml = 0   !< The number of layers at the top that should be treated
                         !! as parts of a homogeneous region.
   integer :: nk_rho_varies = 0 !< The number of layers at the top where the
@@ -272,9 +272,10 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
 end function get_tr_flux_units
 
 !> This sets the coordinate data for the "layer mode" of the isopycnal model.
-subroutine setVerticalGridAxes( Rlay, GV )
+subroutine setVerticalGridAxes( Rlay, GV, scale )
   type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
-  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density
+  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density [R ~> kg m-3]
+  real,                    intent(in)    :: scale !< A unit scaling factor for Rlay
   ! Local variables
   integer :: k, nk
 
@@ -282,13 +283,13 @@ subroutine setVerticalGridAxes( Rlay, GV )
 
   GV%zAxisLongName = 'Target Potential Density'
   GV%zAxisUnits = 'kg m-3'
-  do k=1,nk ; GV%sLayer(k) = Rlay(k) ; enddo
+  do k=1,nk ; GV%sLayer(k) = scale*Rlay(k) ; enddo
   if (nk > 1) then
-    GV%sInterface(1) = 1.5*Rlay(1) - 0.5*Rlay(2)
-    do K=2,nk ; GV%sInterface(K) = 0.5*( Rlay(k-1) + Rlay(k) ) ; enddo
-    GV%sInterface(nk+1) = 1.5*Rlay(nk) - 0.5*Rlay(nk-1)
+    GV%sInterface(1) = scale * (1.5*Rlay(1) - 0.5*Rlay(2))
+    do K=2,nk ; GV%sInterface(K) = scale * 0.5*( Rlay(k-1) + Rlay(k) ) ; enddo
+    GV%sInterface(nk+1) = scale * (1.5*Rlay(nk) - 0.5*Rlay(nk-1))
   else
-    GV%sInterface(1) = 0.0 ; GV%sInterface(nk+1) = 2.0*Rlay(nk)
+    GV%sInterface(1) = 0.0 ; GV%sInterface(nk+1) = 2.0*scale*Rlay(nk)
   endif
 
 end subroutine setVerticalGridAxes

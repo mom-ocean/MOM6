@@ -196,10 +196,11 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
     ! Construct notional interface positions
     e0(1) = 0.
     do K=2,nz
-      e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
+      e0(k) = -G%max_depth * ( 0.5 * US%R_to_kg_m3*( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
       e0(k) = min( 0., e0(k) ) ! Bound by surface
       e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-      ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
+      ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)', &
+      !     G%max_depth,US%R_to_kg_m3*GV%Rlay(k-1),US%R_to_kg_m3*GV%Rlay(k),e0(k)
       ! call MOM_mesg(mesg,5)
     enddo
     e0(nz+1) = -G%max_depth
@@ -248,13 +249,14 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, US, param_file, tv, just_read
 end subroutine ISOMIP_initialize_thickness
 
 !> Initial values for temperature and salinity
-subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
+subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, &
                                                     eqn_of_state, just_read_params)
-  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -364,28 +366,28 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
         if (fit_salin) then
           ! A first guess of the layers' salinity.
           do k=nz,1,-1
-             S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
+             S0(k) = max(0.0, S0(1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(1)) / drho_dS1)
           enddo
           ! Refine the guesses for each layer.
           do itt=1,6
             call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
             call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
             do k=1,nz
-              S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
+              S0(k) = max(0.0, S0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dS1)
             enddo
           enddo
 
         else
           ! A first guess of the layers' temperatures.
           do k=nz,1,-1
-            T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT1
+            T0(k) = T0(1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(1)) / drho_dT1
           enddo
 
           do itt=1,6
             call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
             call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
             do k=1,nz
-              T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+              T0(k) = T0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
             enddo
           enddo
         endif
@@ -406,8 +408,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   !i=G%iec; j=G%jec
   !do k = 1,nz
   !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,eqn_of_state)
-  !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
-  ! call MOM_mesg(mesg,5)
+  !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,US%R_to_kg_m3*GV%Rlay(k)
+  !  call MOM_mesg(mesg,5)
   !enddo
 
 end subroutine ISOMIP_initialize_temperature_salinity
@@ -536,10 +538,11 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
        ! Construct notional interface positions
        e0(1) = 0.
        do K=2,nz
-         e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
+         e0(k) = -G%max_depth * ( 0.5 * US%R_to_kg_m3*( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
          e0(k) = min( 0., e0(k) ) ! Bound by surface
          e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-         ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
+         ! write(mesg,*) 'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',&
+         !       G%max_depth,US%R_to_kg_m3*GV%Rlay(k-1),US%R_to_kg_m3*GV%Rlay(k),e0(k)
          ! call MOM_mesg(mesg,5)
        enddo
        e0(nz+1) = -G%max_depth
@@ -602,7 +605,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
     !i=G%iec; j=G%jec
     !do k = 1,nz
     !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-    !  write(mesg,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+    !  write(mesg,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,US%R_to_kg_m3*GV%Rlay(k)
     !  call MOM_mesg(mesg,5)
     !enddo
 
@@ -653,7 +656,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
     !do k = 1,nz
     !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
     !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
-    !              S(i,j,k),rho_tmp,GV%Rlay(k)
+    !              S(i,j,k),rho_tmp,US%R_to_kg_m3*GV%Rlay(k)
     !  call MOM_mesg(mesg,5)
     !enddo
 

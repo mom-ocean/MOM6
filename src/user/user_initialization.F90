@@ -249,7 +249,7 @@ end subroutine write_user_log
 !!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
 !!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
 !!  - GV%g_prime - The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
-!!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
+!!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!  - T - Temperature [degC].
 !!  - S - Salinity [psu].

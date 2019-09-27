@@ -11,6 +11,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 ! Planned extension:  Support for time varying sponge targets.
@@ -317,9 +318,10 @@ end subroutine set_up_sponge_ML_density
 
 !> This subroutine applies damping to the layers thicknesses, mixed layer buoyancy, and a variety of
 !! tracers for every column where there is damping.
-subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
+subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   real,                    intent(in)    :: dt  !< The amount of time covered by this call [s].
@@ -497,7 +499,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
 
       wpb = 0.0; wb = 0.0
       do k=nz,nkmb+1,-1
-        if (GV%Rlay(k) > Rcv_ml(i,j)) then
+        if (US%R_to_kg_m3*GV%Rlay(k) > Rcv_ml(i,j)) then
           w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*GV%Z_to_H, &
                     ((wb + h(i,j,k)) - GV%Angstrom_H))
           wm = 0.5*(w-ABS(w))

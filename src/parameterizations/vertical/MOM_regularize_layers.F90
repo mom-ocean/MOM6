@@ -10,6 +10,7 @@ use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -74,7 +75,7 @@ contains
 
 !> This subroutine partially steps the bulk mixed layer model.
 !! The following processes are executed, in the order listed.
-subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
+subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -91,6 +92,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
                               intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
+  type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
                                                   !! call to regularize_layers_init.
   ! Local variables
@@ -105,14 +107,14 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
     call pass_var(h, G%Domain, clock=id_clock_pass)
 
   if (CS%regularize_surface_layers) then
-    call regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
+    call regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   endif
 
 end subroutine regularize_layers
 
 !> This subroutine ensures that there is a degree of horizontal smoothness
 !! in the depths of the near-surface interfaces.
-subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
+subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -129,6 +131,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
                               intent(inout) :: eb !< The amount of fluid moved upward into a layer
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
+  type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
                                                   !! call to regularize_layers_init.
   ! Local variables
@@ -452,11 +455,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
           if (k1 <= 1) exit
           if (k2 <= nkmb) exit
           ! ### The 0.6 here should be adjustable?  It gives 20% overlap for now.
-          Rcv_min_det = GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2))
+          Rcv_min_det = US%R_to_kg_m3*(GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2)))
           if (k2 < nz) then
-            Rcv_max_det = GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2))
+            Rcv_max_det = US%R_to_kg_m3*(GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2)))
           else
-            Rcv_max_det = GV%Rlay(nz) + 0.6*Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1))
+            Rcv_max_det = US%R_to_kg_m3*(GV%Rlay(nz) + 0.6*Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1)))
           endif
           if (Rcv(i,k1) > Rcv_max_det) &
             exit ! All shallower interior layers are too light for detrainment.

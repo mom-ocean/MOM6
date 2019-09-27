@@ -589,8 +589,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
       else  ! Use Rlay and/or the coordinate density as density variables.
         Rhtot = 0.0
         do k=nz,K2,-1
-          oldfn = Rhtot - GV%Rlay(k)*htot
-          Dfn = (GV%Rlay(k) - GV%Rlay(k-1))*(h_at_vel(i,k)+htot)
+          oldfn = Rhtot - US%R_to_kg_m3*GV%Rlay(k)*htot
+          Dfn = (US%R_to_kg_m3*GV%Rlay(k) - US%R_to_kg_m3*GV%Rlay(k-1))*(h_at_vel(i,k)+htot)
 
           if (oldfn >= ustarsq) then
             cycle
@@ -601,7 +601,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           endif
 
           htot = htot + Dh
-          Rhtot = Rhtot + GV%Rlay(k)*Dh
+          Rhtot = Rhtot + US%R_to_kg_m3*GV%Rlay(k)*Dh
         enddo
         if (nkml>0) then
           do k=nkmb,2,-1
@@ -621,7 +621,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           enddo
           if (Rhtot - Rml_vel(i,1)*htot < ustarsq) htot = htot + h_at_vel(i,1)
         else
-          if (Rhtot - GV%Rlay(1)*htot < ustarsq) htot = htot + h_at_vel(i,1)
+          if (Rhtot - US%R_to_kg_m3*GV%Rlay(1)*htot < ustarsq) htot = htot + h_at_vel(i,1)
         endif
       endif ! use_BBL_EOS
 
@@ -1250,7 +1250,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
                 gHprime = g_H_Rho0 * (dR_dT(I) * (T_lay*htot(I) - Thtot(I)) + &
                                       dR_dS(I) * (S_lay*htot(I) - Shtot(I)))
               else
-                gHprime = g_H_Rho0 * (GV%Rlay(k)*htot(I) - Rhtot(I))
+                gHprime = g_H_Rho0 * (US%R_to_kg_m3*GV%Rlay(k)*htot(I) - Rhtot(I))
               endif
 
               if (gHprime > 0.0) then
@@ -1282,7 +1282,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
             Thtot(I) = Thtot(I) + 0.5 * (h(i,j,k)*tv%T(i,j,k) + h(i+1,j,k)*tv%T(i+1,j,k))
             Shtot(I) = Shtot(I) + 0.5 * (h(i,j,k)*tv%S(i,j,k) + h(i+1,j,k)*tv%S(i+1,j,k))
           else
-            Rhtot(i) = Rhtot(i) + 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%Rlay(k)
+            Rhtot(i) = Rhtot(i) + 0.5 * (h(i,j,k) + h(i+1,j,k)) * US%R_to_kg_m3*GV%Rlay(k)
           endif
         endif ; enddo
       enddo ; endif
@@ -1392,7 +1392,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
         else  ! Use Rlay as the density variable.
           Rhtot = 0.0
           do k=1,nz-1
-            Rlay = GV%Rlay(k) ; Rlb = GV%Rlay(k+1)
+            Rlay = US%R_to_kg_m3*GV%Rlay(k) ; Rlb = US%R_to_kg_m3*GV%Rlay(k+1)
 
             oldfn = Rlay*htot(i) - Rhtot(i)
             if (oldfn >= ustarsq) exit
@@ -1407,7 +1407,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
             htot(i) = htot(i) + Dh
             Rhtot(i) = Rhtot(i) + Rlay*Dh
           enddo
-          if (GV%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) &
+          if (US%R_to_kg_m3*GV%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) &
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
@@ -1487,7 +1487,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
                 gHprime = g_H_Rho0 * (dR_dT(i) * (T_lay*htot(i) - Thtot(i)) + &
                                       dR_dS(i) * (S_lay*htot(i) - Shtot(i)))
               else
-                gHprime = g_H_Rho0 * (GV%Rlay(k)*htot(i) - Rhtot(i))
+                gHprime = g_H_Rho0 * (US%R_to_kg_m3*GV%Rlay(k)*htot(i) - Rhtot(i))
               endif
 
               if (gHprime > 0.0) then
@@ -1519,7 +1519,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
             Thtot(i) = Thtot(i) + 0.5 * (h(i,j,k)*tv%T(i,j,k) + h(i,j+1,k)*tv%T(i,j+1,k))
             Shtot(i) = Shtot(i) + 0.5 * (h(i,j,k)*tv%S(i,j,k) + h(i,j+1,k)*tv%S(i,j+1,k))
           else
-            Rhtot(i) = Rhtot(i) + 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%Rlay(k)
+            Rhtot(i) = Rhtot(i) + 0.5 * (h(i,j,k) + h(i,j+1,k)) * US%R_to_kg_m3*GV%Rlay(k)
           endif
         endif ; enddo
       enddo ; endif
@@ -1629,7 +1629,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
         else  ! Use Rlay as the density variable.
           Rhtot = 0.0
           do k=1,nz-1
-            Rlay = GV%Rlay(k) ; Rlb = GV%Rlay(k+1)
+            Rlay = US%R_to_kg_m3*GV%Rlay(k) ; Rlb = US%R_to_kg_m3*GV%Rlay(k+1)
 
             oldfn = Rlay*htot(i) - Rhtot(i)
             if (oldfn >= ustarsq) exit
@@ -1644,7 +1644,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
             htot(i) = htot(i) + Dh
             Rhtot = Rhtot + Rlay*Dh
           enddo
-          if (GV%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) &
+          if (US%R_to_kg_m3*GV%Rlay(nz)*htot(i) - Rhtot(i) < ustarsq) &
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
