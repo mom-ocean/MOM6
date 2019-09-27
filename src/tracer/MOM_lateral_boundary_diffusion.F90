@@ -1,6 +1,6 @@
 !> Calculate and apply diffusive fluxes as a parameterization of lateral mixing (non-neutral) by
 !! mesoscale eddies near the top and bottom boundary layers of the ocean.
-module MOM_lateral_boundary_mixing
+module MOM_lateral_boundary_diffusion
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -25,7 +25,7 @@ use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 
 implicit none ; private
 
-public near_boundary_unit_tests, lateral_boundary_mixing, lateral_boundary_mixing_init
+public near_boundary_unit_tests, lateral_boundary_diffusion, lateral_boundary_diffusion_init
 public boundary_k_range
 ! Private parameters to avoid doing string comparisons for bottom or top boundary layer
 integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface bopundary
@@ -33,7 +33,7 @@ integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to th
 #include <MOM_memory.h>
 
 !> Sets parameters for lateral boundary mixing module.
-type, public :: lateral_boundary_mixing_CS ; private
+type, public :: lateral_boundary_diffusion_CS ; private
   integer :: method                                               !< Determine which of the three methods calculate
                                                                   !! and apply near boundary layer fluxes
                                                                   !! 1. bulk-layer approach
@@ -47,40 +47,40 @@ type, public :: lateral_boundary_mixing_CS ; private
   type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure needed to get MLD
   type(diag_ctrl), pointer :: diag => NULL()                      !< A structure that is used to
                                                                   !! regulate the timing of diagnostic output.
-end type lateral_boundary_mixing_CS
+end type lateral_boundary_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40) :: mdl = "MOM_lateral_boundary_mixing"          !< Name of this module
+character(len=40) :: mdl = "MOM_lateral_boundary_diffusion"          !< Name of this module
 
 contains
 
 !> Initialization routine that reads runtime parameters and sets up pointers to other control structures that might be
 !! needed for lateral boundary mixing
-logical function lateral_boundary_mixing_init(Time, G, param_file, diag, diabatic_CSp, CS)
+logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diabatic_CSp, CS)
   type(time_type), target,          intent(in)    :: Time       !< Time structure
   type(ocean_grid_type),            intent(in)    :: G          !< Grid structure
   type(param_file_type),            intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl), target,          intent(inout) :: diag       !< Diagnostics control structure
   type(diabatic_CS),                pointer       :: diabatic_CSp !< KPP control structure needed to get BLD
-  type(lateral_boundary_mixing_CS), pointer       :: CS         !< Lateral boundary mixing control structure
+  type(lateral_boundary_diffusion_CS), pointer       :: CS         !< Lateral boundary mixing control structure
 
   character(len=80)  :: string  ! Temporary strings
   logical :: boundary_extrap
 
   if (ASSOCIATED(CS)) then
-    call MOM_error(FATAL, "lateral_boundary_mixing_init called with associated control structure.")
+    call MOM_error(FATAL, "lateral_boundary_diffusion_init called with associated control structure.")
     return
   endif
 
   ! Log this module and master switch for turning it on/off
   call log_version(param_file, mdl, version, &
        "This module implements lateral boundary  mixing of tracers")
-  call get_param(param_file, mdl, "USE_LATERAL_BOUNDARY_MIXING", lateral_boundary_mixing_init, &
+  call get_param(param_file, mdl, "USE_LATERAL_BOUNDARY_DIFFUSION", lateral_boundary_diffusion_init, &
                  "If true, enables the lateral boundary mixing module.", &
                  default=.false.)
 
-  if (.not. lateral_boundary_mixing_init) then
+  if (.not. lateral_boundary_diffusion_init) then
     return
   endif
 
@@ -100,10 +100,10 @@ logical function lateral_boundary_mixing_init(Time, G, param_file, diag, diabati
                  "1. Bulk layer approach"//&
                  "2. Along layer approach"//&
                  "3. Decomposition on to pressure levels", default=1)
-  call get_param(param_file, mdl, "LBM_BOUNDARY_EXTRAP", boundary_extrap, &
-                 "Use boundary extrapolation in LBM code", &
+  call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
+                 "Use boundary extrapolation in LBD code", &
                  default=.false.)
-  call get_param(param_file, mdl, "LBM_REMAPPING_SCHEME", string, &
+  call get_param(param_file, mdl, "LBD_REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used "//&
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
@@ -111,11 +111,11 @@ logical function lateral_boundary_mixing_init(Time, G, param_file, diag, diabati
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap )
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
 
-end function lateral_boundary_mixing_init
+end function lateral_boundary_diffusion_init
 
 !> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries. Two different methods
 !! Method 1: Calculate fluxes from bulk layer integrated quantities
-subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
+subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   type(ocean_grid_type),                intent(inout) :: G       !< Grid type
   type(verticalGrid_type),              intent(in)    :: GV      !< ocean vertical grid structure
   type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
@@ -126,7 +126,7 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real,                                 intent(in)    :: dt     !< Tracer time step * I_numitts
                                                                 !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),           pointer       :: Reg    !< Tracer registry
-  type(lateral_boundary_mixing_CS),     intent(in)    :: CS      !< Control structure for this module
+  type(lateral_boundary_diffusion_CS),     intent(in)    :: CS      !< Control structure for this module
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: hbl   !< bnd. layer depth [m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
@@ -238,7 +238,7 @@ subroutine lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
   enddo
 
-end subroutine lateral_boundary_mixing
+end subroutine lateral_boundary_diffusion
 
 !< Calculate bulk layer value of a scalar quantity as the thickness weighted average
 real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coefs, method, k_top, zeta_top, k_bot, &
@@ -970,4 +970,4 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
 
 
 end function test_boundary_k_range
-end module MOM_lateral_boundary_mixing
+end module MOM_lateral_boundary_diffusion

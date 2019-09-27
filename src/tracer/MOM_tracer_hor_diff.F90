@@ -23,8 +23,8 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_end
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
-use MOM_lateral_boundary_mixing, only : lateral_boundary_mixing_CS, lateral_boundary_mixing_init
-use MOM_lateral_boundary_mixing, only : lateral_boundary_mixing
+use MOM_lateral_boundary_diffusion, only : lateral_boundary_diffusion_CS, lateral_boundary_diffusion_init
+use MOM_lateral_boundary_diffusion, only : lateral_boundary_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_variables,             only : thermo_var_ptrs
@@ -60,12 +60,12 @@ type, public :: tracer_hor_diff_CS ; private
                                   !! the CFL limit is not violated.
   logical :: use_neutral_diffusion !< If true, use the neutral_diffusion module from within
                                    !! tracer_hor_diff.
-  logical :: use_lateral_boundary_mixing !< If true, use the lateral_boundary_mixing module from within
+  logical :: use_lateral_boundary_diffusion !< If true, use the lateral_boundary_diffusion module from within
                                          !! tracer_hor_diff.
   logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
                                    !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
-  type(lateral_boundary_mixing_CS), pointer :: lateral_boundary_mixing_CSp => NULL() !< Control structure for lateral
+  type(lateral_boundary_diffusion_CS), pointer :: lateral_boundary_diffusion_CSp => NULL() !< Control structure for lateral
                                                                                      !! boundary mixing.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
@@ -390,7 +390,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     endif
   enddo
 
-  if (CS%use_lateral_boundary_mixing) then
+  if (CS%use_lateral_boundary_diffusion) then
 
     if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary mixing (tracer_hordiff)")
 
@@ -410,7 +410,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      call lateral_boundary_mixing(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%lateral_boundary_mixing_CSp)
+      call lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%lateral_boundary_diffusion_CSp)
     enddo ! itt
   endif
 
@@ -1500,10 +1500,10 @@ subroutine tracer_hor_diff_init(Time, G, US, param_file, diag, EOS, diabatic_CSp
                              CS%neutral_diffusion_CSp )
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
-  CS%use_lateral_boundary_mixing = lateral_boundary_mixing_init(Time, G, param_file, diag, diabatic_CSp, &
-                                                                CS%lateral_boundary_mixing_CSp)
+  CS%use_lateral_boundary_diffusion = lateral_boundary_diffusion_init(Time, G, param_file, diag, diabatic_CSp, &
+                                                                CS%lateral_boundary_diffusion_CSp)
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
-       "USE_LATERAL_BOUNDARY_MIXING and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
+       "USE_LATERAL_BOUNDARY_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
