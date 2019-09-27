@@ -101,7 +101,7 @@ subroutine verticalGridInit( param_file, GV, US )
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
   call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_m, &
@@ -143,15 +143,15 @@ subroutine verticalGridInit( param_file, GV, US )
   GV%ke = nk
 
   if (GV%Boussinesq) then
-    GV%H_to_kg_m2 = GV%Rho0 * GV%H_to_m
+    GV%H_to_kg_m2 = US%R_to_kg_m3*GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
     GV%Angstrom_H = GV%m_to_H * GV%Angstrom_m
     GV%H_to_MKS = GV%H_to_m
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
-    GV%m_to_H = GV%Rho0 * GV%kg_m2_to_H
-    GV%H_to_m = GV%H_to_kg_m2 / GV%Rho0
+    GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
+    GV%H_to_m = GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0)
     GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
     GV%H_to_MKS = GV%H_to_kg_m2
   endif

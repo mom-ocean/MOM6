@@ -132,7 +132,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
   Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
   use_EOS = associated(tv%eqn_of_state)
 
@@ -600,7 +600,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
   use_EOS = associated(tv%eqn_of_state)
   Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
 

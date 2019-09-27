@@ -36,9 +36,10 @@ real, parameter :: HMLmax = 0.75 !< Deepest ML as fractional depth of ocean [non
 contains
 
 !> Initialization of thicknesses in 2D Rossby front test
-subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),   intent(in) :: G            !< Grid structure
-  type(verticalGrid_type), intent(in) :: GV           !< Vertical grid structure
+subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< Grid structure
+  type(verticalGrid_type), intent(in)  :: GV          !< Vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -78,7 +79,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
     case (REGRIDDING_LAYER, REGRIDDING_RHO)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / (US%R_to_kg_m3*GV%Rho0) ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -89,7 +90,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / (US%R_to_kg_m3*GV%Rho0) ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -205,7 +206,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5* (G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
-      dUdT = ( GV%g_Earth*dRho_dT ) / ( f * GV%Rho0 )
+      dUdT = ( GV%g_Earth*dRho_dT ) / ( f * US%R_to_kg_m3*GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = US%L_to_m*dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.

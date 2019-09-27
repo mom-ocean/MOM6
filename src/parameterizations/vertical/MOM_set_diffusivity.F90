@@ -279,7 +279,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  I_Rho0     = 1.0 / GV%Rho0
+  I_Rho0     = 1.0 / (US%R_to_kg_m3*GV%Rho0)
   ! ### Dimensional parameters
   if (CS%answers_2018) then
     kappa_dt_fill = US%m_to_Z**2 * 1.e-3 * 7200.
@@ -509,7 +509,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_lay(i,k)) ! Floor of Kd_min*rho0/F_Ri
         Kd_lay(i,j,k) = max(Kd_lay(i,j,k) , &  ! Apply floor to Kd
-                            dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_lay(i,k) + Omega2))))
+                            dissip * (CS%FluxRi_max / (US%R_to_kg_m3*GV%Rho0 * (N2_lay(i,k) + Omega2))))
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
@@ -517,13 +517,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_int(i,K)) ! Floor of Kd_min*rho0/F_Ri
         Kd_int(i,j,K) = max(Kd_int(i,j,K) , &  ! Apply floor to Kd
-                            dissip * (CS%FluxRi_max / (GV%Rho0 * (N2_int(i,K) + Omega2))))
+                            dissip * (CS%FluxRi_max / (US%R_to_kg_m3*GV%Rho0 * (N2_int(i,K) + Omega2))))
       enddo ; enddo ; endif
     endif
 
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
-        dd%Kd_Work(i,j,k) = GV%Rho0 * Kd_lay(i,j,k) * N2_lay(i,k) * &
+        dd%Kd_Work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * Kd_lay(i,j,k) * N2_lay(i,k) * &
                             GV%H_to_Z*h(i,j,k)  ! Watt m-2 s = kg s-3
       enddo ; enddo
     endif
@@ -690,9 +690,9 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   I_dt      = 1.0 / dt
   Omega2    = CS%omega**2
   H_neglect = GV%H_subroundoff
-  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / (US%R_to_kg_m3*GV%Rho0)
   if (CS%answers_2018) then
-    I_Rho0    = 1.0 / GV%Rho0
+    I_Rho0    = 1.0 / (US%R_to_kg_m3*GV%Rho0)
     G_IRho0 = (US%L_to_Z**2 * GV%g_Earth) * I_Rho0
   else
     G_IRho0 = G_Rho0
@@ -890,7 +890,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / (US%R_to_kg_m3*GV%Rho0)
   H_neglect = GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -1177,8 +1177,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   TKE_Ray = 0.0 ; Rayleigh_drag = .false.
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
 
-  I_Rho0 = 1.0/GV%Rho0
-  R0_g = GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)
+  I_Rho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
+  R0_g = US%R_to_kg_m3*GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)
 
   do K=2,nz ; Rint(K) = 0.5*(US%R_to_kg_m3*GV%Rlay(k-1)+US%R_to_kg_m3*GV%Rlay(k)) ; enddo
 
@@ -1394,7 +1394,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
-  I_Rho0 = 1.0/GV%Rho0
+  I_Rho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
   cdrag_sqrt = sqrt(CS%cdrag)
 
   do i=G%isc,G%iec ! Developed in single-column mode
@@ -1818,7 +1818,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   enddo
 
   if (CS%bulkmixedlayer) then
-    g_R0 = GV%g_Earth / GV%Rho0
+    g_R0 = GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
     kmb = GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
@@ -2122,7 +2122,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
   CS%dissip_N2 = 0.0
   if (CS%FluxRi_max > 0.0) &
-    CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
+    CS%dissip_N2 = CS%dissip_Kd_min * US%R_to_kg_m3*GV%Rho0 / CS%FluxRi_max
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
       'Diapycnal diffusivity of layers (as set)', 'm2 s-1', &

@@ -318,7 +318,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
        case ("soliton"); call soliton_initialize_thickness(h, G, GV, US)
        case ("phillips"); call Phillips_initialize_thickness(h, G, GV, US, PF, &
                                    just_read_params=just_read)
-       case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, &
+       case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, US, &
                                        PF, just_read_params=just_read)
        case ("USER"); call user_initialize_thickness(h, G, GV, PF, &
                                just_read_params=just_read)
@@ -952,7 +952,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
   max_itt = 10
   Boussinesq = GV%Boussinesq
   I_gEarth = 1.0 / (GV%mks_g_Earth)
-  Hm_rho_to_Pa = GV%mks_g_Earth * GV%H_to_m ! = GV%H_to_Pa / GV%Rho0
+  Hm_rho_to_Pa = GV%mks_g_Earth * GV%H_to_m ! = GV%H_to_Pa / (US%R_to_kg_m3*GV%Rho0)
 
   if (Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
@@ -995,7 +995,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
       do k=1,nz ; do j=js,je ; do i=is,ie
         h(i,j,k) = (h(i,j,k) * US%R_to_kg_m3*GV%Rlay(k)) * Hm_rho_to_Pa * GV%kg_m2_to_H**2
         ! This is mathematically equivalent to
-        !  h(i,j,k) = h(i,j,k) * (US%R_to_kg_m3*GV%Rlay(k) / GV%Rho0)
+        !  h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
       enddo ; enddo ; enddo
     endif
   endif
@@ -1154,7 +1154,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV, GV%mks_g_Earth*US%Z_to_m, G%bathyT(i,j), &
+    call cut_off_column_top(GV%ke, tv, GV, US, GV%mks_g_Earth*US%Z_to_m, G%bathyT(i,j), &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
                z_tol=1.0e-5*US%m_to_Z)
@@ -1165,11 +1165,12 @@ end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
+subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, &
                               T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS, z_tol)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real,                  intent(in)    :: G_earth !< Gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
   real,                  intent(in)    :: depth !< Depth of ocean column [Z ~> m].
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed [Z ~> m].
@@ -1203,7 +1204,7 @@ subroutine cut_off_column_top(nk, tv, GV, G_earth, depth, min_thickness, &
   e_top = e(1)
   do k=1,nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, &
+                                        P_t, p_surf, US%R_to_kg_m3*GV%Rho0, G_earth, tv%eqn_of_state, &
                                         P_b, z_out, z_tol=z_tol)
     if (z_out>=e(K)) then
       ! Imposed pressure was less that pressure at top of cell
@@ -2406,15 +2407,15 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
     S_t(k) = 35.-(0./500.)*e(k)
     S(k)   = 35.+(0./500.)*z(k)
     S_b(k) = 35.-(0./500.)*e(k+1)
-    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%mks_g_Earth*z(k), &
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -US%R_to_kg_m3*GV%Rho0*GV%mks_g_Earth*z(k), &
                            rho(k), tv%eqn_of_state)
     P_tot = P_tot + GV%mks_g_Earth * rho(k) * h(k)
   enddo
 
   P_t = 0.
   do k = 1, nk
-    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, 0.5*P_tot, GV%Rho0, GV%mks_g_Earth, tv%eqn_of_state, P_b, z_out)
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
+                                        US%R_to_kg_m3*GV%Rho0, GV%mks_g_Earth, tv%eqn_of_state, P_b, z_out)
     write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
     P_t = P_b
   enddo
@@ -2424,8 +2425,8 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   write(0,*) ' ==================================================================== '
   write(0,*) ''
   write(0,*) h
-  call cut_off_column_top(nk, tv, GV, GV%mks_g_Earth, -e(nk+1), GV%Angstrom_H, &
-               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
+  call cut_off_column_top(nk, tv, GV, US, GV%mks_g_Earth, -e(nk+1), GV%Angstrom_H, &
+                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 
 end subroutine MOM_state_init_tests

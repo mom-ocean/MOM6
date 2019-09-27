@@ -789,7 +789,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   max_itt = 20
 
   h_tt_min = 0.0
-  I_dtrho = 0.0 ; if (dt*GV%Rho0 > 0.0) I_dtrho = (US%Z_to_m**3*US%s_to_T**3) / (dt*GV%Rho0)
+  I_dtrho = 0.0 ; if (dt*GV%Rho0 > 0.0) I_dtrho = (US%Z_to_m**3*US%s_to_T**3) / (dt*US%R_to_kg_m3*GV%Rho0)
   vstar_unit_scale = US%m_to_Z * US%T_to_s
 
   MLD_guess = MLD_io
@@ -863,9 +863,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
 
       !/ Apply MStar to get mech_TKE
       if ((CS%answers_2018) .and. (CS%mstar_scheme==Use_Fixed_MStar)) then
-        mech_TKE = (dt*MSTAR_total*GV%Rho0) * u_star**3
+        mech_TKE = (dt*MSTAR_total*US%R_to_kg_m3*GV%Rho0) * u_star**3
       else
-        mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
+        mech_TKE = MSTAR_total * (dt*US%R_to_kg_m3*GV%Rho0* u_star**3)
       endif
 
       if (CS%TKE_diagnostics) then
@@ -970,7 +970,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
           ! on a curve fit from the data of Wang (GRL, 2003).
           ! Note:         Ro = 1.0 / sqrt(0.5 * dt * Rho0 * (absf*htot)**3 / conv_PErel)
           nstar_FC = CS%nstar * conv_PErel / (conv_PErel + 0.2 * &
-                     sqrt(0.5 * dt * GV%Rho0 * (absf*(htot*GV%H_to_Z))**3 * conv_PErel))
+                     sqrt(0.5 * dt * US%R_to_kg_m3*GV%Rho0 * (absf*(htot*GV%H_to_Z))**3 * conv_PErel))
         endif
 
         if (debug) nstar_k(K) = nstar_FC

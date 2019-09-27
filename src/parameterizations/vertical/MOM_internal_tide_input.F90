@@ -185,7 +185,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
+  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / (US%R_to_kg_m3*GV%Rho0)
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -403,7 +403,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
       itide%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
-    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
+    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*US%R_to_kg_m3*GV%Rho0*&
          kappa_itides * US%Z_to_m**2*itide%h2(i,j) * itide%tideamp(i,j)**2
   enddo ; enddo
 

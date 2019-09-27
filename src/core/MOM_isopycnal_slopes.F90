@@ -121,7 +121,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = (US%L_to_Z*L_to_Z*GV%g_Earth) / GV%Rho0
+  G_Rho0 = (US%L_to_Z*L_to_Z*GV%g_Earth) / (US%R_to_kg_m3*GV%Rho0)
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.

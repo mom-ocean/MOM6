@@ -2678,7 +2678,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
         call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, &
                                Rho_conv, tv%eqn_of_state)
       else
-        Rho_conv=GV%Rho0
+        Rho_conv = US%R_to_kg_m3*GV%Rho0
       endif
       IgR0 = 1.0 / (Rho_conv * GV%mks_g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
@@ -2914,7 +2914,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
        if (G%mask2dT(i,j)>0.) then
          ! instantaneous melt_potential [J m-2]
-         sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%GV%Rho0 * delT(i)
+         sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%US%R_to_kg_m3*GV%Rho0 * delT(i)
        endif
       enddo
     enddo ! end of j loop

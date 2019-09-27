@@ -269,7 +269,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
-  Rho0x400_G = 400.0*(GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
+  Rho0x400_G = 400.0*(US%R_to_kg_m3*GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -1134,7 +1134,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
     Jsq = js-1 ; Isq = is-1
   endif ; endif
 
-  Rho0x400_G = 400.0*(GV%Rho0/(US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
+  Rho0x400_G = 400.0*(US%R_to_kg_m3*GV%Rho0/(US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_Z = US%L_to_Z * sqrt(CS%cdrag)
@@ -1144,7 +1144,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
   dt_Rho0 = US%T_to_s*dt_in_T / GV%H_to_kg_m2
   h_neglect = GV%H_subroundoff
   h_tiny = 2.0*GV%Angstrom_H + h_neglect
-  g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / GV%Rho0
+  g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / (US%R_to_kg_m3*GV%Rho0)
 
   if (associated(forces%frac_shelf_u) .neqv. associated(forces%frac_shelf_v)) &
     call MOM_error(FATAL, "set_viscous_ML: one of forces%frac_shelf_u and "//&

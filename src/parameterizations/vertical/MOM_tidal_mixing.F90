@@ -480,7 +480,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
       utide = CS%tideamp(i,j)
       ! Compute the fixed part of internal tidal forcing.
       ! The units here are [kg Z3 m-3 T-2 ~> J m-2 = kg s-2] here.
-      CS%TKE_itidal(i,j) = 0.5 * CS%kappa_h2_factor * GV%Rho0 * &
+      CS%TKE_itidal(i,j) = 0.5 * CS%kappa_h2_factor * US%R_to_kg_m3*GV%Rho0 * &
            CS%kappa_itides * CS%h2(i,j) * utide*utide
     enddo ; enddo
 
@@ -1021,7 +1021,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     htot(i) = htot(i) + GV%H_to_Z*h(i,j,k)
   enddo ; enddo
 
-  I_Rho0 = 1.0/GV%Rho0
+  I_Rho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
 
   use_Polzin = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
                 (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09)) .or. &
@@ -1255,7 +1255,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
         if (k<nz) dd%Kd_itidal(i,j,K+1) = dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_Itidal_work)) &
-        dd%Kd_itidal_work(i,j,k) = GV%Rho0 * TKE_itide_lay
+        dd%Kd_itidal_work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * TKE_itide_lay
       if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
       if (associated(dd%Kd_Niku)) then
@@ -1268,7 +1268,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
       endif
 !     if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (associated(dd%Kd_Niku_work)) &
-        dd%Kd_Niku_work(i,j,k) = GV%Rho0 * TKE_Niku_lay
+        dd%Kd_Niku_work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * TKE_Niku_lay
 
       if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
@@ -1279,7 +1279,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
         if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_lowmode_work)) &
-        dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
+        dd%Kd_lowmode_work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
     enddo ; enddo
@@ -1343,7 +1343,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
         if (k<nz) dd%Kd_itidal(i,j,K+1) = dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_Itidal_work)) &
-        dd%Kd_itidal_work(i,j,k) = GV%Rho0 * TKE_itide_lay
+        dd%Kd_itidal_work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * TKE_itide_lay
       if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
       if (associated(dd%Kd_Niku)) then
@@ -1355,7 +1355,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
         if (k<nz) dd%Kd_Niku(i,j,K+1) = dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
       endif
    !  if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
-      if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = GV%Rho0 * TKE_Niku_lay
+      if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * TKE_Niku_lay
 
       if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
@@ -1366,7 +1366,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
         if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_lowmode_work)) &
-        dd%Kd_lowmode_work(i,j,k) = GV%Rho0 * TKE_lowmode_lay
+        dd%Kd_lowmode_work(i,j,k) = US%R_to_kg_m3*GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
     enddo ; enddo

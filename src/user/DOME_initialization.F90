@@ -290,7 +290,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  g_prime_tot = (GV%g_Earth / GV%Rho0)*2.0
+  g_prime_tot = (GV%g_Earth / (US%R_to_kg_m3*GV%Rho0))*2.0
   Def_Rad = US%L_to_m*sqrt(D_edge*g_prime_tot) / (1.0e-4*US%T_to_s * 1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*US%m_to_L*Def_Rad) * GV%Z_to_H
 

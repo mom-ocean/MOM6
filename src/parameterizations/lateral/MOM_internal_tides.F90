@@ -202,7 +202,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
-  I_rho0 = 1.0 / GV%Rho0
+  I_rho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
   dt_in_T = US%s_to_T*dt
   cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
 
@@ -2307,7 +2307,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     h2(i,j) = min(0.01*(G%bathyT(i,j))**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here
     ! will be multiplied by N and En to get into [W m-2]
-    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0 * US%L_to_Z*kappa_itides * h2(i,j)
+    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*US%R_to_kg_m3*GV%Rho0 * US%L_to_Z*kappa_itides * h2(i,j)
   enddo ; enddo
 
   deallocate(h2)

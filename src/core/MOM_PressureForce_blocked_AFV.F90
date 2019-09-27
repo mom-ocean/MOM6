@@ -515,9 +515,9 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
-  I_Rho0 = US%m_s_to_L_T**2 / GV%Rho0
+  I_Rho0 = US%m_s_to_L_T**2 / (US%R_to_kg_m3*GV%Rho0)
   g_Earth_z = US%L_T_to_m_s**2 * GV%g_Earth
-  G_Rho0 = GV%g_Earth / GV%Rho0
+  G_Rho0 = GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
   rho_ref = CS%Rho0
 
   if (CS%tides) then

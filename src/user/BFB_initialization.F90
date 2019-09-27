@@ -56,14 +56,14 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file, eqn_of_state)
           "SST at the suothern edge of the domain.", units="C", default=20.0)
   call get_param(param_file, mdl, "T_BOT", T_bot, &
                  "Bottom Temp", units="C", default=5.0)
-  rho_top = US%kg_m3_to_R*GV%rho0 + drho_dt*SST_s
-  rho_bot = US%kg_m3_to_R*GV%rho0 + drho_dt*T_bot
+  rho_top = GV%Rho0 + drho_dt*SST_s
+  rho_bot = GV%Rho0 + drho_dt*T_bot
   nz = GV%ke
 
   do k = 1,nz
     Rlay(k) = (rho_bot - rho_top)/(nz-1)*real(k-1) + rho_top
     if (k >1) then
-      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth / (US%kg_m3_to_R*GV%rho0)
+      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth / (GV%Rho0)
     else
       g_prime(k) = GV%g_Earth
     endif

@@ -460,9 +460,9 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   !   The -GV%Rho0 changes the sign convention of the flux and changes the units
   ! of the flux from [Conc. m s-1] to [Conc. kg m-2 s-1].
   call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, &
-                                 CFC11_flux, -GV%Rho0, idim=idim, jdim=jdim)
+                                 CFC11_flux, -G%US%R_to_kg_m3*GV%Rho0, idim=idim, jdim=jdim)
   call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, &
-                                 CFC12_flux, -GV%Rho0, idim=idim, jdim=jdim)
+                                 CFC12_flux, -G%US%R_to_kg_m3*GV%Rho0, idim=idim, jdim=jdim)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.

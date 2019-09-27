@@ -724,8 +724,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   dtbt = dt_in_T * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
-  mass_accel_to_Z = US%m_to_L*US%T_to_s**2 * US%m_to_Z / GV%Rho0
-  mass_to_Z = US%m_to_Z / GV%Rho0
+  mass_accel_to_Z = US%m_to_L*US%T_to_s**2 * US%m_to_Z / (US%R_to_kg_m3*GV%Rho0)
+  mass_to_Z = US%m_to_Z / (US%R_to_kg_m3*GV%Rho0)
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -4345,10 +4345,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (US%R_to_kg_m3*GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (US%R_to_kg_m3*GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 

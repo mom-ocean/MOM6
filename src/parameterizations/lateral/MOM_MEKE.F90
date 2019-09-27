@@ -675,7 +675,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
                  (G%dF_dy(i,j) + beta_topo_y)**2 )
 
-    I_H = US%L_to_m*GV%Rho0 * I_mass(i,j)
+    I_H = US%L_to_m*US%R_to_kg_m3*GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
       ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E

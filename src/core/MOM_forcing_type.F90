@@ -336,7 +336,7 @@ contains
 !! for optimization purposes. The 2d (i,j) wrapper is the next subroutine below.
 !! This routine multiplies fluxes by dt, so that the result is an accumulation of fluxes
 !! over a time step.
-subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                           &
+subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               &
                   FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
                   aggregate_FW, nonpenSW, netmassInOut_rate,net_Heat_Rate,      &
@@ -344,6 +344,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
   type(ocean_grid_type),    intent(in)    :: G              !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV             !< ocean vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US             !< A dimensional unit scaling type
   type(forcing),            intent(inout) :: fluxes         !< structure containing pointers to possible
                                                             !! forcing fields. NULL unused fields.
   type(optics_type),        pointer       :: optics         !< pointer to optics
@@ -433,7 +434,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   !}BGR
 
   Ih_limit  = 1.0 / FluxRescaleDepth
-  Irho0     = 1.0 / GV%Rho0
+  Irho0     = 1.0 / (US%R_to_kg_m3*GV%Rho0)
   I_Cp      = 1.0 / fluxes%C_p
   J_m2_to_H = 1.0 / (GV%H_to_kg_m2 * fluxes%C_p)
 
@@ -804,13 +805,14 @@ end subroutine extractFluxes1d
 !> 2d wrapper for 1d extract fluxes from surface fluxes type.
 !! This subroutine extracts fluxes from the surface fluxes type. It multiplies the
 !! fluxes by dt, so that the result is an accumulation of the fluxes over a time step.
-subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
+subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth, &
                            useRiverHeatContent, useCalvingHeatContent, h, T, &
                            netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv, &
                            aggregate_FW)
 
   type(ocean_grid_type),            intent(in)    :: G              !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV             !< ocean vertical grid structure
+  type(unit_scale_type),            intent(in)    :: US             !< A dimensional unit scaling type
   type(forcing),                    intent(inout) :: fluxes         !< structure containing pointers to forcing.
   type(optics_type),                pointer       :: optics         !< pointer to optics
   integer,                          intent(in)    :: nsw            !< number of bands of penetrating SW
@@ -854,7 +856,7 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt, FluxRescaleDepth, &
 !$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
 !$OMP                                  aggregate_FW)
   do j=G%jsc, G%jec
-    call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                      &
+    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,                      &
             FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent,&
             h(:,j,:), T(:,j,:), netMassInOut(:,j), netMassOut(:,j),              &
             net_heat(:,j), net_salt(:,j), pen_SW_bnd(:,:,j), tv, aggregate_FW)
@@ -916,7 +918,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
 
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = (GV%g_Earth*US%m_to_Z * GV%H_to_m*US%T_to_s) / GV%Rho0
+  GoRho       = (GV%g_Earth*US%m_to_Z * GV%H_to_m*US%T_to_s) / (US%R_to_kg_m3*GV%Rho0)
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -929,7 +931,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
   ! this call returns the rate because dt=1
-  call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                                 &
+  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,                         &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
                 netSalt, penSWbnd, tv, .false., skip_diags=skip_diags)

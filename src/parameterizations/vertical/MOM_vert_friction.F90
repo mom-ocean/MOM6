@@ -215,7 +215,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
   endif
   dt_Rho0 = US%m_s_to_L_T*US%T_to_s * dt_in_T / GV%H_to_kg_m2
   dt_Z_to_H = dt_in_T*GV%Z_to_H
-  Rho0 = GV%Rho0
+  Rho0 = US%R_to_kg_m3*GV%Rho0
   h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt_in_T
 
@@ -1340,7 +1340,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt_in_T, G, GV, U
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
   H_report = 6.0 * GV%Angstrom_H
-  dt_Rho0 = US%T_to_s*dt_in_T / GV%Rho0
+  dt_Rho0 = US%T_to_s*dt_in_T / (US%R_to_kg_m3*GV%Rho0)
 
   if (len_trim(CS%u_trunc_file) > 0) then
     !$OMP parallel do default(shared) private(trunc_any,CFL)

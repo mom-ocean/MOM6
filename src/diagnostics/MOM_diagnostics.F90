@@ -842,7 +842,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
+                              z_top, z_bot, 0.0, US%R_to_kg_m3*GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -2006,7 +2006,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
 
   id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
-       'kg m-3', cmor_field_name='rhozero', &
+       'kg m-3', cmor_field_name='rhozero', conversion=US%R_to_kg_m3, &
        cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
        cmor_long_name='reference sea water density for boussinesq approximation')
   if (id > 0) call post_data(id, GV%Rho0, diag, .true.)
