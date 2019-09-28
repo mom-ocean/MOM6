@@ -25,7 +25,7 @@ public geothermal, geothermal_init, geothermal_end
 type, public :: geothermal_CS ; private
   real    :: dRcv_dT_inplace !<   The value of dRcv_dT above which (dRcv_dT is
                              !! negative) the water is heated in place instead
-                             !! of moving upward between layers [kg m-3 degC-1].
+                             !! of moving upward between layers [R degC-1 ~> kg m-3 degC-1].
   real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [W m-2].
   real    :: geothermal_thick !< The thickness over which geothermal heating is
                              !! applied [m] (not [H]).
@@ -76,20 +76,20 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat [H degC ~> m degC or kg degC m-2]
     h_geo_rem, & ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
-    Rcv_BL,    & ! coordinate density in the deepest variable density layer [kg m-3]
+    Rcv_BL,    & ! coordinate density in the deepest variable density layer [R ~> kg m-3]
     p_ref        ! coordiante densities reference pressure [Pa]
 
   real, dimension(2) :: &
     T2, S2, &   ! temp and saln in the present and target layers [degC] and [ppt]
-    dRcv_dT_, & ! partial derivative of coordinate density wrt temp [kg m-3 degC-1]
-    dRcv_dS_    ! partial derivative of coordinate density wrt saln [kg m-3 ppt-1]
+    dRcv_dT_, & ! partial derivative of coordinate density wrt temp [R degC-1 ~> kg m-3 degC-1]
+    dRcv_dS_    ! partial derivative of coordinate density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
 
   real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
-  real :: Rcv           ! coordinate density of present layer [kg m-3]
-  real :: Rcv_tgt       ! coordinate density of target layer [kg m-3]
-  real :: dRcv          ! difference between Rcv and Rcv_tgt [kg m-3]
+  real :: Rcv           ! coordinate density of present layer [R ~> kg m-3]
+  real :: Rcv_tgt       ! coordinate density of target layer [R ~> kg m-3]
+  real :: dRcv          ! difference between Rcv and Rcv_tgt [R ~> kg m-3]
   real :: dRcv_dT       ! partial derivative of coordinate density wrt temp
-                        ! in the present layer [kg m-3 degC-1]; usually negative
+                        ! in the present layer [R degC-1 ~> kg m-3 degC-1]; usually negative
   real :: h_heated      ! thickness that is being heated [H ~> m or kg m-2]
   real :: heat_avail    ! heating available for the present layer [degC H ~> degC m or degC kg m-2]
   real :: heat_in_place ! heating to warm present layer w/o movement between layers
@@ -197,7 +197,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 
     if (nkmb > 0) then
       call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_Ref(:), &
-                             Rcv_BL(:), isj, iej-isj+1, tv%eqn_of_state)
+                             Rcv_BL(:), isj, iej-isj+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
     else
       Rcv_BL(:) = -1.0
     endif
@@ -229,25 +229,25 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
-          elseif ((k==nkmb+1) .or. (US%R_to_kg_m3*GV%Rlay(k-1) < Rcv_BL(i))) then
+          elseif ((k==nkmb+1) .or. (GV%Rlay(k-1) < Rcv_BL(i))) then
             ! Add enough heat to match the lowest buffer layer density.
             k_tgt = nkmb
             Rcv_tgt = Rcv_BL(i)
           else
             ! Add enough heat to match the target density of layer k-1.
             k_tgt = k-1
-            Rcv_tgt = US%R_to_kg_m3*GV%Rlay(k-1)
+            Rcv_tgt = GV%Rlay(k-1)
           endif
 
           if (k<=nkmb .or. nkmb<=0) then
             Rcv = 0.0 ; dRcv_dT = 0.0 ! Is this OK?
           else
             call calculate_density(tv%T(i,j,k), tv%S(i,j,k), tv%P_Ref, &
-                         Rcv, tv%eqn_of_state)
+                         Rcv, tv%eqn_of_state, scale=US%kg_m3_to_R)
             T2(1) = tv%T(i,j,k) ; S2(1) = tv%S(i,j,k)
             T2(2) = tv%T(i,j,k_tgt) ; S2(2) = tv%S(i,j,k_tgt)
             call calculate_density_derivs(T2(:), S2(:), p_Ref(:), &
-                         dRcv_dT_, dRcv_dS_, 1, 2, tv%eqn_of_state)
+                         dRcv_dT_, dRcv_dS_, 1, 2, tv%eqn_of_state, scale=US%kg_m3_to_R)
             dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2))
           endif
 
@@ -258,13 +258,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
           elseif (dRcv_dT <= CS%dRcv_dT_inplace) then
             ! This is the option that usually applies in isopycnal coordinates.
             heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * &
-                                            ((US%R_to_kg_m3*GV%Rlay(k)-Rcv) / dRcv_dT)))
+                                            ((GV%Rlay(k)-Rcv) / dRcv_dT)))
             heat_trans = heat_avail - heat_in_place
           else
             ! wt_in_place should go from 0 to 1.
             wt_in_place = (CS%dRcv_dT_inplace - dRcv_dT) / CS%dRcv_dT_inplace
             heat_in_place = max(wt_in_place*heat_avail, &
-                                h(i,j,k) * ((US%R_to_kg_m3*GV%Rlay(k)-Rcv) / dRcv_dT) )
+                                h(i,j,k) * ((GV%Rlay(k)-Rcv) / dRcv_dT) )
             heat_trans = heat_avail - heat_in_place
           endif
 
@@ -373,10 +373,11 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 end subroutine geothermal
 
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
-subroutine geothermal_init(Time, G, GV, param_file, diag, CS)
+subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
@@ -423,7 +424,7 @@ subroutine geothermal_init(Time, G, GV, param_file, diag, CS)
                  "The value of drho_dT above which geothermal heating "//&
                  "simply heats water in place instead of moving it between "//&
                  "isopycnal layers.  This must be negative.", &
-                 units="kg m-3 K-1",  default=-0.01)
+                 units="kg m-3 K-1", scale=US%kg_m3_to_R, default=-0.01)
   if (CS%dRcv_dT_inplace >= 0.0) call MOM_error(FATAL, "geothermal_init: "//&
          "GEOTHERMAL_DRHO_DT_INPLACE must be negative.")
 

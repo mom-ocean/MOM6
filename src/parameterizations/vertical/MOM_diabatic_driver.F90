@@ -3692,7 +3692,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! initialize the geothermal heating module
   if (CS%use_geothermal) &
-    call geothermal_init(Time, G, GV, param_file, diag, CS%geothermal_CSp)
+    call geothermal_init(Time, G, GV, US, param_file, diag, CS%geothermal_CSp)
 
   ! initialize module for internal tide induced mixing
   if (CS%use_int_tides) then
