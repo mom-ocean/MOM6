@@ -37,12 +37,12 @@ type, public :: int_tide_input_CS ; private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                         !! regulate the timing of diagnostic output.
   real :: TKE_itide_max !< Maximum Internal tide conversion
-                        !! available to mix above the BBL [W m-2]
+                        !! available to mix above the BBL [R m3 s-3 ~> W m-2]
   real :: kappa_fill    !< Vertical diffusivity used to interpolate sensible values
                         !! of T & S into thin layers [Z2 T-1 ~> m2 s-1].
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
-            !< The time-invariant field that enters the TKE_itidal input calculation [J m-2].
+            !< The time-invariant field that enters the TKE_itidal input calculation [R m3 s-2 ~> J m-2].
   character(len=200) :: inputdir !< The directory for input files.
 
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
@@ -120,7 +120,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * US%s_to_T*sqrt(N2_bot(i,j))
-    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
+    itide%TKE_itidal_input(i,j) = US%R_to_kg_m3*min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
   enddo ; enddo
 
   if (CS%int_tide_source_test) then
@@ -167,25 +167,25 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
                                                                  !! ocean bottom [s-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(G)+1) :: &
-    dRho_int      ! The unfiltered density differences across interfaces.
+    dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
   real, dimension(SZI_(G)) :: &
     pres, &       ! The pressure at each interface [Pa].
     Temp_int, &   ! The temperature at each interface [degC].
     Salin_int, &  ! The salinity at each interface [ppt].
-    drho_bot, &
+    drho_bot, &   ! The density difference at the bottom of a layer [R ~> kg m-3]
     h_amp, &      ! The amplitude of topographic roughness [Z ~> m].
     hb, &         ! The depth below a layer [Z ~> m].
     z_from_bot, & ! The height of a layer center above the bottom [Z ~> m].
-    dRho_dT, &    ! The partial derivatives of density with temperature and
-    dRho_dS       ! salinity [kg m-3 degC-1] and [kg m-3 ppt-1].
+    dRho_dT, &    ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS       ! The partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
 
   real :: dz_int  ! The thickness associated with an interface [Z ~> m].
   real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
+                  ! density [Z T-2 R-1 ~> m4 s-2 kg-1].
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / (US%R_to_kg_m3*GV%Rho0)
+  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / (GV%Rho0)
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -211,7 +211,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
         call calculate_density_derivs(Temp_int, Salin_int, pres, &
-                 dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state)
+                 dRho_dT(:), dRho_dS(:), is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
         do i=is,ie
           dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                               dRho_dS(i)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
@@ -219,7 +219,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
       enddo
     else
       do K=2,nz ; do i=is,ie
-        dRho_int(i,K) = US%R_to_kg_m3*(GV%Rlay(k) - GV%Rlay(k-1))
+        dRho_int(i,K) = (GV%Rlay(k) - GV%Rlay(k-1))
       enddo ; enddo
     endif
 
@@ -350,7 +350,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                "The maximum internal tide energy source available to mix "//&
                "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
-               units="W m-2",  default=1.0e3)
+               units="W m-2", default=1.0e3, scale=US%kg_m3_to_R)
 
   call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
                "If true, read a file (given by TIDEAMP_FILE) containing "//&
@@ -403,7 +403,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
       itide%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
-    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*US%R_to_kg_m3*GV%Rho0*&
+    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * US%Z_to_m**2*itide%h2(i,j) * itide%tideamp(i,j)**2
   enddo ; enddo
 
