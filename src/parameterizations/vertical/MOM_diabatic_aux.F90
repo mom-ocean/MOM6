@@ -728,29 +728,30 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
                                                      !! or 50 m if missing [Z ~> m]
 
   ! Local variables
-  real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [kg m-3].
+  real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [R ~> kg m-3].
   real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [Pa].
   real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m].
   real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [degC].
   real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [ppt].
-  real, dimension(SZI_(G)) :: rho_subML, rho_deeper ! Densities used in the N2 calculation [kg m-3].
+  real, dimension(SZI_(G)) :: rho_subML, rho_deeper ! Densities used in the N2 calculation [R ~> kg m-3].
   real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
-  real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixedlayer depth [kg m-3].
+  real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixedlayer depth [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [T-2 ~> s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
   logical, dimension(SZI_(G)) :: N2_region_set ! If true, all necessary values for calculating N2
                                                ! have been stored already.
-  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [Z m3 T-2 kg-1 ~> m4 s-2 kg-1].
+  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [Z T-2 R-1 ~> m4 s-2 kg-1].
   real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
+  real :: aFac             ! A nondimensional factor [nondim]
+  real :: ddRho            ! A density difference [R ~> kg m-3]
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
-  real :: aFac, ddRho
 
   id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
 
   id_SQ = -1 ; if (PRESENT(id_MLDsq)) id_SQ = id_MLDsq
 
-  gE_rho0 = US%L_to_Z**2*GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
+  gE_rho0 = US%L_to_Z**2*GV%g_Earth / (GV%Rho0)
   dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -758,7 +759,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   pRef_MLD(:) = 0.0
   do j=js,je
     do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, tv%eqn_of_state)
+    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, &
+                           tv%eqn_of_state, scale=US%kg_m3_to_R)
     do i=is,ie
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
@@ -799,7 +801,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
       do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is, ie-is+1, tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is, ie-is+1, &
+                             tv%eqn_of_state, scale=US%kg_m3_to_R)
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
@@ -822,8 +825,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
       ! endif
-      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, is, ie-is+1, tv%eqn_of_state)
-      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, is, ie-is+1, tv%eqn_of_state)
+      call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, is, ie-is+1, &
+                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, is, ie-is+1, &
+                             tv%eqn_of_state, scale=US%kg_m3_to_R)
       do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
       endif ; enddo
