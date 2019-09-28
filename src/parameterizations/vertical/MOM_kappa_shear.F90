@@ -130,7 +130,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
-    T_2d, S_2d, rho_2d  ! 2-D versions of T, S, and rho.
+    T_2d, S_2d, rho_2d  ! 2-D versions of T [degC], S [ppt], and rho [R ~> kg m-3].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, & ! 2-D version of kappa_io [Z2 T-1 ~> m2 s-1].
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
@@ -194,7 +194,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     if (use_temperature) then ; do k=1,nz ; do i=is,ie
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
     enddo ; enddo ; else ; do k=1,nz ; do i=is,ie
-      rho_2d(i,k) = US%R_to_kg_m3*GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
+      rho_2d(i,k) = GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do i=is,ie
       kappa_2d(i,K) = kappa_io(i,j,K)
@@ -396,7 +396,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
-    T_2d, S_2d, rho_2d  ! 2-D versions of T, S, and rho.
+    T_2d, S_2d, rho_2d  ! 2-D versions of T [degC], S [ppt], and rho [R ~> kg m-3].
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
     kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
@@ -492,7 +492,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 !                   (h(i+1,j,k)**2 + h(i,j+1,k)**2))*GV%H_to_Z * I_hwt
     enddo ; enddo
     if (.not.use_temperature) then ; do k=1,nz ; do I=IsB,IeB
-      rho_2d(I,k) = US%R_to_kg_m3*GV%Rlay(k)
+      rho_2d(I,k) = GV%Rlay(k)
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do I=IsB,IeB
       kappa_2d(I,K,J2) = kv_io(I,J,K) * I_Prandtl
@@ -744,8 +744,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: bd1           ! A term in the denominator of b1.
   real :: d1            ! 1 - c1 in the tridiagonal equations.
   real :: gR0           ! A conversion factor from Z to Pa equal to Rho_0 times g
-                        ! [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
-  real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z m3 kg-1 T-2 ~> m4 kg-1 s-2].
+                        ! [Pa Z-1 = kg m-1 s-2 Z-1 ~> kg m-2 s-2].
+  real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z R-1 T-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
   real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
@@ -761,8 +761,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: dt_inc        !   An increment to dt_test that is being tested [T ~> s].
 
   real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
-  logical :: valid_dt   ! If true, all levels so far exhibit acceptably small
-                        ! changes in k_src.
+  logical :: valid_dt   ! If true, all levels so far exhibit acceptably small changes in k_src.
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
   integer :: ks_kappa, ke_kappa  ! The k-range with nonzero kappas.
@@ -793,7 +792,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%z_to_H*GV%H_to_Pa
-  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / (US%R_to_kg_m3*GV%Rho0)
+  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / (GV%Rho0)
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
@@ -884,11 +883,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
     enddo
     call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, &
-                                  dbuoy_dS, 2, nzc-1, tv%eqn_of_state)
-    do K=2,nzc
-      dbuoy_dT(K) = -g_R0*dbuoy_dT(K)
-      dbuoy_dS(K) = -g_R0*dbuoy_dS(K)
-    enddo
+                                  dbuoy_dS, 2, nzc-1, tv%eqn_of_state, scale=-g_R0*US%kg_m3_to_R)
   else
     do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   endif
