@@ -161,7 +161,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     h_2d, &     !   A 2-d version of h [H ~> m or kg m-2].
     T_2d, &     !   A 2-d version of tv%T [degC].
     S_2d, &     !   A 2-d version of tv%S [ppt].
-    Rcv, &      !   A 2-d version of the coordinate density [kg m-3].
+    Rcv, &      !   A 2-d version of the coordinate density [R ~> kg m-3].
     h_2d_init, &  ! The initial value of h_2d [H ~> m or kg m-2].
     T_2d_init, &  ! THe initial value of T_2d [degC].
     S_2d_init, &  ! The initial value of S_2d [ppt].
@@ -196,7 +196,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   real :: h_det_tot
   real :: max_def_rat
   real :: Rcv_min_det  ! The lightest (min) and densest (max) coordinate density
-  real :: Rcv_max_det  ! that can detrain into a layer [kg m-3].
+  real :: Rcv_max_det  ! that can detrain into a layer [R ~> kg m-3].
 
   real :: int_top, int_bot
   real :: h_predicted
@@ -444,7 +444,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
       call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
         call calculate_density(T_2d(:,k),S_2d(:,k),p_ref_cv,Rcv(:,k), &
-                               is,ie-is+1,tv%eqn_of_state)
+                               is,ie-is+1,tv%eqn_of_state, scale=US%kg_m3_to_R)
       enddo
       call cpu_clock_end(id_clock_EOS)
 
@@ -455,11 +455,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
           if (k1 <= 1) exit
           if (k2 <= nkmb) exit
           ! ### The 0.6 here should be adjustable?  It gives 20% overlap for now.
-          Rcv_min_det = US%R_to_kg_m3*(GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2)))
+          Rcv_min_det = (GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2)))
           if (k2 < nz) then
-            Rcv_max_det = US%R_to_kg_m3*(GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2)))
+            Rcv_max_det = (GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2)))
           else
-            Rcv_max_det = US%R_to_kg_m3*(GV%Rlay(nz) + 0.6*Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1)))
+            Rcv_max_det = (GV%Rlay(nz) + 0.6*Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1)))
           endif
           if (Rcv(i,k1) > Rcv_max_det) &
             exit ! All shallower interior layers are too light for detrainment.
