@@ -131,7 +131,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     dS_kb, &      ! The reference potential density difference across the
                   ! interface between the buffer layers and layer kb [R ~> kg m-3].
     dS_anom_lim, &! The amount by which dS_kb is reduced when limits are
-                  ! applied [kg m-3].
+                  ! applied [R ~> kg m-3].
     I_dSkbp1, &   ! The inverse of the potential density difference across the
                   ! interface below layer kb [R-1 ~> m3 kg-1].
     dtKd_kb, &    ! The diapycnal diffusivity in layer kb times the time step
@@ -1627,7 +1627,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                             ! kb, limited to ensure that it is positive and not
                             ! too much bigger than dS_kb or dS_kbp1 [R ~> kg m-3].
     ddSkb_dE, ddSlay_dE, &  ! The derivatives of dS_kb and dS_Lay with E
-                            ! [kg m-3 H-1 ~> kg m-4 or m-1].
+                            ! [R H-1 ~> kg m-4 or m-1].
     derror_dE, &            ! The derivative of err with E [H ~> m or kg m-2].
     err, &                  ! The "error" whose zero is being sought [H2 ~> m2 or kg2 m-4].
     E_min, E_max, &         ! The minimum and maximum values of E [H ~> m or kg m-2].
@@ -1635,7 +1635,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   real :: err_est           ! An estimate of what err will be [H2 ~> m2 or kg2 m-4].
   real :: eL                ! 1 or 0, depending on whether increases in E lead
                             ! to decreases in the entrainment from below by the
-                            ! deepest buffer layer.
+                            ! deepest buffer layer [nondim].
   real :: fa                ! Temporary variable used to calculate err [nondim].
   real :: fk                ! Temporary variable used to calculate err [H2 ~> m2 or kg2 m-4].
   real :: fm, fr            ! Temporary variables used to calculate err [H ~> m or kg m-2].

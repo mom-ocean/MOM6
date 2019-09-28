@@ -561,10 +561,10 @@ end function find_limited_slope
 !> Find interface positions corresponding to density profile
 function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps_z) result(zi)
   real, dimension(:,:,:), &
-                      intent(in) :: rho   !< potential density in z-space [kg m-3]
+                      intent(in) :: rho   !< potential density in z-space [R ~> kg m-3]
   real, dimension(size(rho,3)), &
                       intent(in) :: zin   !< Input data levels [Z ~> m or m].
-  real, dimension(:), intent(in) :: Rb    !< target interface densities [kg m-3]
+  real, dimension(:), intent(in) :: Rb    !< target interface densities [R ~> kg m-3]
   real, dimension(size(rho,1),size(rho,2)), &
                       intent(in) :: depth !< ocean depth [Z ~> m].
   real, dimension(size(rho,1),size(rho,2)), &
@@ -577,7 +577,7 @@ function find_interfaces(rho, zin, Rb, depth, nlevs, nkml, nkbl, hml, debug, eps
   real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi !< The returned interface, in the same units az zin.
 
   ! Local variables
-  real, dimension(size(rho,1),size(rho,3)) :: rho_
+  real, dimension(size(rho,1),size(rho,3)) :: rho_ ! A slice of densities [R ~> kg m-3]
   real, dimension(size(rho,1)) :: depth_
   logical :: unstable
   integer :: dir
