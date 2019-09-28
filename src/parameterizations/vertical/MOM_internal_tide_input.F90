@@ -62,7 +62,7 @@ end type int_tide_input_CS
 !> This type is used to exchange fields related to the internal tides.
 type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
-    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [W m-2].
+    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [R m3 s-3 ~> W m-2].
     h2, &               !< The squared topographic roughness height [Z2 ~> m2].
     tideamp, &          !< The amplitude of the tidal velocities [m s-1].
     Nb                  !< The bottom stratification [s-1].
@@ -120,7 +120,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * US%s_to_T*sqrt(N2_bot(i,j))
-    itide%TKE_itidal_input(i,j) = US%R_to_kg_m3*min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
+    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
   enddo ; enddo
 
   if (CS%int_tide_source_test) then
@@ -131,7 +131,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
         ! Input  an arbitrary energy point source.id_
         if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
             ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
-          itide%TKE_itidal_input(i,j) = 1.0
+          itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R
         endif
       enddo ; enddo
     endif
@@ -139,7 +139,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   if (CS%debug) then
     call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
-    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0)
+    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0, scale=US%R_to_kg_m3)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
@@ -409,7 +409,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
 
 
   CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
-      'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
+      'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2', conversion=US%R_to_kg_m3)
 
   CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
        'Bottom Buoyancy Frequency', 's-1')
