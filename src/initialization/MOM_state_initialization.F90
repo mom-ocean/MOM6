@@ -544,7 +544,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, US, tv, PF, useALE, &
                                                       sponge_CSp, ALE_sponge_CSp)
-      case("RGC"); call RGC_initialize_sponges(G, GV, tv, u, v, PF, useALE, &
+      case("RGC"); call RGC_initialize_sponges(G, GV, US, tv, u, v, PF, useALE, &
                                                      sponge_CSp, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, GV, use_temperature, tv, PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, PF, &
@@ -1853,7 +1853,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
     do j=js,je
       call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), &
-                             is, ie-is+1, tv%eqn_of_state)
+                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
     enddo
 
     call set_up_sponge_ML_density(tmp_2d, G, CSp)

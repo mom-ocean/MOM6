@@ -2689,7 +2689,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       !$OMP parallel do default(shared)
       do j=js,je
          call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
-                             is, ie-is+1, tv%eqn_of_state)
+                             is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
       enddo
       call apply_sponge(h, dt, G, GV, US, ea, eb, CS%sponge_CSp, Rcv_ml)
     else
