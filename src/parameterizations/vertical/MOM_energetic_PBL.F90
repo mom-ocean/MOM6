@@ -261,7 +261,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: TKE_forced !< The forcing requirements to homogenize the
                                                    !! forcing that has been applied to each layer
-                                                   !! [kg m-3 Z3 T-2 ~> J m-2].
+                                                   !! [R Z3 T-2 ~> J m-2].
   type(thermo_var_ptrs),   intent(inout) :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
@@ -406,7 +406,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     do k=1,nz ; do i=is,ie
       h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = u_3d(i,j,k) ; v_2d(i,k) = v_3d(i,j,k)
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
-      TKE_forced_2d(i,k) = US%kg_m3_to_R*TKE_forced(i,j,k)
+      TKE_forced_2d(i,k) = TKE_forced(i,j,k)
       dSV_dT_2d(i,k) = US%R_to_kg_m3*dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = US%R_to_kg_m3*dSV_dS(i,j,k)
     enddo ; enddo
 

@@ -485,7 +485,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                  ! [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
     dSV_dS, &    ! The partial derivative of specific volume with salinity [m3 kg-1 ppt-1].
-    cTKE,   &    ! convective TKE requirements for each layer [kg m-3 Z3 T-2 ~> J m-2].
+    cTKE,   &    ! convective TKE requirements for each layer [R Z3 T-2 ~> J m-2].
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -835,7 +835,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       call hchksum(eb_t, "after applyBoundaryFluxes eb_t",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(ea_s, "after applyBoundaryFluxes ea_s",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(eb_s, "after applyBoundaryFluxes eb_s",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0)
+      call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0, &
+                   scale=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2)
       call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G%HI,haloshift=0)
       call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
     endif
@@ -1268,7 +1269,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                  ! [H ~> m or kg m-2]
     dSV_dT, &    ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
     dSV_dS, &    ! The partial derivative of specific volume with salinity [m3 kg-1 ppt-1].
-    cTKE,   &    ! convective TKE requirements for each layer [kg m-3 Z3 T-2 ~> J m-2].
+    cTKE,   &    ! convective TKE requirements for each layer [R Z3 T-2 ~> J m-2].
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -1565,7 +1566,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       call hchksum(eb_t, "after applyBoundaryFluxes eb_t",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(ea_s, "after applyBoundaryFluxes ea_s",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(eb_s, "after applyBoundaryFluxes eb_s",G%HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0)
+      call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0, &
+                   scale=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**2)
       call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G%HI,haloshift=0)
       call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
     endif

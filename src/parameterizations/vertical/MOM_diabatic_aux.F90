@@ -868,7 +868,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                                                !! heat and freshwater fluxes is applied [m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: cTKE !< Turbulent kinetic energy requirement to mix
-                                               !! forcing through each layer [kg m-3 Z3 T-2 ~> J m-2]
+                                               !! forcing through each layer [R Z3 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
                                                !! potential temperature [m3 kg-1 degC-1].
@@ -946,7 +946,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
 !  I_G_Earth = US%Z_to_m / (US%L_T_to_m_s**2 * GV%g_Earth)
-  g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2
+  g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2*US%kg_m3_to_R
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
@@ -1136,7 +1136,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             RivermixConst = -0.5*(CS%rivermix_depth*dt)*(US%m_to_Z**3 * US%T_to_s**2) * GV%Z_to_H*GV%H_to_Pa
 
-            cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
+            cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*US%kg_m3_to_R*dSV_dS(i,j,1) * &
                   (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
           endif
 
@@ -1283,7 +1283,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
-        cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
+        cTKE(i,j,k) = cTKE(i,j,k) + US%kg_m3_to_R*pen_TKE_2d(i,k)
       enddo ; enddo
     else
       call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
