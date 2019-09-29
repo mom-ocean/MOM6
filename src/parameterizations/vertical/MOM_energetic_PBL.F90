@@ -254,10 +254,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: dSV_dT !< The partial derivative of in-situ specific
                                                    !! volume with potential temperature
-                                                   !! [m3 kg-1 degC-1].
+                                                   !! [R-1 degC-1 ~> m3 kg-1 degC-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: dSV_dS !< The partial derivative of in-situ specific
-                                                   !! volume with salinity [m3 kg-1 ppt-1].
+                                                   !! volume with salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: TKE_forced !< The forcing requirements to homogenize the
                                                    !! forcing that has been applied to each layer
@@ -407,7 +407,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       h_2d(i,k) = h_3d(i,j,k) ; u_2d(i,k) = u_3d(i,j,k) ; v_2d(i,k) = v_3d(i,j,k)
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
       TKE_forced_2d(i,k) = TKE_forced(i,j,k)
-      dSV_dT_2d(i,k) = US%R_to_kg_m3*dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = US%R_to_kg_m3*dSV_dS(i,j,k)
+      dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = dSV_dS(i,j,k)
     enddo ; enddo
 
     !   Determine the initial mech_TKE and conv_PErel, including the energy required

@@ -871,10 +871,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                                                !! forcing through each layer [R Z3 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
-                                               !! potential temperature [m3 kg-1 degC-1].
+                                               !! potential temperature [R-1 degC-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
-                                               !! salinity [m3 kg-1 ppt-1].
+                                               !! salinity [R-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                    optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
 
@@ -909,8 +909,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
     T2d, &           ! A 2-d copy of the layer temperatures [degC]
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
-                     ! a layer [kg m-3 Z3 T-2 ~> J m-2]
-    dSV_dT_2d        ! The partial derivative of specific volume with temperature [m3 kg-1 degC-1]
+                     ! a layer [R Z3 T-2 ~> J m-2]
+    dSV_dT_2d        ! The partial derivative of specific volume with temperature [R-1 degC-1]
   real, dimension(SZI_(G),SZK_(G)+1) :: netPen
   real, dimension(max(nsw,1),SZI_(G)) :: &
     Pen_SW_bnd, &    ! The penetrative shortwave heating integrated over a timestep by band
@@ -922,9 +922,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding
   real    :: Temp_in, Salin_in
-!  real   :: I_G_Earth ! The inverse of the gravitational acceleration with conversion factors [s2 m-1].
+! real   :: I_G_Earth ! The inverse of the gravitational acceleration with conversion factors [R m2 kg-1 s2 ~> s2 m-1]
   real    :: dt_in_T ! The time step converted to T units [T ~> s]
-  real    :: g_Hconv2
+  real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
+                      ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
                       ! [Z3 m T-2 kg-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
@@ -945,8 +946,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
-!  I_G_Earth = US%Z_to_m / (US%L_T_to_m_s**2 * GV%g_Earth)
-  g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2*US%kg_m3_to_R
+!  I_G_Earth = US%kg_m3_to_R*US%Z_to_m / (US%L_T_to_m_s**2 * GV%g_Earth)
+  g_Hconv2 = (US%m_to_Z**3 * US%T_to_s**2) * GV%H_to_Pa * GV%H_to_kg_m2*US%kg_m3_to_R**2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
@@ -1004,7 +1005,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           pres(i) = pres(i) + d_pres(i)
         enddo
         call calculate_specific_vol_derivs(T2d(:,k), tv%S(:,j,k), p_lay(:),&
-                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state)
+                 dSV_dT(:,j,k), dSV_dS(:,j,k), is, ie-is+1, tv%eqn_of_state, scale=US%R_to_kg_m3)
         do i=is,ie ; dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; enddo
 !        do i=is,ie
 !          dT_to_dPE(i,k) = I_G_Earth * d_pres(i) * p_lay(i) * dSV_dT(i,j,k)
@@ -1134,10 +1135,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
-            RivermixConst = -0.5*(CS%rivermix_depth*dt)*(US%m_to_Z**3 * US%T_to_s**2) * GV%Z_to_H*GV%H_to_Pa
+            RivermixConst = -0.5*(CS%rivermix_depth*dt)*(US%m_to_Z**3 * US%T_to_s**2) * &
+                            GV%Z_to_H*GV%H_to_Pa*US%kg_m3_to_R
 
-            cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*US%kg_m3_to_R*dSV_dS(i,j,1) * &
-                  (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
+            cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
+                  US%kg_m3_to_R*(fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
           endif
 
           ! Update state
@@ -1283,7 +1285,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
-        cTKE(i,j,k) = cTKE(i,j,k) + US%kg_m3_to_R*pen_TKE_2d(i,k)
+        cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
       call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
