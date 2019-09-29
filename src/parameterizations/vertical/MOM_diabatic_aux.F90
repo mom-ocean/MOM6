@@ -899,8 +899,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     nonpenSW,     &  ! non-downwelling SW, which is absorbed at ocean surface
                      ! [degC H ~> degC m or degC kg m-2]
     SurfPressure, &  ! Surface pressure (approximated as 0.0) [Pa]
-    dRhodT,       &  ! change in density per change in temperature [kg m-3 degC-1]
-    dRhodS,       &  ! change in density per change in salinity [kg m-3 ppt-1]
+    dRhodT,       &  ! change in density per change in temperature [R degC-1 ~> kg m-3 degC-1]
+    dRhodS,       &  ! change in density per change in salinity [R ppt-1 ~> kg m-3 ppt-1]
     netheat_rate, &  ! netheat but for dt=1 [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
                      ! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
@@ -926,7 +926,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
                       ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
-                      ! [Z3 m T-2 kg-1 ~> m4 s-2 kg-1]
+                      ! [Z T-2 R-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
   integer :: i, j, is, ie, js, je, k, nz, n
@@ -950,7 +950,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   if (present(cTKE)) cTKE(:,:,:) = 0.0
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho       = US%L_to_Z**2*GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
+    GoRho       = US%L_to_Z**2*GV%g_Earth / GV%Rho0
     start       = 1 + G%isc - G%isd
     npts        = 1 + G%iec - G%isc
   endif
@@ -1341,7 +1341,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                           H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
-           dRhodT, dRhodS, start, npts, tv%eqn_of_state)
+           dRhodT, dRhodS, start, npts, tv%eqn_of_state, scale=US%kg_m3_to_R)
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.
@@ -1350,7 +1350,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       do i=is,ie
         SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%T_to_s * &
             (dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
-             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
+             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! [Z2 T-3 ~> m2 s-3]
       enddo
     endif
 
