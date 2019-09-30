@@ -157,10 +157,10 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(thermo_var_ptrs),            intent(in)    :: tv !< Pointer to thermodynamic variables
                                                         !! (needed for wave structure).
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input !< The energy input to the
-                                                        !! internal waves [R m3 s-3 ~> W m-2].
+                                                        !! internal waves [R Z3 T-3 ~> W m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide !< Barotropic velocity read
-                                                        !! from file [m s-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency [s-1].
+                                                        !! from file [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency [T-1 ~> s-1].
   real,                             intent(in)    :: dt !< Length of time over which these fluxes
                                                         !! will be applied [s].
   type(int_tide_CS),                pointer       :: CS !< The control structure returned by a
@@ -220,8 +220,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
-                            dt*frac_per_sector*(1.0-CS%q_itides)*US%R_to_kg_m3*TKE_itidal_input(i,j)
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*(1.0-CS%q_itides) * &
+                            US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo ; enddo
   elseif (CS%energized_angle <= CS%nAngle) then
     frac_per_sector = 1.0 / real(CS%nMode * CS%nFreq)
@@ -230,8 +230,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
-                            dt*frac_per_sector*(1.0-CS%q_itides)*US%R_to_kg_m3*TKE_itidal_input(i,j)
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*(1.0-CS%q_itides) * &
+                            US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo
   else
     call MOM_error(WARNING, "Internal tide energy is being put into a angular "//&
@@ -357,7 +357,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do j=jsd,jed ; do i=isd,ied
       ! Note the 1 m dimensional scale here.  Should this be a parameter?
       I_D_here = 1.0 / (US%Z_to_m*max(G%bathyT(i,j), 1.0*US%m_to_Z))
-      drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, vel_btTide(i,j)**2 + &
+      drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, US%L_to_m**2*US%s_to_T**2*vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
@@ -633,7 +633,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
   type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
                                                  !! previous call to int_tide_init.
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                             intent(in)    :: Nb !< Near-bottom stratification [s-1].
+                             intent(in)    :: Nb !< Near-bottom stratification [T-1 ~> s-1].
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), &
                              intent(inout) :: Ub !< RMS (over one period) near-bottom horizontal
                                                  !! mode velocity [L T-1 ~> m s-1].
@@ -677,7 +677,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
 
     ! Calculate TKE loss rate; units of [W m-2] here.
     TKE_loss_tot = q_itides *  US%Z_to_m**3*US%s_to_T**3 * TKE_loss_fixed(i,j) * &
-                   US%T_to_s*Nb(i,j) * Ub(i,j,fr,m)**2
+                   Nb(i,j) * Ub(i,j,fr,m)**2
 
     ! Update energy remaining (this is a pseudo implicit calc)
     ! (E(t+1)-E(t))/dt = -TKE_loss(E(t+1)/E(t)), which goes to zero as E(t+1) goes to zero
@@ -2427,7 +2427,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !Register 2-D energy input into internal tides
   CS%id_TKE_itidal_input = register_diag_field('ocean_model', 'TKE_itidal_input', diag%axesT1, &
                  Time, 'Conversion from barotropic to baroclinic tide, '//&
-                 'a fraction of which goes into rays', 'W m-2', conversion=US%R_to_kg_m3)
+                 'a fraction of which goes into rays', &
+                 'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m**3*US%s_to_T**3)
   ! Register 2-D energy losses (summed over angles, freq, modes)
   CS%id_tot_leak_loss = register_diag_field('ocean_model', 'ITide_tot_leak_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to background drag', 'W m-2')
