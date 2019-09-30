@@ -73,7 +73,7 @@ type, public :: thickness_diffuse_CS ; private
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
-  real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [W m-2]
+  real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
   real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
 
@@ -580,8 +580,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
     S_v, &        ! Salinity on the interface at the v-point [ppt].
     pres_v        ! Pressure on the interface at the v-point [Pa].
   real :: Work_u(SZIB_(G), SZJ_(G)) ! The work being done by the thickness
-  real :: Work_v(SZI_(G), SZJB_(G)) ! diffusion integrated over a cell [ kg L2 s-3 ~> W ]
-  real :: Work_h        ! The work averaged over an h-cell [W m-2].
+  real :: Work_v(SZI_(G), SZJB_(G)) ! diffusion integrated over a cell [R Z L4 T-3  ~> W ]
+  real :: Work_h        ! The work averaged over an h-cell [R Z L2 T-3 ~> W m-2].
   real :: PE_release_h  ! The amount of potential energy released by GM averaged over an h-cell [L4 Z-1 T-3 ~> m3 s-3]
                         ! The calculation is equal to h * S^2 * N^2 * kappa_GM.
   real :: I4dt          ! 1 / 4 dt [T-1 ~> s-1].
@@ -625,8 +625,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
   real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
   real :: dz_neglect    ! A thickness [Z ~> m], that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
-  real :: G_scale       ! The gravitational acceleration times some unit conversion
-                        ! factors [kg T R-1 Z-1 H-1 s-3 ~> m s-2 or m4 kg-1 s-2].
+  real :: G_scale       ! The gravitational acceleration times a unit conversion
+                        ! factor [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: find_work  ! If true, find the change in energy due to the fluxes.
@@ -644,7 +644,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
 
   I4dt = 0.25 / (dt_in_T)
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = GV%g_Earth*US%L_to_m**2*US%s_to_T**3 * GV%H_to_m * US%R_to_kg_m3
+  G_scale = GV%g_Earth * GV%H_to_Z
+
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
   G_rho0 = GV%g_Earth / GV%Rho0
@@ -1269,27 +1270,24 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
   endif
 
 
-  !if (find_work) then ; do j=js,je ; do i=is,ie ; do k=nz,1,-1
   if (find_work) then ; do j=js,je ; do i=is,ie
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
-    PE_release_h = -0.25*(KH_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
-                          Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &
-                          Kh_v(i,J,k)*(Slope_y_PE(i,J,k)**2) * hN2_y_PE(i,J,k) + &
-                          Kh_v(i,J-1,k)*(Slope_y_PE(i,J-1,k)**2) * hN2_y_PE(i,J-1,k))
     if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
-      if (CS%GM_src_alt) then
-        !### This expression is in [L2 T-3 m ~> m3 s-3]
-        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%L_to_m**2*US%m_to_Z*PE_release_h
-      else
-        !### This expression is in [L2 T-3 kg m-2 ~> kg s-3]
-        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%m_to_L**2*US%T_to_s**3*Work_h
-      endif
+    if (associated(MEKE) .and. .not.CS%GM_src_alt) then ; if (associated(MEKE%GM_src)) then
+      MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
-  !enddo ; enddo ; enddo ; endif
   enddo ; enddo ; endif
+  if (find_work .and. CS%GM_src_alt .and. associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
+    do j=js,je ; do i=is,ie ; do k=nz,1,-1
+      PE_release_h = -0.25*(KH_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
+                            Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &
+                            Kh_v(i,J,k)*(Slope_y_PE(i,J,k)**2) * hN2_y_PE(i,J,k) + &
+                            Kh_v(i,J-1,k)*(Slope_y_PE(i,J-1,k)**2) * hN2_y_PE(i,J-1,k))
+      MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%L_to_Z**2 * GV%Rho0 * PE_release_h
+    enddo ; enddo ; enddo
+  endif ; endif
 
   if (CS%id_slope_x > 0) call post_data(CS%id_slope_x, CS%diagSlopeX, CS%diag)
   if (CS%id_slope_y > 0) call post_data(CS%id_slope_y, CS%diagSlopeY, CS%diag)
@@ -1889,11 +1887,11 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
            x_cell_method='sum', v_extensive=.true.)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
 
-  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
-   'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',               &
-   'W m-2', cmor_field_name='tnkebto',                                                        &
-   cmor_long_name='Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',&
-   cmor_standard_name='tendency_of_ocean_eddy_kinetic_energy_content_due_to_parameterized_eddy_advection')
+  CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time, &
+          'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection', &
+          'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3, cmor_field_name='tnkebto', &
+          cmor_long_name='Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection', &
+          cmor_standard_name='tendency_of_ocean_eddy_kinetic_energy_content_due_to_parameterized_eddy_advection')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
 
   CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
@@ -1902,13 +1900,13 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
            'Parameterized mesoscale eddy advection diffusivity at V-point', &
            'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-  CS%id_KH_t = register_diag_field('ocean_model', 'KHTH_t', diag%axesTL, Time,               &
-       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', &
-       'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
-   cmor_field_name='diftrblo',                                                               &
-   cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection',       &
-   cmor_units='m2 s-1',                                                                      &
-   cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
+  CS%id_KH_t = register_diag_field('ocean_model', 'KHTH_t', diag%axesTL, Time, &
+          'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', &
+          'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
+          cmor_field_name='diftrblo', &
+          cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', &
+          cmor_units='m2 s-1', &
+          cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
            'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', &
@@ -1916,7 +1914,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &
            'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', &
            'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-  CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time,&
+  CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time, &
            'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', &
            'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
 

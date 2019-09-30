@@ -182,11 +182,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
     if (CS%debug) then
       if (associated(MEKE%mom_src)) &
-        call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%L_to_m**2*US%s_to_T**3)
+        call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%GME_snk)) &
-        call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, scale=US%L_to_m**2*US%s_to_T**3)
+        call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%GM_src)) &
-        call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%L_to_m**2*US%s_to_T**3)
+        call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T)
       call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m)
@@ -295,14 +295,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     if (associated(MEKE%mom_src)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        src(i,j) = src(i,j) - CS%MEKE_FrCoeff*I_mass(i,j)*MEKE%mom_src(i,j)
+        src(i,j) = src(i,j) - CS%MEKE_FrCoeff*I_mass(i,j)*US%R_to_kg_m3*US%Z_to_m*MEKE%mom_src(i,j)
       enddo ; enddo
     endif
 
     if (associated(MEKE%GME_snk)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        src(i,j) = src(i,j) - CS%MEKE_GMECoeff*I_mass(i,j)*MEKE%GME_snk(i,j)
+        src(i,j) = src(i,j) - CS%MEKE_GMECoeff*I_mass(i,j)*US%R_to_kg_m3*US%Z_to_m*MEKE%GME_snk(i,j)
       enddo ; enddo
     endif
 
@@ -310,13 +310,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (CS%GM_src_alt) then
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
-          src(i,j) = src(i,j) - CS%MEKE_GMcoeff*MEKE%GM_src(i,j) / &
-                     MAX(1.0, G%bathyT(i,j))  !### 1.0 seems to be a hard-coded dimensional constant (1 m?).
+          src(i,j) = src(i,j) - CS%MEKE_GMcoeff*US%Z_to_m*MEKE%GM_src(i,j) / &
+                     (GV%Rho0 * MAX(1.0*US%m_to_Z, G%bathyT(i,j)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
-          src(i,j) = src(i,j) - CS%MEKE_GMcoeff*I_mass(i,j)*MEKE%GM_src(i,j)
+          src(i,j) = src(i,j) - CS%MEKE_GMcoeff*I_mass(i,j)*US%R_to_kg_m3*US%Z_to_m*MEKE%GM_src(i,j)
         enddo ; enddo
       endif
     endif
@@ -1150,13 +1150,16 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
      'MEKE decay rate', 's-1', conversion=US%s_to_T)
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
-     'MEKE energy available from thickness mixing', 'W m-2', conversion=US%L_to_m**2*US%s_to_T**3)
+     'MEKE energy available from thickness mixing', &
+     'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
   if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
   CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
-     'MEKE energy available from momentum', 'W m-2', conversion=US%L_to_m**2*US%s_to_T**3)
+     'MEKE energy available from momentum', &
+     'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
   CS%id_GME_snk = register_diag_field('ocean_model', 'MEKE_GME_snk',diag%axesT1, Time, &
-     'MEKE energy lost to GME backscatter', 'W m-2', conversion=US%L_to_m**2*US%s_to_T**3)
+     'MEKE energy lost to GME backscatter', &
+     'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
   if (.not. associated(MEKE%GME_snk)) CS%id_GME_snk = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)

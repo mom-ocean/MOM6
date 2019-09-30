@@ -1369,8 +1369,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       if (CS%use_GME) then
         do j=js,je ; do i=is,ie
           ! MEKE%mom_src now is sign definite because it only uses the dissipation
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + (US%R_to_kg_m3*US%Z_to_m) * &
-                              MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
         enddo ; enddo
       else ! use_GME
         if (MEKE%backscatter_Ro_c /= 0.) then
@@ -1397,7 +1396,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                 RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
               endif
             endif
-            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_RZ * (US%R_to_kg_m3*US%Z_to_m) * ( &
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_RZ * ( &
                   ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
                   -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
            +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
@@ -1415,18 +1414,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           enddo ; enddo
         else ! MEKE%backscatter_Ro_c
           do j=js,je ; do i=is,ie
-            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + (US%R_to_kg_m3*US%Z_to_m) * FrictWork(i,j,k)
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
           enddo ; enddo
         endif ! MEKE%backscatter_Ro_c
       endif !use GME
 
-      if (CS%use_GME .and. associated(MEKE)) then
-        if (associated(MEKE%GME_snk)) then
-          do j=js,je ; do i=is,ie
-            MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + (US%R_to_kg_m3*US%Z_to_m) * FrictWork_GME(i,j,k)
-          enddo ; enddo
-        endif
-      endif
+      if (CS%use_GME .and. associated(MEKE)) then ; if (associated(MEKE%GME_snk)) then
+        do j=js,je ; do i=is,ie
+          MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
+        enddo ; enddo
+      endif ; endif
 
     endif ; endif ! find_FrictWork and associated(mom_src)
 
