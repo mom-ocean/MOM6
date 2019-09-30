@@ -43,10 +43,10 @@ type, public :: wave_structure_CS ; !private
   real, allocatable, dimension(:,:,:) :: W_profile
                                    !< Vertical profile of w_hat(z), where
                                    !! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
-                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z) [m s-1].
+                                   !! varying vertical velocity with w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
   real, allocatable, dimension(:,:,:) :: Uavg_profile
                                    !< Vertical profile of the magnitude of horizontal velocity,
-                                   !! (u^2+v^2)^0.5, averaged over a period [m s-1].
+                                   !! (u^2+v^2)^0.5, averaged over a period [L T-1 ~> m s-1].
   real, allocatable, dimension(:,:,:) :: z_depths
                                    !< Depths of layer interfaces [m].
   real, allocatable, dimension(:,:,:) :: N2
@@ -102,8 +102,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   type(wave_structure_CS),                  pointer     :: CS !< The control structure returned by a
                                                               !! previous call to wave_structure_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                                  optional, intent(in)  :: En !< Internal wave energy density [J m-2].
-  logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
+                                  optional, intent(in)  :: En !< Internal wave energy density [R Z3 T-2 ~> J m-2]
+  logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
                                                               !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
@@ -147,10 +147,14 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(G)+1) :: w_strct2, u_strct2
                                         ! squared values
   real, dimension(SZK_(G))   :: dz      ! thicknesses of merged layers (same as Hc I hope)
-  real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
+  ! real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
   real                       :: w2avg   ! average of squared vertical velocity structure funtion
-  real                       :: int_dwdz2, int_w2, int_N2w2, KE_term, PE_term, W0
-                                        ! terms in vertically averaged energy equation
+  real                       :: int_dwdz2
+  real                       :: int_w2
+  real                       :: int_N2w2
+  real                       :: KE_term ! terms in vertically averaged energy equation
+  real                       :: PE_term ! terms in vertically averaged energy equation
+  real                       :: W0      ! A vertical velocity magnitude [Z T-1 ~> m s-1]
   real                       :: gp_unscaled ! A version of gprime rescaled to [m s-2].
   real, dimension(SZK_(G)-1) :: lam_z   ! product of eigen value and gprime(k); one value for each
                                         ! interface (excluding surface and bottom)
@@ -471,18 +475,18 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             w_strct2(:) = w_strct(1:nzm)**2
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
-              int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1))*dz(k)
-              int_w2    = int_w2    + 0.5*(w_strct2(K)+w_strct2(K+1))*dz(k)
-              int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1))*dz(k)
+              int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1)) * US%m_to_Z*dz(k)
+              int_w2    = int_w2    + 0.5*(w_strct2(K)+w_strct2(K+1)) * US%m_to_Z*dz(k)
+              int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1)) * US%m_to_Z*dz(k)
             enddo
 
             ! Back-calculate amplitude from energy equation
-            if (Kmag2 > 0.0) then
-              !### This should be simpified to use a single division.
-              KE_term = 0.25*US%R_to_kg_m3*GV%Rho0*( ((1.0 + f2/freq**2) / Kmag2)*int_dwdz2 + int_w2 )
-              PE_term = 0.25*US%R_to_kg_m3*GV%Rho0*( int_N2w2/(US%s_to_T*freq)**2 )
+            if (present(En) .and. (freq**2*Kmag2 > 0.0)) then
+              ! Units here are [R
+              KE_term = 0.25*GV%Rho0*( ((freq**2 + f2) / (freq**2*Kmag2))*int_dwdz2 + int_w2 )
+              PE_term = 0.25*GV%Rho0*( int_N2w2 / (US%s_to_T*freq)**2 )
               if (En(i,j) >= 0.0) then
-                W0 = sqrt( En(i,j)/(KE_term + PE_term) )
+                W0 = sqrt( En(i,j) / (KE_term + PE_term) )
               else
                 call MOM_error(WARNING, "wave_structure: En < 0.0; setting to W0 to 0.0")
                 print *, "En(i,j)=", En(i,j), " at ig=", ig, ", jg=", jg
@@ -490,13 +494,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
               endif
               ! Calculate actual vertical velocity profile and derivative
               W_profile(:)    = W0*w_strct(:)
-              dWdz_profile(:) = W0*u_strct(:)
+              ! dWdz_profile(:) = W0*u_strct(:)
               ! Calculate average magnitude of actual horizontal velocity over a period
-              !### This should be simpified to use a single division.
-              Uavg_profile(:) = abs(dWdz_profile(:)) * sqrt((1.0 + f2/freq**2) / (2.0*Kmag2))
+              Uavg_profile(:) = US%Z_to_L*abs(W0*u_strct(:)) * sqrt((freq**2 + f2) / (2.0*freq**2*Kmag2))
             else
               W_profile(:)    = 0.0
-              dWdz_profile(:) = 0.0
+              ! dWdz_profile(:) = 0.0
               Uavg_profile(:) = 0.0
             endif
 
