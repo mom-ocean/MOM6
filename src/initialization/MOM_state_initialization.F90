@@ -1969,6 +1969,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   integer :: kd, inconsistent
   integer :: nkd      ! number of levels to use for regridding input arrays
   real    :: eps_Z    ! A negligibly thin layer thickness [Z ~> m].
+  real    :: eps_rho  ! A negligibly small density difference [R ~> kg m-3].
   real    :: PI_180             ! for conversion from degrees to radians
 
   real, dimension(:,:), pointer :: shelf_area => NULL()
@@ -1988,9 +1989,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   logical :: debug = .false.  ! manually set this to true for verbose output
 
   ! data arrays
-  real, dimension(:), allocatable :: z_edges_in, z_in, Rb
+  real, dimension(:), allocatable :: z_edges_in, z_in
+  real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
-  real, dimension(:,:,:), allocatable :: rho_z
+  real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi   ! Interface heights [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press  ! Pressures [Pa].
@@ -2115,6 +2117,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
   !### Change this to GV%Angstrom_Z
   eps_z = 1.0e-10*US%m_to_Z
+  eps_rho = 1.0e-10*US%kg_m3_to_R
 
   ! Read input grid coordinates for temperature and salinity field
   ! in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2154,7 +2157,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call convert_temp_salt_for_TEOS10(temp_z, salt_z, press, G, kd, mask_z, eos)
 
   do k=1,kd ; do j=js,je
-    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
+    call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), is, ie, &
+                           eos, scale=US%kg_m3_to_R)
   enddo ; enddo
 
   call pass_var(temp_z,G%Domain)
@@ -2286,11 +2290,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
     ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
-    do k=2,nz ; Rb(k) = 0.5*US%R_to_kg_m3*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
-    Rb(1) = 0.0 ;  Rb(nz+1) = US%R_to_kg_m3*( 2.0*GV%Rlay(nz) - GV%Rlay(nz-1) )
+    do k=2,nz ; Rb(k) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
+    Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
-                                        nlevs(is:ie,js:je), nkml, nkbl, min_depth, eps_z=eps_z)
+                                        nlevs(is:ie,js:je), nkml, nkbl, min_depth, eps_z=eps_z, &
+                                        eps_rho=eps_rho)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, zi, h)
