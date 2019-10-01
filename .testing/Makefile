@@ -181,7 +181,7 @@ define CMP_RULE
 
 .PRECIOUS: $(foreach b,$(2),results/%/chksum_diag.$(b))
 %.$(1).diag: $(foreach b,$(2),results/%/chksum_diag.$(b))
-	cmp $$^ || true
+	cmp $$^
 endef
 
 $(eval $(call CMP_RULE,regression,symmetric target))
@@ -255,7 +255,7 @@ results/%/ocean.stats.restart: ../build/symmetric/MOM6
 	rm -rf work/$*/restart
 	mkdir -p work/$*/restart
 	cp -rL $*/* work/$*/restart
-	mkdir work/$*/restart/RESTART
+	mkdir -p work/$*/restart/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes runtime set by DAYMAX, will fail if set by input.nml
 	cd work/$*/restart \
