@@ -974,9 +974,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
   !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
   !$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
-  !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,SurfPressure,       &
+  !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,                    &
   !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
-  !$OMP                     firstprivate(start,npts)
+  !$OMP                     firstprivate(start,npts,SurfPressure)
   do j=js,je
   ! Work in vertical slices for efficiency
 
