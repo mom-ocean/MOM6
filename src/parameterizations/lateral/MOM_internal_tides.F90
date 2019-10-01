@@ -206,8 +206,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
-  I_rho0 = 1.0 / (GV%Rho0)
-!  dt_in_T = US%s_to_T*dt
+  I_rho0 = 1.0 / GV%Rho0
   cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
 
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
