@@ -350,7 +350,7 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
 
   salt_add_col(:,:) = 0.0
 
-  !$OMP parallel do default(none) private(mc)
+  !$OMP parallel do default(shared) private(mc)
   do j=js,je
     do k=nz,1,-1 ; do i=is,ie
       if ( (G%mask2dT(i,j) > 0.0) .and. &
@@ -595,7 +595,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
       "in call to find_uv_at_h.")
 !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,mix_vertically,h,h_neglect, &
 !$OMP                                  eb,u_h,u,v_h,v,nz,ea)                     &
-!$OMP                          private(s,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
+!$OMP                          private(sum_area,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
       sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
@@ -965,7 +965,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,US,optics,fluxes,dt, &
   !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
-  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
+  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt_in_T,     &
   !$OMP                                  calculate_buoyancy,netPen,SkinBuoyFlux,GoRho,     &
   !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &

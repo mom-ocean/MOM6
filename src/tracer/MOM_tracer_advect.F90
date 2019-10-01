@@ -252,7 +252,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
 !$OMP parallel do default(none) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
 !$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
-!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v)
+!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v,US)
 
     !  To ensure positive definiteness of the thickness at each iteration, the
     !  mass fluxes out of each layer are checked each step, and limited to keep
