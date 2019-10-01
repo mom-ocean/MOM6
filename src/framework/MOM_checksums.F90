@@ -1849,20 +1849,12 @@ end subroutine chksum_error
 !> Does a bitcount of a number by first casting to an integer and then using BTEST
 !! to check bit by bit
 integer function bitcount(x)
-  real :: x !< Number to be bitcount
+  real, intent(in) :: x !< Number to be bitcount
 
-  ! Local variables
-  integer(kind(x)) :: y !< Store the integer representation of the memory used by x
-  integer :: bit
+  integer, parameter :: xk = kind(x)  !< Kind type of x
 
-  bitcount = 0
-  y = transfer(x,y)
-
-  ! Fortran standard says that bit indexing start at 0
-  do bit = 0, bit_size(y)-1
-    if (BTEST(y,bit)) bitcount = bitcount+1
-  enddo
-
+  ! NOTE: Assumes that reals and integers of kind=xk are the same size
+  bitcount = popcnt(transfer(x, 1_xk))
 end function bitcount
 
 end module MOM_checksums
