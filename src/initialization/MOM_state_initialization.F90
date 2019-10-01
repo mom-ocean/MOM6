@@ -993,9 +993,7 @@ subroutine convert_thickness(h, G, GV, US, tv)
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = (h(i,j,k) * US%R_to_kg_m3*GV%Rlay(k)) * Hm_rho_to_Pa * GV%kg_m2_to_H**2
-        ! This is mathematically equivalent to
-        !  h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
+        h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
       enddo ; enddo ; enddo
     endif
   endif
