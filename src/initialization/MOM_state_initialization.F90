@@ -1552,9 +1552,9 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   real :: T_Ref         ! Reference Temperature [degC]
   real :: S_Ref         ! Reference Salinity [ppt]
   real :: pres(SZK_(G))      ! An array of the reference pressure [Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [kg m-3].
+  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "initialize_temp_salt_fit" ! This subroutine's name.
@@ -1583,32 +1583,32 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
     T0(k) = T_Ref
   enddo
 
-  call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state)
-  call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
+  call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state, scale=US%kg_m3_to_R)
+  call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state, scale=US%kg_m3_to_R)
 
   if (fit_salin) then
     ! A first guess of the layers' temperatures.
     do k=nz,1,-1
-      S0(k) = max(0.0, S0(1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
+      S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
     enddo
     ! Refine the guesses for each layer.
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
       do k=1,nz
-        S0(k) = max(0.0, S0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
+        S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
       enddo
     enddo
   else
     ! A first guess of the layers' temperatures.
     do k=nz,1,-1
-      T0(k) = T0(1) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
+      T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
     enddo
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state, scale=US%kg_m3_to_R)
       do k=1,nz
-        T0(k) = T0(k) + (US%R_to_kg_m3*GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+        T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
       enddo
     enddo
   endif
