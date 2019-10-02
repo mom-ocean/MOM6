@@ -14,7 +14,6 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-!use MOM_io, only : MOM_read_data
 use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t
 use MOM_io, only : MOM_open_file, close_file, register_axis

@@ -10,9 +10,9 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
+use MOM_io, only : fieldtype, file_exists
 use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
+use MOM_io, only : slasher, vardesc, var_desc
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
@@ -538,16 +538,9 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
-  !call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-
-  !call write_field(unit, fields(1), GV%Rlay)
-  !call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
-
-  !call mpp_close_file(unit)
-                      
   ! allocate the axis data and attribute types for the vertical grid file
   !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  !! more than 20 axes.
   allocate(axis_data_CS%axis(20))
   allocate(axis_data_CS%data(20))
 

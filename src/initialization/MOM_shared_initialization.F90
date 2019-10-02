@@ -1283,7 +1283,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   ! allocate the axis data and attribute types for the file
   !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
+  !! more than 20 axes.
   allocate(axis_data_CS%axis(20))
   allocate(axis_data_CS%data(20))
 
