@@ -113,9 +113,9 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean
-                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+                                                      !! to the seafloor [R L Z T-2 ~> Pa]
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
-                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+                                                      !! to the seafloor [R L Z T-2 ~> Pa]
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
                      !! the backward weighting of the time stepping scheme.

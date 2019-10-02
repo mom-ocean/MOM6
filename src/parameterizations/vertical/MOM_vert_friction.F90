@@ -163,10 +163,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
   type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
   real, dimension(SZIB_(G),SZJ_(G)), &
                    optional, intent(out) :: taux_bot !< Zonal bottom stress from ocean to
-                                                     !! rock [kg L Z T-2 m-3 ~> Pa]
+                                                     !! rock [R L Z T-2 ~> Pa]
   real, dimension(SZI_(G),SZJB_(G)), &
                    optional, intent(out) :: tauy_bot !< Meridional bottom stress from ocean to
-                                                     !! rock [kg L Z T-2 m-3 ~> Pa]
+                                                     !! rock [R L Z T-2 ~> Pa]
   type(wave_parameters_CS), &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
 
@@ -325,10 +325,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
 
     if (PRESENT(taux_bot)) then
       do I=Isq,Ieq
-        taux_bot(I,j) = Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
+        taux_bot(I,j) = US%kg_m3_to_R*Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-        taux_bot(I,j) = taux_bot(I,j) + Rho0 * (Ray(I,k)*u(I,j,k))
+        taux_bot(I,j) = taux_bot(I,j) + US%kg_m3_to_R*Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
 
@@ -406,10 +406,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
 
     if (present(tauy_bot)) then
       do i=is,ie
-        tauy_bot(i,J) = Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
+        tauy_bot(i,J) = US%kg_m3_to_R*Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-        tauy_bot(i,J) = tauy_bot(i,J) + Rho0 * (Ray(i,k)*v(i,J,k))
+        tauy_bot(i,J) = tauy_bot(i,J) + US%kg_m3_to_R*Rho0 * (Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
 
@@ -1732,10 +1732,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%L_T2_to_m_s2*US%Z_to_m)
+     conversion=US%R_to_kg_m3*US%L_T2_to_m_s2*US%Z_to_m)
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%L_T2_to_m_s2*US%Z_to_m)
+     conversion=US%R_to_kg_m3*US%L_T2_to_m_s2*US%Z_to_m)
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)

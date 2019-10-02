@@ -444,9 +444,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! gradient at the start of the barotropic stepping
                                                          !! [H ~> m or kg m-2].
   real, dimension(:,:),                optional, pointer :: taux_bot     !< The zonal bottom frictional stress from
-                                                         !! ocean to the seafloor [kg L Z T-2 m-3 ~> Pa].
+                                                         !! ocean to the seafloor [R L Z T-2 ~> Pa].
   real, dimension(:,:),                optional, pointer :: tauy_bot     !< The meridional bottom frictional stress
-                                                         !! from ocean to the seafloor [kg L Z T-2 m-3 ~> Pa].
+                                                         !! from ocean to the seafloor [R L Z T-2 ~> Pa].
   real, dimension(:,:,:),              optional, pointer :: uh0     !< The zonal layer transports at reference
                                                                     !! velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(:,:,:),              optional, pointer :: u_uh0   !< The velocities used to calculate
@@ -1002,11 +1002,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (associated(taux_bot) .and. associated(tauy_bot)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
-        BT_force_u(I,j) = BT_force_u(I,j) - taux_bot(I,j) * mass_to_Z  * CS%IDatu(I,j)
+        BT_force_u(I,j) = BT_force_u(I,j) - US%R_to_kg_m3*taux_bot(I,j) * mass_to_Z  * CS%IDatu(I,j)
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie
-        BT_force_v(i,J) = BT_force_v(i,J) - tauy_bot(i,J) * mass_to_Z  * CS%IDatv(i,J)
+        BT_force_v(i,J) = BT_force_v(i,J) - US%R_to_kg_m3*tauy_bot(i,J) * mass_to_Z  * CS%IDatv(i,J)
       enddo ; enddo
     endif
   endif
