@@ -561,9 +561,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    Rml_max  ! The maximum coordinate density within the mixed layer [kg m-3].
+    Rml_max  ! The maximum coordinate density within the mixed layer [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G), max(1,GV%nk_rho_varies)) :: &
-    rho_coord ! The coordinate density that is used to mix along [kg m-3].
+    rho_coord ! The coordinate density that is used to mix along [R ~> kg m-3].
 
   ! The naming mnemnonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
   ! These are 1-D arrays of pointers to 2-d arrays to minimize memory usage.
@@ -587,7 +587,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
 
   real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
-    rho_srt, & ! The density of each layer of the sorted columns [kg m-3].
+    rho_srt, & ! The density of each layer of the sorted columns [R ~> kg m-3].
     h_srt      ! The thickness of each layer of the sorted columns [H ~> m or kg m-2].
   integer, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
     k0_srt     ! The original k-index that each layer of the sorted column
@@ -620,7 +620,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                        ! for inclusion in mixing [H ~> m or kg m-2].
   real :: Idt        ! The inverse of the time step [s-1].
   real :: I_maxitt   ! The inverse of the maximum number of iterations.
-  real :: rho_pair, rho_a, rho_b  ! Temporary densities [kg m-3].
+  real :: rho_pair, rho_a, rho_b  ! Temporary densities [R ~> kg m-3].
   real :: Tr_min_face  ! The minimum and maximum tracer concentrations
   real :: Tr_max_face  ! associated with a pairing [Conc]
   real :: Tr_La, Tr_Lb ! The 4 tracer concentrations that might be
@@ -665,7 +665,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
     call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
-                         rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state)
+                         rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state, scale=US%kg_m3_to_R)
   enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2
@@ -681,14 +681,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,GV,Rml_max,max_kRho) &
 !$OMP                          private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
-    if (Rml_max(i,j) > US%R_to_kg_m3*GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
-    elseif (Rml_max(i,j) <= US%R_to_kg_m3*GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
+    if (Rml_max(i,j) > GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
+    elseif (Rml_max(i,j) <= GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
     else
       k_min = nkmb+2 ; k_max = nz
       do
         k_test = (k_min + k_max) / 2
-        if (Rml_max(i,j) <= US%R_to_kg_m3*GV%Rlay(k_test-1)) then ; k_max = k_test-1
-        elseif (US%R_to_kg_m3*GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
+        if (Rml_max(i,j) <= GV%Rlay(k_test-1)) then ; k_max = k_test-1
+        elseif (GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
         else ; max_kRho(i,j) = k_test ; exit ; endif
 
         if (k_min == k_max) then ; max_kRho(i,j) = k_max ; exit ; endif
@@ -722,7 +722,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
         num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
         k0_srt(i,ns,j) = k
-        rho_srt(i,ns,j) = US%R_to_kg_m3*GV%Rlay(k)
+        rho_srt(i,ns,j) = GV%Rlay(k)
         h_srt(i,ns,j) = h(i,j,k)
       endif
     endif ; enddo ; enddo
