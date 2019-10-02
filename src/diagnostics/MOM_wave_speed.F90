@@ -71,29 +71,42 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
-    dRho_dT, dRho_dS, &
-    pres, T_int, S_int, &
+    dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    pres, &       ! Interface pressure [Pa]
+    T_int, &      ! Temperature interpolated to interfaces [degC]
+    S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
+                  ! The thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, Tf, Sf, Rf
+    Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
+    Tf, &         ! Layer temperatures after very thin layers are combined [degC]
+    Sf, &         ! Layer salinities after very thin layers are combined [ppt]
+    Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
   real, dimension(SZK_(G)) :: &
-    Hc, Tc, Sc, Rc
+    Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
+    Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
+    Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
+    Rc            ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
   real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
   real :: lam, dlam, lam0
   real :: min_h_frac
   real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &  ! Thicknesses [Z ~> m].
-    H_here, HxT_here, HxS_here, HxR_here
-  real :: speed2_tot
-  real :: I_Hnew, drxh_sum
+    htot, hmin, &  ! Thicknesses [Z ~> m]
+    H_here, &      ! A thickness [Z ~> m]
+    HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
+    HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
+    HxR_here       ! A layer integrated density [R Z ~> kg m-2]
+  real :: speed2_tot ! overestimate of the mode-1 speed squared [m2 s-2]
+  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 m-2 ~> 1].
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  ! G_Earth/Rho0 [m2 s-2 Z-1 R-1 ~> m4 s-2 kg-1].
   real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
@@ -132,7 +145,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
   Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
   use_EOS = associated(tv%eqn_of_state)
 
@@ -192,10 +205,10 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -214,7 +227,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
           S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
         enddo
         call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                      kf(i)-1, tv%eqn_of_state)
+                                      kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
 
         ! Sum the reduced gravities to find out how small a density difference
         ! is negligibly small.
@@ -528,9 +541,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                                                                       !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
-    dRho_dT, dRho_dS, &
-    pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface [m s-2]
+    dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    pres, &       ! Interface pressure [Pa]
+    T_int, &      ! Temperature interpolated to interfaces [degC]
+    S_int, &      ! Salinity interpolated to interfaces [ppt]
+    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
@@ -539,9 +555,15 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                   ! diagonals of tridiagonal matrix; one value for each
                   ! interface (excluding surface and bottom)
   real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, Tf, Sf, Rf
+    Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
+    Tf, &         ! Layer temperatures after very thin layers are combined [degC]
+    Sf, &         ! Layer salinities after very thin layers are combined [ppt]
+    Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
   real, dimension(SZK_(G)) :: &
-    Hc, Tc, Sc, Rc
+    Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
+    Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
+    Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
+    Rc            ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
   real, parameter :: c1_thresh = 0.01
                           ! if c1 is below this value, don't bother calculating
                           ! cn values for higher modes
@@ -564,16 +586,20 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: min_h_frac
   real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &    ! Thicknesses [Z ~> m].
-    H_here, HxT_here, HxS_here, HxR_here
+    htot, hmin, &  ! Thicknesses [Z ~> m]
+    H_here, &      ! A thickness [Z ~> m]
+    HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
+    HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
+    HxR_here       ! A layer integrated density [R Z ~> kg m-2]
   real :: speed2_tot ! overestimate of the mode-1 speed squared [m2 s-2]
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching
   real, parameter :: reduct_factor = 0.5
                      ! factor used in setting speed2_min
-  real :: I_Hnew, drxh_sum
+  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  ! G_Earth/Rho0 [m2 s-2 Z-1 R-1 ~> m4 s-2 kg-1].
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.
@@ -600,7 +626,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
   Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
 
@@ -649,10 +675,10 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -672,7 +698,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
           call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state)
+                                        kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.
