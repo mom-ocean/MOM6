@@ -1399,7 +1399,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     enddo ! j-loop
   else  ! Do not report accelerations leading to large velocities.
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h,H_report)
+!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt_in_T,G,CS,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
         elseif ((u(I,j,k) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
@@ -1712,16 +1712,20 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
      'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
-     'Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+     'Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
+     conversion=GV%H_to_m)
 
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
-     'Thickness at Meridional Velocity Points for Viscosity', thickness_units)
+     'Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
+     conversion=GV%H_to_m)
 
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
-     'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+     'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
+     conversion=GV%H_to_m)
 
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
-     'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units)
+     'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
+     conversion=GV%H_to_m)
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
      Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)

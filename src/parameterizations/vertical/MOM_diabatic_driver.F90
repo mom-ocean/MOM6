@@ -66,7 +66,7 @@ use MOM_tracer_diabatic,     only : tracer_vertdiff
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
-use MOM_verticalGrid,        only : verticalGrid_type
+use MOM_verticalGrid,        only : verticalGrid_type, get_thickness_units
 use MOM_wave_speed,          only : wave_speeds
 use MOM_wave_interface,      only : wave_parameters_CS
 
@@ -508,10 +508,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
-    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt m s-1]
-    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt m s-1]
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -1291,10 +1291,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
-    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt m s-1]
-    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt m s-1]
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   logical :: in_boundary(SZI_(G)) ! True if there are no massive layers below,
                                   ! where massive is defined as sufficiently thick that
@@ -2705,7 +2705,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     !$OMP parallel do default(shared)
     do j=js,je
       do K=2,nz ; do i=is,ie
-        CDp%diapyc_vel(i,j,K) = Idt * (GV%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
+        CDp%diapyc_vel(i,j,K) = Idt * (ea(i,j,k) - eb(i,j,k-1))
       enddo ; enddo
       do i=is,ie
         CDp%diapyc_vel(i,j,1) = 0.0
@@ -3361,24 +3361,29 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
 
   ! Register all available diagnostics for this module.
-  if (GV%Boussinesq) then ; thickness_units = "m"
-  else ; thickness_units = "kg m-2" ; endif
+  thickness_units = get_thickness_units(GV)
 
   CS%id_ea_t = register_diag_field('ocean_model','ea_t',diag%axesTL,Time, &
-      'Layer (heat) entrainment from above per timestep','m')
+      'Layer (heat) entrainment from above per timestep','m', &
+      conversion=GV%H_to_m)
   CS%id_eb_t = register_diag_field('ocean_model','eb_t',diag%axesTL,Time, &
-      'Layer (heat) entrainment from below per timestep', 'm')
+      'Layer (heat) entrainment from below per timestep', 'm', &
+      conversion=GV%H_to_m)
   CS%id_ea_s = register_diag_field('ocean_model','ea_s',diag%axesTL,Time, &
-      'Layer (salt) entrainment from above per timestep','m')
+      'Layer (salt) entrainment from above per timestep','m', &
+      conversion=GV%H_to_m)
   CS%id_eb_s = register_diag_field('ocean_model','eb_s',diag%axesTL,Time, &
-      'Layer (salt) entrainment from below per timestep', 'm')
+      'Layer (salt) entrainment from below per timestep', 'm', &
+      conversion=GV%H_to_m)
   ! used by layer diabatic
   CS%id_ea = register_diag_field('ocean_model','ea',diag%axesTL,Time, &
-      'Layer entrainment from above per timestep','m')
+      'Layer entrainment from above per timestep','m', &
+      conversion=GV%H_to_m)
   CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
-      'Layer entrainment from below per timestep', 'm')
+      'Layer entrainment from below per timestep', 'm', &
+      conversion=GV%H_to_m)
   CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
-    'Diapycnal velocity', 'm s-1')
+    'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m)
   if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
@@ -3402,16 +3407,16 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (use_temperature) then
     CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
         Time, "Diffusive diapycnal temperature flux across interfaces", &
-        "degC m s-1")
+        "degC m s-1", conversion=GV%H_to_m)
     CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv",diag%axesTi, &
         Time, "Advective diapycnal temperature flux across interfaces", &
-        "degC m s-1")
+        "degC m s-1", conversion=GV%H_to_m)
     CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff",diag%axesTi, &
         Time, "Diffusive diapycnal salnity flux across interfaces", &
-        "psu m s-1")
+        "psu m s-1", conversion=GV%H_to_m)
     CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv",diag%axesTi, &
         Time, "Advective diapycnal salnity flux across interfaces", &
-        "psu m s-1")
+        "psu m s-1", conversion=GV%H_to_m)
     CS%id_MLD_003 = register_diag_field('ocean_model', 'MLD_003', diag%axesT1, Time, &
         'Mixed layer depth (delta rho = 0.03)', 'm', conversion=US%Z_to_m, &
         cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
@@ -3446,7 +3451,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
       'Meridional velocity before diabatic forcing', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true.)
+      'Layer Thickness before diabatic forcing', trim(thickness_units), &
+      conversion=GV%H_to_MKS, v_extensive=.true.)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'm')
   if (use_temperature) then
@@ -3510,7 +3516,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! available only for ALE algorithm.
   ! diagnostics for tendencies of temp and heat due to frazil
   CS%id_diabatic_diff_h = register_diag_field('ocean_model', 'diabatic_diff_h', diag%axesTL, Time, &
-      long_name = 'Cell thickness used during diabatic diffusion', units='m', v_extensive=.true.)
+      long_name = 'Cell thickness used during diabatic diffusion', units='m', &
+      conversion=GV%H_to_m, v_extensive=.true.)
   if (CS%useALEalgorithm) then
     CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
         'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
@@ -3582,7 +3589,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     ! available only for ALE algorithm.
   ! diagnostics for tendencies of temp and heat due to frazil
     CS%id_boundary_forcing_h = register_diag_field('ocean_model', 'boundary_forcing_h', diag%axesTL, Time, &
-      long_name = 'Cell thickness after applying boundary forcing', units='m', v_extensive=.true.)
+      long_name = 'Cell thickness after applying boundary forcing', units='m', &
+      conversion=GV%H_to_m, v_extensive=.true.)
     CS%id_boundary_forcing_h_tendency = register_diag_field('ocean_model',   &
         'boundary_forcing_h_tendency', diag%axesTL, Time,                &
         'Cell thickness tendency due to boundary forcing', 'm s-1',                  &
@@ -3640,7 +3648,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! diagnostics for tendencies of temp and heat due to frazil
   CS%id_frazil_h = register_diag_field('ocean_model', 'frazil_h', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
+      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', &
+      conversion=GV%H_to_m, v_extensive=.true.)
 
   ! diagnostic for tendency of temp due to frazil
   CS%id_frazil_temp_tend = register_diag_field('ocean_model',&
@@ -3683,7 +3692,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! initialize the geothermal heating module
   if (CS%use_geothermal) &
-    call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
+    call geothermal_init(Time, G, GV, param_file, diag, CS%geothermal_CSp)
 
   ! initialize module for internal tide induced mixing
   if (CS%use_int_tides) then

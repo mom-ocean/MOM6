@@ -454,20 +454,20 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
                 Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
           enddo ; enddo
           if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-            Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + US%L_to_m**2*Coef_x(I,j) * &
-                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
+            Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) &
+                * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k)) * Idt
           enddo ; enddo ; endif
           if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-            Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + US%L_to_m**2*Coef_y(i,J) * &
-                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
+            Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) &
+                * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k)) * Idt
           enddo ; enddo ; endif
           if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-            Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + US%L_to_m**2*Coef_x(I,j) * &
-                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))*Idt
+            Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) &
+                * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k)) * Idt
           enddo ; enddo ; endif
           if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-            Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + US%L_to_m**2*Coef_y(i,J) * &
-                                (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))*Idt
+            Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) &
+                * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k)) * Idt
           enddo ; enddo ; endif
           do j=js,je ; do i=is,ie
             Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)

@@ -1262,9 +1262,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 !$OMP                               find_etaav,jsvf,jevf,isvf,ievf,eta_sum,eta_wtd, &
 !$OMP                               ubt_sum,uhbt_sum,PFu_bt_sum,Coru_bt_sum,ubt_wtd,&
 !$OMP                               ubt_trans,vbt_sum,vhbt_sum,PFv_bt_sum,          &
-!$OMP                               Corv_bt_sum,vbt_wtd,vbt_trans,eta_src,dt,dtbt,  &
+!$OMP                               Corv_bt_sum,vbt_wtd,vbt_trans,eta_src,dt_in_T,dtbt,  &
 !$OMP                               Rayleigh_u, Rayleigh_v,                         &
-!$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt)  &
+!$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt,US)  &
 !$OMP                       private(u_max_cor,v_max_cor,eta_cor_max,Htot)
   !$OMP do
   do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
@@ -4205,13 +4205,13 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       'Barotropic meridional acceleration from baroclinic terms', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_eta_bt = register_diag_field('ocean_model', 'eta_bt', diag%axesT1, Time, &
-      'Barotropic end SSH', thickness_units)
+      'Barotropic end SSH', thickness_units, conversion=GV%H_to_m)
   CS%id_ubt = register_diag_field('ocean_model', 'ubt', diag%axesCu1, Time, &
       'Barotropic end zonal velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_vbt = register_diag_field('ocean_model', 'vbt', diag%axesCv1, Time, &
       'Barotropic end meridional velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_eta_st = register_diag_field('ocean_model', 'eta_st', diag%axesT1, Time, &
-      'Barotropic start SSH', thickness_units)
+      'Barotropic start SSH', thickness_units, conversion=GV%H_to_m)
   CS%id_ubt_st = register_diag_field('ocean_model', 'ubt_st', diag%axesCu1, Time, &
       'Barotropic start zonal velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_vbt_st = register_diag_field('ocean_model', 'vbt_st', diag%axesCv1, Time, &
@@ -4221,31 +4221,34 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%id_vbtav = register_diag_field('ocean_model', 'vbtav', diag%axesCv1, Time, &
       'Barotropic time-average meridional velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_eta_cor = register_diag_field('ocean_model', 'eta_cor', diag%axesT1, Time, &
-      'Corrective mass flux', 'm s-1')
+      'Corrective mass flux', 'm s-1', conversion=GV%H_to_m)
   CS%id_visc_rem_u = register_diag_field('ocean_model', 'visc_rem_u', diag%axesCuL, Time, &
       'Viscous remnant at u', 'nondim')
   CS%id_visc_rem_v = register_diag_field('ocean_model', 'visc_rem_v', diag%axesCvL, Time, &
       'Viscous remnant at v', 'nondim')
   CS%id_gtotn = register_diag_field('ocean_model', 'gtot_n', diag%axesT1, Time, &
-      'gtot to North', 'm s-2', conversion=US%L_T_to_m_s**2)
+      'gtot to North', 'm s-2', conversion=GV%m_to_H*(US%L_T_to_m_s**2))
   CS%id_gtots = register_diag_field('ocean_model', 'gtot_s', diag%axesT1, Time, &
-      'gtot to South', 'm s-2', conversion=US%L_T_to_m_s**2)
+      'gtot to South', 'm s-2', conversion=GV%m_to_H*(US%L_T_to_m_s**2))
   CS%id_gtote = register_diag_field('ocean_model', 'gtot_e', diag%axesT1, Time, &
-      'gtot to East', 'm s-2', conversion=US%L_T_to_m_s**2)
+      'gtot to East', 'm s-2', conversion=GV%m_to_H*(US%L_T_to_m_s**2))
   CS%id_gtotw = register_diag_field('ocean_model', 'gtot_w', diag%axesT1, Time, &
-      'gtot to West', 'm s-2', conversion=US%L_T_to_m_s**2)
+      'gtot to West', 'm s-2', conversion=GV%m_to_H*(US%L_T_to_m_s**2))
   CS%id_eta_hifreq = register_diag_field('ocean_model', 'eta_hifreq', diag%axesT1, Time, &
-      'High Frequency Barotropic SSH', thickness_units)
+      'High Frequency Barotropic SSH', thickness_units, conversion=GV%H_to_m)
   CS%id_ubt_hifreq = register_diag_field('ocean_model', 'ubt_hifreq', diag%axesCu1, Time, &
       'High Frequency Barotropic zonal velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_vbt_hifreq = register_diag_field('ocean_model', 'vbt_hifreq', diag%axesCv1, Time, &
       'High Frequency Barotropic meridional velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_eta_pred_hifreq = register_diag_field('ocean_model', 'eta_pred_hifreq', diag%axesT1, Time, &
-      'High Frequency Predictor Barotropic SSH', thickness_units)
+      'High Frequency Predictor Barotropic SSH', thickness_units, &
+      conversion=GV%H_to_m)
   CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', diag%axesCu1, Time, &
-      'High Frequency Barotropic zonal transport', 'm3 s-1')
+      'High Frequency Barotropic zonal transport', 'm3 s-1', &
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
   CS%id_vhbt_hifreq = register_diag_field('ocean_model', 'vhbt_hifreq', diag%axesCv1, Time, &
-      'High Frequency Barotropic meridional transport', 'm3 s-1')
+      'High Frequency Barotropic meridional transport', 'm3 s-1', &
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
   CS%id_frhatu = register_diag_field('ocean_model', 'frhatu', diag%axesCuL, Time, &
       'Fractional thickness of layers in u-columns', 'nondim')
   CS%id_frhatv = register_diag_field('ocean_model', 'frhatv', diag%axesCvL, Time, &
@@ -4255,9 +4258,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%id_frhatv1 = register_diag_field('ocean_model', 'frhatv1', diag%axesCvL, Time, &
       'Predictor Fractional thickness of layers in v-columns', 'nondim')
   CS%id_uhbt = register_diag_field('ocean_model', 'uhbt', diag%axesCu1, Time, &
-      'Barotropic zonal transport averaged over a baroclinic step', 'm3 s-1')
+      'Barotropic zonal transport averaged over a baroclinic step', 'm3 s-1', &
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
   CS%id_vhbt = register_diag_field('ocean_model', 'vhbt', diag%axesCv1, Time, &
-      'Barotropic meridional transport averaged over a baroclinic step', 'm3 s-1')
+      'Barotropic meridional transport averaged over a baroclinic step', 'm3 s-1', &
+      conversion=GV%H_to_m*US%L_to_m*US%L_T_to_m_s)
 
   if (use_BT_cont_type) then
     CS%id_BTC_FA_u_EE = register_diag_field('ocean_model', 'BTC_FA_u_EE', diag%axesCu1, Time, &
@@ -4269,9 +4274,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     CS%id_BTC_FA_u_W0 = register_diag_field('ocean_model', 'BTC_FA_u_W0', diag%axesCu1, Time, &
         'BTCont type near west face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_ubt_EE = register_diag_field('ocean_model', 'BTC_ubt_EE', diag%axesCu1, Time, &
-        'BTCont type far east velocity', 'm s-1')
+        'BTCont type far east velocity', 'm s-1', conversion=US%L_T_to_m_s)
     CS%id_BTC_ubt_WW = register_diag_field('ocean_model', 'BTC_ubt_WW', diag%axesCu1, Time, &
-        'BTCont type far west velocity', 'm s-1')
+        'BTCont type far west velocity', 'm s-1', conversion=US%L_T_to_m_s)
     CS%id_BTC_FA_v_NN = register_diag_field('ocean_model', 'BTC_FA_v_NN', diag%axesCv1, Time, &
         'BTCont type far north face area', 'm2', conversion=US%L_to_m*GV%H_to_m)
     CS%id_BTC_FA_v_N0 = register_diag_field('ocean_model', 'BTC_FA_v_N0', diag%axesCv1, Time, &

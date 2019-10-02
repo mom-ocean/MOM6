@@ -678,13 +678,17 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
       conversion=H_convert*US%L_to_m**2*US%s_to_T)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
-      'Zonal Coriolis and Advective Acceleration', 'meter second-2, conversion=US%L_T2_to_m_s2')
+      'Zonal Coriolis and Advective Acceleration', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
-      'Meridional Coriolis and Advective Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
+      'Meridional Coriolis and Advective Acceleration', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
+      'Zonal Pressure Force Acceleration', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
+      'Meridional Pressure Force Acceleration', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)

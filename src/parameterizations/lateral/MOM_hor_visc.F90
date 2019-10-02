@@ -506,20 +506,34 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   endif ! use_GME
 
-  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,US,u,v,is,js,ie,je, &
-  !$OMP                                  h,rescale_Kh,VarMix,h_neglect,h_neglect3,      &
-  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,diffv,apply_OBC,OBC, &
-  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
-  !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
-  !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
-  !$OMP                          private(Del2u, Del2v, sh_xx, str_xx, visc_bound_rem,   &
-  !$OMP                                  sh_xy,str_xy,Ah,Kh,AhSm,dvdx,dudy,dDel2udy,    &
-  !$OMP                                  dDel2vdx,sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
-  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,h_u,h_v, &
-  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,  &
-  !$OMP                                  div_xx, div_xx_dx, div_xx_dy, local_strain,    &
-  !$OMP                                  meke_res_fn,Sh_F_pow,                          &
-  !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
+  !$OMP parallel do default(none) &
+  !$OMP shared( &
+  !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, &
+  !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
+  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
+  !$OMP   use_MEKE_Ku, use_MEKE_Au, boundary_mask, GME_coeff_limiter, &
+  !$OMP   backscat_subround, &
+  !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI5, H0_GME, &
+  !$OMP   diffu, diffv, diss_rate, max_diss_rate, target_diss_rate_GME, &
+  !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, &
+  !$OMP   FrictWork, FrictWork_diss, FrictWorkMax, FrictWork_GME, &
+  !$OMP   div_xx_h, sh_xx_3d, sh_xy_3d, vort_xy_q, &
+  !$OMP   GME_coeff_h, GME_coeff_q &
+  !$OMP ) &
+  !$OMP private( &
+  !$OMP   i, j, k, n, &
+  !$OMP   dudx, dudy, dvdx, dvdy, sh_xx, sh_xy, h_u, h_v, &
+  !$OMP   Del2u, Del2v, DY_dxBu, DX_dyBu, sh_xx_bt, sh_xy_bt, &
+  !$OMP   str_xx, str_xy, bhstr_xx, bhstr_xy, str_xx_GME, str_xy_GME, &
+  !$OMP   vort_xy, vort_xy_dx, vort_xy_dy, div_xx, div_xx_dx, div_xx_dy, &
+  !$OMP   grad_div_mag_h, grad_div_mag_q, grad_vort_mag_h, grad_vort_mag_q, &
+  !$OMP   grad_vort_mag_h_2d, grad_vort_mag_q_2d, grad_vel_mag_h, &
+  !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
+  !$OMP   meke_res_fn, Shear_mag, vert_vort_mag, hrat_min, visc_bound_rem, &
+  !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
+  !$OMP   dDel2vdx, dDel2udy, &
+  !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
+  !$OMP )
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal
@@ -1365,58 +1379,58 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           enddo ; enddo
         endif
       endif
-      if (MEKE%backscatter_Ro_c /= 0.) then
-        do j=js,je ; do i=is,ie
-          FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                        (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
-          Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
-            0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
-                  (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
-          if (CS%answers_2018) then
-            FatH = (US%s_to_T*FatH)**MEKE%backscatter_Ro_pow ! f^n
-            ! Note the hard-coded dimensional constant in the following line that can not
-            ! be rescaled for dimensional consistency.
-            Shear_mag = ( ( (US%s_to_T*Shear_mag)**MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
-                        * MEKE%backscatter_Ro_c ! c * D^n
-            ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
-            ! RoScl = 1 - g(Ro)
-            RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
-          else
-            if (FatH <= backscat_subround*Shear_mag) then
-              RoScl = 1.0
-            else
-              Sh_F_pow = MEKE%backscatter_Ro_c * (Shear_mag / FatH)**MEKE%backscatter_Ro_pow
-              RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
-            endif
-          endif
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
-                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
-                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
-         +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
-                     (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)                               &
-                    +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )                             &
-                +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
-                     (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
-                    +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
-               +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
-                     (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
-                    +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
-                +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
-                     (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
-                    +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
-        enddo ; enddo
-      endif ! MEKE%backscatter
-
       if (CS%use_GME) then
         do j=js,je ; do i=is,ie
           ! MEKE%mom_src now is sign definite because it only uses the dissipation
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + MAX(FrictWork_diss(i,j,k), FrictWorkMax(i,j,k))
         enddo ; enddo
-      else
-        do j=js,je ; do i=is,ie
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
-        enddo ; enddo
-      endif ! CS%use_GME
+      else ! use_GME
+        if (MEKE%backscatter_Ro_c /= 0.) then
+          do j=js,je ; do i=is,ie
+            FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                          (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
+            Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
+              0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
+                    (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
+            if (CS%answers_2018) then
+              FatH = (US%s_to_T*FatH)**MEKE%backscatter_Ro_pow ! f^n
+              ! Note the hard-coded dimensional constant in the following line that can not
+              ! be rescaled for dimensional consistency.
+              Shear_mag = ( ( (US%s_to_T*Shear_mag)**MEKE%backscatter_Ro_pow ) + 1.e-30 ) &
+                          * MEKE%backscatter_Ro_c ! c * D^n
+              ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
+              ! RoScl = 1 - g(Ro)
+              RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
+            else
+              if (FatH <= backscat_subround*Shear_mag) then
+                RoScl = 1.0
+              else
+                Sh_F_pow = MEKE%backscatter_Ro_c * (Shear_mag / FatH)**MEKE%backscatter_Ro_pow
+                RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
+              endif
+            endif
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
+                  ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
+                  -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
+           +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
+                       (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)                               &
+                      +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )                             &
+                  +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
+                       (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
+                      +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
+                  +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
+                       (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
+                      +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
+                  +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
+                       (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
+                      +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+          enddo ; enddo
+        else ! MEKE%backscatter_Ro_c
+          do j=js,je ; do i=is,ie
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
+          enddo ; enddo
+        endif ! MEKE%backscatter_Ro_c
+      endif !use GME
 
       if (CS%use_GME .and. associated(MEKE)) then
         if (associated(MEKE%GME_snk)) then

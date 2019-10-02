@@ -11,7 +11,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : MOM_read_data, slasher
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -143,15 +143,6 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 !    resid(i,j) = tv%internal_heat(i,j)
 !  enddo ; enddo
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,CS,dt,Irho_cp,nkmb,tv,    &
-!$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb)          &
-!$OMP                          private(num_start,heat_rem,do_i,h_geo_rem,num_left,&
-!$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
-!$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &
-!$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
-!$OMP                                  wt_in_place,dTemp,dRcv,h_transfer,heating, &
-!$OMP                                  I_h)
-
   ! Conditionals for tracking diagnostic depdendencies
   compute_h_old = CS%id_internal_heat_h_tendency > 0 &
                   .or. CS%id_internal_heat_heat_tendency > 0 &
@@ -163,6 +154,17 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
   if (CS%id_internal_heat_heat_tendency > 0) work_3d(:,:,:) = 0.0
   if (compute_h_old) h_old(:,:,:) = 0.0
   if (compute_T_old) T_old(:,:,:) = 0.0
+
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,CS,dt,Irho_cp,nkmb,tv,    &
+!$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb,          &
+!$OMP                                  compute_h_old,compute_T_old,h_old,T_old,   &
+!$OMP                                  work_3d,Idt)                               &
+!$OMP                          private(num_start,heat_rem,do_i,h_geo_rem,num_left,&
+!$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
+!$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &
+!$OMP                                  dRcv_dS_,heat_in_place,heat_trans,         &
+!$OMP                                  wt_in_place,dTemp,dRcv,h_transfer,heating, &
+!$OMP                                  I_h)
 
   do j=js,je
     ! 1. Only work on columns that are being heated.
@@ -371,9 +373,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS, halo)
 end subroutine geothermal
 
 !> Initialize parameters and allocate memory associated with the geothermal heating module.
-subroutine geothermal_init(Time, G, param_file, diag, CS)
+subroutine geothermal_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
@@ -382,6 +385,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_geothermal"  ! module name
+  character(len=48)  :: thickness_units
   ! Local variables
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
   real :: scale
@@ -442,6 +446,8 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   endif
   call pass_var(CS%geo_heat, G%domain)
 
+  thickness_units = get_thickness_units(GV)
+
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
         'Geothermal heat flux into ocean', 'W m-2',                    &
@@ -463,7 +469,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
-        'm OR kg m-2', v_extensive=.true.)
+        trim(thickness_units), conversion=GV%H_to_MKS, v_extensive=.true.)
 
 end subroutine geothermal_init
 
