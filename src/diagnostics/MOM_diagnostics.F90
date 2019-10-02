@@ -623,7 +623,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,CS,US) &
 !$OMP                          private(f2_h,mag_beta)
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
@@ -672,7 +672,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     endif
     if (CS%id_cg_ebt>0) call post_data(CS%id_cg_ebt, CS%cg1, CS%diag)
     if (CS%id_Rd_ebt>0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,CS,US) &
 !$OMP                          private(f2_h,mag_beta)
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.

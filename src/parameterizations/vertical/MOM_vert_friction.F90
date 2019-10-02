@@ -1395,7 +1395,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt_in_T, G, GV, U
     enddo ! j-loop
   else  ! Do not report accelerations leading to large velocities.
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h,H_report)
+!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt_in_T,G,CS,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
         elseif ((u(I,j,k) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then

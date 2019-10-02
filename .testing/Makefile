@@ -36,7 +36,7 @@ MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-gnu.mk
 # Test configuration
 
 # Executables
-BUILDS = symmetric asymmetric repro
+BUILDS = symmetric asymmetric repro openmp
 CONFIGS := $(wildcard tc*)
 TESTS = grids layouts restarts repros nans dims
 
@@ -85,6 +85,7 @@ $(BUILD)/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
 $(BUILD)/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
+$(BUILD)/openmp/MOM6: MOMFLAGS=NETCDF=3 OPENMP=1
 
 $(BUILD)/asymmetric/path_names: GRID_SRC=config_src/dynamic
 $(BUILD)/%/path_names: GRID_SRC=config_src/dynamic_symmetric
@@ -170,6 +171,7 @@ test.grids: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
 test.layouts: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
 test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
 test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
+test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
 test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
 test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d).diag))
 
@@ -181,13 +183,14 @@ define CMP_RULE
 
 .PRECIOUS: $(foreach b,$(2),results/%/chksum_diag.$(b))
 %.$(1).diag: $(foreach b,$(2),results/%/chksum_diag.$(b))
-	cmp $$^ || true
+	cmp $$^
 endef
 
 $(eval $(call CMP_RULE,regression,symmetric target))
 $(eval $(call CMP_RULE,grid,symmetric asymmetric))
 $(eval $(call CMP_RULE,layout,symmetric layout))
 $(eval $(call CMP_RULE,repro,symmetric repro))
+$(eval $(call CMP_RULE,openmp,symmetric openmp))
 $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
@@ -243,6 +246,7 @@ $(eval $(call STAT_RULE,symmetric,symmetric,$(REPORT_COVERAGE),,,1))
 $(eval $(call STAT_RULE,asymmetric,asymmetric,,,,1))
 $(eval $(call STAT_RULE,target,target,,,,1))
 $(eval $(call STAT_RULE,repro,repro,,,,1))
+$(eval $(call STAT_RULE,openmp,openmp,,,,1))
 $(eval $(call STAT_RULE,layout,symmetric,,LAYOUT=2$(,)1,,2))
 $(eval $(call STAT_RULE,nan,symmetric,,,MALLOC_PERTURB_=256,1))
 $(eval $(call STAT_RULE,dim.t,symmetric,,T_RESCALE_POWER=11,,1))
@@ -255,7 +259,7 @@ results/%/ocean.stats.restart: ../build/symmetric/MOM6
 	rm -rf work/$*/restart
 	mkdir -p work/$*/restart
 	cp -rL $*/* work/$*/restart
-	mkdir work/$*/restart/RESTART
+	mkdir -p work/$*/restart/RESTART
 	# Generate the half-period input namelist
 	# TODO: Assumes runtime set by DAYMAX, will fail if set by input.nml
 	cd work/$*/restart \

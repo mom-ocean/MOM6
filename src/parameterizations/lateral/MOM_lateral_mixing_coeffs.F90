@@ -241,7 +241,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
 
-!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
+!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS,US) &
 !$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
   if (CS%Res_fn_power_visc >= 100) then
 !$OMP do
