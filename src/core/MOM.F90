@@ -2662,7 +2662,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv    ! The density used to convert surface pressure to
-                      ! a corrected effective SSH [kg m-3].
+                      ! a corrected effective SSH [R ~> kg m-3].
   real :: IgR0        ! The SSH conversion factor from Pa to m [m Pa-1].
   logical :: calc_rho
   integer :: i, j, is, ie, js, je
@@ -2676,11 +2676,11 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
     do j=js,je ; do i=is,ie
       if (calc_rho) then
         call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, &
-                               Rho_conv, tv%eqn_of_state)
+                               Rho_conv, tv%eqn_of_state, scale=US%kg_m3_to_R)
       else
-        Rho_conv = US%R_to_kg_m3*GV%Rho0
+        Rho_conv = GV%Rho0
       endif
-      IgR0 = 1.0 / (Rho_conv * GV%mks_g_Earth)
+      IgR0 = 1.0 / (Rho_conv * US%R_to_kg_m3*GV%mks_g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif
