@@ -775,7 +775,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
         ! Equation 1 of Jansen et al. (2015), balancing the GEOMETRIC GM coefficient against
         ! bottom drag (Equations 3 and 12)
         ! TODO: create a run time parameter for limitting SN.
-        MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * MIN(SN,1.e-5) * US%Z_to_m*G%bathyT(i,j))**2 / (CS%cdrag**2 * bottomFac2**3)
+        MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * MIN(SN,1.e-7) * US%Z_to_m*G%bathyT(i,j))**2 / (CS%cdrag**2 * bottomFac2**3)
       else
         MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
       endif
