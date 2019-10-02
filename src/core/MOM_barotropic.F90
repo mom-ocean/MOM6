@@ -1262,9 +1262,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 !$OMP                               find_etaav,jsvf,jevf,isvf,ievf,eta_sum,eta_wtd, &
 !$OMP                               ubt_sum,uhbt_sum,PFu_bt_sum,Coru_bt_sum,ubt_wtd,&
 !$OMP                               ubt_trans,vbt_sum,vhbt_sum,PFv_bt_sum,          &
-!$OMP                               Corv_bt_sum,vbt_wtd,vbt_trans,eta_src,dt,dtbt,  &
+!$OMP                               Corv_bt_sum,vbt_wtd,vbt_trans,eta_src,dt_in_T,dtbt,  &
 !$OMP                               Rayleigh_u, Rayleigh_v,                         &
-!$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt)  &
+!$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt,US)  &
 !$OMP                       private(u_max_cor,v_max_cor,eta_cor_max,Htot)
   !$OMP do
   do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
