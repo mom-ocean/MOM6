@@ -137,6 +137,8 @@ type axis_atts
   character(len=8)   :: positive                !< Positive-definite direction: 
                                                 !! up, down, east, west, north, south
   integer            :: horgrid_position        !< Horizontal grid position
+  integer            :: x_position              !< x-direction grid position
+  integer            :: y_position              !< y-direction grid position
   logical            :: is_domain_decomposed    !< if .true. the axis data are domain-decomposed
                                                 !! and need to be indexed by the compute domain
                                                 !! before passing to write_data
@@ -531,21 +533,22 @@ subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length, domain_position
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
                                                 !! (only needed for Layer, Interface, Time, and Period)
-   integer, intent(in), optional :: domain_position !< Domain position.
+   character(len=*), intent(in), optional :: domain_position !< Character array for domain position.
    ! local
-   integer :: pos
+   integer :: x_pos, y_pos
    if (present(domain_position)) then 
-      pos = domain_position
+      call get_horizontal_grid_position(domain_position,x_pos,y_pos)
    else 
-      pos = CENTER
+      x_pos = CENTER
+      y_pos = CENTER
    endif
 
    select case (trim(axis_name))
          
-         case ('latq'); call register_axis(fileObj,'latq','y', domain_position=pos)
-         case ('lath'); call register_axis(fileObj,'lath','y', domain_position=pos) 
-         case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=pos) 
-         case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=pos)
+         case ('latq'); call register_axis(fileObj,'latq','y', domain_position=y_pos)
+         case ('lath'); call register_axis(fileObj,'lath','y', domain_position=y_pos) 
+         case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=x_pos) 
+         case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=x_pos)
          case ('Layer')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
@@ -634,6 +637,7 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
  
   character(len=8) :: t_grid
   character(len=8) :: t_grid_read
+  integer :: x_pos, y_pos
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
@@ -657,7 +661,7 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   use_lonh = .false.
   use_latq = .false.
   use_lonq = .false.
-  
+
   select case (trim(hor_grid))
      case ('h') ; use_lath = .true. ; use_lonh = .true.
      case ('q') ; use_latq = .true. ; use_lonq = .true.
@@ -786,9 +790,13 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
   axis_data_CS%axis(axis_number)%longname = ''
   axis_data_CS%axis(axis_number)%units = ''
   axis_data_CS%axis(axis_number)%horgrid_position = 0
+  axis_data_CS%axis(axis_number)%x_position = CENTER
+  axis_data_CS%axis(axis_number)%y_position = CENTER
   axis_data_CS%axis(axis_number)%is_domain_decomposed = .false.
   axis_data_CS%axis(axis_number)%positive = ''
   axis_data_CS%data(axis_number)%p => NULL()
+
+  
   
   select case(trim(axis_name))
      case('lath')
@@ -876,26 +884,26 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
 end subroutine MOM_get_axis_data
 
 !> get the position parameter value from the horizontal grid (hor_grid) string id
-function get_horizontal_grid_position(grid_string_id) result(grid_position)
+subroutine get_horizontal_grid_position(grid_string_id, x_pos,y_pos)
   character(len=*), intent(in) :: grid_string_id !< horizontal grid string
-  integer :: grid_position !< integer corresponding to the grid position
+  integer, intent(out) :: x_pos, y_pos !< integers corresponding to the x and y grid positions
 
-  select case (grid_string_id)
-     case ('h') ; grid_position = CENTER
-     case ('q') ; grid_position = CORNER
-     case ('u') ; grid_position = EAST_FACE
-     case ('v') ; grid_position = NORTH_FACE
-     case ('T')  ; grid_position = CENTER
-     case ('Bu') ; grid_position = CORNER
-     case ('Cu') ; grid_position = EAST_FACE
-     case ('Cv') ; grid_position = NORTH_FACE
-     case ('1') ; grid_position = 0 
+  select case (trim(grid_string_id))
+     case ('h') ; x_pos = CENTER; y_pos = CENTER
+     case ('q') ; x_pos = EAST_FACE; y_pos=NORTH_FACE
+     case ('u') ; x_pos = EAST_FACE; y_pos=CENTER
+     case ('v') ; x_pos = CENTER; y_pos=NORTH_FACE
+     case ('T')  ; x_pos = CENTER; y_pos=CENTER
+     case ('Bu') ; x_pos = EAST_FACE; y_pos=NORTH_FACE
+     case ('Cu') ; x_pos = EAST_FACE; y_pos=CENTER
+     case ('Cv') ; x_pos = CENTER; y_pos=NORTH_FACE
+     case ('1') ; x_pos = 0; y_pos=0 
      case default
         call MOM_error(FATAL, "MOM_io:get_horizontal_grid_position "//&
                         "Unrecognized grid_string_id argument "//trim(grid_string_id))
   end select
 
-end function get_horizontal_grid_position
+end subroutine get_horizontal_grid_position
 
 !> get the size of a variable in bytes
 function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
