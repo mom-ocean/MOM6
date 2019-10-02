@@ -107,30 +107,43 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(G)+1) :: &
-    dRho_dT, dRho_dS, &
-    pres, T_int, S_int, &
+    dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    pres, &       ! Interface pressure [Pa]
+    T_int, &      ! Temperature interpolated to interfaces [degC]
+    S_int, &      ! Salinity interpolated to interfaces [ppt]
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
   real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, Tf, Sf, Rf
+    Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
+    Tf, &         ! Layer temperatures after very thin layers are combined [degC]
+    Sf, &         ! Layer salinities after very thin layers are combined [ppt]
+    Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
   real, dimension(SZK_(G)) :: &
-    Hc, Tc, Sc, Rc, &
+    Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
+    Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
+    Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
+    Rc, &         ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
     det, ddet
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    htot
+    htot          ! The vertical sum of the thicknesses [Z ~> m]
   real :: lam
   real :: min_h_frac
   real :: H_to_pres
   real, dimension(SZI_(G)) :: &
-    hmin, &  ! Thicknesses [Z ~> m].
-    H_here, HxT_here, HxS_here, HxR_here
+    hmin, &        ! Thicknesses [Z ~> m]
+    H_here, &      ! A thickness [Z ~> m]
+    HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
+    HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
+    HxR_here       ! A layer integrated density [R Z ~> kg m-2]
   real :: speed2_tot
-  real :: I_Hnew, drxh_sum
+  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum ! The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 in [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0  ! G_Earth/Rho0 in [m2 s-2 Z-1 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
   integer, parameter :: max_itt = 1 ! number of times to iterate in solving for eigenvector
@@ -182,7 +195,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   Pi = (4.0*atan(1.0))
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / (US%R_to_kg_m3*GV%Rho0)
+  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
   cg_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   use_EOS = associated(tv%eqn_of_state)
 
@@ -233,10 +246,10 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
+          HxR_here(i) = (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*US%R_to_kg_m3*GV%Rlay(k)
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*GV%H_to_Z)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -264,15 +277,15 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
           enddo
           call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state)
+                                        kf(i)-1, tv%eqn_of_state, scale=US%kg_m3_to_R)
 
           ! Sum the reduced gravities to find out how small a density difference
           ! is negligibly small.
           drxh_sum = 0.0
           do k=2,kf(i)
             drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
-                max(0.0,drho_dT(k)*(Tf(k,i)-Tf(k-1,i)) + &
-                        drho_dS(k)*(Sf(k,i)-Sf(k-1,i)))
+                max(0.0,dRho_dT(k)*(Tf(k,i)-Tf(k-1,i)) + &
+                        dRho_dS(k)*(Sf(k,i)-Sf(k-1,i)))
           enddo
         else
           drxh_sum = 0.0
@@ -291,7 +304,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             kc = 1
             Hc(1) = Hf(1,i) ; Tc(1) = Tf(1,i) ; Sc(1) = Sf(1,i)
             do k=2,kf(i)
-              if ((drho_dT(k)*(Tf(k,i)-Tc(kc)) + drho_dS(k)*(Sf(k,i)-Sc(kc))) * &
+              if ((dRho_dT(k)*(Tf(k,i)-Tc(kc)) + dRho_dS(k)*(Sf(k,i)-Sc(kc))) * &
                   (Hc(kc) + Hf(k,i)) < 2.0 * tol2*drxh_sum) then
                 ! Merge this layer with the one above and backtrack.
                 I_Hnew = 1.0 / (Hc(kc) + Hf(k,i))
@@ -302,7 +315,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                 ! that the tolerance is a factor of two larger, to avoid limit how
                 ! far back we go.
                 do k2=kc,2,-1
-                  if ((drho_dT(k2)*(Tc(k2)-Tc(k2-1)) + drho_dS(k2)*(Sc(k2)-Sc(k2-1))) * &
+                  if ((dRho_dT(k2)*(Tc(k2)-Tc(k2-1)) + dRho_dS(k2)*(Sc(k2)-Sc(k2-1))) * &
                       (Hc(k2) + Hc(k2-1)) < tol2*drxh_sum) then
                     ! Merge the two bottommost layers.  At this point kc = k2.
                     I_Hnew = 1.0 / (Hc(kc) + Hc(kc-1))
@@ -321,8 +334,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
             do k=2,kc ! Revisit this if non-Boussinesq.
-              gprime(k) = g_Rho0 * (drho_dT(k)*(Tc(k)-Tc(k-1)) + &
-                                    drho_dS(k)*(Sc(k)-Sc(k-1)))
+              gprime(k) = g_Rho0 * (dRho_dT(k)*(Tc(k)-Tc(k-1)) + &
+                                    dRho_dS(k)*(Sc(k)-Sc(k-1)))
             enddo
           else  ! .not.use_EOS
             ! Do the same with density directly...
