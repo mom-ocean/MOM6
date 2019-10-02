@@ -49,7 +49,8 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: Tz, Dml, eta, stretch, h0
-  real    :: min_thickness, T_range, dRho_dT
+  real    :: min_thickness, T_range
+  real    :: dRho_dT      ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
@@ -68,7 +69,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, scale=US%kg_m3_to_R, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -79,7 +80,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
     case (REGRIDDING_LAYER, REGRIDDING_RHO)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / (US%R_to_kg_m3*GV%Rho0) ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -90,7 +91,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / (US%R_to_kg_m3*GV%Rho0) ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -179,7 +180,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   real    :: y            ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range      ! Range of salinities and temperatures over the vertical
   real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f [L2 Z-1 T-1 degC-1 ~> m s-1 degC-1]
-  real    :: dRho_dT
+  real    :: dRho_dT      ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
   real    :: Dml, zi, zc, zm ! Depths [Z ~> m].
   real    :: f            ! The local Coriolis parameter [T-1 ~> s-1]
   real    :: Ty           ! The meridional temperature gradient [degC L-1 ~> degC m-1]
@@ -196,7 +197,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, scale=US%kg_m3_to_R, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -206,7 +207,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5* (G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
-      dUdT = ( GV%g_Earth*dRho_dT ) / ( f * US%R_to_kg_m3*GV%Rho0 )
+      dUdT = ( GV%g_Earth*dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = US%L_to_m*dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
