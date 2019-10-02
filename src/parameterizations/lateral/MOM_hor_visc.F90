@@ -506,31 +506,34 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   endif ! use_GME
 
-  !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,US,u,v,is,js,ie,je, &
-  !$OMP                                  h,rescale_Kh,VarMix,h_neglect,h_neglect3,      &
-  !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,diffv,apply_OBC,OBC, &
-  !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
-  !$OMP                                  use_MEKE_Au, MEKE,sh_xx_3d,sh_xy_3d,           &
-  !$OMP                                  GME_coeff_limiter,boundary_mask,FWfrac,backscat_subround,&
-  !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
-  !$OMP                          private(Del2u, Del2v, sh_xx, str_xx, visc_bound_rem,   &
-  !$OMP                                  dudx,dvdy,DX_dyBu,DY_dxBu,                     &
-  !$OMP                                  grad_div_mag_h,grad_div_mag_q,                 &
-  !$OMP                                  grad_vort_mag_h_2d,grad_vort_mag_q_2d,         &
-  !$OMP                                  grad_vort_mag_h,grad_vort_mag_q,vert_vort_mag, &
-  !$OMP                                  inv_PI3,inv_PI5,grad_vel_mag_h,                &
-  !$OMP                                  grad_d2vel_mag_h,diss_rate,max_diss_rate,      &
-  !$OMP                                  FrictWork_diss,FrictWorkMax,                   &
-  !$OMP                                  target_diss_rate_GME,GME_coeff,                &
-  !$OMP                                  grad_vel_mag_bt_h,H0_GME,GME_coeff_h,          &
-  !$OMP                                  str_xx_GME,grad_vel_mag_bt_q,GME_coeff_q,str_xy_GME,FrictWork_GME,&
-  !$OMP                                  sh_xy,str_xy,Ah,Kh,AhSm,dvdx,dudy,dDel2udy,    &
-  !$OMP                                  dDel2vdx,sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
-  !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,h_u,h_v, &
-  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,AhLth,  &
-  !$OMP                                  div_xx, div_xx_dx, div_xx_dy, local_strain,    &
-  !$OMP                                  meke_res_fn,Sh_F_pow,                          &
-  !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
+  !$OMP parallel do default(none) &
+  !$OMP shared( &
+  !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, &
+  !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
+  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
+  !$OMP   use_MEKE_Ku, use_MEKE_Au, boundary_mask, GME_coeff_limiter, &
+  !$OMP   backscat_subround, &
+  !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI5, H0_GME, &
+  !$OMP   diffu, diffv, diss_rate, max_diss_rate, target_diss_rate_GME, &
+  !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, &
+  !$OMP   FrictWork, FrictWork_diss, FrictWorkMax, FrictWork_GME, &
+  !$OMP   div_xx_h, sh_xx_3d, sh_xy_3d, vort_xy_q, &
+  !$OMP   GME_coeff_h, GME_coeff_q &
+  !$OMP ) &
+  !$OMP private( &
+  !$OMP   i, j, k, n, &
+  !$OMP   dudx, dudy, dvdx, dvdy, sh_xx, sh_xy, h_u, h_v, &
+  !$OMP   Del2u, Del2v, DY_dxBu, DX_dyBu, sh_xx_bt, sh_xy_bt, &
+  !$OMP   str_xx, str_xy, bhstr_xx, bhstr_xy, str_xx_GME, str_xy_GME, &
+  !$OMP   vort_xy, vort_xy_dx, vort_xy_dy, div_xx, div_xx_dx, div_xx_dy, &
+  !$OMP   grad_div_mag_h, grad_div_mag_q, grad_vort_mag_h, grad_vort_mag_q, &
+  !$OMP   grad_vort_mag_h_2d, grad_vort_mag_q_2d, grad_vel_mag_h, &
+  !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
+  !$OMP   meke_res_fn, Shear_mag, vert_vort_mag, hrat_min, visc_bound_rem, &
+  !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
+  !$OMP   dDel2vdx, dDel2udy, &
+  !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
+  !$OMP )
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal
