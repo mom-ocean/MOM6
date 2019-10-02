@@ -880,6 +880,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: is, ie
   integer :: substring_index
   integer :: horgrid_position = 1
+  integer :: x_pos, y_pos
   integer :: num_dims, total_axes
   integer :: var_periods
   logical :: file_open_success = .false.
@@ -1016,7 +1017,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_dims
            if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
               total_axes=total_axes+1
-              call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i))
+              call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i), hor_grid)
               call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                      time_val=(/restart_time/), time_units=restart_time_units)
            endif
@@ -1065,7 +1066,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                               z_grid=z_grid, t_grid=t_grid, longname=longname, &
                               units=units, caller="save_restart")
 
-           horgrid_position = get_horizontal_grid_position(hor_grid)  
+           call get_horizontal_grid_position(hor_grid,x_pos,y_pos)
+           horgrid_position = 1
+           if (x_pos .ne. CENTER) then
+              horgrid_position = x_pos
+           elseif (y_pos .ne. CENTER) then
+              horgrid_position = y_pos
+           elseif ((x_pos .eq. CENTER) .and. (y_pos .eq. CENTER)) then 
+              horgrid_position = CENTER
+           endif
         
            call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
         
@@ -1214,7 +1223,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
             total_axes=total_axes+1
             call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                    time_val=(/ic_time/), time_units=time_units)
-            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
+            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i), hor_grid)
         endif
      enddo
   enddo
