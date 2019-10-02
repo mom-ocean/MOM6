@@ -18,9 +18,10 @@ use MOM_io, only : get_var_dimension_features
 use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
-use MOM_io, only : MOM_register_axis
 use MOM_io, only : axis_data_type
 use MOM_io, only : MOM_get_axis_data
+use MOM_io, only : MOM_open_file
+use MOM_io, only : MOM_register_axis
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
@@ -34,7 +35,6 @@ use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field
                            fms2_read_restart => read_restart, &
                            fms2_write_restart => write_restart,&
                            fms2_write_data => write_data, &
-                           fms2_open_file => open_file, &
                            fms2_close_file => close_file, &
                            fms2_global_att_exists => global_att_exists, &
                            fms2_attribute_exists => variable_att_exists, &
@@ -851,7 +851,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! file object returned by a call to fms2_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! file object returned by a call to MOM_open_file
   character(len=1024) :: restartpath     ! The restart file path (dir/file).
   character(len=1024) :: restartname     ! The restart file name (no dir).
   character(len=1024) :: restartpath_temp ! temporary location for the restart file path (dir/file).
@@ -888,8 +888,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=64) :: checksum_char
   character(len=64) :: units
   character(len=256) :: longname
-  character(len=16) :: t_grid_read, t_grid_str
-  real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
   type(axis_data_type) :: axis_data_CS
 
@@ -954,9 +952,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   restart_time = time_type_to_real(time) / 86400.0
   restart_time_units = get_time_units(restart_time*86400.0)
 
-  !WRITE(mpp_pe()+2000, '(A,F8.2)') "save_restart: the restart_time is ", restart_time
-  !call flush(mpp_pe()+2000)
-
   next_var = 1
   do while (next_var <= CS%novars )
      start_var = next_var
@@ -981,14 +976,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      endif 
 
      ! append to restart file if it exists
-     file_open_success = fms2_open_file(fileObjWrite, trim(restartpath),"overwrite", &
-                                       G%Domain%mpp_domain, is_restart = .true.)
-     ! else, open a new restart file for writing
-     if (.not. (file_open_success)) then
-        file_open_success = fms2_open_file(fileObjWrite, trim(restartpath),"write", &
-                                          G%Domain%mpp_domain, is_restart = .true.)
-     endif
-
+     file_open_success = MOM_open_file(fileObjWrite, trim(restartpath),"write", &
+                                       G, is_restart = .true.)
+       
      ! get variable sizes in bytes
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
 
@@ -1005,34 +995,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
 
-        ! get the restart time value(s) and assign to time_vals array
-        if (.not.(allocated(time_vals))) then
-           t_grid_str = ''
-           t_grid_str = adjustl(t_grid)
-           select case (t_grid_str(1:1))
-              case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
-                 allocate(time_vals(1))
-                 time_vals(1) = restart_time
-              case ('p')
-                 if (len_trim(t_grid(2:8)) > 0) then
-                    var_periods = -1
-                    t_grid_read = adjustl(t_grid(2:8))
-                    read(t_grid_read,*) var_periods
-                    if (var_periods < 1) then 
-                       call MOM_error(FATAL, "MOM_restart::save_restart: "//&
-                                       "Period value must be positive.")
-                    endif
-                    ! Define a periodic axis array
-                    allocate(time_vals(var_periods))
-                    do k=1,var_periods
-                       time_vals(k) = real(k)
-                    enddo
-                 endif
-              case default
-                 call MOM_error(FATAL,"MOM_restart: save_restart: "//&
-                                "t_grid_str is empty or incorrectly defined.")
-           end select
-        endif
         
         var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
      
@@ -1056,7 +1018,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
               total_axes=total_axes+1
               call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i))
               call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                                     time_val=time_vals, time_units=restart_time_units)
+                                     time_val=(/restart_time/), time_units=restart_time_units)
            endif
         enddo  
      enddo
@@ -1161,7 +1123,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      call fms2_write_restart(fileObjWrite)
      call fms2_close_file(fileObjWrite)
     
-     if (allocated(time_vals)) deallocate(time_vals)     
      if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
      if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
@@ -1182,7 +1143,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   
   ! local
   type(vardesc) :: vd ! structure for variable metadata
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to fms2_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to MOM_open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   integer :: substring_index
   integer :: name_length
@@ -1195,12 +1156,10 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   character(len=200) :: base_file_name
   character(len=200) :: dim_names(4)
   character(len=20) :: time_units
-  character(len=20) :: t_grid_read, t_grid_str
   character(len=64) :: units
   character(len=256) :: longname
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   real :: ic_time
-  real, dimension(:), allocatable :: time_vals
   real, dimension(:), allocatable :: data_temp
 
   ! append '.nc' to the restart file name if it is missing
@@ -1220,13 +1179,8 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
 
   ! open the netCDF file
   ! check if file already exists and can be appended
-   file_open_success = fms2_open_file(fileObjWrite, base_file_name, "append", & 
-                                  G%Domain%mpp_domain, is_restart = .false.)
-   if (.not.(file_open_success)) then
-   ! create and open new file(s) for domain-decomposed write
-      file_open_success = fms2_open_file(fileObjWrite, base_file_name, "write", & 
-                                   G%Domain%mpp_domain, is_restart = .false.)
-   endif
+  file_open_success = MOM_open_file(fileObjWrite, trim(base_file_name), "write", & 
+                                   G, is_restart = .false.)
   
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
   !>@NOTE the user may need to increase the allocated array sizes to accomodate 
@@ -1244,35 +1198,6 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                         z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
 
-     if (.not.(allocated(time_vals))) then
-        t_grid_str = ''
-        t_grid_str = adjustl(t_grid)
-        select case (t_grid_str(1:1))
-           case ('s', 'a', 'm') ! allocate an empty array that will be populated after the function call
-              allocate(time_vals(1))
-              time_vals(1) = ic_time
-           case ('p')
-              if (len_trim(t_grid(2:8)) > 0) then
-                 var_periods = -1
-                 t_grid_read = ''
-                 t_grid_read = adjustl(t_grid(2:8))
-                 read(t_grid_read,*) var_periods
-                 if (var_periods < 1) then 
-                     call MOM_error(FATAL, "MOM::write_initial_conditions: "//&
-                                   "Period value must be positive.")
-                 endif
-                 ! Define a periodic axis array
-                 allocate(time_vals(var_periods))
-                 do k=1,var_periods
-                    time_vals(k) = real(k)
-                 enddo
-              endif
-           case default
-               call MOM_error(FATAL,"MOM_restart:write_initial_conditions: "//&
-                              "t_grid_str is empty or incorrectly defined.")
-        end select
-     endif
-
      ! get the dimension names and lengths for variable 'm'                                
      ! note: 4d variables are lon x lat x vertical level x time
      num_dims=0 
@@ -1288,7 +1213,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
         if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
             total_axes=total_axes+1
             call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                                   time_val=time_vals, time_units=time_units)
+                                   time_val=(/ic_time/), time_units=time_units)
             call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
         endif
      enddo
@@ -1374,13 +1299,11 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   ! close the IC file and deallocate the allocatable arrays
   call fms2_close_file(fileObjWrite)
 
-  if(allocated(time_vals)) deallocate(time_vals)
+ 
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
 
 end subroutine write_initial_conditions
-
-
 
 !> restore_state reads the model state from previously generated files.  All
 !! restart variables are read from the first file in the input filename list
@@ -1418,7 +1341,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   logical                          :: check_exist, is_there_a_checksum
   integer(LONG_KIND),dimension(3)  :: checksum_file
   integer(kind=8)                  :: checksum_data
-  logical :: file_open_success = .false. ! returned by call to fms2_open_file 
+  logical :: file_open_success = .false. ! returned by call to MOM_open_file 
   type(FmsNetcdfDomainFile_t) :: fileObjRead  ! fms2 data structure
   integer :: str_index
   character(len=96), dimension(:), allocatable :: variable_names(:) ! File variable names
@@ -1452,8 +1375,8 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   !Open the restart file.
   
-  file_open_success = fms2_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
-                                     G%Domain%mpp_domain, is_restart=.true.)
+  file_open_success = MOM_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
+                                     G, is_restart=.true.)
   
   if (is_root_pe() .and. file_open_success) then
      call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(directory)//trim(base_file_name))
@@ -1688,8 +1611,8 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
         filepath = trim(directory) // trim(restartname)
   
         ! check if file already exists and can be appendedf
-        fexists = fms2_open_file(fileObjRead, trim(filepath), "read", & 
-                                  G%Domain%mpp_domain, is_restart = .true.)
+        fexists = MOM_open_file(fileObjRead, trim(filepath), "read", & 
+                                  G, is_restart = .true.)
 
         if (fexists) then
            if (fms2_global_att_exists(fileObjRead,'NumFilesInSet')) then
