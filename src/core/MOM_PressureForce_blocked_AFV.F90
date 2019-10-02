@@ -327,7 +327,7 @@ subroutine PressureForce_blk_AFV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm,
   ! geopotentials will not now be linear at the sub-grid-scale.  Doing this
   ! ensures no motion with flat isopycnals, even with a nonlinear equation of state.
 !$OMP parallel do default(none) shared(nz,za,G,GV,dza,intx_dza,h,PFu, &
-!$OMP                                  intp_dza,p,dp_neglect,inty_dza,PFv,CS,dM) &
+!$OMP                                  intp_dza,p,dp_neglect,inty_dza,PFv,CS,dM,US) &
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk, &
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,i,j,za_bk,intx_za_bk,  &
 !$OMP                                  inty_za_bk,dp_bk)

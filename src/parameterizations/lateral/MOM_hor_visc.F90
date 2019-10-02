@@ -510,13 +510,24 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP                                  h,rescale_Kh,VarMix,h_neglect,h_neglect3,      &
   !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,diffv,apply_OBC,OBC, &
   !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,          &
-  !$OMP                                  use_MEKE_Au, MEKE, hq,                         &
+  !$OMP                                  use_MEKE_Au, MEKE,sh_xx_3d,sh_xy_3d,           &
+  !$OMP                                  GME_coeff_limiter,boundary_mask,FWfrac,backscat_subround,&
   !$OMP                                  mod_Leith, legacy_bound, div_xx_h, vort_xy_q)  &
   !$OMP                          private(Del2u, Del2v, sh_xx, str_xx, visc_bound_rem,   &
+  !$OMP                                  dudx,dvdy,DX_dyBu,DY_dxBu,                     &
+  !$OMP                                  grad_div_mag_h,grad_div_mag_q,                 &
+  !$OMP                                  grad_vort_mag_h_2d,grad_vort_mag_q_2d,         &
+  !$OMP                                  grad_vort_mag_h,grad_vort_mag_q,vert_vort_mag, &
+  !$OMP                                  inv_PI3,inv_PI5,grad_vel_mag_h,                &
+  !$OMP                                  grad_d2vel_mag_h,diss_rate,max_diss_rate,      &
+  !$OMP                                  FrictWork_diss,FrictWorkMax,                   &
+  !$OMP                                  target_diss_rate_GME,GME_coeff,                &
+  !$OMP                                  grad_vel_mag_bt_h,H0_GME,GME_coeff_h,          &
+  !$OMP                                  str_xx_GME,grad_vel_mag_bt_q,GME_coeff_q,str_xy_GME,FrictWork_GME,&
   !$OMP                                  sh_xy,str_xy,Ah,Kh,AhSm,dvdx,dudy,dDel2udy,    &
   !$OMP                                  dDel2vdx,sh_xx_bt, sh_xy_bt, dvdx_bt, dudy_bt, &
   !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,h_u,h_v, &
-  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,  &
+  !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,AhLth,  &
   !$OMP                                  div_xx, div_xx_dx, div_xx_dy, local_strain,    &
   !$OMP                                  meke_res_fn,Sh_F_pow,                          &
   !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)

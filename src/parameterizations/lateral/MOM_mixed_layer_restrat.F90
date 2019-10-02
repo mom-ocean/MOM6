@@ -295,7 +295,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt_in_T,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_LFront,    &
 !$OMP                               res_upscale,                                       &
@@ -628,7 +628,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,   &
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt_in_T,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
 !$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
