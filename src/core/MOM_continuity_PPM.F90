@@ -300,7 +300,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt_in_T, G, GV, US, CS, LB, uhbt, OBC, &
 
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,u,h_in,h_L,h_R,use_visc_rem,visc_rem_u,  &
-!$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,set_BT_cont,    &
+!$OMP                                  uh,dt_in_T,US,G,GV,CS,local_specified_BC,OBC,uhbt,set_BT_cont,    &
 !$OMP                                  CFL_dt,I_dt,u_cor,BT_cont, local_Flather_OBC) &
 !$OMP                          private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
 !$OMP                                  is_simple,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W,any_simple_OBC ) &
@@ -1099,7 +1099,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt_in_T, G, GV, US, CS, LB, vhbt, O
 
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,v,h_in,h_L,h_R,vh,use_visc_rem, &
-!$OMP                                  visc_rem_v,dt,G,GV,CS,local_specified_BC,OBC,vhbt, &
+!$OMP                                  visc_rem_v,dt_in_T,US,G,GV,CS,local_specified_BC,OBC,vhbt, &
 !$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,BT_cont, local_Flather_OBC ) &
 !$OMP                          private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
 !$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
