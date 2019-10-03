@@ -91,7 +91,7 @@ end type user_surface_forcing_CS
 
 contains
 
-!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy, in [Pa].
+!> This subroutine sets the surface wind stresses, forces%taux and forces%tauy, in [R Z L T-2 ~> Pa].
 !! These are the stresses in the direction of the model grid (i.e. the same
 !! direction as the u- and v- velocities).
 subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
@@ -104,7 +104,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
                                                        !! by a previous call to user_surface_forcing_init
 
-!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy [Pa].
+!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy [R Z L T-2 ~> Pa].
 ! In addition, this subroutine can be used to set the surface friction velocity,
 ! forces%ustar [Z T-1 ~> m s-1], which is needed with a bulk mixed layer.
 
@@ -130,7 +130,8 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
-    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
+    ! Change this to the desired expression.
+    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0*US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   enddo ; enddo
   do J=js-1,Jeq ; do i=is,ie
     forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
@@ -140,7 +141,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-       sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+       US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
             0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo ; endif
 

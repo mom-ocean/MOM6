@@ -862,9 +862,9 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   type(surface_forcing_CS),pointer       :: CS   !< A pointer to the control structure returned by a
                                                  !! previous call to surface_forcing_init.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(inout) :: taux !< The zonal wind stresses on a C-grid [Pa].
+                 optional, intent(inout) :: taux !< The zonal wind stresses on a C-grid [R Z L T-2 ~> Pa].
   real, dimension(SZI_(G),SZJB_(G)), &
-                 optional, intent(inout) :: tauy !< The meridional wind stresses on a C-grid [Pa].
+                 optional, intent(inout) :: tauy !< The meridional wind stresses on a C-grid [R Z L T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(inout) :: ustar !< The surface friction velocity [Z T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -873,17 +873,18 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: taux_in_A   ! Zonal wind stresses [Pa] at h points
-  real, dimension(SZI_(G),SZJ_(G)) :: tauy_in_A   ! Meridional wind stresses [Pa] at h points
+  real, dimension(SZI_(G),SZJ_(G)) :: taux_in_A   ! Zonal wind stresses [R Z L T-2 ~> Pa] at h points
+  real, dimension(SZI_(G),SZJ_(G)) :: tauy_in_A   ! Meridional wind stresses [R Z L T-2 ~> Pa] at h points
   real, dimension(SZIB_(G),SZJ_(G)) :: taux_in_C  ! Zonal wind stresses [Pa] at u points
-  real, dimension(SZI_(G),SZJB_(G)) :: tauy_in_C  ! Meridional wind stresses [Pa] at v points
+  real, dimension(SZI_(G),SZJB_(G)) :: tauy_in_C  ! Meridional wind stresses [R Z L T-2 ~> Pa] at v points
   real, dimension(SZIB_(G),SZJB_(G)) :: taux_in_B ! Zonal wind stresses [Pa] at q points
-  real, dimension(SZIB_(G),SZJB_(G)) :: tauy_in_B ! Meridional wind stresses [Pa] at q points
+  real, dimension(SZIB_(G),SZJB_(G)) :: tauy_in_B ! Meridional wind stresses [R Z L T-2 ~> Pa] at q points
 
-  real :: gustiness     ! unresolved gustiness that contributes to ustar [Pa]
+  real :: gustiness     ! unresolved gustiness that contributes to ustar [R Z L T-2 ~> Pa]
   real :: Irho0         ! Inverse of the mean density rescaled to [Z2 s2 m T-2 kg-1 ~> m3 kg-1]
-  real :: taux2, tauy2  ! squared wind stresses [Pa2]
-  real :: tau_mag       ! magnitude of the wind stress [Pa]
+  real :: taux2, tauy2  ! squared wind stresses [R2 Z2 L2 T-4 ~> Pa2]
+  real :: tau_mag       ! magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: stress_conversion ! A unit conversion factor from Pa times any stress multiplier [R Z L T-2 Pa-1 ~> 1]
 
   logical :: do_ustar, do_gustless
   integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
@@ -896,6 +897,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   i0 = is - index_bounds(1) ; j0 = js - index_bounds(3)
 
   Irho0 = (US%m_to_Z*US%T_to_s)**2 / CS%Rho0
+  stress_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * CS%wind_stress_multiplier
 
   do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
 
@@ -916,8 +918,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
       taux_in_B(:,:) = 0.0 ; tauy_in_B(:,:) = 0.0
       if (associated(IOB%u_flux).and.associated(IOB%v_flux)) then
         do J=js,je ; do I=is,ie
-          taux_in_B(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-          tauy_in_B(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+          taux_in_B(I,J) = IOB%u_flux(i-i0,j-j0) * stress_conversion
+          tauy_in_B(I,J) = IOB%v_flux(i-i0,j-j0) * stress_conversion
         enddo ; enddo
       endif
 
@@ -942,8 +944,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
       taux_in_A(:,:) = 0.0 ; tauy_in_A(:,:) = 0.0
       if (associated(IOB%u_flux).and.associated(IOB%v_flux)) then
         do j=js,je ; do i=is,ie
-          taux_in_A(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-          tauy_in_A(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+          taux_in_A(i,j) = IOB%u_flux(i-i0,j-j0) * stress_conversion
+          tauy_in_A(i,j) = IOB%v_flux(i-i0,j-j0) * stress_conversion
         enddo ; enddo
       endif
 
@@ -971,8 +973,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
       taux_in_C(:,:) = 0.0 ; tauy_in_C(:,:) = 0.0
       if (associated(IOB%u_flux).and.associated(IOB%v_flux)) then
         do j=js,je ; do i=is,ie
-          taux_in_C(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-          tauy_in_C(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+          taux_in_C(I,j) = IOB%u_flux(i-i0,j-j0) * stress_conversion
+          tauy_in_C(i,J) = IOB%v_flux(i-i0,j-j0) * stress_conversion
         enddo ; enddo
       endif
 
@@ -1029,11 +1031,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
             ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
         if (CS%answers_2018) then
-          if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z*tau_mag / CS%Rho0)
         else
-          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
         endif
       enddo ; enddo
     elseif (wind_stagger == AGRID) then
@@ -1041,11 +1043,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         tau_mag = G%mask2dT(i,j) * sqrt(taux_in_A(i,j)**2 + tauy_in_A(i,j)**2)
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
         if (CS%answers_2018) then
-          if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z*tau_mag / CS%Rho0)
         else
-          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
         endif
       enddo ; enddo
     else  ! C-grid wind stresses.
@@ -1062,11 +1064,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         gustiness = CS%gust_const
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * tau_mag)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
         if (CS%answers_2018) then
-          if (do_gustless) gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z*tau_mag / CS%Rho0)
         else
-          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * tau_mag)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
         endif
       enddo ; enddo
     endif ! endif for wind friction velocity fields
@@ -1132,12 +1134,15 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points [Pa]
-  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points [Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points [R Z L T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points [R Z L T-2 ~> Pa]
 
   integer :: isc, iec, jsc, jec, i, j
   real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
   logical :: overrode_x, overrode_y
+  type(unit_scale_type), pointer :: US => NULL() !< A dimensional unit scaling type
+
+  US => G%US
 
   isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
 
@@ -1160,8 +1165,8 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
       if (rDlon > 0.) rDlon = 1. / rDlon
       cosA = dLonDx * rDlon
       sinA = dLonDy * rDlon
-      zonal_tau = tempx_at_h(i,j)
-      merid_tau = tempy_at_h(i,j)
+      zonal_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * tempx_at_h(i,j)
+      merid_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * tempy_at_h(i,j)
       tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
       tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
     enddo ; enddo

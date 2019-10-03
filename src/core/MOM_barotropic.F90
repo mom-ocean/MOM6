@@ -580,9 +580,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
     vbt_prev, vhbt_prev, vbt_sum_prev, vhbt_sum_prev, vbt_wtd_prev  ! for OBC
 
-  real :: mass_to_Z   ! The depth unit converison divided by the mean density (Rho0) [Z m2 kg-1 ~> m3 kg-1].
-  real :: mass_accel_to_Z ! The depth unit converison times an acceleration conversion divided by
-                      ! the mean density (Rho0) [Z L m s2 T-2 kg-1 ~> m3 kg-1].
+  real :: mass_to_Z   ! The depth unit converison divided by the mean density (Rho0) [Z m-1 R-1 ~> m3 kg-1].
+  real :: mass_accel_to_Z ! The inverse of the mean density (Rho0) [R-1 ~> m3 kg-1].
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: dtbt        ! The barotropic time step [T ~> s].
@@ -724,8 +723,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   dtbt = dt_in_T * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
-  mass_accel_to_Z = US%m_to_L*US%T_to_s**2 * US%m_to_Z / (US%R_to_kg_m3*GV%Rho0)
-  mass_to_Z = US%m_to_Z / (US%R_to_kg_m3*GV%Rho0)
+  mass_accel_to_Z = 1.0 / GV%Rho0
+  mass_to_Z = US%m_to_Z / (GV%Rho0)
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -1002,11 +1001,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (associated(taux_bot) .and. associated(tauy_bot)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
-        BT_force_u(I,j) = BT_force_u(I,j) - US%R_to_kg_m3*taux_bot(I,j) * mass_to_Z  * CS%IDatu(I,j)
+        BT_force_u(I,j) = BT_force_u(I,j) - taux_bot(I,j) * mass_to_Z  * CS%IDatu(I,j)
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie
-        BT_force_v(i,J) = BT_force_v(i,J) - US%R_to_kg_m3*tauy_bot(i,J) * mass_to_Z  * CS%IDatv(i,J)
+        BT_force_v(i,J) = BT_force_v(i,J) - tauy_bot(i,J) * mass_to_Z  * CS%IDatv(i,J)
       enddo ; enddo
     endif
   endif

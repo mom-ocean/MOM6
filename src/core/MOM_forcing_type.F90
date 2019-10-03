@@ -185,8 +185,8 @@ end type forcing
 type, public :: mech_forcing
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    taux  => NULL(), & !< zonal wind stress [Pa]
-    tauy  => NULL(), & !< meridional wind stress [Pa]
+    taux  => NULL(), & !< zonal wind stress [R L Z T-2 ~> Pa]
+    tauy  => NULL(), & !< meridional wind stress [R L Z T-2 ~> Pa]
     ustar => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     net_mass_src => NULL() !< The net mass source to the ocean [kg m-2 s-1].
 
@@ -1102,7 +1102,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   ! and js...je as their extent.
   if (associated(forces%taux) .and. associated(forces%tauy)) &
     call uvchksum(mesg//" forces%tau[xy]", forces%taux, forces%tauy, G%HI, &
-                  haloshift=hshift, symmetric=.true.)
+                  haloshift=hshift, symmetric=.true., scale=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L)
   if (associated(forces%p_surf)) &
     call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
   if (associated(forces%ustar)) &
@@ -1215,13 +1215,15 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
 
   handles%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time,  &
-        'Zonal surface stress from ocean interactions with atmos and ice', 'Pa',    &
+        'Zonal surface stress from ocean interactions with atmos and ice', &
+        'Pa', conversion=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L, &
         standard_name='surface_downward_x_stress', cmor_field_name='tauuo',         &
         cmor_units='N m-2', cmor_long_name='Surface Downward X Stress',             &
         cmor_standard_name='surface_downward_x_stress')
 
   handles%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time,  &
-        'Meridional surface stress ocean interactions with atmos and ice', 'Pa',    &
+        'Meridional surface stress ocean interactions with atmos and ice', &
+        'Pa',  conversion=US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L, &
          standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
          cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
          cmor_standard_name='surface_downward_y_stress')
@@ -2050,6 +2052,7 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
 
 end subroutine copy_common_forcing_fields
 
+!### Change the units of Rho0 passed to set_derived_forcing_fields.
 
 !> This subroutine calculates certain derived forcing fields based on information
 !! from a mech_forcing type and stores them in a (thermodynamic) forcing type.
@@ -2061,12 +2064,12 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
   real,                    intent(in)    :: Rho0     !< A reference density of seawater [kg m-3],
                                                      !! as used to calculate ustar.
 
-  real :: taux2, tauy2 ! Squared wind stress components [Pa2].
-  real :: Irho0        ! Inverse of the mean density rescaled to [Z2 m / kg ~> m3 kg-1]
+  real :: taux2, tauy2 ! Squared wind stress components [R2 L2 Z2 T-4 ~> Pa2].
+  real :: Irho0        ! Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  Irho0 = US%m_to_Z**2 / Rho0
+  Irho0 = US%L_to_Z / (US%kg_m3_to_R*Rho0)
 
   if (associated(forces%taux) .and. associated(forces%tauy) .and. &
       associated(fluxes%ustar_gustless)) then
@@ -2082,7 +2085,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      fluxes%ustar_gustless(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(taux2 + tauy2) / Rho0)
+      fluxes%ustar_gustless(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
 !### Change to:
 !      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo

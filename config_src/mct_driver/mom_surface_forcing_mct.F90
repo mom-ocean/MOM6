@@ -710,8 +710,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       if (associated(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
       if (associated(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (associated(IOB%u_flux)) forces%taux(I,j) = IOB%u_flux(i-i0,j-j0) * &
+                                      US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z*CS%wind_stress_multiplier
+      if (associated(IOB%v_flux)) forces%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * &
+                                      US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z*CS%wind_stress_multiplier
     endif
 
   enddo ; enddo
@@ -725,7 +727,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do j=js,je ; do I=Isq,Ieq
       forces%taux(I,j) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
-        forces%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
+        forces%taux(I,j) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                           (G%mask2dBu(I,J)*taux_at_q(I,J) + &
                             G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
                            (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
     enddo; enddo
@@ -733,7 +736,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do J=Jsq,Jeq ; do i=is,ie
       forces%tauy(i,J) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
-        forces%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
+        forces%tauy(i,J) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                           (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
                             G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
                            (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
     enddo; enddo
@@ -762,7 +766,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do j=js,je ; do I=Isq,Ieq
       forces%taux(I,j) = 0.0
       if ((G%mask2dT(i,j) + G%mask2dT(i+1,j)) > 0) &
-        forces%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
+        forces%taux(I,j) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                           (G%mask2dT(i,j)*taux_at_h(i,j) + &
                             G%mask2dT(i+1,j)*taux_at_h(i+1,j)) / &
                            (G%mask2dT(i,j) + G%mask2dT(i+1,j))
     enddo; enddo
@@ -770,7 +775,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do J=Jsq,Jeq ; do i=is,ie
       forces%tauy(i,J) = 0.0
       if ((G%mask2dT(i,j) + G%mask2dT(i,j+1)) > 0) &
-        forces%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
+        forces%tauy(i,J) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                           (G%mask2dT(i,j)*tauy_at_h(i,j) + &
                             G%mask2dT(i,J+1)*tauy_at_h(i,j+1)) / &
                            (G%mask2dT(i,j) + G%mask2dT(i,j+1))
     enddo; enddo
@@ -799,9 +805,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
                  G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
-        forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust(i,j)*Irho0 + &
+                Irho0*US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*sqrt(taux2 + tauy2))
       else
-        forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(CS%gust_const*Irho0 + &
+                Irho0*US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*sqrt(taux2 + tauy2))
       endif
     enddo; enddo
 
@@ -913,8 +921,8 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h !< Delta to zonal wind stress at h points [Pa]
-  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h !< Delta to meridional wind stress at h points [Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h !< Delta to zonal wind stress at h points [R Z L T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h !< Delta to meridional wind stress at h points [R Z L T-2 ~> Pa]
 
   integer :: isc, iec, jsc, jec, i, j
   real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
@@ -941,8 +949,8 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
       if (rDlon > 0.) rDlon = 1. / rDlon
       cosA = dLonDx * rDlon
       sinA = dLonDy * rDlon
-      zonal_tau = tempx_at_h(i,j)
-      merid_tau = tempy_at_h(i,j)
+      zonal_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * tempx_at_h(i,j)
+      merid_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * tempy_at_h(i,j)
       tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
       tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
     enddo ; enddo

@@ -1087,7 +1087,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
                     ! viscous mixed layer, including reduction for turbulent
                     ! decay. Nondimensional.
   real :: dt_Rho0   ! The time step divided by the conversion from the layer
-                    ! thickness to layer mass [s H m2 kg-1 ~> s m3 kg-1 or s].
+                    ! thickness to layer mass [T H Z-1 R-1 ~> s m3 kg-1 or s].
   real :: g_H_Rho0  !   The gravitational acceleration times the conversion from H to m divided
                     ! by the mean density [L2 T-2 H-1 R-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: ustarsq     ! 400 times the square of ustar, times
@@ -1141,7 +1141,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
 
   OBC => CS%OBC
   use_EOS = associated(tv%eqn_of_state)
-  dt_Rho0 = US%T_to_s*dt_in_T / GV%H_to_kg_m2
+  dt_Rho0 = dt_in_T / GV%H_to_RZ
   h_neglect = GV%H_subroundoff
   h_tiny = 2.0*GV%Angstrom_H + h_neglect
   g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / (GV%Rho0)
@@ -1205,8 +1205,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
           do_i(I) = .true. ; do_any = .true.
           k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
-          uhtot(I) = US%m_s_to_L_T*dt_Rho0 * forces%taux(I,j)
-          vhtot(I) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
+          uhtot(I) = dt_Rho0 * forces%taux(I,j)
+          vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1440,8 +1440,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
           do_i(i) = .true. ; do_any = .true.
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
-          vhtot(i) = US%m_s_to_L_T*dt_Rho0 * forces%tauy(i,J)
-          uhtot(i) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
+          vhtot(i) = dt_Rho0 * forces%tauy(i,J)
+          uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else

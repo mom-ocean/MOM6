@@ -131,8 +131,12 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
   type(param_file_type),    intent(in) :: param_file !< Input parameter structure
   type(SCM_CVMix_tests_CS), pointer    :: CS         !< Parameter container
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  type(unit_scale_type), pointer :: US => NULL() !< A dimensional unit scaling type
+
+  US => G%US
 
   if (associated(CS)) then
     call MOM_error(FATAL, "SCM_CVMix_tests_surface_forcing_init called with an associated "// &
@@ -163,11 +167,11 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
     call get_param(param_file, mdl, "SCM_TAU_X",                      &
                  CS%tau_x, "Constant X-dir wind stress "//            &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='N/m2', fail_if_missing=.true.)
+                 units='N/m2', scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, fail_if_missing=.true.)
     call get_param(param_file, mdl, "SCM_TAU_Y",                      &
                  CS%tau_y, "Constant y-dir wind stress "//            &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='N/m2', fail_if_missing=.true.)
+                 units='N/m2', scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, fail_if_missing=.true.)
   endif
   if (CS%UseHeatFlux) then
     call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &
@@ -218,7 +222,7 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
 
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(  mag_tau / CS%Rho0 )
+    forces%ustar(i,j) = sqrt( US%R_to_kg_m3*US%L_to_Z * mag_tau / CS%Rho0 )
   enddo ; enddo ; endif
 
 end subroutine SCM_CVMix_tests_wind_forcing

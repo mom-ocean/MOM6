@@ -186,7 +186,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
                            ! is applied with direct_stress [H ~> m or kg m-2].
   real :: I_Hmix           ! The inverse of Hmix [H-1 ~> m-1 or m2 kg-1].
   real :: Idt              ! The inverse of the time step [T-1 ~> s-1].
-  real :: dt_Rho0          ! The time step divided by the mean density [L s2 H m T-1 kg-1 ~> s m3 kg-1 or s].
+  real :: dt_Rho0          ! The time step divided by the mean density [T H Z-1 R-1 ~> s m3 kg-1 or s].
   real :: Rho0             ! A density used to convert drag laws into stress in Pa [kg m-3].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness - [T H Z-1 ~> s or s kg m-3].
@@ -213,7 +213,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
     Hmix = CS%Hmix_stress
     I_Hmix = 1.0 / Hmix
   endif
-  dt_Rho0 = US%m_s_to_L_T*US%T_to_s * dt_in_T / GV%H_to_kg_m2
+  dt_Rho0 = dt_in_T / GV%H_to_RZ
   dt_Z_to_H = dt_in_T*GV%Z_to_H
   Rho0 = US%R_to_kg_m3*GV%Rho0
   h_neglect = GV%H_subroundoff
@@ -1328,7 +1328,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt_in_T, G, GV, U
   real :: truncvel         ! are truncated to truncvel, both [L T-1 ~> m s-1].
   real :: CFL              ! The local CFL number.
   real :: H_report         ! A thickness below which not to report truncations.
-  real :: dt_Rho0          ! The timestep divided by the Boussinesq density [s m3 kg-1].
+  real :: dt_Rho0          ! The timestep divided by the Boussinesq density [m2 T2 s-1 L-1 Z-1 R-1 ~> s m3 kg-1].
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
   real :: u_old(SZIB_(G),SZJ_(G),SZK_(G)) ! The previous u-velocity [L T-1 ~> m s-1]
   real :: v_old(SZI_(G),SZJB_(G),SZK_(G)) ! The previous v-velocity [L T-1 ~> m s-1]
@@ -1340,7 +1340,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt_in_T, G, GV, U
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
   H_report = 6.0 * GV%Angstrom_H
-  dt_Rho0 = US%T_to_s*dt_in_T / (US%R_to_kg_m3*GV%Rho0)
+  dt_Rho0 = (US%L_T_to_m_s*US%Z_to_m) * dt_in_T / (GV%Rho0)
 
   if (len_trim(CS%u_trunc_file) > 0) then
     !$OMP parallel do default(shared) private(trunc_any,CFL)

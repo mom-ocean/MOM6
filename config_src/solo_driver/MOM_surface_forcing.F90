@@ -379,14 +379,15 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
 
   !set steady surface wind stresses, in units of Pa.
+  !### mag_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * sqrt( tau_x0**2 + tau_y0**2)
   mag_tau = sqrt( tau_x0**2 + tau_y0**2)
 
   do j=js,je ; do I=is-1,Ieq
-    forces%taux(I,j) = tau_x0
+    forces%taux(I,j) = tau_x0 * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   enddo ; enddo
 
   do J=js-1,Jeq ; do i=is,ie
-    forces%tauy(i,J) = tau_y0
+    forces%tauy(i,J) = tau_y0 * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   enddo ; enddo
 
   if (CS%read_gust_2d) then
@@ -425,8 +426,8 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, US, CS)
   PI = 4.0*atan(1.0)
 
   do j=js,je ; do I=is-1,Ieq
-    forces%taux(I,j) = 0.1*(1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / &
-                                      CS%len_lat))
+    forces%taux(I,j) = 0.1*US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                      (1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat))
   enddo ; enddo
 
   do J=js-1,Jeq ; do i=is,ie
@@ -459,7 +460,8 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, US, CS)
   PI = 4.0*atan(1.0)
 
   do j=js,je ; do I=is-1,Ieq
-    forces%taux(I,j) =-0.2*cos(PI*(G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat)
+    forces%taux(I,j) = -0.2*US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                       cos(PI*(G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat)
   enddo ; enddo
 
   do J=js-1,Jeq ; do i=is,ie
@@ -492,9 +494,10 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
 
   do j=js-1,je+1 ; do I=is-1,Ieq
     y = (G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat
-    forces%taux(I,j) = CS%gyres_taux_const +                            &
+    forces%taux(I,j) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+            (CS%gyres_taux_const +                            &
              (   CS%gyres_taux_sin_amp*sin(CS%gyres_taux_n_pis*PI*y)    &
-               + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) )
+               + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) ))
   enddo ; enddo
 
   do J=js-1,Jeq ; do i=is-1,ie+1
@@ -506,14 +509,16 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
     do j=js,je ; do i=is,ie
       forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + &
         forces%tauy(i,j)*forces%tauy(i,j) + forces%taux(i-1,j)*forces%taux(i-1,j) + &
-        forces%taux(i,j)*forces%taux(i,j)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+        forces%taux(i,j)*forces%taux(i,j))) * &
+        US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L/CS%Rho0 + (CS%gust_const/CS%Rho0))
     enddo ; enddo
   else
     I_rho = 1.0 / CS%Rho0
     do j=js,je ; do i=is,ie
       forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt( (CS%gust_const + &
             sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
+                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) * &
+                      US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L ) * I_rho )
     enddo ; enddo
   endif
 
@@ -583,7 +588,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
       call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
                          temp_x(:,:), temp_y(:,:), &
-                         G%Domain, stagger=AGRID, timelevel=time_lev)
+                         G%Domain, stagger=AGRID, timelevel=time_lev, &
+                          scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
 
       call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
       do j=js,je ; do I=is-1,Ieq
@@ -597,12 +603,12 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         if (CS%read_gust_2d) then
           do j=js,je ; do i=is,ie
             forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt((sqrt(temp_x(i,j)*temp_x(i,j) + &
-                temp_y(i,j)*temp_y(i,j)) + CS%gust(i,j)) / CS%Rho0)
+                temp_y(i,j)*temp_y(i,j))*US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L + CS%gust(i,j)) / CS%Rho0)
           enddo ; enddo
         else
           do j=js,je ; do i=is,ie
             forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(temp_x(i,j)*temp_x(i,j) + &
-                temp_y(i,j)*temp_y(i,j))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+                temp_y(i,j)*temp_y(i,j)) * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L/CS%Rho0 + (CS%gust_const/CS%Rho0))
           enddo ; enddo
         endif
       endif
@@ -616,7 +622,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
         call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
                              temp_x(:,:), temp_y(:,:), &
-                             G%Domain_aux, stagger=CGRID_NE, timelevel=time_lev)
+                             G%Domain_aux, stagger=CGRID_NE, timelevel=time_lev, &
+                             scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
         do j=js,je ; do i=is,ie
           forces%taux(I,j) = CS%wind_scale * temp_x(I,j)
           forces%tauy(i,J) = CS%wind_scale * temp_y(i,J)
@@ -625,7 +632,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       else
         call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
                              forces%taux(:,:), forces%tauy(:,:), &
-                             G%Domain, stagger=CGRID_NE, timelevel=time_lev)
+                             G%Domain, stagger=CGRID_NE, timelevel=time_lev, &
+                             scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
 
         if (CS%wind_scale /= 1.0) then
           do j=js,je ; do I=Isq,Ieq
@@ -642,14 +650,14 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         if (CS%read_gust_2d) then
           do j=js, je ; do i=is, ie
             forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt((sqrt(0.5*((forces%tauy(i,j-1)**2 + &
-              forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
-              forces%taux(i,j)**2))) + CS%gust(i,j)) / CS%Rho0 )
+              forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + forces%taux(i,j)**2))) * &
+              US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L + CS%gust(i,j)) / CS%Rho0 )
           enddo ; enddo
         else
           do j=js, je ; do i=is, ie
             forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(sqrt(0.5*((forces%tauy(i,j-1)**2 + &
-              forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + &
-              forces%taux(i,j)**2)))/CS%Rho0 + (CS%gust_const/CS%Rho0))
+              forces%tauy(i,j)**2) + (forces%taux(i-1,j)**2 + forces%taux(i,j)**2))) * &
+              US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L/CS%Rho0 + (CS%gust_const/CS%Rho0))
           enddo ; enddo
         endif
       endif
@@ -707,10 +715,10 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
   ! Ignore CS%wind_scale when using data_override ?????
   do j=G%jsc,G%jec ; do I=G%isc-1,G%IecB
-    forces%taux(I,j) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
+    forces%taux(I,j) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * 0.5 * (temp_x(i,j) + temp_x(i+1,j))
   enddo ; enddo
   do J=G%jsc-1,G%JecB ; do i=G%isc,G%iec
-    forces%tauy(i,J) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
+    forces%tauy(i,J) = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * 0.5 * (temp_y(i,j) + temp_y(i,j+1))
   enddo ; enddo
 
   read_Ustar = (len_trim(CS%ustar_var) > 0) ! Need better control higher up ????

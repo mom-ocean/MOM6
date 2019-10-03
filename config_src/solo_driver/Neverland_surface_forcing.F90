@@ -61,7 +61,8 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real :: x, y
   real :: PI
-  real :: tau_max, off
+  real :: tau_max  ! The magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: off
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -78,7 +79,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! calculation of ustar - otherwise the lower bound would be Isq.
   PI = 4.0*atan(1.0)
   forces%taux(:,:) = 0.0
-  tau_max = 0.2
+  tau_max = 0.2 * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   off = 0.02
   do j=js,je ; do I=is-1,Ieq
 !    x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
@@ -105,7 +106,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
 ! if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
 !   !  This expression can be changed if desired, but need not be.
 !   forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-!      sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+!      US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
 !           0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
 ! enddo ; enddo ; endif
 
