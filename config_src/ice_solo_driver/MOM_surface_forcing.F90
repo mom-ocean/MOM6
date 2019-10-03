@@ -270,7 +270,7 @@ subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, U
   ! Fields that exist in both the forcing and mech_forcing types must be copied.
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
     call copy_common_forcing_fields(forces, fluxes, G)
-    call set_derived_forcing_fields(forces, fluxes, G, US, (US%R_to_kg_m3*CS%Rho0))
+    call set_derived_forcing_fields(forces, fluxes, G, US, CS%Rho0)
   endif
 
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &

@@ -2052,8 +2052,6 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
 
 end subroutine copy_common_forcing_fields
 
-!### Change the units of Rho0 passed to set_derived_forcing_fields.
-
 !> This subroutine calculates certain derived forcing fields based on information
 !! from a mech_forcing type and stores them in a (thermodynamic) forcing type.
 subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
@@ -2061,7 +2059,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
   type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in)    :: G        !< grid type
   type(unit_scale_type),   intent(in)    :: US       !< A dimensional unit scaling type
-  real,                    intent(in)    :: Rho0     !< A reference density of seawater [kg m-3],
+  real,                    intent(in)    :: Rho0     !< A reference density of seawater [R ~> kg m-3],
                                                      !! as used to calculate ustar.
 
   real :: taux2, tauy2 ! Squared wind stress components [R2 L2 Z2 T-4 ~> Pa2].
@@ -2069,7 +2067,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  Irho0 = US%L_to_Z / (US%kg_m3_to_R*Rho0)
+  Irho0 = US%L_to_Z / Rho0
 
   if (associated(forces%taux) .and. associated(forces%tauy) .and. &
       associated(fluxes%ustar_gustless)) then
@@ -2085,8 +2083,8 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      fluxes%ustar_gustless(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
-!### Change to:
+      fluxes%ustar_gustless(i,j) = sqrt(US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
+!### For efficiency this could be changed to:
 !      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
     enddo ; enddo
   endif

@@ -570,7 +570,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
-  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%US%R_to_kg_m3*OS%GV%Rho0)
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%use_waves) then

@@ -582,7 +582,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #endif
   endif
 
-  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%US%R_to_kg_m3*OS%GV%Rho0)
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%US, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%use_waves) then
