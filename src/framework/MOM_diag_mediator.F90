@@ -14,6 +14,7 @@ use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
 use MOM_io,               only : get_filename_appendix
+use MOM_io,               only : EAST_FACE, NORTH_FACE
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
@@ -360,14 +361,14 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   ! Horizontal axes for the native grids
   if (G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
-              'q point nominal longitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal longitude', Domain2=G%Domain%mpp_domain, pos=EAST_FACE)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
-              'q point nominal latitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal latitude', Domain2=G%Domain%mpp_domain, pos=NORTH_FACE)
   else
     id_xq = diag_axis_init('xq', G%gridLonB(G%isg:G%ieg), G%x_axis_units, 'x', &
-              'q point nominal longitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal longitude', Domain2=G%Domain%mpp_domain, pos=EAST_FACE)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsg:G%jeg), G%y_axis_units, 'y', &
-              'q point nominal latitude', Domain2=G%Domain%mpp_domain)
+              'q point nominal latitude', Domain2=G%Domain%mpp_domain, pos=NORTH_FACE)
   endif
   id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
               'h point nominal longitude', Domain2=G%Domain%mpp_domain)
