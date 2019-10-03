@@ -66,7 +66,7 @@ type, public :: surface_forcing_CS ; private
   logical :: use_temperature    !< If true, temp and saln used as state variables
   real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress [nondim].
 
-  real :: Rho0                  !< Boussinesq reference density [kg m-3]
+  real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
   real :: area_surf = -1.0      !< Total ocean surface area [m2]
   real :: latent_heat_fusion    !< Latent heat of fusion [J kg-1]
   real :: latent_heat_vapor     !< Latent heat of vaporization [J kg-1]
@@ -85,14 +85,14 @@ type, public :: surface_forcing_CS ; private
                                 !! type without any further adjustments to drive the ocean dynamics.
                                 !! The actual net mass source may differ due to corrections.
 
-  real :: gust_const            !< Constant unresolved background gustiness for ustar [Pa]
+  real :: gust_const            !< Constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
   logical :: read_gust_2d       !< If true, use a 2-dimensional gustiness supplied from an input file.
   real, pointer, dimension(:,:) :: &
     TKE_tidal => NULL()         !< Turbulent kinetic energy introduced to the bottom boundary layer
                                 !! by drag on the tidal flows [W m-2].
   real, pointer, dimension(:,:) :: &
     gust => NULL()              !< A spatially varying unresolved background gustiness that
-                                !! contributes to ustar [Pa].  gust is used when read_gust_2d is true.
+                                !! contributes to ustar [R L Z T-1 ~> Pa].  gust is used when read_gust_2d is true.
   real, pointer, dimension(:,:) :: &
     ustar_tidal => NULL()       !< Tidal contribution to the bottom friction velocity [m s-1]
   real :: cd_tides              !< Drag coefficient that applies to the tides (nondimensional)
@@ -352,7 +352,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       do j=js,je ; do i=is,ie
         delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
+        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (US%R_to_kg_m3*CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -372,7 +372,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
-                      (CS%Rho0*CS%Flux_const) * &
+                      (US%R_to_kg_m3*CS%Rho0*CS%Flux_const) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
       enddo ; enddo
@@ -398,7 +398,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                      (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+                      (US%R_to_kg_m3*CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
     enddo ; enddo
   endif
 
@@ -836,7 +836,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
 
   if (CS%allow_flux_adjustments) then
     ! Apply adjustments to forces
-    call apply_force_adjustments(G, CS, Time, forces)
+    call apply_force_adjustments(G, US, CS, Time, forces)
   endif
 
 !###  ! Allow for user-written code to alter fluxes after all the above
@@ -881,9 +881,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZIB_(G),SZJB_(G)) :: tauy_in_B ! Meridional wind stresses [R Z L T-2 ~> Pa] at q points
 
   real :: gustiness     ! unresolved gustiness that contributes to ustar [R Z L T-2 ~> Pa]
-  real :: Irho0         ! Inverse of the mean density rescaled to [Z2 s2 m T-2 kg-1 ~> m3 kg-1]
+  real :: Irho0         ! Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
   real :: taux2, tauy2  ! squared wind stresses [R2 Z2 L2 T-4 ~> Pa2]
   real :: tau_mag       ! magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: Pa_conversion ! A unit conversion factor from Pa to the internal wind stress units [R Z L T-2 Pa-1 ~> 1]
   real :: stress_conversion ! A unit conversion factor from Pa times any stress multiplier [R Z L T-2 Pa-1 ~> 1]
 
   logical :: do_ustar, do_gustless
@@ -896,8 +897,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   Isqh = G%IscB-halo ; Ieqh  = G%IecB+halo ; Jsqh = G%JscB-halo ; Jeqh = G%JecB+halo
   i0 = is - index_bounds(1) ; j0 = js - index_bounds(3)
 
-  Irho0 = (US%m_to_Z*US%T_to_s)**2 / CS%Rho0
-  stress_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * CS%wind_stress_multiplier
+  IRho0 = US%L_to_Z / CS%Rho0
+  Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
+  stress_conversion = Pa_conversion * CS%wind_stress_multiplier
+  !### Pa_conversion*US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L = 1.0
 
   do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
 
@@ -1008,15 +1011,15 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
                 (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0)) ) &
             gustiness = CS%gust(i,j)
         endif
-        ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*IOB%stress_mag(i-i0,j-j0))
+        ustar(i,j) = sqrt(gustiness*IRho0 + IRho0*Pa_conversion*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
       if (CS%answers_2018) then
         if (do_gustless) then ; do j=js,je ; do i=is,ie
-          gustless_ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
+          gustless_ustar(i,j) = sqrt(Pa_conversion*US%L_to_Z*IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
         enddo ; enddo ; endif
       else
         if (do_gustless) then ; do j=js,je ; do i=is,ie
-          gustless_ustar(i,j) = sqrt(Irho0 * IOB%stress_mag(i-i0,j-j0))
+          gustless_ustar(i,j) = sqrt(IRho0 * Pa_conversion*IOB%stress_mag(i-i0,j-j0))
         enddo ; enddo ; endif
       endif
     elseif (wind_stagger == BGRID_NE) then
@@ -1031,11 +1034,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
             ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (CS%answers_2018) then
-          if (do_gustless) gustless_ustar(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z*tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
-          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
         endif
       enddo ; enddo
     elseif (wind_stagger == AGRID) then
@@ -1043,11 +1046,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         tau_mag = G%mask2dT(i,j) * sqrt(taux_in_A(i,j)**2 + tauy_in_A(i,j)**2)
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (CS%answers_2018) then
-          if (do_gustless) gustless_ustar(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z*tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
-          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
         endif
       enddo ; enddo
     else  ! C-grid wind stresses.
@@ -1064,11 +1067,11 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         gustiness = CS%gust_const
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
-        if (do_ustar) ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
+        if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (CS%answers_2018) then
-          if (do_gustless) gustless_ustar(i,j) = sqrt(US%R_to_kg_m3*US%L_to_Z*tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
-          if (do_gustless) gustless_ustar(i,j) = sqrt(Irho0 * US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*tau_mag)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
         endif
       enddo ; enddo
     endif ! endif for wind friction velocity fields
@@ -1127,8 +1130,9 @@ end subroutine apply_flux_adjustments
 !! Available adjustments are:
 !! - taux_adj (Zonal wind stress delta, positive to the east [Pa])
 !! - tauy_adj (Meridional wind stress delta, positive to the north [Pa])
-subroutine apply_force_adjustments(G, CS, Time, forces)
+subroutine apply_force_adjustments(G, US, CS, Time, forces)
   type(ocean_grid_type),    intent(inout) :: G  !< Ocean grid structure
+  type(unit_scale_type),    intent(in)    :: US !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
   type(time_type),          intent(in)    :: Time !< Model time structure
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
@@ -1139,12 +1143,11 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
 
   integer :: isc, iec, jsc, jec, i, j
   real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
+  real :: Pa_conversion ! A unit conversion factor from Pa to the internal units [R Z L T-2 Pa-1 ~> 1]
   logical :: overrode_x, overrode_y
-  type(unit_scale_type), pointer :: US => NULL() !< A dimensional unit scaling type
-
-  US => G%US
 
   isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
+  Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
 
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
@@ -1165,8 +1168,8 @@ subroutine apply_force_adjustments(G, CS, Time, forces)
       if (rDlon > 0.) rDlon = 1. / rDlon
       cosA = dLonDx * rDlon
       sinA = dLonDy * rDlon
-      zonal_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * tempx_at_h(i,j)
-      merid_tau = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * tempy_at_h(i,j)
+      zonal_tau = Pa_conversion * tempx_at_h(i,j)
+      merid_tau = Pa_conversion * tempy_at_h(i,j)
       tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
       tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
     enddo ; enddo
@@ -1259,7 +1262,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
@@ -1437,13 +1440,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
-      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*US%R_to_kg_m3*CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
     do j=jsd,jed; do i=isd,ied
       utide=CS%utide
-      CS%TKE_tidal(i,j) = CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      CS%TKE_tidal(i,j) = US%R_to_kg_m3*CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   endif
@@ -1455,8 +1458,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-               "The background gustiness in the winds.", units="Pa", &
-               default=0.02)
+               "The background gustiness in the winds.", &
+               units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
   if (CS%read_gust_2d) then
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in "//&
@@ -1464,7 +1467,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1) ! units should be Pa
+    call MOM_read_data(gust_file, 'gustiness', CS%gust, G%domain, timelevel=1, &
+               scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z) ! units in file should be Pa
   endif
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &

@@ -33,11 +33,11 @@ type, public :: user_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
+  real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 s-2 ~> m s-2].
   real :: Flux_const         !< The restoring rate at the surface [m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [Pa].
+                             !! that contributes to ustar [R L Z T-1 ~> Pa].
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                              !! timing of diagnostic output.
@@ -72,7 +72,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
 
-  !  Set the surface wind stresses, in units of Pa.  A positive taux
+  !  Set the surface wind stresses, in units of [R L Z T-1 ~> Pa].  A positive taux
   !  accelerates the ocean to the (pseudo-)east.
 
   !  The i-loop extends to is-1 so that taux can be used later in the
@@ -85,13 +85,13 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
     forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
 
-  !    Set the surface friction velocity, in units of m s-1.  ustar
+  !    Set the surface friction velocity, in units of [Z T-1 ~> m s-1].  ustar
   !  is always positive.
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-   forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-       US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
+            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))) * (US%L_to_Z/CS%Rho0))
   enddo ; enddo ; endif
 
 end subroutine USER_wind_forcing
@@ -131,6 +131,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   real :: density_restore  ! The potential density that is being restored
                          ! toward [kg m-3].
   real :: rhoXcp         ! The mean density times the heat capacity [J m-3 degC-1].
+  real :: Rho0_mks         ! The mean density in MKS units [kg m-3]
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
 
@@ -139,6 +140,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  Rho0_mks = CS%Rho0 * US%R_to_kg_m3
 
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
@@ -200,7 +202,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
         "Temperature and salinity restoring used without modification." )
 
-      rhoXcp = CS%Rho0 * fluxes%C_p
+      rhoXcp = Rho0_mks * fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in degC) and
         ! salinity (in PSU or ppt) that are being restored toward.
@@ -209,7 +211,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - sfc_state%SST(i,j))
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (Rho0_mks*CS%Flux_const)) * &
             ((Salin_restore - sfc_state%SSS(i,j)) / &
              (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
@@ -220,7 +222,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / Rho0_mks
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density [kg m-3] that is being restored toward.
@@ -270,10 +272,10 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-                 "The background gustiness in the winds.", units="Pa", &
-                 default=0.02)
+                 "The background gustiness in the winds.", &
+                 units="Pa", default=0.02, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
