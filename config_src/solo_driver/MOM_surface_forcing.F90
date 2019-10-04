@@ -315,13 +315,13 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%buoy_config) == "Neverland") then
       call Neverland_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%Neverland_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
-      call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, CS%SCM_CVmix_tests_CSp)
+      call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, US, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
       call USER_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%user_forcing_CSp)
     elseif (trim(CS%buoy_config) == "BFB") then
       call BFB_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%BFB_forcing_CSp)
     elseif (trim(CS%buoy_config) == "dumbbell") then
-      call dumbbell_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%dumbbell_forcing_CSp)
+      call dumbbell_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, US, CS%dumbbell_forcing_CSp)
     elseif (trim(CS%buoy_config) == "NONE") then
       call MOM_mesg("MOM_surface_forcing: buoyancy forcing has been set to omitted.")
     elseif (CS%variable_buoyforce .and. .not.CS%first_call_set_forcing) then
@@ -348,7 +348,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
 
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
-    call set_net_mass_forcing(fluxes, forces, G)
+    call set_net_mass_forcing(fluxes, forces, G, US)
   endif
 
   CS%first_call_set_forcing = .false.
@@ -842,12 +842,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
                      G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
         fluxes%latent(i,j)           = -CS%latent_heat_vapor*temp(i,j)
-        fluxes%evap(i,j)             = -temp(i,j)
+        fluxes%evap(i,j)             = -US%kg_m3_to_R*US%m_to_Z*US%T_to_s*temp(i,j)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     else
       call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     endif
     CS%evap_last_lev = time_lev
 
@@ -902,9 +902,9 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       case default ; time_lev = 1
     end select
     call MOM_read_data(CS%snow_file, CS%snow_var, &
-             fluxes%fprec(:,:), G%Domain, timelevel=time_lev)
+             fluxes%fprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     call MOM_read_data(CS%rain_file, CS%rain_var, &
-             fluxes%lprec(:,:), G%Domain, timelevel=time_lev)
+             fluxes%lprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     if (CS%archaic_OMIP_file) then
       do j=js,je ; do i=is,ie
         fluxes%lprec(i,j) = fluxes%lprec(i,j) - fluxes%fprec(i,j)
@@ -919,20 +919,20 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
     end select
     if (CS%archaic_OMIP_file) then
       call MOM_read_data(CS%runoff_file, CS%lrunoff_var, temp(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
       do j=js,je ; do i=is,ie
         fluxes%lrunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
       enddo ; enddo
       call MOM_read_data(CS%runoff_file, CS%frunoff_var, temp(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
       do j=js,je ; do i=is,ie
         fluxes%frunoff(i,j) = temp(i,j)*US%m_to_L**2*G%IareaT(i,j)
       enddo ; enddo
     else
       call MOM_read_data(CS%runoff_file, CS%lrunoff_var, fluxes%lrunoff(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
       call MOM_read_data(CS%runoff_file, CS%frunoff_var, fluxes%frunoff(:,:), &
-                     G%Domain, timelevel=time_lev)
+                     G%Domain, timelevel=time_lev, scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s)
     endif
     CS%runoff_last_lev = time_lev
 
@@ -976,8 +976,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%latent(i,j)  = fluxes%latent(i,j)  * G%mask2dT(i,j)
 
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-      fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j)    = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%fprec(i,j)*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j)  = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%frunoff(i,j)*CS%latent_heat_fusion
     enddo ; enddo
 
   endif ! time_lev /= CS%buoy_last_lev_read
@@ -991,12 +991,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
-          fluxes%vprec(i,j) = - (US%R_to_kg_m3*CS%Rho0*CS%Flux_const_S) * &
+          fluxes%vprec(i,j) = - (US%m_to_Z*US%T_to_s*CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
           fluxes%heat_added(i,j) = 0.0
-          fluxes%vprec(i,j)        = 0.0
+          fluxes%vprec(i,j)      = 0.0
         endif
       enddo ; enddo
     else
@@ -1089,10 +1089,12 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
   ! note the sign convention
   do j=js,je ; do i=is,ie
-     fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
-                                           ! but evap is normally a positive quantity in the files
-     fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
-     fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
+    ! This is dangerous because it is not clear whether the data files have been read!
+    fluxes%evap(i,j) = -fluxes%evap(i,j)  ! Normal convention is positive into the ocean
+                                          ! but evap is normally a positive quantity in the files
+    fluxes%latent(i,j)           = CS%latent_heat_vapor*fluxes%evap(i,j)
+    fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
+    fluxes%evap(i,j) = US%kg_m3_to_R*US%m_to_Z*US%T_to_s*fluxes%evap(i,j)
   enddo ; enddo
 
   call data_override('OCN', 'sens', fluxes%sens(:,:), day, &
@@ -1108,16 +1110,23 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
        is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
 
   call data_override('OCN', 'snow', fluxes%fprec(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s
 
   call data_override('OCN', 'rain', fluxes%lprec(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s
 
   call data_override('OCN', 'runoff', fluxes%lrunoff(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s
 
   call data_override('OCN', 'calving', fluxes%frunoff(:,:), day, &
-       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+       is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in) ! scale=US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+
+  if (US%kg_m3_to_R*US%m_to_Z*US%T_to_s /= 1.0) then ; do j=js,je ; do i=is,ie
+    fluxes%lprec(i,j) = fluxes%lprec(i,j) * US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+    fluxes%fprec(i,j) = fluxes%fprec(i,j) * US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+    fluxes%lrunoff(i,j) = fluxes%lrunoff(i,j) * US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+    fluxes%frunoff(i,j) = fluxes%frunoff(i,j) * US%kg_m3_to_R*US%m_to_Z*US%T_to_s
+  enddo ; enddo ; endif
 
 !     Read the SST and SSS fields for damping.
   if (CS%restorebuoy) then !#CTRL# .or. associated(CS%ctrl_forcing_CSp)) then
@@ -1136,7 +1145,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
-          fluxes%vprec(i,j) = - (Rho0_mks*CS%Flux_const_S) * &
+          fluxes%vprec(i,j) = - (CS%Rho0*US%m_to_Z*US%T_to_s*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -1180,8 +1189,8 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
     fluxes%sw(i,j)      = fluxes%sw(i,j)      * G%mask2dT(i,j)
 
     fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
-    fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
-    fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
+    fluxes%latent_fprec_diag(i,j)    = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%fprec(i,j)*CS%latent_heat_fusion
+    fluxes%latent_frunoff_diag(i,j)  = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%frunoff(i,j)*CS%latent_heat_fusion
   enddo ; enddo
 
 
@@ -1336,7 +1345,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - sfc_state%SST(i,j)) * ((Rho0_mks * fluxes%C_p) * CS%Flux_const))
-          fluxes%vprec(i,j) = - (Rho0_mks*CS%Flux_const) * &
+          fluxes%vprec(i,j) = - (US%m_to_Z*US%T_to_s*CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else

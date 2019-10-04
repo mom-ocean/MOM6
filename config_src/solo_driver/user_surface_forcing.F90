@@ -123,7 +123,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 !  (fprec, lrunoff and frunoff) left as arrays full of zeros.
 !  Evap is usually negative and precip is usually positive.  All heat fluxes
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
-!  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
+!  fluxes are in [R Z T-1 ~> kg m-2 s-1] and positive for water moving into the ocean.
 
   ! Local variables
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
@@ -172,7 +172,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -211,9 +211,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - sfc_state%SST(i,j))
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (Rho0_mks*CS%Flux_const)) * &
-            ((Salin_restore - sfc_state%SSS(i,j)) / &
-             (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (US%m_to_Z*US%T_to_s*CS%Rho0*CS%Flux_const)) * &
+            ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here

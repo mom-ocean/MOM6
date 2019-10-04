@@ -1130,12 +1130,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             if (GV%Boussinesq) then
-              RivermixConst = -0.5*(CS%rivermix_depth*dt)*(US%m_to_Z) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
+              RivermixConst = -0.5*(CS%rivermix_depth*US%s_to_T*dt) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
             else
-              RivermixConst = -0.5*(CS%rivermix_depth*dt)*(US%m_to_Z) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
+              RivermixConst = -0.5*(CS%rivermix_depth*US%s_to_T*dt) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
             endif
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
-                  US%kg_m3_to_R*(fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
+                            (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
           endif
 
           ! Update state

@@ -227,11 +227,12 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
 end subroutine SCM_CVMix_tests_wind_forcing
 
 
-subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
+subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, US, CS)
   type(surface),            intent(in)    :: state  !< Surface state structure
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
   type(time_type),          intent(in)    :: day    !< Current model time
   type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(SCM_CVMix_tests_CS), pointer       :: CS     !< Container for SCM parameters
 
   ! Local variables
@@ -259,9 +260,9 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
   if (CS%UseEvaporation) then
     do J=Jsq,Jeq ; do i=is,ie
     ! Note CVMix test inputs give evaporation in [m s-1]
-    ! This therefore must be converted to mass flux
-    ! by multiplying by density
-      fluxes%evap(i,J) = CS%surf_evap * CS%Rho0
+    ! This therefore must be converted to mass flux in [R Z T-1 ~> kg m-2 s-1]
+    ! by multiplying by density and some unit conversion factors.
+      fluxes%evap(i,J) = CS%surf_evap * US%kg_m3_to_R*US%m_to_Z*US%T_to_s * CS%Rho0
     enddo ; enddo
   endif
 

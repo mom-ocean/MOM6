@@ -967,10 +967,10 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
     if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
     if (associated(fluxes%lprec)) then
       if (ISS%water_flux(i,j) > 0.0) then
-        fluxes%lprec(i,j) =  frac_area*ISS%water_flux(i,j)*CS%flux_factor
+        fluxes%lprec(i,j) =  US%kg_m3_to_R*US%m_to_Z*US%T_to_s*frac_area*ISS%water_flux(i,j)*CS%flux_factor
       else
         fluxes%lprec(i,j) = 0.0
-        fluxes%evap(i,j) = frac_area*ISS%water_flux(i,j)*CS%flux_factor
+        fluxes%evap(i,j) = US%kg_m3_to_R*US%m_to_Z*US%T_to_s*frac_area*ISS%water_flux(i,j)*CS%flux_factor
       endif
     endif
 
@@ -1061,6 +1061,8 @@ subroutine add_shelf_flux(G, US, CS, state, fluxes)
         fluxes%vprec(i,j) = -mean_melt_flux * CS%density_ice/1000. ! evap is negative
         fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! W /m^2
         fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! kg (salt)/(m^2 s)
+        ! Rescale fluxes%vprec to the proper units.
+        fluxes%vprec(i,j) =  US%kg_m3_to_R*US%m_to_Z*US%T_to_s * fluxes%vprec(i,j)
       endif
     enddo ; enddo
 

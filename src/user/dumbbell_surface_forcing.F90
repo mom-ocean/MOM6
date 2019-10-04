@@ -47,7 +47,7 @@ end type dumbbell_surface_forcing_CS
 contains
 
 !> Surface buoyancy (heat and fresh water) fluxes for the dumbbell test case
-subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
+subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
   type(surface),                 intent(inout) :: state  !< A structure containing fields that
                                                          !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
@@ -57,6 +57,7 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   real,                          intent(in)    :: dt     !< The amount of time over which
                                                          !! the fluxes apply [s]
   type(ocean_grid_type),         intent(in)    :: G      !< The ocean's grid structure
+  type(unit_scale_type),         intent(in)    :: US     !< A dimensional unit scaling type
   type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
                                                          !! call to dumbbell_surface_forcing_init
   ! Local variables
@@ -123,9 +124,8 @@ subroutine dumbbell_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       !   Set density_restore to an expression for the surface potential
       ! density [kg m-3] that is being restored toward.
       if (CS%forcing_mask(i,j)>0.) then
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-          ((CS%S_restore(i,j) - state%SSS(i,j)) / &
-           (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (US%kg_m3_to_R*US%m_to_Z*US%T_to_s*CS%Rho0*CS%Flux_const)) * &
+                ((CS%S_restore(i,j) - state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + state%SSS(i,j))))
 
       endif
     enddo ; enddo

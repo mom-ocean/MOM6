@@ -936,7 +936,7 @@ end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, salt and heat, through
 !! the ocean surface for use in diagnosing conservation.
-subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, CS)
+subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible
                                               !! forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: sfc_state !< A structure containing fields that
@@ -945,6 +945,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, CS)
                                               !! thermodynamic variables.
   real,                  intent(in) :: dt     !< The amount of time over which to average [s].
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
+  type(unit_scale_type), intent(in) :: US     !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
                                               !! to MOM_sum_output_init.
   ! Local variables
@@ -977,7 +978,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, CS)
   if (associated(fluxes%evap)) then
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
-        FW_in(i,j) = dt*G%US%L_to_m**2*G%areaT(i,j)*(fluxes%evap(i,j) + &
+        FW_in(i,j) = G%US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m*US%s_to_T*dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
             (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
               (fluxes%fprec(i,j) + fluxes%frunoff(i,j))))
       enddo ; enddo
@@ -988,7 +989,8 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, CS)
   endif
 
   if (associated(fluxes%seaice_melt)) then ; do j=js,je ; do i=is,ie
-    FW_in(i,j) = FW_in(i,j) + dt * G%US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt(i,j)
+    FW_in(i,j) = FW_in(i,j) + G%US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m*US%s_to_T*dt * &
+                 G%areaT(i,j) * fluxes%seaice_melt(i,j)
   enddo ; enddo ; endif
 
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0

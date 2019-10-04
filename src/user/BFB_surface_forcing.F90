@@ -136,9 +136,8 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - state%SST(i,j))
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((Salin_restore - state%SSS(i,j)) / &
-             (0.5 * (Salin_restore + state%SSS(i,j))))
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (US%kg_m3_to_R*US%m_to_Z*US%T_to_s*CS%Rho0*CS%Flux_const)) * &
+            ((Salin_restore - state%SSS(i,j)) / (0.5 * (Salin_restore + state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
