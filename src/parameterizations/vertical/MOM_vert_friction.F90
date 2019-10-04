@@ -187,7 +187,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
   real :: I_Hmix           ! The inverse of Hmix [H-1 ~> m-1 or m2 kg-1].
   real :: Idt              ! The inverse of the time step [T-1 ~> s-1].
   real :: dt_Rho0          ! The time step divided by the mean density [T H Z-1 R-1 ~> s m3 kg-1 or s].
-  real :: Rho0             ! A density used to convert drag laws into stress in Pa [kg m-3].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness - [T H Z-1 ~> s or s kg m-3].
   real :: h_neglect        ! A thickness that is so small it is usually lost
@@ -215,7 +214,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
   endif
   dt_Rho0 = dt_in_T / GV%H_to_RZ
   dt_Z_to_H = dt_in_T*GV%Z_to_H
-  Rho0 = US%R_to_kg_m3*GV%Rho0
   h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt_in_T
 
@@ -320,15 +318,15 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
     enddo ; enddo ; endif
 
     if (associated(visc%taux_shelf)) then ; do I=Isq,Ieq
-      visc%taux_shelf(I,j) = -Rho0*US%L_T2_to_m_s2*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
+      visc%taux_shelf(I,j) = -GV%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
 
     if (PRESENT(taux_bot)) then
       do I=Isq,Ieq
-        taux_bot(I,j) = US%kg_m3_to_R*Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
+        taux_bot(I,j) = GV%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-        taux_bot(I,j) = taux_bot(I,j) + US%kg_m3_to_R*Rho0 * (Ray(I,k)*u(I,j,k))
+        taux_bot(I,j) = taux_bot(I,j) + GV%Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
 
@@ -401,15 +399,15 @@ subroutine vertvisc(u, v, h, forces, visc, dt_in_T, OBC, ADp, CDp, G, GV, US, CS
     enddo ; enddo ; endif
 
     if (associated(visc%tauy_shelf)) then ; do i=is,ie
-      visc%tauy_shelf(i,J) = -Rho0*US%L_T2_to_m_s2*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
+      visc%tauy_shelf(i,J) = -GV%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
     enddo ; endif
 
     if (present(tauy_bot)) then
       do i=is,ie
-        tauy_bot(i,J) = US%kg_m3_to_R*Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
+        tauy_bot(i,J) = GV%Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-        tauy_bot(i,J) = tauy_bot(i,J) + US%kg_m3_to_R*Rho0 * (Ray(i,k)*v(i,J,k))
+        tauy_bot(i,J) = tauy_bot(i,J) + GV%Rho0 * (Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
 

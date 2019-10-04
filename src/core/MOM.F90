@@ -2739,8 +2739,6 @@ subroutine extract_surface_state(CS, sfc_state)
   sfc_state%frazil => CS%tv%frazil
   sfc_state%T_is_conT = CS%tv%T_is_conT
   sfc_state%S_is_absS = CS%tv%S_is_absS
-  if (associated(CS%visc%taux_shelf)) sfc_state%taux_shelf => CS%visc%taux_shelf
-  if (associated(CS%visc%tauy_shelf)) sfc_state%tauy_shelf => CS%visc%tauy_shelf
 
   do j=js,je ; do i=is,ie
     sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
@@ -2937,16 +2935,16 @@ subroutine extract_surface_state(CS, sfc_state)
       sfc_state%internal_heat(i,j) = CS%tv%internal_heat(i,j)
     enddo ; enddo
   endif
-  if (associated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
+  if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
-      sfc_state%taux_shelf(I,j) = CS%visc%taux_shelf(I,j)
+      sfc_state%taux_shelf(I,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*CS%visc%taux_shelf(I,j)
     enddo ; enddo
   endif
-  if (associated(sfc_state%tauy_shelf) .and. associated(CS%visc%tauy_shelf)) then
+  if (allocated(sfc_state%tauy_shelf) .and. associated(CS%visc%tauy_shelf)) then
     !$OMP parallel do default(shared)
     do J=js-1,je ; do i=is,ie
-      sfc_state%tauy_shelf(i,J) = CS%visc%tauy_shelf(i,J)
+      sfc_state%tauy_shelf(i,J) = US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L*CS%visc%tauy_shelf(i,J)
     enddo ; enddo
   endif
 

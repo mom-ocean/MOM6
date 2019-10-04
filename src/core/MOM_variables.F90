@@ -50,6 +50,8 @@ type, public :: surface
     ocean_mass, &  !< The total mass of the ocean [kg m-2].
     ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
     ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
+    taux_shelf, &  !< The zonal stresses on the ocean under shelves [Pa].
+    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [Pa].
     TempxPmE, &    !< The net inflow of water into the ocean times the temperature at which this
                    !! inflow occurs during the call to step_MOM [degC kg m-2].
     salt_deficit, & !< The salt needed to maintain the ocean column at a minimum
@@ -60,9 +62,6 @@ type, public :: surface
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
                    !! absolute salinity in [g/kg].
-  real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), & !< The zonal stresses on the ocean under shelves [Pa].
-    tauy_shelf => NULL()    !< The meridional stresses on the ocean under shelves [Pa].
   real, pointer, dimension(:,:) :: frazil => NULL()
                 !< The energy needed to heat the ocean column to the freezing point during the call
                 !! to step_MOM [J m-2].
@@ -208,8 +207,8 @@ type, public :: vertvisc_type
                              !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
                              !! to [kg Z3 m-3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [Pa].
-    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [Pa].
+    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
+    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
   real, pointer, dimension(:,:) :: tbl_thick_shelf_u => NULL()
                 !< Thickness of the viscous top boundary layer under ice shelves at u-points [Z ~> m].
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
@@ -296,7 +295,7 @@ contains
 !> Allocates the fields for the surface (return) properties of
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn, use_meltpot)
+                                  gas_fields_ocn, use_meltpot, use_iceshelves)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
@@ -309,9 +308,11 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
   logical,     optional, intent(in)    :: use_meltpot      !< If true, allocate the space for melt potential
+  logical,     optional, intent(in)    :: use_iceshelves   !< If true, allocate the space for the stresses
+                                                           !! under ice shelves.
 
   ! local variables
-  logical :: use_temp, alloc_integ, use_melt_potential
+  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -322,6 +323,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
   use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
+  alloc_iceshelves = .false. ; if (present(use_iceshelves)) alloc_iceshelves = use_iceshelves
 
   if (sfc_state%arrays_allocated) return
 
@@ -350,6 +352,11 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
       allocate(sfc_state%salt_deficit(isd:ied,jsd:jed))  ; sfc_state%salt_deficit(:,:) = 0.0
       allocate(sfc_state%internal_heat(isd:ied,jsd:jed)) ; sfc_state%internal_heat(:,:) = 0.0
     endif
+  endif
+
+  if (alloc_iceshelves) then
+    allocate(sfc_state%taux_shelf(IsdB:IedB,jsd:jed)) ; sfc_state%taux_shelf(:,:) = 0.0
+    allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB)) ; sfc_state%tauy_shelf(:,:) = 0.0
   endif
 
   if (present(gas_fields_ocn)) &

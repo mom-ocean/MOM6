@@ -1151,15 +1151,17 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
                    "forces%frac_shelf_v is associated, but the other is not.")
 
   if (associated(forces%frac_shelf_u)) then
-    ! This configuration has ice shelves, and the appropriate variables need to
-    ! be allocated.
+    ! This configuration has ice shelves, and the appropriate variables need to be
+    ! allocated.  If the arrays have already been allocated, these calls do nothing.
     call safe_alloc_ptr(visc%tauy_shelf, G%isd, G%ied, G%JsdB, G%JedB)
     call safe_alloc_ptr(visc%tbl_thick_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
     call safe_alloc_ptr(visc%tbl_thick_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
     call safe_alloc_ptr(visc%kv_tbl_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
     call safe_alloc_ptr(visc%kv_tbl_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
+    call safe_alloc_ptr(visc%taux_shelf, G%IsdB, G%IedB, G%jsd, G%jed)
+    call safe_alloc_ptr(visc%tauy_shelf, G%isd, G%ied, G%JsdB, G%JedB)
 
-    !  With a linear drag law, the friction velocity is already known.
+    !  With a linear drag law under shelves, the friction velocity is already known.
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt_Z*CS%drag_bg_vel
   endif
 
