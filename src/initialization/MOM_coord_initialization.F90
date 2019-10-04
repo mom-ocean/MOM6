@@ -544,8 +544,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   allocate(axis_data_CS%axis(20))
   allocate(axis_data_CS%data(20))
 
-  if (.not. (check_if_open(fileObjWrite))) then 
-     file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
+  if (.not. (check_if_open(fileObjWrite)) .and. is_root_pe()) then 
+     file_open_success = MOM_open_file(fileObjWrite, filepath, "write", is_restart=.false.)
   endif
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file
   if (check_if_open(fileObjWrite)) then       
@@ -562,8 +562,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
         ! register the variable dimensions to the file if the corresponding global axes are not registered
         do j=1,num_dims
-           axis_found = dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.)
-           if (.not.(axis_found)) then
+           if (.not.(dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.))) then
               total_axes=total_axes+1
               call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
               call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
@@ -606,7 +605,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   endif
 
-  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+  if (check_if_open(fileObjWrite) .and. is_root_pe()) call close_file(fileObjWrite)
 
   deallocate(axis_data_CS%axis)
   deallocate(axis_data_CS%data)

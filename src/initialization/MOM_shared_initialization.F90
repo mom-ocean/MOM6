@@ -18,6 +18,7 @@ use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
+use MOM_io, only : check_if_open
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -1262,7 +1263,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
   else
-    filepath = trim(directory) // "ocean_geometry.nc"
+    filepath = trim(directory) // "ocean_geometry"
   endif
 
   out_h(:,:) = 0.0
@@ -1287,9 +1288,11 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   allocate(axis_data_CS%axis(20))
   allocate(axis_data_CS%data(20))
 
-  ! open the file   
-  file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
+  ! open the file
+  if (.not. (check_if_open(fileObjWrite)) .and. is_root_pe()) then
+     file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
                                      G, is_restart=.false.)
+  endif
   ! loop through the variables, and get the global dimension names and lengths for the file
   total_axes=0      
   do i=1,size(vars)  
@@ -1313,22 +1316,23 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
      enddo
   
      ! register the fields and attributes for non-coordinate variable 'i'
-     call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
-     call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
-     call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+     if (.not. variable_exists(fileObjWrite, trim(vars(i)%name))) then 
+        call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
+        call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+        call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+     endif
   enddo
 
   ! register and write the coordinate variables (axes) to the file,
   do i=1,total_axes
-     variable_found = variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name))
-     if (.not.(variable_found)) then 
-        if (associated(axis_data_CS%data(i)%p)) then
+     if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+        if (associated(axis_data_CS%data(i)%p) .and. is_root_pe()) then
            call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
            if (axis_data_CS%axis(i)%is_domain_decomposed) then
               call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), isg, ieg)
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(isg:ieg))
+              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
 
            else
               call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
@@ -1421,7 +1425,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   endif
 
   ! close the file
-  call close_file(fileObjWrite)
+  if (check_if_open(fileObjWrite) .and. is_root_pe()) call close_file(fileObjWrite)
+
   deallocate(axis_data_CS%axis)
   deallocate(axis_data_CS%data)
 

@@ -785,12 +785,10 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
   axis_data_CS%axis(axis_number)%is_domain_decomposed = .false.
   axis_data_CS%axis(axis_number)%positive = ''
   axis_data_CS%data(axis_number)%p => NULL()
-
-  
   
   select case(trim(axis_name))
      case('lath')
-        axis_data_CS%data(axis_number)%p=>gridLatT(jsg:jeg)
+        axis_data_CS%data(axis_number)%p(jsg:jeg)=>gridLatT(jsg:jeg)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
@@ -798,7 +796,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%axis  = 'Y'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('lonh')
-        axis_data_CS%data(axis_number)%p=>gridLonT(isg:ieg)
+        axis_data_CS%data(axis_number)%p(isg:ieg)=>gridLonT(isg:ieg)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
         axis_data_CS%axis(axis_number)%longname = 'Longitude'
@@ -806,7 +804,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%axis = 'X'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('latq')
-        axis_data_CS%data(axis_number)%p=>gridLatB(JsgB:JegB)
+        axis_data_CS%data(axis_number)%p(JsgB:JegB)=>gridLatB(JsgB:JegB)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
@@ -815,7 +813,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('lonq')
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
-        axis_data_CS%data(axis_number)%p=>gridLonB(IsgB:IegB)
+        axis_data_CS%data(axis_number)%p(IsgB:IegB)=>gridLonB(IsgB:IegB)
         axis_data_CS%axis(axis_number)%longname  = 'Longitude'
         axis_data_CS%axis(axis_number)%units = x_axis_units
         axis_data_CS%axis(axis_number)%axis = 'X'
