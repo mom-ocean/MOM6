@@ -533,7 +533,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
   logical :: axis_found ! If true, the axis is registered to the file
 
-  filepath = trim(directory) // trim("Vertical_coordinate")
+  filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')

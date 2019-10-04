@@ -1262,7 +1262,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
   else
-    filepath = trim(directory) // "ocean_geometry"
+    filepath = trim(directory) // "ocean_geometry.nc"
   endif
 
   out_h(:,:) = 0.0
