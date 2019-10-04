@@ -1681,8 +1681,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "faster by eliminating subroutine calls.", default=.false.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as "//&
-                 "the gravity wave adjustment to h. This is a fragile feature and "//&
-                 "thus undocumented.", default=.true., do_not_log=.true. )
+                 "the gravity wave adjustment to h. This may be a fragile feature, "//&
+                 "but can be useful during development", default=.true.)
   call get_param(param_file, "MOM", "ADVECT_TS", advect_TS, &
                  "If True, advect temperature and salinity horizontally "//&
                  "If False, T/S are registered for advection. "//&
