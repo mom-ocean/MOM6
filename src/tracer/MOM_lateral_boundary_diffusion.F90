@@ -381,7 +381,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
   real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 trunit]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 conc]
   ! Local variables
   real, dimension(nk) :: h_means              ! Calculate the layer-wise harmonic means           [m]
   real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
@@ -390,7 +390,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
   real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
   real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
-                                              !                                                   [trunit m^-3 ]
+                                              !                                                   [conc m^-3 ]
   real    :: htot                 ! Total column thickness [m]
   integer :: k, k_bot_min, k_top_max
   integer :: k_top_L, k_bot_L, k_top_u
@@ -483,10 +483,10 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real, dimension(nk,2),     intent(in   )       :: ppoly0_E_R !< Polynomial edge values (right)        [ nondim ]
   integer,                   intent(in   )       :: method   !< Method of polynomial integration        [ nondim ]
   real,                      intent(in   )       :: khtr_u   !< Horizontal diffusivities times delta t at U-point [m^2]
-  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^2 trunit]
-  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 trunit]
+  real,                      intent(  out)       :: F_bulk   !< The bulk mixed layer lateral flux       [m^2 conc]
+  real, dimension(nk),       intent(  out)       :: F_layer  !< Layerwise diffusive flux at U-point     [m^2 conc]
   real, optional, dimension(nk), intent(  out)   :: F_limit  !< The amount of flux not applied due to limiter
-                                                             !! F_layer(k) - F_max                      [m^2 trunit]
+                                                             !! F_layer(k) - F_max                      [m^2 conc]
   ! Local variables
   real, dimension(nk) :: h_means              ! Calculate the layer-wise harmonic means           [m]
   real, dimension(nk) :: h_u                  ! Thickness at the u-point                          [m]
@@ -495,7 +495,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real                :: heff                 ! Harmonic mean of layer thicknesses                [m]
   real                :: inv_heff             ! Inverse of the harmonic mean of layer thicknesses [m^[-1]
   real                :: phi_L_avg, phi_R_avg ! Bulk, thickness-weighted tracer averages (left and right column)
-                                              !                                                   [trunit m^-3 ]
+                                              !                                                   [conc m^-3 ]
   real    :: htot                 ! Total column thickness [m]
   integer :: k, k_min, k_max
   integer :: k_top_L, k_bot_L, k_top_u
