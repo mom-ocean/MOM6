@@ -1311,7 +1311,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
         if (.not.(axis_found)) then
             total_axes=total_axes+1
             call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, dG=G)
-            call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+            spcall MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
         endif
      enddo
   
