@@ -1202,7 +1202,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
              visc%TKE_BBL(i,j)
 
     if (associated(fluxes%TKE_tidal)) &
-      TKE(i) = TKE(i) + (US%kg_m3_to_R * US%T_to_s**3 * US%m_to_Z**3 * fluxes%TKE_tidal(i,j)) * I_Rho0 * &
+      TKE(i) = TKE(i) + fluxes%TKE_tidal(i,j) * I_Rho0 * &
            (CS%BBL_effic * exp(-I2decay(i)*(GV%H_to_Z*h(i,j,nz))))
 
     ! Distribute the work over a BBL of depth 20^2 ustar^2 / g' following
@@ -1418,10 +1418,10 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
     ! (Note that visc%TKE_BBL is in [Z3 T-3 ~> m3 s-3], set in set_BBL_TKE().)
     ! I am still unsure about sqrt(cdrag) in this expressions - AJA
     TKE_column = cdrag_sqrt * visc%TKE_BBL(i,j)
-    ! Add in tidal dissipation energy at the bottom [m3 s-3].
-    ! Note that TKE_tidal is in [W m-2].
+    ! Add in tidal dissipation energy at the bottom [R Z3 T-3 ~> m3 s-3].
+    ! Note that TKE_tidal is in [R Z3 T-3 ~> W m-2].
     if (associated(fluxes%TKE_tidal)) &
-      TKE_column = TKE_column + US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3 * fluxes%TKE_tidal(i,j) * I_Rho0
+      TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column

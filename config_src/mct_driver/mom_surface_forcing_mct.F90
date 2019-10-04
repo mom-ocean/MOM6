@@ -83,14 +83,14 @@ type, public :: surface_forcing_CS ; private
                                 !! from an input file.
   real, pointer, dimension(:,:) :: &
     TKE_tidal => NULL(), &      !< turbulent kinetic energy introduced to the
-                                !! bottom boundary layer by drag on the tidal flows [W m-2]
+                                !! bottom boundary layer by drag on the tidal flows [R Z3 T-3 ~> W m-2]
     gust => NULL(), &           !< spatially varying unresolved background
                                 !! gustiness that contributes to ustar [R L Z T-1 ~> Pa].
                                 !! gust is used when read_gust_2d is true.
-    ustar_tidal => NULL()       !< tidal contribution to the bottom friction velocity [m/s]
+    ustar_tidal => NULL()       !< tidal contribution to the bottom friction velocity [Z T-1 ~> m s-1]
   real :: cd_tides              !< drag coefficient that applies to the tides (nondimensional)
   real :: utide                 !< constant tidal velocity to use if read_tideamp
-                                !! is false [m s-1]
+                                !! is false [Z T-1 ~> m s-1]
   logical :: read_tideamp     !< If true, spatially varying tidal amplitude read from a file.
   logical :: rigid_sea_ice    !< If true, sea-ice exerts a rigidity that acts
                               !! to damp surface deflections (especially surface
@@ -301,7 +301,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
 
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
-      fluxes%ustar_tidal(i,j) = US%m_to_Z*US%T_to_s*CS%ustar_tidal(i,j)
+      fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
     enddo; enddo
 
     if (restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
@@ -1002,7 +1002,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                                                   !! restoring will be applied in this model.
 
   ! Local variables
-  real :: utide  ! The RMS tidal velocity, in m s-1.
+  real :: utide  ! The RMS tidal velocity [Z T-1 ~> m s-1].
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
   type(time_type)    :: Time_frc
@@ -1199,7 +1199,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   else
     call get_param(param_file, mdl, "UTIDE", CS%utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
-                 units="m s-1", default=0.0)
+                 units="m s-1", default=0.0, scale=US%m_to_Z*US%T_to_s)
   endif
 
   call safe_alloc_ptr(CS%TKE_tidal,isd,ied,jsd,jed)
@@ -1207,16 +1207,16 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
-    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1, scale=US%m_to_Z*US%T_to_s)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
-      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*US%R_to_kg_m3*CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
     do j=jsd,jed; do i=isd,ied
-      utide=CS%utide
-      CS%TKE_tidal(i,j) = US%R_to_kg_m3*CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      utide = CS%utide
+      CS%TKE_tidal(i,j) = CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   endif
