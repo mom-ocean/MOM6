@@ -851,7 +851,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   ! Accumulate the surface fluxes for assessing conservation
   if (do_thermo .and. fluxes%fluxes_used) &
-    call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, &
+    call accumulate_net_input(fluxes, sfc_state, CS%tv, fluxes%dt_buoy_accum, &
                               G, CS%sum_output_CSp)
 
   if (MOM_state_is_synchronized(CS)) &
@@ -2737,8 +2737,6 @@ subroutine extract_surface_state(CS, sfc_state)
     call allocate_surface_state(sfc_state, G, use_temperature, do_integrals=.true.)
   endif
   sfc_state%frazil => CS%tv%frazil
-  sfc_state%TempxPmE => CS%tv%TempxPmE
-  sfc_state%internal_heat => CS%tv%internal_heat
   sfc_state%T_is_conT = CS%tv%T_is_conT
   sfc_state%S_is_absS = CS%tv%S_is_absS
   if (associated(CS%visc%taux_shelf)) sfc_state%taux_shelf => CS%visc%taux_shelf
@@ -2925,6 +2923,30 @@ subroutine extract_surface_state(CS, sfc_state)
     do j=js,je ; do i=is,ie
       ! Convert from gSalt to kgSalt
       sfc_state%salt_deficit(i,j) = 1000.0 * CS%tv%salt_deficit(i,j)
+    enddo ; enddo
+  endif
+  if (allocated(sfc_state%TempxPmE) .and. associated(CS%tv%TempxPmE)) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      sfc_state%TempxPmE(i,j) = CS%tv%TempxPmE(i,j)
+    enddo ; enddo
+  endif
+  if (allocated(sfc_state%internal_heat) .and. associated(CS%tv%internal_heat)) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      sfc_state%internal_heat(i,j) = CS%tv%internal_heat(i,j)
+    enddo ; enddo
+  endif
+  if (associated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do I=is-1,ie
+      sfc_state%taux_shelf(I,j) = CS%visc%taux_shelf(I,j)
+    enddo ; enddo
+  endif
+  if (associated(sfc_state%tauy_shelf) .and. associated(CS%visc%tauy_shelf)) then
+    !$OMP parallel do default(shared)
+    do J=js-1,je ; do i=is,ie
+      sfc_state%tauy_shelf(i,J) = CS%visc%tauy_shelf(i,J)
     enddo ; enddo
   endif
 

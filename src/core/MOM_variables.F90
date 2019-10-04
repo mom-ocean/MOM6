@@ -50,8 +50,12 @@ type, public :: surface
     ocean_mass, &  !< The total mass of the ocean [kg m-2].
     ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
     ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
-    salt_deficit   !< The salt needed to maintain the ocean column at a minimum
+    TempxPmE, &    !< The net inflow of water into the ocean times the temperature at which this
+                   !! inflow occurs during the call to step_MOM [degC kg m-2].
+    salt_deficit, & !< The salt needed to maintain the ocean column at a minimum
                    !! salinity of 0.01 PSU over the call to step_MOM [kgSalt m-2].
+    internal_heat  !< Any internal or geothermal heat sources that are applied to the ocean
+                   !! integrated over the call to step_MOM [degC kg m-2].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
@@ -62,13 +66,6 @@ type, public :: surface
   real, pointer, dimension(:,:) :: frazil => NULL()
                 !< The energy needed to heat the ocean column to the freezing point during the call
                 !! to step_MOM [J m-2].
-  real, pointer, dimension(:,:) :: TempxPmE => NULL()
-                !< The net inflow of water into the ocean times the temperature at which this inflow
-                !! occurs during the call to step_MOM [degC kg m-2]. This should be prescribed in the
-                !! forcing fields, but as it often is not, this is a useful heat budget diagnostic.
-  real, pointer, dimension(:,:) :: internal_heat => NULL()
-                !< Any internal or geothermal heat sources that are applied to the ocean integrated
-                !! over the call to step_MOM [degC kg m-2].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -127,8 +124,8 @@ type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
     T => NULL(), & !< Pointer to the temperature state variable [degC]
     S => NULL(), & !< Pointer to the salinity state variable [ppt ~> PSU or g/kg]
-    u => NULL(), & !< Pointer to the zonal velocity [m s-1]
-    v => NULL(), & !< Pointer to the meridional velocity [m s-1]
+    u => NULL(), & !< Pointer to the zonal velocity [L T-1 ~> m s-1]
+    v => NULL(), & !< Pointer to the meridional velocity [L T-1 ~> m s-1]
     h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: &
     uh => NULL(), & !<  Pointer to zonal transports [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -349,8 +346,10 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
     if (use_temp) then
       allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
       allocate(sfc_state%ocean_salt(isd:ied,jsd:jed)) ; sfc_state%ocean_salt(:,:) = 0.0
+      allocate(sfc_state%TempxPmE(isd:ied,jsd:jed))   ; sfc_state%TempxPmE(:,:) = 0.0
+      allocate(sfc_state%salt_deficit(isd:ied,jsd:jed))  ; sfc_state%salt_deficit(:,:) = 0.0
+      allocate(sfc_state%internal_heat(isd:ied,jsd:jed)) ; sfc_state%internal_heat(:,:) = 0.0
     endif
-    allocate(sfc_state%salt_deficit(isd:ied,jsd:jed)) ; sfc_state%salt_deficit(:,:) = 0.0
   endif
 
   if (present(gas_fields_ocn)) &

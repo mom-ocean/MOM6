@@ -936,11 +936,13 @@ end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, salt and heat, through
 !! the ocean surface for use in diagnosing conservation.
-subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
+subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, CS)
   type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible
                                               !! forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
+  type(thermo_var_ptrs), intent(in) :: tv     !< A structure pointing to various
+                                              !! thermodynamic variables.
   real,                  intent(in) :: dt     !< The amount of time over which to average [s].
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
@@ -1004,7 +1006,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) *                          &
+!      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) * &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
@@ -1012,9 +1014,9 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 !    enddo ; enddo ; endif
 
     ! smg: old code
-    if (associated(sfc_state%TempxPmE)) then
+    if (associated(tv%TempxPmE)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * sfc_state%TempxPmE(i,j)
+        heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * tv%TempxPmE(i,j)
       enddo ; enddo
     elseif (associated(fluxes%evap)) then
       do j=js,je ; do i=is,ie
@@ -1024,14 +1026,14 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 
 
     ! The following heat sources may or may not be used.
-    if (associated(sfc_state%internal_heat)) then
+    if (associated(tv%internal_heat)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * &
-                     sfc_state%internal_heat(i,j)
+                       tv%internal_heat(i,j)
       enddo ; enddo
     endif
-    if (associated(sfc_state%frazil)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + G%US%L_to_m**2*G%areaT(i,j) * sfc_state%frazil(i,j)
+    if (associated(tv%frazil)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + G%US%L_to_m**2*G%areaT(i,j) * tv%frazil(i,j)
     enddo ; enddo ; endif
     if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j)*fluxes%heat_added(i,j)
