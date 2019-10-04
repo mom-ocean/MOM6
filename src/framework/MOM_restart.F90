@@ -1017,14 +1017,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_dims
            if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
               total_axes=total_axes+1
-              call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i), hor_grid)
+              call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i))
               call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                      time_val=(/restart_time/), time_units=restart_time_units)
            endif
         enddo  
      enddo
 
-     ! register the axis variables and their attributes
+     ! register the axis variables and their attributes, and write the axes
      do i=1,total_axes
         if (.not.(fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
            if (associated(axis_data_CS%data(i)%p)) then
@@ -1034,10 +1034,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p(is:ie), &
                                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+                 call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
+
               else
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p, &
                                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+                 call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
               endif
 
               call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
@@ -1067,15 +1071,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                               units=units, caller="save_restart")
 
            call get_horizontal_grid_position(hor_grid,x_pos,y_pos)
-           horgrid_position = 1
-           if (x_pos .ne. CENTER) then
-              horgrid_position = x_pos
-           elseif (y_pos .ne. CENTER) then
-              horgrid_position = y_pos
-           elseif ((x_pos .eq. CENTER) .and. (y_pos .eq. CENTER)) then 
-              horgrid_position = CENTER
-           endif
-        
+         
            call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
         
            num_dims = 0
@@ -1223,7 +1219,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
             total_axes=total_axes+1
             call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                    time_val=(/ic_time/), time_units=time_units)
-            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i), hor_grid)
+            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
         endif
      enddo
   enddo

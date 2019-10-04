@@ -528,27 +528,17 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 end subroutine reopen_file
 
 !> register an axis to a domain-decomposed file
-subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length, domain_position)
+subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
    integer, optional, intent(in) :: axis_length !< length of axis/dimension
                                                 !! (only needed for Layer, Interface, Time, and Period)
-   character(len=*), intent(in), optional :: domain_position !< Character array for domain position.
-   ! local
-   integer :: x_pos, y_pos
-   if (present(domain_position)) then 
-      call get_horizontal_grid_position(domain_position,x_pos,y_pos)
-   else 
-      x_pos = CENTER
-      y_pos = CENTER
-   endif
-
    select case (trim(axis_name))
          
-         case ('latq'); call register_axis(fileObj,'latq','y', domain_position=y_pos)
-         case ('lath'); call register_axis(fileObj,'lath','y', domain_position=y_pos) 
-         case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=x_pos) 
-         case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=x_pos)
+         case ('latq'); call register_axis(fileObj,'latq','y', domain_position=NORTH_FACE)
+         case ('lath'); call register_axis(fileObj,'lath','y', domain_position=CENTER) 
+         case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=EAST_FACE) 
+         case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=CENTER)
          case ('Layer')
             if (.not.(present(axis_length))) then
                 call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
@@ -821,7 +811,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
         axis_data_CS%axis(axis_number)%axis = 'Y'
-        axis_data_CS%axis(axis_number)%horgrid_position = CORNER
+        axis_data_CS%axis(axis_number)%horgrid_position = NORTH_FACE
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('lonq')
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
@@ -829,7 +819,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%longname  = 'Longitude'
         axis_data_CS%axis(axis_number)%units = x_axis_units
         axis_data_CS%axis(axis_number)%axis = 'X'
-        axis_data_CS%axis(axis_number)%horgrid_position = CORNER
+        axis_data_CS%axis(axis_number)%horgrid_position = EAST_FACE
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('Layer')
         axis_data_CS%data(axis_number)%p=>GV%sLayer(1:GV%ke)
