@@ -339,7 +339,7 @@ contains
 subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               &
                   FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
-                  aggregate_FW, nonpenSW, netmassInOut_rate,net_Heat_Rate,      &
+                  aggregate_FW, nonpenSW, netmassInOut_rate, net_Heat_Rate,      &
                   net_salt_rate, pen_sw_bnd_Rate, skip_diags)
 
   type(ocean_grid_type),    intent(in)    :: G              !< ocean grid structure
@@ -392,22 +392,23 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
                                                             !! Summed over SW bands when diagnosing nonpenSW.
   real, dimension(SZI_(G)), &
                   optional, intent(out)   :: net_Heat_rate  !< Rate of net surface heating
-                                                            !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1].
+                                                            !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1].
   real, dimension(SZI_(G)), &
                   optional, intent(out)   :: net_salt_rate  !< Surface salt flux into the ocean
-                                                            !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1].
+                                                            !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1].
   real, dimension(SZI_(G)), &
                   optional, intent(out)   :: netmassInOut_rate !< Rate of net mass flux into the ocean
-                                                            !! [H s-1 ~> m s-1 or kg m-2 s-1].
+                                                            !! [H T-1 ~> m s-1 or kg m-2 s-1].
   real, dimension(max(1,nsw),G%isd:G%ied), &
                   optional, intent(out)   :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating
-                                                             !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1].
+                                                             !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1].
   logical,        optional, intent(in)    :: skip_diags      !< If present and true, skip calculating diagnostics
 
   ! local
   real :: htot(SZI_(G))       ! total ocean depth [H ~> m or kg m-2]
   real :: Pen_sw_tot(SZI_(G)) ! sum across all bands of Pen_SW [degC H ~> degC m or degC kg m-2].
-  real :: pen_sw_tot_rate(SZI_(G)) ! Similar but sum but as a rate (no dt in calculation)
+  real :: pen_sw_tot_rate(SZI_(G)) ! Summed rate of shortwave heating across bands
+                              ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
   real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
   real :: J_m2_to_H           ! converts J/m^2 to H units (m for Bouss and kg/m^2 for non-Bouss)
@@ -503,7 +504,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
       pen_sw_tot_rate(i) = 0.0
       if (nsw >= 1) then
         do n=1,nsw
-          Pen_SW_bnd_rate(n,i) = J_m2_to_H*scale * max(0.0, Pen_SW_bnd_rate(n,i))
+          Pen_SW_bnd_rate(n,i) = J_m2_to_H*US%T_to_s*scale * max(0.0, Pen_SW_bnd_rate(n,i))
           pen_sw_tot_rate(i) = pen_sw_tot_rate(i) + pen_sw_bnd_rate(n,i)
         enddo
       else
@@ -521,8 +522,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
                                         + fluxes%seaice_melt(i,j))  &
                                         + fluxes%frunoff(i,j)    ))
 
-    if (do_NMIOr) then  ! Repeat the above code w/ dt=1s for legacy reasons
-      netMassInOut_rate(i) = (scale * US%s_to_T* &
+    if (do_NMIOr) then  ! Repeat the above code without multiplying by a timestep for legacy reasons
+      netMassInOut_rate(i) = (scale * &
                                    (((((( fluxes%lprec(i,j)      &
                                         + fluxes%fprec(i,j)      )  &
                                         + fluxes%evap(i,j)       )  &
@@ -540,7 +541,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
     if (.not.GV%Boussinesq .and. associated(fluxes%salt_flux)) then
       netMassInOut(i) = netMassInOut(i) + dt * (scale * US%kg_m3_to_R*US%m_to_Z*fluxes%salt_flux(i,j))
       if (do_NMIOr) netMassInOut_rate(i) = netMassInOut_rate(i) + &
-                                               (scale * US%kg_m3_to_R*US%m_to_Z*fluxes%salt_flux(i,j))
+                                               (scale * US%kg_m3_to_R*US%m_to_Z*US%T_to_s*fluxes%salt_flux(i,j))
     endif
 
     ! net volume/mass of water leaving the ocean.
@@ -580,21 +581,21 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
                     ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
                       fluxes%seaice_melt_heat(i,j)) )
       !Repeats above code w/ dt=1. for legacy reason
-      if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
+      if (do_NHR)  net_heat_rate(i) = scale * US%T_to_s*J_m2_to_H * &
            ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j) + &
              fluxes%seaice_melt_heat(i,j)))
     else
       net_heat(i) = scale * dt * J_m2_to_H * &
                     ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
       !Repeats above code w/ dt=1. for legacy reason
-      if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
+      if (do_NHR)  net_heat_rate(i) = scale * US%T_to_s*J_m2_to_H * &
            ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
     endif
 
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (associated(fluxes%heat_added)) then
       net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_added(i,j)
-      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * (J_m2_to_H)) * fluxes%heat_added(i,j)
+      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * (US%T_to_s*J_m2_to_H)) * fluxes%heat_added(i,j)
     endif
 
     ! Add explicit heat flux for runoff (which is part of the ice-ocean boundary
@@ -605,7 +606,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
                      (GV%RZ_to_H * (scale * dt_in_T)) * fluxes%lrunoff(i,j) * T(i,1)
       !BGR-Jul 5, 2017{
       !Intentionally neglect the following contribution to rate for legacy reasons.
-      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
+      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*(US%T_to_s*J_m2_to_H)) * &
+      !               fluxes%heat_content_lrunoff(i,j)) - &
       !               (GV%RZ_to_H * (scale)) * US%s_to_T*fluxes%lrunoff(i,j) * T(i,1)
       !}BGR
       if (calculate_diags .and. associated(tv%TempxPmE)) then
@@ -622,7 +624,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
                     (GV%RZ_to_H * (scale * dt_in_T)) * fluxes%frunoff(i,j) * T(i,1)
       !BGR-Jul 5, 2017{
       !Intentionally neglect the following contribution to rate for legacy reasons.
-!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
+!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*(US%T_to_s*J_m2_to_H)) * &
+!                    fluxes%heat_content_frunoff(i,j) - &
 !                    (GV%RZ_to_H * (scale)) * US%s_to_T*fluxes%frunoff(i,j) * T(i,1)
       !}BGR
       if (calculate_diags .and. associated(tv%TempxPmE)) then
@@ -679,7 +682,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
     if (associated(fluxes%salt_flux)) then
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
       !Repeat above code for 'rate' term
-      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
+      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * US%T_to_s*fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
     endif
 
     ! Diagnostics follow...

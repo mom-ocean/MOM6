@@ -901,22 +901,24 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     SurfPressure, &  ! Surface pressure (approximated as 0.0) [Pa]
     dRhodT,       &  ! change in density per change in temperature [R degC-1 ~> kg m-3 degC-1]
     dRhodS,       &  ! change in density per change in salinity [R ppt-1 ~> kg m-3 ppt-1]
-    netheat_rate, &  ! netheat but for dt=1 [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    netheat_rate, &  ! netheat but for dt=1 [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
-                     ! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-    netMassInOut_rate! netmassinout but for dt=1 [H s-1 ~> m s-1 or kg m-2 s-1]
+                     ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    netMassInOut_rate! netmassinout but for dt=1 [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G), SZK_(G)) :: &
     h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
     T2d, &           ! A 2-d copy of the layer temperatures [degC]
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
                      ! a layer [R Z3 T-2 ~> J m-2]
     dSV_dT_2d        ! The partial derivative of specific volume with temperature [R-1 degC-1]
-  real, dimension(SZI_(G),SZK_(G)+1) :: netPen
+  real, dimension(SZI_(G)) :: &
+    netPen_rate      ! The surface penetrative shortwave heating rate summed over all bands
+                     ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1),SZI_(G)) :: &
     Pen_SW_bnd, &    ! The penetrative shortwave heating integrated over a timestep by band
                      ! [degC H ~> degC m or degC kg m-2]
     Pen_SW_bnd_rate  ! The penetrative shortwave heating rate by band
-                     ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                     ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1),SZI_(G),SZK_(G)) :: &
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
@@ -929,7 +931,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                       ! [Z T-2 R-1 ~> m4 s-2 kg-1]
   logical :: calculate_energetics
   logical :: calculate_buoyancy
-  integer :: i, j, is, ie, js, je, k, nz, n
+  integer :: i, j, is, ie, js, je, k, nz, n, nb
   integer :: start, npts
   character(len=45) :: mesg
 
@@ -970,7 +972,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
   !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt_in_T,     &
-  !$OMP                                  calculate_buoyancy,netPen,SkinBuoyFlux,GoRho,     &
+  !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho,     &
   !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
   !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
@@ -1334,11 +1336,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     if (Calculate_Buoyancy) then
       drhodt(:) = 0.0
       drhods(:) = 0.0
-      netPen(:,:) = 0.0
-      ! Sum over bands and attenuate as a function of depth
-      ! netPen is the netSW as a function of depth
-      call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt_in_T, &
-                          H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
+      netPen_rate(:) = 0.0
+      ! Sum over bands and attenuate as a function of depth.
+      ! netPen_rate is the netSW as a function of depth, but only the surface value is used here,
+      ! in which case the values of dt, h, optics and H_limit_fluxes are irrelevant.  Consider
+      ! writing a shorter and simpler variant to handle this very limited case.
+      ! call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt_in_T, &
+      !                     H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
+      do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
+
       ! Density derivatives
       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
            dRhodT, dRhodS, start, npts, tv%eqn_of_state, scale=US%kg_m3_to_R)
@@ -1348,9 +1354,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
       do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * US%T_to_s * &
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * &
             (dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
-             dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! [Z2 T-3 ~> m2 s-3]
+             dRhodT(i) * ( netHeat_rate(i) + netPen_rate(i)) ) ! [Z2 T-3 ~> m2 s-3]
       enddo
     endif
 
