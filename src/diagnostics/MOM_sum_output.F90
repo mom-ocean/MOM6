@@ -1046,7 +1046,8 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
       ! convert salt_flux from kg (salt)/(m^2 s) to ppt * [m s-1].
-      salt_in(i,j) = dt*G%US%L_to_m**2*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
+      salt_in(i,j) = G%US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m*US%s_to_T*dt * &
+                     G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif
 

@@ -355,17 +355,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
       do j=js,je ; do i=is,ie
         delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (US%R_to_kg_m3*CS%Rho0*CS%Flux_const)* &
-                  (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
+        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*US%m_to_Z*US%T_to_s*CS%Flux_const)* &
+             (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
-          call adjust_area_mean_to_zero(fluxes%salt_flux, G, fluxes%saltFluxGlobalScl)
+          call adjust_area_mean_to_zero(fluxes%salt_flux, G, fluxes%saltFluxGlobalScl, &
+                          unit_scale=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
           fluxes%saltFluxGlobalAdj = 0.
         else
-          work_sum(is:ie,js:je) = US%L_to_m**2*G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je)
+          work_sum(is:ie,js:je) = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m*US%s_to_T * &
+                  G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je)
           fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
-          fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - fluxes%saltFluxGlobalAdj
+          fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - kg_m2_s_conversion * fluxes%saltFluxGlobalAdj
         endif
       endif
       fluxes%salt_flux_added(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
@@ -548,8 +550,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, sfc
   ! more salt restoring logic
   if (associated(IOB%salt_flux)) then
     do j=js,je ; do i=is,ie
-      fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
-      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -IOB%salt_flux(i-i0,j-j0) )
+      fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - kg_m2_s_conversion*IOB%salt_flux(i-i0,j-j0))
+      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -kg_m2_s_conversion*IOB%salt_flux(i-i0,j-j0) )
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%salt_flux(i-i0,j-j0), G%mask2dT(i,j), i, j, 'salt_flux', G)
     enddo ; enddo
@@ -906,7 +908,6 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   IRho0 = US%L_to_Z / CS%Rho0
   Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   stress_conversion = Pa_conversion * CS%wind_stress_multiplier
-  !### Pa_conversion*US%R_to_kg_m3*US%L_T_to_m_s**2*US%Z_to_L = 1.0
 
   do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
 
@@ -1119,7 +1120,8 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   call data_override('OCN', 'sflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
-    fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
+    fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + &
+        US%kg_m3_to_R*US%m_to_Z*US%T_to_s * temp_at_h(i,j)* G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
 

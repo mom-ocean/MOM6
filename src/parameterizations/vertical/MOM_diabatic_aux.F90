@@ -382,13 +382,14 @@ end subroutine adjust_salt
 !> Insert salt from brine rejection into the first layer below the mixed layer
 !! which both contains mass and in which the change in layer density remains
 !! stable after the addition of salt via brine rejection.
-subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
+subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv   !< Structure containing pointers to any
                                                  !! available thermodynamic fields
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(forcing),           intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
   integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
@@ -428,7 +429,7 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
     salt(:)=0.0 ; dzbr(:)=0.0
 
     do i=is,ie ; if (G%mask2dT(i,j) > 0.) then
-      salt(i) = dt * (1000. * fluxes%salt_flux(i,j))
+      salt(i) = US%s_to_T*dt * (1000. * US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%salt_flux(i,j))
     endif ; enddo
 
     do k=1,nz

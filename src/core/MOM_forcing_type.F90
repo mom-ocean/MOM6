@@ -107,10 +107,10 @@ type, public :: forcing
 
   ! salt mass flux (contributes to ocean mass only if non-Bouss )
   real, pointer, dimension(:,:) :: &
-    salt_flux       => NULL(), & !< net salt flux into the ocean [kgSalt m-2 s-1]
-    salt_flux_in    => NULL(), & !< salt flux provided to the ocean from coupler [kgSalt m-2 s-1]
+    salt_flux       => NULL(), & !< net salt flux into the ocean [R Z T-1 ~> kgSalt m-2 s-1]
+    salt_flux_in    => NULL(), & !< salt flux provided to the ocean from coupler [R Z T-1 ~> kgSalt m-2 s-1]
     salt_flux_added => NULL()    !< additional salt flux from restoring or flux adjustment before adjustment
-                                 !! to net zero [kgSalt m-2 s-1]
+                                 !! to net zero [R Z T-1 ~> kgSalt m-2 s-1]
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
@@ -539,9 +539,9 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
     ! is added to the ocean, which may still need to be coded.  Not that the units
     ! of netMassInOut are still kg_m2, so no conversion to H should occur yet.
     if (.not.GV%Boussinesq .and. associated(fluxes%salt_flux)) then
-      netMassInOut(i) = netMassInOut(i) + dt * (scale * US%kg_m3_to_R*US%m_to_Z*fluxes%salt_flux(i,j))
+      netMassInOut(i) = netMassInOut(i) + dt_in_T * (scale * fluxes%salt_flux(i,j))
       if (do_NMIOr) netMassInOut_rate(i) = netMassInOut_rate(i) + &
-                                               (scale * US%kg_m3_to_R*US%m_to_Z*US%T_to_s*fluxes%salt_flux(i,j))
+                                               (scale * fluxes%salt_flux(i,j))
     endif
 
     ! net volume/mass of water leaving the ocean.
@@ -678,9 +678,9 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
     ! Boussinesq: (ppt * m)
     ! non-Bouss:  (g/m^2)
     if (associated(fluxes%salt_flux)) then
-      Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
+      Net_salt(i) = (scale * dt_in_T * (1000.0 * fluxes%salt_flux(i,j))) * GV%RZ_to_H
       !Repeat above code for 'rate' term
-      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * US%T_to_s*fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
+      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * fluxes%salt_flux(i,j))) * GV%RZ_to_H
     endif
 
     ! Diagnostics follow...
@@ -688,7 +688,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
 
       ! Store Net_salt for unknown reason?
       if (associated(fluxes%salt_flux)) then
-        if (calculate_diags) fluxes%netSalt(i,j) = Net_salt(i)
+        ! This seems like a bad idea to me. -RWH
+        if (calculate_diags) fluxes%netSalt(i,j) = US%kg_m3_to_R*US%m_to_Z*US%T_to_s*Net_salt(i)
       endif
 
       ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
@@ -1061,9 +1062,10 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%p_surf)) &
     call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G%HI,haloshift=hshift)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift, scale=RZ_T_conversion)
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift, &
+                 scale=US%R_to_kg_m3**3*US%Z_to_m**3*US%s_to_T)
   if (associated(fluxes%ustar_tidal)) &
     call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%lrunoff)) &
@@ -1786,21 +1788,22 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,&
         'Net salt flux into ocean at surface (restoring + sea-ice)',                      &
-        'kg m-2 s-1',cmor_field_name='sfdsi',                                             &
-        cmor_standard_name='downward_sea_ice_basal_salt_flux',                            &
+        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+        cmor_field_name='sfdsi', cmor_standard_name='downward_sea_ice_basal_salt_flux', &
         cmor_long_name='Downward Sea Ice Basal Salt Flux')
 
   handles%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
-        'Salt flux into ocean at surface from coupler', 'kg m-2 s-1')
+        'Salt flux into ocean at surface from coupler', &
+        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_flux_added', &
         diag%axesT1,Time,'Salt flux into ocean at surface due to restoring or flux adjustment', &
-        'kg m-2 s-1')
+        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_saltFluxGlobalAdj = register_scalar_field('ocean_model',              &
         'salt_flux_global_restoring_adjustment', Time, diag,                       &
         'Adjustment needed to balance net global salt flux into ocean at surface', &
-        'kg m-2 s-1')
+         units='kg m-2 s-1') !, conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_vPrecGlobalAdj = register_scalar_field('ocean_model',  &
         'vprec_global_adjustment', Time, diag,                      &
@@ -2705,21 +2708,21 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
     if ((handles%id_saltflux > 0) .and. associated(fluxes%salt_flux)) &
       call post_data(handles%id_saltflux, fluxes%salt_flux, diag)
     if ((handles%id_total_saltflux > 0) .and. associated(fluxes%salt_flux)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux,G)
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_saltflux, total_transport, diag)
     endif
 
     if ((handles%id_saltFluxAdded > 0) .and. associated(fluxes%salt_flux_added)) &
       call post_data(handles%id_saltFluxAdded, fluxes%salt_flux_added, diag)
     if ((handles%id_total_saltFluxAdded > 0) .and. associated(fluxes%salt_flux_added)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_added,G)
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_added, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_saltFluxAdded, total_transport, diag)
     endif
 
     if (handles%id_saltFluxIn > 0 .and. associated(fluxes%salt_flux_in)) &
       call post_data(handles%id_saltFluxIn, fluxes%salt_flux_in, diag)
     if ((handles%id_total_saltFluxIn > 0) .and. associated(fluxes%salt_flux_in)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_in,G)
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_in, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_saltFluxIn, total_transport, diag)
     endif
 

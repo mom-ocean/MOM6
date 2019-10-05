@@ -2085,7 +2085,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                             eaml,ebml, G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
                             Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.false.)
         if (CS%salt_reject_below_ML) &
-          call insert_brine(h, tv, G, GV, fluxes, nkmb, CS%diabatic_aux_CSp, &
+          call insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS%diabatic_aux_CSp, &
                             dt*CS%ML_mix_first, CS%id_brine_lay)
       else
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
@@ -2479,7 +2479,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                           Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.true.)
 
       if (CS%salt_reject_below_ML) &
-        call insert_brine(h, tv, G, GV, fluxes, nkmb, CS%diabatic_aux_CSp, US%T_to_s*dt_mix, &
+        call insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS%diabatic_aux_CSp, US%T_to_s*dt_mix, &
                           CS%id_brine_lay)
 
       !  Keep salinity from falling below a small but positive threshold.
