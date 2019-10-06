@@ -429,7 +429,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
     salt(:)=0.0 ; dzbr(:)=0.0
 
     do i=is,ie ; if (G%mask2dT(i,j) > 0.) then
-      salt(i) = US%s_to_T*dt * (1000. * US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%salt_flux(i,j))
+      salt(i) = US%s_to_T*dt * (1000. * US%R_to_kg_m3*US%Z_to_m*fluxes%salt_flux(i,j))
     endif ; enddo
 
     do k=1,nz
