@@ -31,8 +31,7 @@ type, public :: Neverland_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq
-                             !! approximation [kg m-3].
+  real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: flux_const         !<  The restoring rate at the surface [Z T-1 ~> m s-1].
   real, dimension(:,:), pointer :: &
@@ -108,7 +107,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
 !   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
 !           sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
 !                0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))) * &
-!            (US%L_to_Z * US%R_to_kg_m3/CS%Rho0) )
+!            (US%L_to_Z / CS%Rho0) )
 ! enddo ; enddo ; endif
 
 end subroutine Neverland_wind_forcing
@@ -148,7 +147,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
+                           ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
   real :: density_restore  ! De
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -204,7 +203,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - sfc_state%sfc_density(i,j))
+                          US%kg_m3_to_R*(density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
@@ -248,7 +247,7 @@ subroutine Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
 ! call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
 !                "The background gustiness in the winds.", units="Pa", &
 !                default=0.02)
