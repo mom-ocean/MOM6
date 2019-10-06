@@ -80,9 +80,9 @@ type, public :: surface_forcing_CS ; private
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
   real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const            !< piston velocity for surface restoring [m s-1]
+  real :: Flux_const            !< piston velocity for surface restoring [Z T-1 ~> m s-1]
   real :: Flux_const_T          !< piston velocity for surface temperature restoring [m s-1]
-  real :: Flux_const_S          !< piston velocity for surface salinity restoring [m s-1]
+  real :: Flux_const_S          !< piston velocity for surface salinity restoring [Z T-1 ~> m s-1]
   real :: latent_heat_fusion    !< latent heat of fusion times scaling factors [J T m-2 R-1 Z-1 s-1 ~> J kg-1]
   real :: latent_heat_vapor     !< latent heat of vaporization [J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const" forcing
@@ -1410,7 +1410,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   type(time_type)    :: Time_frc
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  real :: flux_const_default ! The unscaled value of FLUX_CONST [m day-1]
+  real :: flux_const_default ! The unscaled value of FLUXCONST [m day-1]
   logical :: default_2018_answers
   character(len=40)  :: mdl = "MOM_surface_forcing" ! This module's name.
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.

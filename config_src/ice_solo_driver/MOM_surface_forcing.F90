@@ -99,7 +99,7 @@ type, public :: surface_forcing_CS ; private
 
   real :: Rho0                  ! Boussinesq reference density [R ~> kg m-3]
   real :: G_Earth               ! gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const            ! piston velocity for surface restoring [m s-1]
+  real :: Flux_const            ! piston velocity for surface restoring [Z T-1 ~> m s-1]
 
   real    :: gust_const                 ! constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
   logical :: read_gust_2d               ! if true, use 2-dimensional gustiness supplied from a file
@@ -745,8 +745,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
-          fluxes%vprec(i,j) = - ((US%m_to_Z*US%T_to_s*CS%Rho0)*CS%Flux_const) * &
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * US%Z_to_m*US%s_to_T*CS%Flux_const)
+          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -758,7 +758,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/(US%R_to_kg_m3*CS%Rho0))
+                             (CS%G_Earth * CS%Flux_const/(US%R_to_kg_m3*CS%Rho0))
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -877,9 +877,9 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * US%Z_to_m*US%s_to_T * &
               ((T_Restore - sfc_state%SST(i,j)) * (((US%R_to_kg_m3*CS%Rho0) * fluxes%C_p) * CS%Flux_const))
-          fluxes%vprec(i,j) = - ((US%m_to_Z*US%T_to_s*CS%Rho0)*CS%Flux_const) * &
+          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else
@@ -892,8 +892,8 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
                      "RESTOREBUOY to linear not written yet.")
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
-     !   fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-     !                       (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const/(US%R_to_kg_m3*CS%Rho0))
+     !   fluxes%buoy(i,j) = US%kg_m3_to_R*(CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
+     !                       (CS%G_Earth * CS%Flux_const / CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0
      !  endif
@@ -1090,8 +1090,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", &
-                 fail_if_missing=.true.)
+                 "velocity).  Note the non-MKS units.", &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
     if (trim(CS%buoy_config) == "linear") then

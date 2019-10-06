@@ -35,7 +35,7 @@ type, public :: user_surface_forcing_CS ; private
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 s-2 ~> m s-2].
-  real :: Flux_const         !< The restoring rate at the surface [m s-1].
+  real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [R L Z T-1 ~> Pa].
 
@@ -209,9 +209,9 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         Temp_restore = 0.0
         Salin_restore = 0.0
 
-        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
+        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * US%Z_to_m*US%s_to_T*CS%Flux_const)) * &
             (Temp_restore - sfc_state%SST(i,j))
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (US%m_to_Z*US%T_to_s*CS%Rho0*CS%Flux_const)) * &
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
             ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
@@ -221,7 +221,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / Rho0_mks
+      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / Rho0_mks
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density [kg m-3] that is being restored toward.
@@ -284,8 +284,8 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", &
-                 fail_if_missing=.true.)
+                 "velocity).  Note the non-MKS units.", &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
   endif
