@@ -159,7 +159,6 @@ type, public :: barotropic_CS ; private
   type(BT_OBC_type) :: BT_OBC !< A structure with all of this modules fields
                               !! for applying open boundary conditions.
 
-  real    :: Rho0            !< The density used in the Boussinesq approximation [kg m-3].
   real    :: dtbt            !< The barotropic time step [s].
   real    :: dtbt_fraction   !<   The fraction of the maximum time-step that
                              !! should used.  The default is 0.98.
@@ -724,7 +723,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   bebt = CS%bebt
   be_proj = CS%bebt
   mass_accel_to_Z = 1.0 / GV%Rho0
-  mass_to_Z = US%m_to_Z / (GV%Rho0)
+  mass_to_Z = US%m_to_Z / GV%Rho0
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -4326,30 +4325,20 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
 !   Calculate other constants which are used for btstep.
 
-  ! The following is only valid with the Boussinesq approximation.
-! if (GV%Boussinesq) then
-    do j=js,je ; do I=is-1,ie
-      if (G%mask2dCu(I,j)>0.) then
-        CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
-      else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
-        CS%IDatu(I,j) = 0.
-      endif
-    enddo ; enddo
-    do J=js-1,je ; do i=is,ie
-      if (G%mask2dCv(i,J)>0.) then
-        CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
-      else ! Both neighboring H points are masked out so IDatv(I,j) is meaningless
-        CS%IDatv(i,J) = 0.
-      endif
-    enddo ; enddo
-! else
-!   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (US%R_to_kg_m3*GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
-!   enddo ; enddo
-!   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (US%R_to_kg_m3*GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
-!   enddo ; enddo
-! endif
+  do j=js,je ; do I=is-1,ie
+    if (G%mask2dCu(I,j)>0.) then
+      CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+    else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
+      CS%IDatu(I,j) = 0.
+    endif
+  enddo ; enddo
+  do J=js-1,je ; do i=is,ie
+    if (G%mask2dCv(i,J)>0.) then
+      CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+    else ! Both neighboring H points are masked out so IDatv(I,j) is meaningless
+      CS%IDatv(i,J) = 0.
+    endif
+  enddo ; enddo
 
   call find_face_areas(Datu, Datv, G, GV, US, CS, MS, halo=1)
   if (CS%bound_BT_corr) then
