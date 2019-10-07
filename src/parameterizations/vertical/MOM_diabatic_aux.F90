@@ -1055,14 +1055,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
     !   but do change answers.
     !-----------------------------------------------------------------------------------------
     if (calculate_buoyancy) then
-      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, US%T_to_s*dt_in_T,          &
+      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T,          &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW,                &
                   net_Heat_rate=netheat_rate, net_salt_rate=netsalt_rate,                 &
                   netmassinout_rate=netmassinout_rate, pen_sw_bnd_rate=pen_sw_bnd_rate)
     else
-      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, US%T_to_s*dt_in_T,          &
+      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T,          &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW)

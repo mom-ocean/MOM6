@@ -347,7 +347,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
 
   real :: absf_x_H  ! The absolute value of f times the mixed layer thickness [Z T-1 ~> m s-1].
   real :: kU_star   ! Ustar times the Von Karmen constant [Z T-1 ~> m s-1].
-!  real :: dt_in_T   ! Time increment in time units [T ~> s].
   real :: dt__diag  ! A recaled copy of dt_diag (if present) or dt [T ~> s].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
@@ -369,8 +368,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
   nkmb = CS%nkml+CS%nkbl
   Inkml = 1.0 / REAL(CS%nkml)
   if (CS%nkml > 1) Inkmlm1 = 1.0 / REAL(CS%nkml-1)
-
-!  dt_in_T = dt * US%s_to_T
 
   Irho0 = 1.0 / (GV%Rho0)
   dt__diag = dt_in_T ; if (present(dt_diag)) dt__diag = dt_diag
@@ -533,7 +530,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
     ! net_heat     = heat via surface fluxes [degC H ~> degC m or degC kg m-2]
     ! net_salt     = salt via surface fluxes [ppt H ~> dppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
-    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, US%T_to_s*dt_in_T, &
+    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd,&
                   tv, aggregate_FW_forcing)

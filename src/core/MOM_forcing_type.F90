@@ -336,10 +336,10 @@ contains
 !! for optimization purposes. The 2d (i,j) wrapper is the next subroutine below.
 !! This routine multiplies fluxes by dt, so that the result is an accumulation of fluxes
 !! over a time step.
-subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               &
+subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
                   FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent, &
-                  h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
-                  aggregate_FW, nonpenSW, netmassInOut_rate, net_Heat_Rate,      &
+                  h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv, &
+                  aggregate_FW, nonpenSW, netmassInOut_rate, net_Heat_Rate, &
                   net_salt_rate, pen_sw_bnd_Rate, skip_diags)
 
   type(ocean_grid_type),    intent(in)    :: G              !< ocean grid structure
@@ -350,7 +350,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
   type(optics_type),        pointer       :: optics         !< pointer to optics
   integer,                  intent(in)    :: nsw            !< number of bands of penetrating SW
   integer,                  intent(in)    :: j              !< j-index to work on
-  real,                     intent(in)    :: dt             !< time step [s]
+  real,                     intent(in)    :: dt_in_T        !< The time step for these fluxes [T ~> s]
   real,                     intent(in)    :: FluxRescaleDepth !< min ocean depth before fluxes
                                                             !! are scaled away [H ~> m or kg m-2]
   logical,                  intent(in)    :: useRiverHeatContent   !< logical for river heat content
@@ -414,7 +414,6 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
   real :: W_m2_to_H_T         ! converts W/m^2 to H degC T-1 [degC H T-1 W-2 m2 ~> degC m3 J-1 or degC kg J-1]
   real :: RZ_T_to_W_m2_degC   ! Converts mass fluxes to heat fluxes per degree temperature
                               ! change [W m-2 degC-1 T R-1 Z-1 ~> J kg degC]
-  real :: dt_in_T             ! The timestep [T ~> s]
   real :: I_Cp                ! 1.0 / C_p [kg decC J-1]
   logical :: calculate_diags  ! Indicate to calculate/update diagnostic arrays
   character(len=200) :: mesg
@@ -438,7 +437,6 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
 
   Ih_limit  = 1.0 / FluxRescaleDepth
   RZ_T_to_W_m2_degC = fluxes%C_p*US%R_to_kg_m3*US%Z_to_m*US%s_to_T
-  dt_in_T = dt * US%s_to_T
   I_Cp      = 1.0 / fluxes%C_p
   W_m2_to_H_T = 1.0 / (US%s_to_T * GV%H_to_kg_m2 * fluxes%C_p)
 
@@ -697,10 +695,10 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
       if (associated(fluxes%heat_content_massin))  then
         if (aggregate_FW) then
           if (netMassInOut(i) > 0.0) then ! net is "in"
-            fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
+            fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
           else ! net is "out"
             fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
-                                               T(i,1) * GV%H_to_kg_m2 / dt
+                                               T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
           endif
         else
           fluxes%heat_content_massin(i,j) = 0.
@@ -712,10 +710,10 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,               
       if (associated(fluxes%heat_content_massout)) then
         if (aggregate_FW) then
           if (netMassInOut(i) > 0.0) then ! net is "in"
-            fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
+            fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
           else ! net is "out"
             fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
-                                               T(i,1) * GV%H_to_kg_m2 / dt
+                                               T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
           endif
         else
           fluxes%heat_content_massout(i,j) = 0.0
@@ -806,7 +804,7 @@ end subroutine extractFluxes1d
 !> 2d wrapper for 1d extract fluxes from surface fluxes type.
 !! This subroutine extracts fluxes from the surface fluxes type. It multiplies the
 !! fluxes by dt, so that the result is an accumulation of the fluxes over a time step.
-subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth, &
+subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt_in_T, FluxRescaleDepth, &
                            useRiverHeatContent, useCalvingHeatContent, h, T, &
                            netMassInOut, netMassOut, net_heat, Net_salt, Pen_SW_bnd, tv, &
                            aggregate_FW)
@@ -817,7 +815,7 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth,
   type(forcing),                    intent(inout) :: fluxes         !< structure containing pointers to forcing.
   type(optics_type),                pointer       :: optics         !< pointer to optics
   integer,                          intent(in)    :: nsw            !< number of bands of penetrating SW
-  real,                             intent(in)    :: dt             !< time step [s]
+  real,                             intent(in)    :: dt_in_T        !< The time step for these fluxes [T ~> s]
   real,                             intent(in)    :: FluxRescaleDepth !< min ocean depth before fluxes
                                                                     !! are scaled away [H ~> m or kg m-2]
   logical,                          intent(in)    :: useRiverHeatContent   !< logical for river heat content
@@ -857,7 +855,7 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt, FluxRescaleDepth,
 !$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
 !$OMP                                  aggregate_FW)
   do j=G%jsc, G%jec
-    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,                      &
+    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
             FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent,&
             h(:,j,:), T(:,j,:), netMassInOut(:,j), netMassOut(:,j),              &
             net_heat(:,j), net_salt(:,j), pen_SW_bnd(:,:,j), tv, aggregate_FW)
@@ -932,7 +930,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
   ! this call returns the rate because dt=1
-  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,                         &
+  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,                         &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
                 netSalt, penSWbnd, tv, .false., skip_diags=skip_diags)
