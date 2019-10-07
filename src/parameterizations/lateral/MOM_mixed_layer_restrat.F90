@@ -88,7 +88,7 @@ contains
 !> Driver for the mixed-layer restratification parameterization.
 !! The code branches between two different implementations depending
 !! on whether the bulk-mixed layer or a general coordinate are in use.
-subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, US, CS)
+subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt_in_T, MLD, VarMix, G, GV, US, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
@@ -99,7 +99,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
                                                                      !! [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt     !< Time increment [s]
+  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
   real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by the
                                                                      !! PBL scheme [H ~> m or kg m-2]
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
@@ -109,9 +109,9 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
          "Module must be initialized before it is used.")
 
   if (GV%nkml>0) then
-    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, US%s_to_T*dt, G, GV, US, CS)
+    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US, CS)
   else
-    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, US%s_to_T*dt, MLD, VarMix, G, GV, US, CS)
+    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD, VarMix, G, GV, US, CS)
   endif
 
 end subroutine mixedlayer_restrat

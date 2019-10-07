@@ -96,7 +96,7 @@ contains
 !> Calculates thickness diffusion coefficients and applies thickness diffusion to layer
 !! thicknesses, h. Diffusivities are limited to ensure stability.
 !! Also returns along-layer mass fluxes used in the continuity equation.
-subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp, CS)
+subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix, CDp, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
@@ -106,7 +106,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
                                                                      !! [L2 H ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamics structure
-  real,                                      intent(in)    :: dt     !< Time increment [s]
+  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
   type(MEKE_type),                           pointer       :: MEKE   !< MEKE control structure
   type(VarMix_CS),                           pointer       :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                      intent(inout) :: CDp    !< Diagnostics for the continuity equation
@@ -141,7 +141,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [L T-1 ~> m s-1]
-  real :: dt_in_T   ! Time increment [T ~> s]
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct, use_Visbeck
   logical :: use_QG_Leith
   integer :: i, j, k, is, ie, js, je, nz
@@ -158,7 +157,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   h_neglect = GV%H_subroundoff
-  dt_in_T = US%s_to_T*dt
 
   if (associated(MEKE)) then
     if (associated(MEKE%GM_src)) then

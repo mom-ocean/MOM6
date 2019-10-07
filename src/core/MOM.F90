@@ -923,7 +923,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix)
-    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
+    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, US%s_to_T*dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
     call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
@@ -996,7 +996,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix)
-    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
+    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, US%s_to_T*dt, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
     if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1013,7 +1013,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     endif
     call cpu_clock_begin(id_clock_ml_restrat)
-    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
+    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, US%s_to_T*dt, CS%visc%MLD, &
                             CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
     call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
