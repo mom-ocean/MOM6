@@ -825,7 +825,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%use_energetic_PBL) then
 
     skinbuoyflux(:,:) = 0.0
-    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
+    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt_in_T, fluxes, CS%optics, &
             optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit,                         &
             CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
 
@@ -891,7 +891,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     endif
 
   else
-    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
+    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt_in_T, fluxes, CS%optics, &
                                   optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, &
                                   CS%evap_CFL_limit, CS%minimum_forcing_depth)
 
@@ -1556,7 +1556,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%use_energetic_PBL) then
 
     skinbuoyflux(:,:) = 0.0
-    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
+    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt_in_T, fluxes, CS%optics, &
             optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit, &
             CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
 
@@ -1610,7 +1610,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     endif
 
   else
-    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
+    call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt_in_T, fluxes, CS%optics, &
                                   optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, &
                                   CS%evap_CFL_limit, CS%minimum_forcing_depth)
 
@@ -2086,7 +2086,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                             Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.false.)
         if (CS%salt_reject_below_ML) &
           call insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS%diabatic_aux_CSp, &
-                            dt*CS%ML_mix_first, CS%id_brine_lay)
+                            dt_in_T*CS%ML_mix_first, CS%id_brine_lay)
       else
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_in_T, eaml, ebml, &
@@ -2479,7 +2479,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
                           Hml, CS%aggregate_FW_forcing, dt_in_T, last_call=.true.)
 
       if (CS%salt_reject_below_ML) &
-        call insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS%diabatic_aux_CSp, US%T_to_s*dt_mix, &
+        call insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS%diabatic_aux_CSp, dt_mix, &
                           CS%id_brine_lay)
 
       !  Keep salinity from falling below a small but positive threshold.

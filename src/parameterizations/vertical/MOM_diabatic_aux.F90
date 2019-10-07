@@ -79,7 +79,7 @@ type, public :: diabatic_aux_CS ; private
 
   ! Optional diagnostic arrays
   real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to
-                                                        !! avoid grounding [m s-1]
+                                                        !! avoid grounding [H T-1 ~> m s-1]
   real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of
                                                         !! penetrative SW [W m-2]
   real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid
@@ -382,7 +382,7 @@ end subroutine adjust_salt
 !> Insert salt from brine rejection into the first layer below the mixed layer
 !! which both contains mass and in which the change in layer density remains
 !! stable after the addition of salt via brine rejection.
-subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
+subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_lay)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -394,7 +394,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init
-  real,                    intent(in)    :: dt   !< The thermodynamic time step [s].
+  real,                    intent(in)    :: dt_in_T !< The thermodynamic time step [T ~> s].
   integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic of
                                                  !! which layer receivees the brine.
 
@@ -429,7 +429,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
     salt(:)=0.0 ; dzbr(:)=0.0
 
     do i=is,ie ; if (G%mask2dT(i,j) > 0.) then
-      salt(i) = US%s_to_T*dt * (1000. * US%R_to_kg_m3*US%Z_to_m*fluxes%salt_flux(i,j))
+      salt(i) = dt_in_T * (1000. * US%R_to_kg_m3*US%Z_to_m*fluxes%salt_flux(i,j))
     endif ; enddo
 
     do k=1,nz
@@ -845,7 +845,7 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
                                     SkinBuoyFlux )
@@ -853,7 +853,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  real,                    intent(in)    :: dt !< Time-step over which forcing is applied [s]
+  real,                    intent(in)    :: dt_in_T !< Time-step over which forcing is applied [T ~> s]
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
   integer,                 intent(in)    :: nsw !< The number of frequency bands of penetrating
@@ -882,7 +882,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   ! Local variables
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-  real :: H_limit_fluxes, IforcingDepthScale, Idt
+  real :: H_limit_fluxes, IforcingDepthScale
+  real :: Idt
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
   real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
@@ -925,7 +926,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding
   real    :: Temp_in, Salin_in
-  real    :: dt_in_T ! The time step converted to T units [T ~> s]
   real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
                       ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
@@ -942,8 +942,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   if (.not.associated(fluxes%sw)) return
 
 #define _OLD_ALG_
-  dt_in_T = dt * US%s_to_T
-  Idt = 1.0/dt
+  Idt = 1.0/ (US%T_to_s*dt_in_T)
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
@@ -1056,14 +1055,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     !   but do change answers.
     !-----------------------------------------------------------------------------------------
     if (calculate_buoyancy) then
-      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,                        &
+      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, US%T_to_s*dt_in_T,          &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW,                &
                   net_Heat_rate=netheat_rate, net_salt_rate=netsalt_rate,                 &
                   netmassinout_rate=netmassinout_rate, pen_sw_bnd_rate=pen_sw_bnd_rate)
     else
-      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,                        &
+      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, US%T_to_s*dt_in_T,          &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW)
@@ -1133,9 +1132,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             if (GV%Boussinesq) then
-              RivermixConst = -0.5*(CS%rivermix_depth*US%s_to_T*dt) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
+              RivermixConst = -0.5*(CS%rivermix_depth*dt_in_T) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
             else
-              RivermixConst = -0.5*(CS%rivermix_depth*US%s_to_T*dt) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
+              RivermixConst = -0.5*(CS%rivermix_depth*dt_in_T) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
             endif
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
                             (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
@@ -1258,7 +1257,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           hGrounding(numberOfGroundings) = netMassIn(i)+netMassOut(i)
         endif
 !$OMP end critical
-        if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - (netMassIn(i)+netMassOut(i))/dt
+        if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - (netMassIn(i)+netMassOut(i))/dt_in_T
       endif
 
     enddo ! i
@@ -1485,7 +1484,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
   if (useALEalgorithm) then
     CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
         Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
-        "m s-1")
+        "m s-1", conversion=GV%H_to_m*US%s_to_T)
     if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
     ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
