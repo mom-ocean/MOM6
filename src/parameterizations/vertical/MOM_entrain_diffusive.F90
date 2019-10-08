@@ -382,7 +382,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         htot(i) = h(i,j,1) - Angstrom
       enddo
       if (associated(fluxes%buoy)) then ; do i=is,ie
-        maxF(i,1) = (dt*fluxes%buoy(i,j)) / (GV%g_prime(2)*US%m_to_Z)
+        maxF(i,1) = GV%Z_to_H * (dt*fluxes%buoy(i,j)) / GV%g_prime(2)
       enddo ; endif
     endif
 
