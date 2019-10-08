@@ -1079,8 +1079,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
     if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
                    "Pre-advection frazil", G%HI, haloshift=0)
     if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                   "Pre-advection salt deficit", G%HI, haloshift=0)
-  ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
+                   "Pre-advection salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
+  ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G, US)
     call cpu_clock_end(id_clock_other)
   endif
 
@@ -1186,7 +1186,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call uvchksum("Pre-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
                     haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     ! call MOM_state_chksum("Pre-diabatic ", u, v, h, CS%uhtr, CS%vhtr, G, GV, vel_scale=1.0)
-      call MOM_thermo_chksum("Pre-diabatic ", tv, G,haloshift=0)
+      call MOM_thermo_chksum("Pre-diabatic ", tv, G, US, haloshift=0)
       call check_redundant("Pre-diabatic ", u, v, G)
       call MOM_forcing_chksum("Pre-diabatic", fluxes, G, US, haloshift=0)
     endif
@@ -1268,8 +1268,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       if (associated(tv%frazil)) call hchksum(tv%frazil, &
                                "Post-diabatic frazil", G%HI, haloshift=0)
       if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, &
-                               "Post-diabatic salt deficit", G%HI, haloshift=0)
-    ! call MOM_thermo_chksum("Post-diabatic ", tv, G)
+                               "Post-diabatic salt deficit", G%HI, haloshift=0, scale=US%R_to_kg_m3*US%Z_to_m)
+    ! call MOM_thermo_chksum("Post-diabatic ", tv, G, US)
       call check_redundant("Post-diabatic ", u, v, G)
     endif
     call disable_averaging(CS%diag)
@@ -2910,7 +2910,7 @@ subroutine extract_surface_state(CS, sfc_state)
 
        if (G%mask2dT(i,j)>0.) then
          ! instantaneous melt_potential [J m-2]
-         sfc_state%melt_potential(i,j) = CS%tv%C_p * CS%US%R_to_kg_m3*GV%Rho0 * delT(i)
+         sfc_state%melt_potential(i,j) = CS%tv%C_p * US%R_to_kg_m3*GV%Rho0 * delT(i)
        endif
       enddo
     enddo ! end of j loop
@@ -2920,7 +2920,7 @@ subroutine extract_surface_state(CS, sfc_state)
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       ! Convert from gSalt to kgSalt
-      sfc_state%salt_deficit(i,j) = 1000.0 * CS%tv%salt_deficit(i,j)
+      sfc_state%salt_deficit(i,j) = 1000.0 * US%R_to_kg_m3*US%Z_to_m*CS%tv%salt_deficit(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%TempxPmE) .and. associated(CS%tv%TempxPmE)) then

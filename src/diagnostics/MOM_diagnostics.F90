@@ -1794,7 +1794,7 @@ subroutine register_surface_diags(Time, G, IDs, diag, tv)
   endif
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', 'psu m-2 s-1')
+         'Salt sink in ocean due to ice flux', 'psu m-2 s-1', conversion=G%US%R_to_kg_m3*G%US%Z_to_m)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', 'W m-2', conversion=G%US%R_to_kg_m3*G%US%Z_to_m)
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&

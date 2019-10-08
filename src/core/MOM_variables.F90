@@ -101,7 +101,7 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
                          !! at a minimum salinity of MIN_SALINITY since the last time
-                         !! that calculate_surface_state was called, [gSalt m-2].
+                         !! that calculate_surface_state was called, [ppt R Z ~> gSalt m-2].
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
                          !! temperature at which this inflow occurs since the
@@ -465,7 +465,7 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   if (associated(tv%frazil)) &
     call hchksum(tv%frazil, mesg//" tv%frazil", G%HI)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
   if (associated(tv%TempxPmE)) &
     call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
 end subroutine MOM_thermovar_chksum

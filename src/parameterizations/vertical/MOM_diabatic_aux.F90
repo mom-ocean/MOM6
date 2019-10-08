@@ -334,9 +334,9 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   integer,       optional, intent(in)    :: halo !< Halo width over which to work
 
   ! local variables
-  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [gSalt m-2]
+  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [ppt R Z ~> gSalt m-2]
   real :: S_min      !< The minimum salinity [ppt].
-  real :: mc         !< A layer's mass [kg m-2].
+  real :: mc         !< A layer's mass [R Z ~> kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -355,7 +355,7 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
     do k=nz,1,-1 ; do i=is,ie
       if ( (G%mask2dT(i,j) > 0.0) .and. &
            ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0)) ) then
-        mc = GV%H_to_kg_m2 * h(i,j,k)
+        mc = GV%H_to_RZ * h(i,j,k)
         if (h(i,j,k) <= 10.0*GV%Angstrom_H) then
           ! Very thin layers should not be adjusted by the salt flux
           if (tv%S(i,j,k) < S_min) then
