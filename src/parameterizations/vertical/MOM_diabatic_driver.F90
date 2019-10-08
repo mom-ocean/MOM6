@@ -163,7 +163,7 @@ type, public:: diabatic_CS; private
                                      !< vertical diffusion of T and S
   logical :: debug_energy_req        !< If true, test the mixing energy requirement code.
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
-  real :: MLDdensityDifference       !< Density difference used to determine MLD_user
+  real :: MLDdensityDifference       !< Density difference used to determine MLD_user [R ~> kg m-3]
   real :: dz_subML_N2                !< The distance over which to calculate a diagnostic of the
                                      !! average stratification at the base of the mixed layer [Z ~> m].
 
@@ -420,11 +420,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! Diagnose mixed layer depths.
   call enable_averaging(dt, Time_end, CS%diag)
   if (CS%id_MLD_003 > 0 .or. CS%id_subMLN2 > 0 .or. CS%id_mlotstsq > 0) then
-    call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03, G, GV, US, CS%diag, &
+    call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03*US%kg_m3_to_R, G, GV, US, CS%diag, &
                                         id_N2subML=CS%id_subMLN2, id_MLDsq=CS%id_mlotstsq, dz_subML=CS%dz_subML_N2)
   endif
   if (CS%id_MLD_0125 > 0) then
-    call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125, G, GV, US, CS%diag)
+    call diagnoseMLDbyDensityDifference(CS%id_MLD_0125, h, tv, 0.125*US%kg_m3_to_R, G, GV, US, CS%diag)
   endif
   if (CS%id_MLD_user > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_user, h, tv, CS%MLDdensityDifference, G, GV, US, CS%diag)
@@ -1966,10 +1966,10 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     Kd_heat,  & ! diapycnal diffusivity of heat [Z2 T-1 ~> m2 s-1]
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers [Z2 T-1 ~> m2 s-1]
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
-    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC m s-1]
-    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC m s-1]
-    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt m s-1]
-    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt m s-1]
+    Tdif_flx, & ! diffusive diapycnal heat flux across interfaces [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+    Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+    Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   ! The following 5 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
@@ -3436,7 +3436,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "The density difference used to determine a diagnostic mixed "//&
                  "layer depth, MLD_user, following the definition of Levitus 1982. "//&
                  "The MLD is the depth at which the density is larger than the "//&
-                 "surface density by the specified amount.", units='kg/m3', default=0.1)
+                 "surface density by the specified amount.", &
+                 units='kg/m3', default=0.1, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "DIAG_DEPTH_SUBML_N2", CS%dz_subML_N2, &
                  "The distance over which to calculate a diagnostic of the "//&
                  "stratification at the base of the mixed layer.", &

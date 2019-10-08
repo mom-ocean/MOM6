@@ -558,15 +558,15 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb)
   type(verticalGrid_type),   intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),     intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                             intent(in)  :: u    !< The zonal velocity [m s-1]
+                             intent(in)  :: u    !< The zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                             intent(in)  :: v    !< The meridional velocity [m s-1]
+                             intent(in)  :: v    !< The meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(out)   :: u_h !< Zonal velocity interpolated to h points [m s-1].
+                             intent(out)   :: u_h !< Zonal velocity interpolated to h points [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                             intent(out)   :: v_h !< Meridional velocity interpolated to h points [m s-1].
+                             intent(out)   :: v_h !< Meridional velocity interpolated to h points [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                      optional, intent(in)  :: ea !< The amount of fluid entrained from the layer
                                                  !! above within this time step [H ~> m or kg m-2].
@@ -722,7 +722,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
-  real,                    intent(in) :: densityDiff !< Density difference to determine MLD [kg m-3]
+  real,                    intent(in) :: densityDiff !< Density difference to determine MLD [R ~> kg m-3]
   type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
   integer,       optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
@@ -873,10 +873,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
                                                !! forcing through each layer [R Z3 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
-                                               !! potential temperature [R-1 degC-1].
+                                               !! potential temperature [R-1 degC-1 ~> m3 kg-1 degC-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
-                                               !! salinity [R-1 ppt-1].
+                                               !! salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                    optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
 
@@ -888,7 +888,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   real :: Idt        ! The inverse of the timestep [T-1 ~> s-1]
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
-  real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
+  real :: RivermixConst  ! A constant used in implementing river mixing [R Z2 T-1 ~> Pa s].
+
   real, dimension(SZI_(G)) :: &
     d_pres,       &  ! pressure change across a layer [Pa]
     p_lay,        &  ! average pressure in a layer [Pa]
@@ -1124,11 +1125,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
           ! Determine the energetics of river mixing before updating the state.
           if (calculate_energetics .and. associated(fluxes%lrunoff) .and. CS%do_rivermix) then
             ! Here we add an additional source of TKE to the mixed layer where river
-            ! is present to simulate unresolved estuaries. The TKE input is diagnosed
-            ! as follows:
-            !   TKE_river[m3 s-3] = 0.5*rivermix_depth*g*(1/rho)*drho_ds*
-            !                       River*(Samb - Sriver) = CS%mstar*U_star^3
-            ! where River is in units of [m s-1].
+            ! is present to simulate unresolved estuaries. The TKE input, TKE_river in
+            ! [Z3 T-3 ~> m3 s-3], is diagnosed as follows:
+            !   TKE_river = 0.5*rivermix_depth*g*(1/rho)*drho_ds*
+            !               River*(Samb - Sriver) = CS%mstar*U_star^3
+            ! where River is in units of [Z T-1 ~> m s-1].
             ! Samb = Ambient salinity at the mouth of the estuary
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
