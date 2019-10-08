@@ -159,10 +159,10 @@ type, public :: barotropic_CS ; private
   type(BT_OBC_type) :: BT_OBC !< A structure with all of this modules fields
                               !! for applying open boundary conditions.
 
-  real    :: dtbt            !< The barotropic time step [s].
+  real    :: dtbt            !< The barotropic time step [T ~> s].
   real    :: dtbt_fraction   !<   The fraction of the maximum time-step that
                              !! should used.  The default is 0.98.
-  real    :: dtbt_max        !<   The maximum stable barotropic time step [s].
+  real    :: dtbt_max        !<   The maximum stable barotropic time step [T ~> s].
   real    :: dt_bt_filter    !<   The time-scale over which the barotropic mode solutions are
                              !! filtered [T ~> s] if positive, or as a fraction of DT if
                              !! negative [nondim].  This can never be taken to be longer than 2*dt.
@@ -380,7 +380,7 @@ contains
 !! 0.0 and 1.0 determining the scheme.  In practice, bebt must be of
 !! order 0.2 or greater.  A forwards-backwards treatment of the
 !! Coriolis terms is always used.
-subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
+subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, pbce, &
                   eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
                   eta_out, uhbtav, vhbtav, G, GV, US, CS, &
                   visc_rem_u, visc_rem_v, etaav, OBC, BT_cont, eta_PF_start, &
@@ -394,8 +394,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                                     !! velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
                                                          !! anomaly or column mass anomaly [H ~> m or kg m-2].
-  real,                                      intent(in)  :: dt      !< The time increment to integrate over.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations [m s-2].
+  real,                                      intent(in)  :: dt_in_T  !< The time increment to integrate over [T ~> s].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations,
+                                                                       !! [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
                                                                        !! [L T-2 ~> m s-2].
   type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
@@ -584,7 +585,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: dtbt        ! The barotropic time step [T ~> s].
-  real :: dt_in_T     ! The baroclinic time step [T ~> s].
   real :: bebt        ! A copy of CS%bebt [nondim].
   real :: be_proj     ! The fractional amount by which velocities are projected
                       ! when project_velocity is true. For now be_proj is set
@@ -651,7 +651,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   MS%isdw = CS%isdw ; MS%iedw = CS%iedw ; MS%jsdw = CS%jsdw ; MS%jedw = CS%jedw
-  dt_in_T = US%s_to_T*dt
+
   Idt = 1.0 / dt_in_T
   accel_underflow = CS%vel_underflow * Idt
 
@@ -709,10 +709,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
   jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
 
-  nstep = CEILING(dt/CS%dtbt - 0.0001)
+  nstep = CEILING(dt_in_T/CS%dtbt - 0.0001)
   if (is_root_PE() .and. (nstep /= CS%nstep_last)) then
     write(mesg,'("btstep is using a dynamic barotropic timestep of ", ES12.6, &
-               & " seconds, max ", ES12.6, ".")') (dt/nstep), CS%dtbt_max
+               & " seconds, max ", ES12.6, ".")') (US%T_to_s*dt_in_T/nstep), US%T_to_s*CS%dtbt_max
     call MOM_mesg(mesg, 3)
   endif
   CS%nstep_last = nstep
@@ -738,7 +738,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       (CS%id_uhbt_hifreq > 0) .or. (CS%id_vhbt_hifreq > 0)) then
     do_hifreq_output = query_averaging_enabled(CS%diag, time_int_in, time_end_in)
     if (do_hifreq_output) &
-      time_bt_start = time_end_in - real_to_time(dt)
+      time_bt_start = time_end_in - real_to_time(US%T_to_s*dt_in_T)
   endif
 
 !--- begin setup for group halo update
@@ -2367,8 +2367,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   call min_across_PEs(dtbt_max)
   if (id_clock_sync > 0) call cpu_clock_end(id_clock_sync)
 
-  CS%dtbt = CS%dtbt_fraction * US%T_to_s * dtbt_max
-  CS%dtbt_max = US%T_to_s * dtbt_max
+  CS%dtbt = CS%dtbt_fraction * dtbt_max
+  CS%dtbt_max = dtbt_max
 end subroutine set_dtbt
 
 !> The following 4 subroutines apply the open boundary conditions.
@@ -3658,8 +3658,6 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
                               ! the sum of the layer thicknesses [H ~> m or kg m-2].
   real :: d_eta               ! The difference between estimates of the total
                               ! thicknesses [H ~> m or kg m-2].
-  real :: limit_dt            ! The fractional mass-source limit divided by the
-                              ! thermodynamic time step [s-1].
   integer :: is, ie, js, je, nz, i, j, k
   real, parameter :: frac_cor = 0.25
   real, parameter :: slow_rate = 0.125
@@ -3670,7 +3668,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  !$OMP parallel do default(shared) private(eta_h,h_tot,limit_dt,d_eta)
+  !$OMP parallel do default(shared) private(eta_h,h_tot,d_eta)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (GV%Boussinesq) then
@@ -3741,7 +3739,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   real :: gtot_estimate ! Summed GV%g_prime [L2 Z-1 T-2 ~> m s-2], to give an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed [Z ~> m].
-  real :: dtbt_input, dtbt_tmp
+  real :: dtbt_input    ! The input value of DTBT, [nondim] if negative or [s] if positive.
+  real :: dtbt_tmp      ! A temporary copy of CS%dtbt read from a restart file [T ~> s]
   real :: wave_drag_scale ! A scaling factor for the barotropic linear wave drag
                           ! piston velocities.
   character(len=200) :: inputdir       ! The directory in which to find input files.
@@ -4159,7 +4158,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%dtbt_fraction = 0.98 ; if (dtbt_input < 0.0) CS%dtbt_fraction = -dtbt_input
 
   dtbt_tmp = -1.0
-  if (query_initialized(CS%dtbt, "DTBT", restart_CS)) dtbt_tmp = CS%dtbt
+  if (query_initialized(CS%dtbt, "DTBT", restart_CS)) then
+    dtbt_tmp = CS%dtbt
+    if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= US%s_to_T)) &
+      dtbt_tmp = (US%s_to_T / US%s_to_T_restart) * CS%dtbt
+  endif
 
   ! Estimate the maximum stable barotropic time step.
   gtot_estimate = 0.0
@@ -4167,14 +4170,14 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   call set_dtbt(G, GV, US, CS, gtot_est=gtot_estimate, SSH_add=SSH_extra)
 
   if (dtbt_input > 0.0) then
-    CS%dtbt = dtbt_input
+    CS%dtbt = US%s_to_T * dtbt_input
   elseif (dtbt_tmp > 0.0) then
     CS%dtbt = dtbt_tmp
   endif
   if ((dtbt_tmp > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
 
-  call log_param(param_file, mdl, "DTBT as used", CS%dtbt)
-  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max)
+  call log_param(param_file, mdl, "DTBT as used", CS%dtbt*US%T_to_s)
+  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max*US%T_to_s)
 
   ! ubtav, vbtav, ubt_IC, vbt_IC, uhbt_IC, and vhbt_IC are allocated and
   ! initialized in register_barotropic_restarts.
