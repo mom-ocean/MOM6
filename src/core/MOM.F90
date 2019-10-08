@@ -896,10 +896,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                    ! various unit conversion factors
   type(MOM_diag_IDs), pointer :: IDs => NULL() ! A structure with the diagnostic IDs.
   real, dimension(:,:,:), pointer :: &
-    u => NULL(), & ! u : zonal velocity component [m s-1]
-    v => NULL(), & ! v : meridional velocity component [m s-1]
+    u => NULL(), & ! u : zonal velocity component [L T-1 ~> m s-1]
+    v => NULL(), & ! v : meridional velocity component [L T-1 ~> m s-1]
     h => NULL()    ! h : layer thickness [H ~> m or kg m-2]
 
+  real :: dt_in_T   ! The time step covered by this call [T ~> s]
   logical :: calc_dtbt  ! Indicates whether the dynamically adjusted
                         ! barotropic time step needs to be updated.
   logical :: showCallTree
@@ -916,13 +917,14 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   showCallTree = callTree_showQuery()
 
   call cpu_clock_begin(id_clock_dynamics)
+  dt_in_T = US%s_to_T*dt
 
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
     call enable_averaging(dt_thermo, Time_local+real_to_time(dt_thermo-dt), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
-      call calc_slope_functions(h, CS%tv, US%s_to_T*dt, G, GV, US, CS%VarMix)
+      call calc_slope_functions(h, CS%tv, dt_in_T, G, GV, US, CS%VarMix)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, US%s_to_T*dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
     call cpu_clock_end(id_clock_thick_diff)
@@ -995,8 +997,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
 
     if (associated(CS%VarMix)) &
-      call calc_slope_functions(h, CS%tv, US%s_to_T*dt, G, GV, US, CS%VarMix)
-    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, US%s_to_T*dt, G, GV, US, &
+      call calc_slope_functions(h, CS%tv, dt_in_T, G, GV, US, CS%VarMix)
+    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_in_T, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
     if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1013,7 +1015,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     endif
     call cpu_clock_begin(id_clock_ml_restrat)
-    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, US%s_to_T*dt, CS%visc%MLD, &
+    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt_in_T, CS%visc%MLD, &
                             CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
     call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
@@ -1029,7 +1031,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   call diag_update_remap_grids(CS%diag)
 
   if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                         CS%visc, US%s_to_T*dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
+                                         CS%visc, dt_in_T, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
   call disable_averaging(CS%diag)
 
   ! Advance the dynamics time by dt.
@@ -2703,8 +2705,6 @@ subroutine extract_surface_state(CS, sfc_state)
   type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
   type(unit_scale_type),   pointer :: US => NULL() !< structure containing various unit conversion factors
   real, dimension(:,:,:),  pointer :: &
-!   u => NULL(), & !< u : zonal velocity component [m s-1]
-!   v => NULL(), & !< v : meridional velocity component [m s-1]
     h => NULL()    !< h : layer thickness [H ~> m or kg m-2]
   real :: depth(SZI_(CS%G))  !< Distance from the surface in depth units [Z ~> m]
   real :: depth_ml           !< Depth over which to average to determine mixed
