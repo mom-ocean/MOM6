@@ -95,15 +95,16 @@ type, public :: forcing
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
-    heat_content_cond    => NULL(), & !< heat content associated with condensating water [W m-2]
-    heat_content_lprec   => NULL(), & !< heat content associated with liquid >0 precip   [W m-2] (diagnostic)
-    heat_content_icemelt => NULL(), & !< heat content associated with snow/seaice melt/formation [W m-2]
-    heat_content_fprec   => NULL(), & !< heat content associated with frozen precip      [W m-2]
-    heat_content_vprec   => NULL(), & !< heat content associated with virtual >0 precip  [W m-2]
-    heat_content_lrunoff => NULL(), & !< heat content associated with liquid runoff      [W m-2]
-    heat_content_frunoff => NULL(), & !< heat content associated with frozen runoff      [W m-2]
-    heat_content_massout => NULL(), & !< heat content associated with mass leaving ocean [W m-2]
-    heat_content_massin  => NULL()    !< heat content associated with mass entering ocean [W m-2]
+    heat_content_cond    => NULL(), & !< heat content associated with condensating water [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_lprec   => NULL(), & !< heat content associated with liquid >0 precip   [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_icemelt => NULL(), & !< heat content associated with snow and seaice
+                                      !! melt and formation [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_fprec   => NULL(), & !< heat content associated with frozen precip      [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_vprec   => NULL(), & !< heat content associated with virtual >0 precip  [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_lrunoff => NULL(), & !< heat content associated with liquid runoff      [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_frunoff => NULL(), & !< heat content associated with frozen runoff      [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_massout => NULL(), & !< heat content associated with mass leaving ocean [J kg-1 R Z T-1 ~> W m-2]
+    heat_content_massin  => NULL()    !< heat content associated with mass entering ocean [J kg-1 R Z T-1 ~> W m-2]
 
   ! salt mass flux (contributes to ocean mass only if non-Bouss )
   real, pointer, dimension(:,:) :: &
@@ -415,6 +416,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
   real :: RZ_T_to_W_m2_degC   ! Converts mass fluxes to heat fluxes per degree temperature
                               ! change [W m-2 degC-1 T R-1 Z-1 ~> J kg degC]
   real :: I_Cp                ! 1.0 / C_p [kg decC J-1]
+  real :: RZcp_to_H           ! Unit convsersion factors divided by the heat capacity
+                              ! [kg degC H R-1 Z-1 J-1 ~> degC m3 J-1 or kg degC J-1]
   logical :: calculate_diags  ! Indicate to calculate/update diagnostic arrays
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
@@ -439,6 +442,8 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
   RZ_T_to_W_m2_degC = fluxes%C_p*US%R_to_kg_m3*US%Z_to_m*US%s_to_T
   I_Cp      = 1.0 / fluxes%C_p
   W_m2_to_H_T = 1.0 / (US%s_to_T * GV%H_to_kg_m2 * fluxes%C_p)
+
+  RZcP_to_H = 1.0 / (GV%H_to_RZ * fluxes%C_p)
 
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -600,16 +605,16 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
     ! flux type). Runoff is otherwise added with a temperature of SST.
     if (useRiverHeatContent) then
       ! remove lrunoff*SST here, to counteract its addition elsewhere
-      net_heat(i) = (net_heat(i) + (scale*(dt_in_T * W_m2_to_H_T)) * fluxes%heat_content_lrunoff(i,j)) - &
+      net_heat(i) = (net_heat(i) + (scale*(dt_in_T * RZcP_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
                      (GV%RZ_to_H * (scale * dt_in_T)) * fluxes%lrunoff(i,j) * T(i,1)
       !BGR-Jul 5, 2017{
       !Intentionally neglect the following contribution to rate for legacy reasons.
-      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*(W_m2_to_H_T)) * fluxes%heat_content_lrunoff(i,j)) - &
+      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*RZcP_to_H) * fluxes%heat_content_lrunoff(i,j)) - &
       !               (GV%RZ_to_H * (scale)) * fluxes%lrunoff(i,j) * T(i,1)
       !}BGR
       if (calculate_diags .and. associated(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt_in_T) * &
-            (I_Cp*US%T_to_s*fluxes%heat_content_lrunoff(i,j) - US%R_to_kg_m3*US%Z_to_m*fluxes%lrunoff(i,j)*T(i,1))
+            (I_Cp*fluxes%heat_content_lrunoff(i,j) - fluxes%lrunoff(i,j)*T(i,1))
       endif
     endif
 
@@ -617,16 +622,16 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
     ! flux type). Calving is otherwise added with a temperature of SST.
     if (useCalvingHeatContent) then
       ! remove frunoff*SST here, to counteract its addition elsewhere
-      net_heat(i) = net_heat(i) + (scale*(dt_in_T * W_m2_to_H_T)) * fluxes%heat_content_frunoff(i,j) - &
+      net_heat(i) = net_heat(i) + (scale*(dt_in_T * RZcP_to_H)) * fluxes%heat_content_frunoff(i,j) - &
                     (GV%RZ_to_H * (scale * dt_in_T)) * fluxes%frunoff(i,j) * T(i,1)
       !BGR-Jul 5, 2017{
       !Intentionally neglect the following contribution to rate for legacy reasons.
-!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*W_m2_to_H_T) * fluxes%heat_content_frunoff(i,j) - &
+!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*RZcP_to_H) * fluxes%heat_content_frunoff(i,j) - &
 !                    (GV%RZ_to_H * scale) * fluxes%frunoff(i,j) * T(i,1)
       !}BGR
       if (calculate_diags .and. associated(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt_in_T) * &
-            (I_Cp*US%T_to_s*fluxes%heat_content_frunoff(i,j) - US%R_to_kg_m3*US%Z_to_m*fluxes%frunoff(i,j)*T(i,1))
+            (I_Cp*fluxes%heat_content_frunoff(i,j) - fluxes%frunoff(i,j)*T(i,1))
       endif
     endif
 
@@ -640,7 +645,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
     ! When evap, lprec, or vprec > 0, then we know their heat content here
     ! via settings from inside of the appropriate config_src driver files.
 !    if (associated(fluxes%heat_content_lprec)) then
-!      net_heat(i) = net_heat(i) + scale * dt_in_T * W_m2_to_H_T *                    &
+!      net_heat(i) = net_heat(i) + scale * dt_in_T * RZcP_to_H * &
 !     (fluxes%heat_content_lprec(i,j)    + (fluxes%heat_content_fprec(i,j)   + &
 !     (fluxes%heat_content_lrunoff(i,j)  + (fluxes%heat_content_frunoff(i,j) + &
 !     (fluxes%heat_content_cond(i,j)     +  fluxes%heat_content_vprec(i,j))))))
@@ -695,10 +700,10 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       if (associated(fluxes%heat_content_massin))  then
         if (aggregate_FW) then
           if (netMassInOut(i) > 0.0) then ! net is "in"
-            fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
+            fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_RZ / dt_in_T
           else ! net is "out"
             fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
-                                               T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
+                                               T(i,1) * GV%H_to_RZ / dt_in_T
           endif
         else
           fluxes%heat_content_massin(i,j) = 0.
@@ -710,10 +715,10 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       if (associated(fluxes%heat_content_massout)) then
         if (aggregate_FW) then
           if (netMassInOut(i) > 0.0) then ! net is "in"
-            fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
+            fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_RZ / dt_in_T
           else ! net is "out"
-            fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
-                                               T(i,1) * GV%H_to_kg_m2 / (US%T_to_s*dt_in_T)
+           fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * &
+                                               T(i,1) * GV%H_to_RZ / dt_in_T
           endif
         else
           fluxes%heat_content_massout(i,j) = 0.0
@@ -729,7 +734,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       ! wait until MOM_diabatic_driver.F90.
       if (associated(fluxes%heat_content_lprec)) then
         if (fluxes%lprec(i,j) > 0.0) then
-          fluxes%heat_content_lprec(i,j) = RZ_T_to_W_m2_degC*fluxes%lprec(i,j)*T(i,1)
+          fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*T(i,1)
         else
           fluxes%heat_content_lprec(i,j) = 0.0
         endif
@@ -740,7 +745,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       ! and until we do so fprec is treated like lprec and enters at SST. -AJA
       if (associated(fluxes%heat_content_fprec)) then
         if (fluxes%fprec(i,j) > 0.0) then
-          fluxes%heat_content_fprec(i,j) = RZ_T_to_W_m2_degC*fluxes%fprec(i,j)*T(i,1)
+          fluxes%heat_content_fprec(i,j) = fluxes%C_p*fluxes%fprec(i,j)*T(i,1)
         else
           fluxes%heat_content_fprec(i,j) = 0.0
         endif
@@ -749,7 +754,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       ! Following lprec and fprec, water flux due to sea ice melt (seaice_melt) enters at SST - GMM
       if (associated(fluxes%heat_content_icemelt)) then
         if (fluxes%seaice_melt(i,j) > 0.0) then
-          fluxes%heat_content_icemelt(i,j) = RZ_T_to_W_m2_degC*fluxes%seaice_melt(i,j)*T(i,1)
+          fluxes%heat_content_icemelt(i,j) = fluxes%C_p*fluxes%seaice_melt(i,j)*T(i,1)
         else
           fluxes%heat_content_icemelt(i,j) = 0.0
         endif
@@ -760,7 +765,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
       if (associated(fluxes%heat_content_vprec)) then
         if (fluxes%vprec(i,j) > 0.0) then
-          fluxes%heat_content_vprec(i,j) = RZ_T_to_W_m2_degC*fluxes%vprec(i,j)*T(i,1)
+          fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*T(i,1)
         else
           fluxes%heat_content_vprec(i,j) = 0.0
         endif
@@ -774,7 +779,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       ! Condensation is assumed to drop into the ocean at the SST, just like lprec.
       if (associated(fluxes%heat_content_cond)) then
         if (fluxes%evap(i,j) > 0.0) then
-          fluxes%heat_content_cond(i,j) = RZ_T_to_W_m2_degC*fluxes%evap(i,j)*T(i,1)
+          fluxes%heat_content_cond(i,j) = fluxes%C_p*fluxes%evap(i,j)*T(i,1)
         else
           fluxes%heat_content_cond(i,j) = 0.0
         endif
@@ -783,14 +788,14 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
       ! Liquid runoff enters ocean at SST if land model does not provide runoff heat content.
       if (.not. useRiverHeatContent) then
         if (associated(fluxes%lrunoff) .and. associated(fluxes%heat_content_lrunoff)) then
-          fluxes%heat_content_lrunoff(i,j) = RZ_T_to_W_m2_degC*fluxes%lrunoff(i,j)*T(i,1)
+          fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
         endif
       endif
 
       ! Icebergs enter ocean at SST if land model does not provide calving heat content.
       if (.not. useCalvingHeatContent) then
         if (associated(fluxes%frunoff) .and. associated(fluxes%heat_content_frunoff)) then
-          fluxes%heat_content_frunoff(i,j) = RZ_T_to_W_m2_degC*fluxes%frunoff(i,j)*T(i,1)
+          fluxes%heat_content_frunoff(i,j) = fluxes%C_p*fluxes%frunoff(i,j)*T(i,1)
         endif
       endif
 
@@ -1071,19 +1076,26 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%frunoff)) &
     call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G%HI,haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_lrunoff)) &
-    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff", G%HI, &
+                 haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_frunoff)) &
-    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff", G%HI, &
+                 haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_lprec)) &
-    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec", G%HI,  &
+                 haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_fprec)) &
-    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec", G%HI, &
+                 haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_icemelt)) &
-    call hchksum(fluxes%heat_content_icemelt, mesg//" fluxes%heat_content_icemelt",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_icemelt, mesg//" fluxes%heat_content_icemelt", G%HI, &
+                 haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_cond)) &
-    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond", G%HI, &
+                 haloshift=hshift, scale=RZ_T_conversion)
   if (associated(fluxes%heat_content_massout)) &
-    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G%HI,haloshift=hshift)
+    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout", G%HI, &
+                 haloshift=hshift, scale=RZ_T_conversion)
 end subroutine MOM_forcing_chksum
 
 !> Write out chksums for the driving mechanical forces.
@@ -1438,58 +1450,62 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   !===============================================================
   ! surface heat flux maps
 
-  handles%id_heat_content_frunoff = register_diag_field('ocean_model', 'heat_content_frunoff',        &
-        diag%axesT1, Time, 'Heat content (relative to 0C) of solid runoff into ocean', 'W m-2',       &
+  handles%id_heat_content_frunoff = register_diag_field('ocean_model', 'heat_content_frunoff', &
+        diag%axesT1, Time, 'Heat content (relative to 0C) of solid runoff into ocean',         &
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
         standard_name='temperature_flux_due_to_solid_runoff_expressed_as_heat_flux_into_sea_water')
 
-  handles%id_heat_content_lrunoff = register_diag_field('ocean_model', 'heat_content_lrunoff',         &
-        diag%axesT1, Time, 'Heat content (relative to 0C) of liquid runoff into ocean', 'W m-2',       &
+  handles%id_heat_content_lrunoff = register_diag_field('ocean_model', 'heat_content_lrunoff', &
+        diag%axesT1, Time, 'Heat content (relative to 0C) of liquid runoff into ocean',        &
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
         standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
 
   handles%id_hfrunoffds = register_diag_field('ocean_model', 'hfrunoffds',                            &
-        diag%axesT1, Time, 'Heat content (relative to 0C) of liquid+solid runoff into ocean', 'W m-2',&
+        diag%axesT1, Time, 'Heat content (relative to 0C) of liquid+solid runoff into ocean', &
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
         standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
 
   handles%id_heat_content_lprec = register_diag_field('ocean_model', 'heat_content_lprec',             &
         diag%axesT1,Time,'Heat content (relative to 0degC) of liquid precip entering ocean',           &
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_heat_content_fprec = register_diag_field('ocean_model', 'heat_content_fprec',&
         diag%axesT1,Time,'Heat content (relative to 0degC) of frozen prec entering ocean',&
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_heat_content_icemelt = register_diag_field('ocean_model', 'heat_content_icemelt',&
         diag%axesT1,Time,'Heat content (relative to 0degC) of water flux due to sea ice melting/freezing',&
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_heat_content_vprec = register_diag_field('ocean_model', 'heat_content_vprec',   &
         diag%axesT1,Time,'Heat content (relative to 0degC) of virtual precip entering ocean',&
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_heat_content_cond = register_diag_field('ocean_model', 'heat_content_cond',   &
         diag%axesT1,Time,'Heat content (relative to 0degC) of water condensing into ocean',&
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_hfrainds = register_diag_field('ocean_model', 'hfrainds',                                 &
         diag%axesT1,Time,'Heat content (relative to 0degC) of liquid+frozen precip entering ocean',    &
-        'W m-2',standard_name='temperature_flux_due_to_rainfall_expressed_as_heat_flux_into_sea_water',&
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T, &
+        standard_name='temperature_flux_due_to_rainfall_expressed_as_heat_flux_into_sea_water',&
         cmor_long_name='Heat Content (relative to 0degC) of Liquid + Frozen Precipitation')
 
   handles%id_heat_content_surfwater = register_diag_field('ocean_model', 'heat_content_surfwater',&
          diag%axesT1, Time,                                                                       &
         'Heat content (relative to 0degC) of net water crossing ocean surface (frozen+liquid)',   &
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_heat_content_massout = register_diag_field('ocean_model', 'heat_content_massout',                      &
          diag%axesT1, Time,'Heat content (relative to 0degC) of net mass leaving ocean ocean via evap and ice form',&
-        'W m-2',                                                                                                 &
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T,                                                      &
         cmor_field_name='hfevapds',                                                                                 &
         cmor_standard_name='temperature_flux_due_to_evaporation_expressed_as_heat_flux_out_of_sea_water',           &
         cmor_long_name='Heat Content (relative to 0degC) of Water Leaving Ocean via Evaporation and Ice Formation')
 
   handles%id_heat_content_massin = register_diag_field('ocean_model', 'heat_content_massin',   &
          diag%axesT1, Time,'Heat content (relative to 0degC) of net mass entering ocean ocean',&
-        'W m-2')
+        'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_net_heat_coupler = register_diag_field('ocean_model', 'net_heat_coupler',          &
         diag%axesT1,Time,'Surface ocean heat flux from SW+LW+latent+sensible+seaice_melt_heat (via the coupler)',&
@@ -2414,63 +2430,63 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
     if ((handles%id_heat_content_lrunoff > 0) .and. associated(fluxes%heat_content_lrunoff))  &
       call post_data(handles%id_heat_content_lrunoff, fluxes%heat_content_lrunoff, diag)
     if ((handles%id_total_heat_content_lrunoff > 0) .and. associated(fluxes%heat_content_lrunoff)) then
-      total_transport = global_area_integral(fluxes%heat_content_lrunoff,G)
+      total_transport = global_area_integral(fluxes%heat_content_lrunoff, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_lrunoff, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_frunoff > 0) .and. associated(fluxes%heat_content_frunoff))  &
       call post_data(handles%id_heat_content_frunoff, fluxes%heat_content_frunoff, diag)
     if ((handles%id_total_heat_content_frunoff > 0) .and. associated(fluxes%heat_content_frunoff)) then
-      total_transport = global_area_integral(fluxes%heat_content_frunoff,G)
+      total_transport = global_area_integral(fluxes%heat_content_frunoff, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_frunoff, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_lprec > 0) .and. associated(fluxes%heat_content_lprec))      &
       call post_data(handles%id_heat_content_lprec, fluxes%heat_content_lprec, diag)
     if ((handles%id_total_heat_content_lprec > 0) .and. associated(fluxes%heat_content_lprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_lprec,G)
+      total_transport = global_area_integral(fluxes%heat_content_lprec, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_lprec, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_fprec > 0) .and. associated(fluxes%heat_content_fprec))      &
       call post_data(handles%id_heat_content_fprec, fluxes%heat_content_fprec, diag)
     if ((handles%id_total_heat_content_fprec > 0) .and. associated(fluxes%heat_content_fprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_fprec,G)
+      total_transport = global_area_integral(fluxes%heat_content_fprec, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_fprec, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_icemelt > 0) .and. associated(fluxes%heat_content_icemelt))      &
       call post_data(handles%id_heat_content_icemelt, fluxes%heat_content_icemelt, diag)
     if ((handles%id_total_heat_content_icemelt > 0) .and. associated(fluxes%heat_content_icemelt)) then
-      total_transport = global_area_integral(fluxes%heat_content_icemelt,G)
+      total_transport = global_area_integral(fluxes%heat_content_icemelt, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_icemelt, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec))      &
       call post_data(handles%id_heat_content_vprec, fluxes%heat_content_vprec, diag)
     if ((handles%id_total_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_vprec,G)
+      total_transport = global_area_integral(fluxes%heat_content_vprec, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_vprec, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_cond > 0) .and. associated(fluxes%heat_content_cond))        &
       call post_data(handles%id_heat_content_cond, fluxes%heat_content_cond, diag)
     if ((handles%id_total_heat_content_cond > 0) .and. associated(fluxes%heat_content_cond)) then
-      total_transport = global_area_integral(fluxes%heat_content_cond,G)
+      total_transport = global_area_integral(fluxes%heat_content_cond, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_cond, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_massout > 0) .and. associated(fluxes%heat_content_massout))  &
       call post_data(handles%id_heat_content_massout, fluxes%heat_content_massout, diag)
     if ((handles%id_total_heat_content_massout > 0) .and. associated(fluxes%heat_content_massout)) then
-      total_transport = global_area_integral(fluxes%heat_content_massout,G)
+      total_transport = global_area_integral(fluxes%heat_content_massout,G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_massout, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_massin > 0) .and. associated(fluxes%heat_content_massin))  &
       call post_data(handles%id_heat_content_massin, fluxes%heat_content_massin, diag)
     if ((handles%id_total_heat_content_massin > 0) .and. associated(fluxes%heat_content_massin)) then
-      total_transport = global_area_integral(fluxes%heat_content_massin,G)
+      total_transport = global_area_integral(fluxes%heat_content_massin, G, scale=RZ_T_conversion)
       call post_data(handles%id_total_heat_content_massin, total_transport, diag)
     endif
 
@@ -2508,25 +2524,33 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
         !if (associated(sfc_state%TempXpme)) then
         !  res(i,j) = res(i,j) + sfc_state%TempXpme(i,j) * fluxes%C_p * I_dt
         !else
-          if (associated(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
-          if (associated(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
-          if (associated(fluxes%heat_content_lprec))   res(i,j) = res(i,j) + fluxes%heat_content_lprec(i,j)
-          if (associated(fluxes%heat_content_fprec))   res(i,j) = res(i,j) + fluxes%heat_content_fprec(i,j)
-          if (associated(fluxes%heat_content_icemelt)) res(i,j) = res(i,j) + fluxes%heat_content_icemelt(i,j)
-          if (associated(fluxes%heat_content_vprec))   res(i,j) = res(i,j) + fluxes%heat_content_vprec(i,j)
-          if (associated(fluxes%heat_content_cond))    res(i,j) = res(i,j) + fluxes%heat_content_cond(i,j)
-          if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
+          if (associated(fluxes%heat_content_lrunoff)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_lrunoff(i,j)
+          if (associated(fluxes%heat_content_frunoff)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_frunoff(i,j)
+          if (associated(fluxes%heat_content_lprec)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_lprec(i,j)
+          if (associated(fluxes%heat_content_fprec)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_fprec(i,j)
+          if (associated(fluxes%heat_content_icemelt)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_icemelt(i,j)
+          if (associated(fluxes%heat_content_vprec)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_vprec(i,j)
+          if (associated(fluxes%heat_content_cond)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_cond(i,j)
+          if (associated(fluxes%heat_content_massout)) &
+            res(i,j) = res(i,j) + RZ_T_conversion*fluxes%heat_content_massout(i,j)
         !endif
-        if (associated(fluxes%heat_added))         res(i,j) = res(i,j) + fluxes%heat_added(i,j)
+        if (associated(fluxes%heat_added)) res(i,j) = res(i,j) + fluxes%heat_added(i,j)
       enddo ; enddo
       if (handles%id_net_heat_surface > 0) call post_data(handles%id_net_heat_surface, res, diag)
 
       if (handles%id_total_net_heat_surface > 0) then
-        total_transport = global_area_integral(res,G)
+        total_transport = global_area_integral(res, G)
         call post_data(handles%id_total_net_heat_surface, total_transport, diag)
       endif
       if (handles%id_net_heat_surface_ga > 0) then
-        ave_flux = global_area_mean(res,G)
+        ave_flux = global_area_mean(res, G)
         call post_data(handles%id_net_heat_surface_ga, ave_flux, diag)
       endif
     endif
@@ -2549,7 +2573,7 @@ subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, US, diag, handles)
       enddo ; enddo
       if (handles%id_heat_content_surfwater > 0) call post_data(handles%id_heat_content_surfwater, res, diag)
       if (handles%id_total_heat_content_surfwater > 0) then
-        total_transport = global_area_integral(res,G)
+        total_transport = global_area_integral(res, G, scale=RZ_T_conversion)
         call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
       endif
     endif

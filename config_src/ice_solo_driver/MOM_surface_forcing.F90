@@ -731,7 +731,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*US%R_to_kg_m3*US%Z_to_m*US%s_to_T * &
+      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p * &
                                          fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
       fluxes%latent_fprec_diag(i,j)    = -US%R_to_kg_m3*US%Z_to_m*US%s_to_T*fluxes%fprec(i,j)*hlf

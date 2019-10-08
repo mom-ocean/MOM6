@@ -105,7 +105,7 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
                          !! temperature at which this inflow occurs since the
-                         !! last call to calculate_surface_state [degC kg m-2].
+                         !! last call to calculate_surface_state [degC R Z ~> degC kg m-2].
                          !! This should be prescribed in the forcing fields, but
                          !! as it often is not, this is a useful heat budget diagnostic.
   real, dimension(:,:), pointer :: internal_heat => NULL()
@@ -467,7 +467,7 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   if (associated(tv%salt_deficit)) &
     call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

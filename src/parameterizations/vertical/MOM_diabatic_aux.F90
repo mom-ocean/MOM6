@@ -882,8 +882,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   ! Local variables
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-  real :: H_limit_fluxes, IforcingDepthScale
-  real :: Idt
+  real :: H_limit_fluxes
+  real :: IforcingDepthScale
+  real :: Idt        ! The inverse of the timestep [T-1 ~> s-1]
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
   real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
@@ -942,7 +943,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   if (.not.associated(fluxes%sw)) return
 
 #define _OLD_ALG_
-  Idt = 1.0/ (US%T_to_s*dt_in_T)
+  Idt = 1.0 / dt_in_T
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
@@ -1112,12 +1113,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T2d(i,k) * dThickness * GV%H_to_kg_m2
+                         T2d(i,k) * dThickness * GV%H_to_RZ
 
           ! Determine the energetics of river mixing before updating the state.
           if (calculate_energetics .and. associated(fluxes%lrunoff) .and. CS%do_rivermix) then
@@ -1193,14 +1194,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
           dTemp = dTemp + dThickness*T2d(i,k)
 
           ! Diagnostics of heat content associated with mass fluxes
-          if (associated(fluxes%heat_content_massin))                             &
-            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
-          if (associated(fluxes%heat_content_massout))                            &
+          if (associated(fluxes%heat_content_massin)) &
+            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+          if (associated(fluxes%heat_content_massout)) &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T2d(i,k) * dThickness * GV%H_to_kg_m2
+                         T2d(i,k) * dThickness * GV%H_to_RZ
 
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
@@ -1304,7 +1305,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_kg_m2
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * US%s_to_T*Idt * tv%C_p * GV%H_to_kg_m2
       enddo ; enddo
 
       ! Perform a cumulative sum upwards from bottom to

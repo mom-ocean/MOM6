@@ -2926,7 +2926,7 @@ subroutine extract_surface_state(CS, sfc_state)
   if (allocated(sfc_state%TempxPmE) .and. associated(CS%tv%TempxPmE)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
-      sfc_state%TempxPmE(i,j) = CS%tv%TempxPmE(i,j)
+      sfc_state%TempxPmE(i,j) = US%R_to_kg_m3*US%Z_to_m*CS%tv%TempxPmE(i,j)
     enddo ; enddo
   endif
   if (allocated(sfc_state%internal_heat) .and. associated(CS%tv%internal_heat)) then
