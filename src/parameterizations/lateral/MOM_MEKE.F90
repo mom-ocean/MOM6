@@ -97,7 +97,7 @@ contains
 
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
-subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv)
+subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt_in_T, G, GV, US, CS, hu, hv)
   type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
@@ -106,7 +106,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
-  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [s].
+  real,                                     intent(in)    :: dt_in_T   !< Model(baroclinic) time-step [T ~> s].
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
@@ -117,9 +117,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     I_mass, &       ! The inverse of mass [R-1 Z-1 ~> m2 kg-1].
     src, &          ! The sum of all MEKE sources [L2 T-3 ~> W kg-1] (= m2 s-3).
     MEKE_decay, &   ! A diagnostic of the MEKE decay timescale [T-1 ~> s-1].
-    ! MEKE_GM_src, &  ! The MEKE source from thickness mixing [m2 s-3].
-    ! MEKE_mom_src, & ! The MEKE source from momentum [m2 s-3].
-    ! MEKE_GME_snk, & ! The MEKE sink from GME backscatter [m2 s-3].
     drag_rate_visc, & ! Near-bottom velocity contribution to bottom dratg [L T-1 ~> m s-1]
     drag_rate, &    ! The MEKE spindown timescale due to bottom drag [T-1 ~> s-1].
     drag_rate_J15, &  ! The MEKE spindown timescale due to bottom drag with the Jansen 2015 scheme.
@@ -193,7 +190,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m)
     endif
 
-    sdt = US%s_to_T*dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
+    sdt = dt_in_T*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
     Rho0 = GV%Rho0
     mass_neglect = GV%H_to_RZ * GV%H_subroundoff
     cdrag2 = CS%cdrag**2
@@ -459,8 +456,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       if (CS%MEKE_advection_factor>0.) then
         !### I think that for dimensional consistency, this should be:
-        ! advFac = GV%H_to_RZ * CS%MEKE_advection_factor / (US%s_to_T*dt)
-        advFac = US%kg_m3_to_R*GV%H_to_Z * CS%MEKE_advection_factor / (US%s_to_T*dt)
+        ! advFac = GV%H_to_RZ * CS%MEKE_advection_factor / sdt
+        advFac = US%kg_m3_to_R*GV%H_to_Z * CS%MEKE_advection_factor / dt_in_T
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
           ! Here the units of the quantities added to MEKE_uflux and MEKE_vflux are [m L4 T-3].
