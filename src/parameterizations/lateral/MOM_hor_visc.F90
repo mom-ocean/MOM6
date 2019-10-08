@@ -261,9 +261,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     boundary_mask ! A mask that zeroes out cells with at least one land edge [nondim]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
-    dvdx, dudy, & ! components in the shearing strain [T-1 s-1]
+    dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
     dDel2vdx, dDel2udy, & ! Components in the biharmonic equivalent of the shearing strain [L-2 T-1 ~> m-2 s-1]
-    dvdx_bt, dudy_bt, & ! components in the barotropic shearing strain [T-1 s-1]
+    dvdx_bt, dudy_bt, & ! components in the barotropic shearing strain [T-1 ~> s-1]
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) including metric terms [T-1 ~> s-1]
     sh_xy_bt, &   ! barotropic horizontal shearing strain (du/dy + dv/dx) inc. metric terms [T-1 ~> s-1]
     str_xy, &     ! str_xy is the cross term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2]
@@ -1511,8 +1511,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                            ! [T2 L-2 ~> s2 m-2]
   real :: Ah_Limit         ! coefficient [T-1 ~> s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
-  real :: Kh               ! Lapacian horizontal viscosity [L2 s-1]
-  real :: Ah               ! biharmonic horizontal viscosity [L4 s-1]
+  real :: Kh               ! Lapacian horizontal viscosity [L2 T-1 ~> m2 s-1]
+  real :: Ah               ! biharmonic horizontal viscosity [L4 T-1 ~> m4 s-1]
   real :: Kh_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing gives Lap visc
   real :: Ah_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing cubed gives bih visc
   real :: Ah_time_scale    ! damping time-scale for biharmonic visc [T ~> s]
