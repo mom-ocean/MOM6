@@ -399,28 +399,31 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
                                                  !! which layer receivees the brine.
 
   ! local variables
-  real :: salt(SZI_(G)) ! The amount of salt rejected from
-                        !  sea ice. [grams]
-  real :: dzbr(SZI_(G)) ! cumulative depth over which brine is distributed
+  real :: salt(SZI_(G)) ! The amount of salt rejected from sea ice [ppt R Z ~> gramSalt m-2]
+  real :: dzbr(SZI_(G)) ! Cumulative depth over which brine is distributed [H ~> m to kg m-2]
   real :: inject_layer(SZI_(G),SZJ_(G)) ! diagnostic
 
   real :: p_ref_cv(SZI_(G))
   real :: T(SZI_(G),SZK_(G))
   real :: S(SZI_(G),SZK_(G))
-  real :: h_2d(SZI_(G),SZK_(G))
+  real :: h_2d(SZI_(G),SZK_(G))   ! A 2-d slice of h with a minimum thickness [H ~> m to kg m-2]
   real :: Rcv(SZI_(G),SZK_(G))
-  real :: mc  ! A layer's mass [kg m-2].
   real :: s_new,R_new,t0,scale, cdz
   integer :: i, j, k, is, ie, js, je, nz, ks
 
-  real, parameter :: brine_dz = 1.0  ! minumum thickness over which to distribute brine
+  real :: brine_dz      ! minumum thickness over which to distribute brine [H ~> m or kg m-2]
   real, parameter :: s_max = 45.0    ! salinity bound
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(fluxes%salt_flux)) return
 
+  !### Injecting the brine into a single layer with a prescribed thickness seems problematic,
+  ! because it is not convergent when resolution becomes very fine. I think that this whole
+  ! subroutine needs to be revisited.- RWH
+
   p_ref_cv(:)  = tv%P_ref
+  brine_dz = 1.0*GV%m_to_H
 
   inject_layer(:,:) = nz
 
@@ -429,14 +432,14 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
     salt(:)=0.0 ; dzbr(:)=0.0
 
     do i=is,ie ; if (G%mask2dT(i,j) > 0.) then
-      salt(i) = dt_in_T * (1000. * US%R_to_kg_m3*US%Z_to_m*fluxes%salt_flux(i,j))
+      salt(i) = dt_in_T * (1000. * fluxes%salt_flux(i,j))
     endif ; enddo
 
     do k=1,nz
       do i=is,ie
-        T(i,k)=tv%T(i,j,k); S(i,k)=tv%S(i,j,k)
+        T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
         ! avoid very small thickness
-        h_2d(i,k)=MAX(h(i,j,k), GV%Angstrom_H)
+        h_2d(i,k) = MAX(h(i,j,k), GV%Angstrom_H)
       enddo
 
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
@@ -449,12 +452,11 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
 
     do k=nkmb+1,nz-1 ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        mc = GV%H_to_kg_m2 * h_2d(i,k)
-        s_new = S(i,k) + salt(i)/mc
+        s_new = S(i,k) + salt(i) / (GV%H_to_RZ * h_2d(i,k))
         t0 = T(i,k)
-        call calculate_density(t0,s_new,tv%P_Ref,R_new,tv%eqn_of_state)
+        call calculate_density(t0, s_new, tv%P_Ref, R_new, tv%eqn_of_state)
         if (R_new < 0.5*(Rcv(i,k)+Rcv(i,k+1)) .and. s_new<s_max) then
-          dzbr(i)=dzbr(i)+h_2d(i,k)
+          dzbr(i) = dzbr(i)+h_2d(i,k)
           inject_layer(i,j) = min(inject_layer(i,j),real(k))
         endif
       endif
@@ -463,9 +465,8 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
     ! Then try to insert into buffer layers if they exist
     do k=nkmb,GV%nkml+1,-1 ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        mc = GV%H_to_kg_m2 * h_2d(i,k)
-        dzbr(i)=dzbr(i)+h_2d(i,k)
-        inject_layer(i,j) = min(inject_layer(i,j),real(k))
+        dzbr(i) = dzbr(i) + h_2d(i,k)
+        inject_layer(i,j) = min(inject_layer(i,j), real(k))
       endif
     enddo ; enddo
 
@@ -473,9 +474,8 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
 
     do k=1,GV%nkml ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        mc = GV%H_to_kg_m2 * h_2d(i,k)
-        dzbr(i)=dzbr(i)+h_2d(i,k)
-        inject_layer(i,j) = min(inject_layer(i,j),real(k))
+        dzbr(i) = dzbr(i) + h_2d(i,k)
+        inject_layer(i,j) = min(inject_layer(i,j), real(k))
       endif
     enddo ; enddo
 
@@ -483,14 +483,15 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
     do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. salt(i) > 0.) then
     !   if (dzbr(i)< brine_dz) call MOM_error(FATAL,"insert_brine: failed")
-        ks=inject_layer(i,j)
-        cdz=0.0
+        ks = inject_layer(i,j)
+        cdz = 0.0
         do k=ks,nz
-          mc = GV%H_to_kg_m2 * h_2d(i,k)
-          scale = h_2d(i,k)/dzbr(i)
-          cdz=cdz+h_2d(i,k)
-          if (cdz > 1.0) exit
-          tv%S(i,j,k) = tv%S(i,j,k) + scale*salt(i)/mc
+          scale = h_2d(i,k) / dzbr(i)
+          cdz = cdz + h_2d(i,k)
+          !### I think that the logic of this line is wrong. Moving it down a line
+          ! would seem to make more sense. - RWH
+          if (cdz > brine_dz) exit
+          tv%S(i,j,k) = tv%S(i,j,k) + scale*salt(i) / (GV%H_to_RZ * h_2d(i,k))
         enddo
       endif
     enddo
