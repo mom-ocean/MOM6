@@ -37,7 +37,7 @@ type, public :: energetic_PBL_CS ; private
   !/ Constants
   real    :: VonKar = 0.41   !<   The von Karman coefficient.  This should be runtime, but because
                              !!  it is runtime in KPP and set to 0.4 it might change answers.
-  real    :: omega           !<   The Earth's rotation rate [T-1].
+  real    :: omega           !<   The Earth's rotation rate [T-1 ~> s-1].
   real    :: omega_frac      !<   When setting the decay scale for turbulence, use this fraction of
                              !!  the absolute rotation rate blended with the local value of f, as
                              !!  sqrt((1-of)*f^2 + of*4*omega^2) [nondim].
@@ -343,7 +343,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
 
-  real :: absf      ! The absolute value of f [T-1].
+  real :: absf      ! The absolute value of f [T-1 ~> s-1].
   real :: U_star    ! The surface friction velocity [Z T-1 ~> m s-1].
   real :: U_Star_Mean ! The surface friction without gustiness [Z T-1 ~> m s-1].
   real :: B_Flux    ! The surface buoyancy flux [Z2 T-3 ~> m2 s-3]
@@ -539,9 +539,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZK_(GV)), intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZK_(GV)), intent(in)  :: u      !< Zonal velocities interpolated to h points
-                                                   !! [m s-1].
+                                                   !! [L T-1 ~> m s-1].
   real, dimension(SZK_(GV)), intent(in)  :: v      !< Zonal velocities interpolated to h points
-                                                   !! [m s-1].
+                                                   !! [L T-1 ~> m s-1].
   real, dimension(SZK_(GV)), intent(in)  :: T0     !< The initial layer temperatures [degC].
   real, dimension(SZK_(GV)), intent(in)  :: S0     !< The initial layer salinities [ppt].
 
@@ -740,7 +740,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     ! from the surface.
 
 ! The following are only used for diagnostics.
-  real :: dt__diag  ! A copy of dt_diag (if present) or dt [T].
+  real :: dt__diag  ! A copy of dt_diag (if present) or dt [T ~> s].
   real :: I_dtdiag  !  = 1.0 / dt__diag [T-1 ~> s-1].
 
   !----------------------------------------------------------------------
@@ -1749,7 +1749,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: UStar !< ustar w/ gustiness [Z T-1 ~> m s-1]
   real,                  intent(in)  :: UStar_Mean !< ustar w/o gustiness [Z T-1 ~> m s-1]
-  real,                  intent(in)  :: Abs_Coriolis !< abolute value of the Coriolis parameter [T-1]
+  real,                  intent(in)  :: Abs_Coriolis !< abolute value of the Coriolis parameter [T-1 ~> s-1]
   real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 T-3 ~> m2 s-3]
   real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
   real,                  intent(out) :: Mstar !< Ouput mstar (Mixing/ustar**3) [nondim]

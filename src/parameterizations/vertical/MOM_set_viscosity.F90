@@ -187,7 +187,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: U_bg_sq          ! The square of an assumed background
                            ! velocity, for calculating the mean
                            ! magnitude near the bottom for use in the
-                           ! quadratic bottom drag [m2 s-2].
+                           ! quadratic bottom drag [L2 T-2 ~> m2 s-2].
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot            ! Running sum of thicknesses times the

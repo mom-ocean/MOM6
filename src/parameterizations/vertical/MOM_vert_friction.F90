@@ -580,7 +580,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt_in_T, G, GV, US, CS, OBC)
   type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary condition structure
 
   ! Field from forces used in this subroutine:
-  !   ustar: the friction velocity [m s-1], used here as the mixing
+  !   ustar: the friction velocity [Z T-1 ~> m s-1], used here as the mixing
   !     velocity in the mixed layer if NKML > 1 in a bulk mixed layer.
 
   ! Local variables

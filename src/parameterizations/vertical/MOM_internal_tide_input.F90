@@ -64,7 +64,7 @@ type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
     TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [R Z3 T-3 ~> W m-2].
     h2, &               !< The squared topographic roughness height [Z2 ~> m2].
-    tideamp, &          !< The amplitude of the tidal velocities [m s-1].
+    tideamp, &          !< The amplitude of the tidal velocities [Z T-1 ~> m s-1].
     Nb                  !< The bottom stratification [T-1 ~> s-1].
 end type int_tide_input_type
 
@@ -401,7 +401,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
     if (max_frac_rough >= 0.0) &
       itide%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, itide%h2(i,j))
 
-    ! Compute the fixed part of internal tidal forcing; units are [R Z3 T-2 = J m-2] here.
+    ! Compute the fixed part of internal tidal forcing; units are [R Z3 T-2 ~> J m-2] here.
     CS%TKE_itidal_coef(i,j) = 0.5*US%L_to_Z*kappa_h2_factor*GV%Rho0*&
          kappa_itides * itide%h2(i,j) * itide%tideamp(i,j)**2
   enddo ; enddo

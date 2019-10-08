@@ -58,8 +58,8 @@ type, public :: set_diffusivity_CS ; private
   logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
                              !! GV%nk_rho_varies variable density mixed & buffer layers.
   real    :: FluxRi_max      !< The flux Richardson number where the stratification is
-                             !! large enough that N2 > omega2.  The full expression for
-                             !! the Flux Richardson number is usually
+                             !! large enough that N2 > omega2 [nondim].  The full expression
+                             !! for the Flux Richardson number is usually
                              !! FLUX_RI_MAX*N2/(N2+OMEGA2). The default is 0.2.
   logical :: bottomdraglaw   !< If true, the  bottom stress is calculated with a
                              !! drag law c_drag*|u|*u.
@@ -93,8 +93,6 @@ type, public :: set_diffusivity_CS ; private
   real :: dissip_N2     !< Coefficient c in minimum dissipation = c*N2 [R Z2 T-1 ~> J s m-3]
   real :: dissip_Kd_min !< Minimum Kd [Z2 T-1 ~> m2 s-1], with dissipation Rho0*Kd_min*N^2
 
-  real :: TKE_itide_max !< maximum internal tide conversion [W m-2]
-                        !! available to mix above the BBL
   real :: omega         !< Earth's rotation frequency [T-1 ~> s-1]
   logical :: ML_radiation !< allow a fraction of TKE available from wind work
                           !! to penetrate below mixed layer base with a vertical
@@ -107,7 +105,7 @@ type, public :: set_diffusivity_CS ; private
                           !! of exp(-h_ML*Idecay_len_TkE), where Idecay_len_TKE is
                           !! calculated the same way as in the mixed layer code.
                           !! The diapycnal diffusivity is KD(k) = E/(N2(k)+OMEGA2),
-                          !! where N2 is the squared buoyancy frequency [s-2] and OMEGA2
+                          !! where N2 is the squared buoyancy frequency [T-2 ~> s-2] and OMEGA2
                           !! is the rotation rate of the earth squared.
   real :: ML_rad_kd_max   !< Maximum diapycnal diffusivity due to turbulence
                           !! radiated from the base of the mixed layer [Z2 T-1 ~> m2 s-1].
@@ -224,7 +222,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
                                                    !!  properties of the ocean.
   type(vertvisc_type),       intent(inout) :: visc !< Structure containing vertical viscosities, bottom
                                                    !! boundary layer properies, and related fields.
-  real,                      intent(in)    :: dt_in_T   !< Time increment [s].
+  real,                      intent(in)    :: dt_in_T   !< Time increment [T ~> s].
   type(set_diffusivity_CS),  pointer       :: CS   !< Module control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(out)   :: Kd_lay !< Diapycnal diffusivity of each layer [Z2 T-1 ~> m2 s-1].
@@ -246,7 +244,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
 
   real, dimension(SZI_(G),SZK_(G)) :: &
     N2_lay, &     !< squared buoyancy frequency associated with layers [T-2 ~> s-2]
-    maxTKE, &     !< energy required to entrain to h_max [m3 T-3]
+    maxTKE, &     !< energy required to entrain to h_max [Z3 T-3 ~> m3 s-3]
     TKE_to_Kd     !< conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   !< TKE dissipated within a layer and Kd in that layer
                   !< [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
@@ -674,10 +672,10 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
                       ! above or below [Z ~> m].
   real :: dRho_lay    ! density change across a layer [R ~> kg m-3]
   real :: Omega2      ! rotation rate squared [T-2 ~> s-2]
-  real :: G_Rho0      ! gravitation accel divided by Bouss ref density [Z T-2 R-1 -> m4 s-2 kg-1]
-  real :: G_IRho0     ! Alternate calculation of G_Rho0 for reproducibility [Z T-2 R-1 -> m4 s-2 kg-1]
+  real :: G_Rho0      ! gravitation accel divided by Bouss ref density [Z T-2 R-1 ~> m4 s-2 kg-1]
+  real :: G_IRho0     ! Alternate calculation of G_Rho0 for reproducibility [Z T-2 R-1 ~> m4 s-2 kg-1]
   real :: I_Rho0      ! inverse of Boussinesq reference density [R-1 ~> m3 kg-1]
-  real :: I_dt        ! 1/dt [T-1]
+  real :: I_dt        ! 1/dt [T-1 ~> s-1]
   real :: H_neglect   ! negligibly small thickness [H ~> m or kg m-2]
   real :: hN2pO2      ! h (N^2 + Omega^2), in [m3 T-2 Z-2 ~> m s-2].
   logical :: do_i(SZI_(G))
@@ -1450,9 +1448,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
       z_bot = z_bot + h(i,j,k)*GV%H_to_Z ! Distance between upper interface of layer and the bottom [Z ~> m].
-      D_minus_z = max(total_thickness - z_bot, 0.) ! Thickness above layer, Z.
+      D_minus_z = max(total_thickness - z_bot, 0.) ! Thickness above layer [Z ~> m].
 
-      ! Diffusivity using law of the wall, limited by rotation, at height z [m2 s-1].
+      ! Diffusivity using law of the wall, limited by rotation, at height z [Z2 T-1 ~> m2 s-1].
       ! This calculation is at the upper interface of the layer
       if ( ustar_D + absf * ( z_bot * D_minus_z ) == 0.) then
         Kd_wall = 0.
@@ -1461,7 +1459,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                   / (ustar_D + absf * (z_bot * D_minus_z))
       endif
 
-      ! TKE associated with Kd_wall [m3 s-2].
+      ! TKE associated with Kd_wall [Z3 T-3 ~> m3 s-3].
       ! This calculation if for the volume spanning the interface.
       TKE_Kd_wall = Kd_wall * 0.5 * (dh + dhm1) * max(N2_int(i,k), N2_min)
 

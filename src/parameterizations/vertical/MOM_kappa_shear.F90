@@ -73,7 +73,7 @@ type, public :: Kappa_shear_CS ; private
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0 [Z T-1 ~> m s-1].
+                             !! are set to 0 [L T-1 ~> m s-1].
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -734,7 +734,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     local_src_avg, & ! The time-integral of the local source [nondim].
     tol_min, & ! Minimum tolerated ksrc for the corrector step [T-1 ~> s-1].
     tol_max, & ! Maximum tolerated ksrc for the corrector step [T-1 ~> s-1].
-    tol_chg, & ! The tolerated change integrated in time [s T-nondim].
+    tol_chg, & ! The tolerated change integrated in time [nondim].
     dist_from_top, &  ! The distance from the top surface [Z ~> m].
     local_src     ! The sum of all sources of kappa, including kappa_src and
                   ! sources from the elliptic term [T-1 ~> s-1].
@@ -1210,8 +1210,8 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
                                               !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [m s-1].
-  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [m s-1].
+  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [L T-1 ~> m s-1].
+  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [L T-1 ~> m s-1].
   real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
   real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [ppt].
   real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers [Z ~> m].
@@ -1222,8 +1222,8 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
                                               !! salinity [Z T-2 ppt-1 ~> m s-2 ppt-1].
   real,                  intent(in)    :: dt  !< The time step [T ~> s].
-  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
-  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
+  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [L T-1 ~> m s-1].
+  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [L T-1 ~> m s-1].
   real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
   real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [ppt].
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1237,13 +1237,13 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! diffusivity.
   real,    optional,     intent(in)    :: vel_underflow !< If present and true, any velocities that
                                               !! are smaller in magnitude than this value are
-                                              !! set to 0 [m s-1].
+                                              !! set to 0 [L T-1 ~> m s-1].
 
   ! Local variables
   real, dimension(nz+1) :: c1
   real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
                          ! units squared [Z2 s2 T-2 m-2 ~> 1].
-  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [m s-1].
+  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [L T-1 ~> m s-1].
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
 
@@ -1352,7 +1352,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
-                                              !! boundaries [Z-2 !> m-2].
+                                              !! boundaries [Z-2 ~> m-2].
   real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers [Z-1 ~> m-1].
   real,                  intent(in)    :: f2  !< The squared Coriolis parameter [T-2 ~> s-2].
   type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
@@ -1366,7 +1366,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(out)   :: kappa  !< The diapycnal diffusivity at interfaces
                                               !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), optional, &
-                         intent(out)   :: kappa_src !< The source term for kappa [T-1].
+                         intent(out)   :: kappa_src !< The source term for kappa [T-1 ~> s-1].
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
                                               !! [T-1 ~> s-1].
@@ -1422,7 +1422,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   ! Temporary variables used in the Newton's method iterations.
   real :: decay_term_k  ! The decay term in the diffusivity equation
   real :: decay_term_Q  ! The decay term in the TKE equation - proportional to [T-1 ~> s-1]
-  real :: I_Q           ! The inverse of TKE [s2 m-2]
+  real :: I_Q           ! The inverse of TKE [T2 Z-2 ~> s2 m-2]
   real :: kap_src
   real :: v1            ! A temporary variable proportional to [T-1 ~> s-1]
   real :: v2
