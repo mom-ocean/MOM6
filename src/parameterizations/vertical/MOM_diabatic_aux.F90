@@ -971,7 +971,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
   numberOfGroundings = 0
 
-  !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,US,optics,fluxes,dt, &
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,US,optics,fluxes,    &
   !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
   !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt_in_T,     &

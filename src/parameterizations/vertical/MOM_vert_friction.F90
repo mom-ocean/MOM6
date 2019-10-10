@@ -671,7 +671,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt_in_T, G, GV, US, CS, OBC)
   endif
 
   !$OMP parallel do default(private) shared(G,GV,US,CS,visc,Isq,Ieq,nz,u,h,forces,hML_u, &
-  !$OMP                                     OBC,h_neglect,dt,I_valBL,Kv_u) &
+  !$OMP                                     OBC,h_neglect,dt_in_T,I_valBL,Kv_u) &
   !$OMP                     firstprivate(i_hbbl)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
@@ -838,7 +838,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt_in_T, G, GV, US, CS, OBC)
 
   ! Now work on v-points.
   !$OMP parallel do default(private) shared(G,GV,CS,US,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
-  !$OMP                                  OBC,h_neglect,dt,I_valBL,Kv_v) &
+  !$OMP                                  OBC,h_neglect,dt_in_T,I_valBL,Kv_v) &
   !$OMP                     firstprivate(i_hbbl)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
