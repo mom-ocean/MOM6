@@ -157,7 +157,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   if (compute_h_old) h_old(:,:,:) = 0.0
   if (compute_T_old) T_old(:,:,:) = 0.0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,CS,dt,Irho_cp,nkmb,tv,    &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,US,CS,dt,Irho_cp,nkmb,tv,    &
 !$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb,          &
 !$OMP                                  compute_h_old,compute_T_old,h_old,T_old,   &
 !$OMP                                  work_3d,Idt)                               &

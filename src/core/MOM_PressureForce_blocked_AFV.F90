@@ -630,8 +630,8 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, 
   endif
 
 !$OMP parallel do default(none) shared(use_p_atm,Rho_ref,Rho_ref_mks,G,GV,e,p_atm,nz,use_EOS,&
-!$OMP                                  use_ALE,T_t,T_b,S_t,S_b,CS,tv,tv_tmp,g_Earth_z, &
-!$OMP                                  h,PFu,I_Rho0,h_neglect,dz_neglect,PFv,dM)&
+!$OMP                                  use_ALE,T_t,T_b,S_t,S_b,CS,tv,tv_tmp,g_Earth_z_geo, &
+!$OMP                                  g_Earth_mks_z,h,PFu,I_Rho0,h_neglect,dz_neglect,PFv,dM)&
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,pa_bk,  &
 !$OMP                                  intx_pa_bk,inty_pa_bk,dpa_bk,intz_dpa_bk,      &

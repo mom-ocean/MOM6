@@ -190,7 +190,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   do i=is,ie
     dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
   enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,h,T_f,S_f, &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,US,h,T_f,S_f, &
 !$OMP                                  h2,N2_bot,G_Rho0) &
 !$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
 !$OMP                                  hb,dRho_bot,z_from_bot,do_i,h_amp,       &

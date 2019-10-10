@@ -855,7 +855,7 @@ subroutine extractFluxes2d(G, GV, US, fluxes, optics, nsw, dt_in_T, FluxRescaleD
   logical,                          intent(in)    :: aggregate_FW   !< For determining how to aggregate the forcing.
 
   integer :: j
-!$OMP parallel do default(none) shared(G, GV, fluxes, optics, nsw,dt,FluxRescaleDepth, &
+!$OMP parallel do default(none) shared(G, GV, US, fluxes, optics, nsw, dt_in_T, FluxRescaleDepth, &
 !$OMP                                  useRiverHeatContent, useCalvingHeatContent,             &
 !$OMP                                  h,T,netMassInOut,netMassOut,Net_heat,Net_salt,Pen_SW_bnd,tv, &
 !$OMP                                  aggregate_FW)
@@ -1320,7 +1320,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea')
 
   handles%id_vprec = register_diag_field('ocean_model', 'vprec', diag%axesT1, Time, &
-        'Virtual liquid precip into ocean due to SSS restoring', 'kg m-2 s-1')
+        'Virtual liquid precip into ocean due to SSS restoring', &
+        units='kg m-2 s-1', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T)
 
   handles%id_frunoff = register_diag_field('ocean_model', 'frunoff', diag%axesT1, Time,    &
         'Frozen runoff (calving) and iceberg melt into ocean', 'kg m-2 s-1',               &
