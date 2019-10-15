@@ -658,128 +658,113 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
 
-    FatH = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
-                 (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1))) ! Coriolis parameter at h points
-
-    ! Since zero-bathymetry cells are masked, this avoids calculations on land
-    if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.) then
-      beta_topo_x = 0. ; beta_topo_y = 0.
-    else
-      !### Consider different combinations of these estimates of topographic beta, and the use
-      !    of the water column thickness instead of the bathymetric depth.
-      beta_topo_x = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                   (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-               / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
-           +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-               / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
-      !### There is a bug in the 4th lne below, where IdxCu should be IdyCv.
-      beta_topo_y = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                   (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-               / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
-                   (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdxCu(i,J-1) &
-               / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
-    endif
-    beta =  sqrt((G%dF_dx(i,j) - beta_topo_x)**2 + &
-                 (G%dF_dy(i,j) - beta_topo_y)**2 )
-
-    I_H = US%L_to_m*GV%Rho0 * I_mass(i,j)
-
-    if (KhCoeff*SN*I_H>0.) then
-      ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
-      EKEmin = 0.   ! Use the trivial root as the left bracket
-      ResMin = 0.   ! Need to detect direction of left residual
-      EKEmax = 0.01*US%m_s_to_L_T**2 ! First guess at right bracket
-      useSecant = .false. ! Start using a bisection method
-
-      ! First find right bracket for which resid<0
-      resid = 1.0*US%m_to_L**2*US%T_to_s**3 ; n1 = 0
-      do while (resid>0.)
-        n1 = n1 + 1
-        EKE = EKEmax
-        call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, G%bathyT(i,j), &
-                                  MEKE%Rd_dx_h(i,j), SN, EKE, &
-                                  bottomFac2, barotrFac2, LmixScale, LRhines, LEady)
-        ! TODO: Should include resolution function in Kh
-        Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
-        src = Kh * (SN * SN)
-        drag_rate = I_H * sqrt(drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
-        ldamping = CS%MEKE_damping + drag_rate * bottomFac2
-        resid = src - ldamping * EKE
-        ! if (debugIteration) then
-        !   write(0,*) n1, 'EKE=',EKE,'resid=',resid
-        !   write(0,*) 'EKEmin=',EKEmin,'ResMin=',ResMin
-        !   write(0,*) 'src=',src,'ldamping=',ldamping
-        !   write(0,*) 'gamma-b=',bottomFac2,'gamma-t=',barotrFac2
-        !   write(0,*) 'drag_visc=',drag_rate_visc(i,j),'Ubg2=',Ubg2
-        ! endif
-        if (resid>0.) then    ! EKE is to the left of the root
-          EKEmin = EKE        ! so we move the left bracket here
-          EKEmax = 10. * EKE  ! and guess again for the right bracket
-          if (resid<ResMin) useSecant = .true.
-          ResMin = resid
-          if (US%L_T_to_m_s**2*EKEmax > 2.e17) then
-            if (debugIteration) stop 'Something has gone very wrong'
-            debugIteration = .true.
-            resid = 1. ; n1 = 0
-            EKEmin = 0. ; ResMin = 0.
-            EKEmax = 0.01*US%m_s_to_L_T**2
-            useSecant = .false.
-          endif
-        endif
-      enddo ! while(resid>0.) searching for right bracket
-      ResMax = resid
-
-      ! Bisect the bracket
-      n2 = 0 ; EKEerr = EKEmax - EKEmin
-      do while (US%L_T_to_m_s**2*EKEerr>tolerance)
-        n2 = n2 + 1
-        if (useSecant) then
-          EKE = EKEmin + (EKEmax - EKEmin) * (ResMin / (ResMin - ResMax))
-        else
-          EKE = 0.5 * (EKEmin + EKEmax)
-        endif
-        EKEerr = min( EKE-EKEmin, EKEmax-EKE )
-        ! TODO: Should include resolution function in Kh
-        Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
-        src = Kh * (SN * SN)
-        drag_rate = I_H * sqrt( drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
-        ldamping = CS%MEKE_damping + drag_rate * bottomFac2
-        resid = src - ldamping * EKE
-        if (useSecant .and. resid>ResMin) useSecant = .false.
-        if (resid>0.) then              ! EKE is to the left of the root
-          EKEmin = EKE                  ! so we move the left bracket here
-          if (resid<ResMin) useSecant = .true.
-          ResMin = resid                ! Save this for the secant method
-        elseif (resid<0.) then          ! EKE is to the right of the root
-          EKEmax = EKE                  ! so we move the right bracket here
-          ResMax = resid                ! Save this for the secant method
-        else
-          exit                          ! resid=0 => EKE is exactly at the root
-        endif
-        if (n2>200) stop 'Failing to converge?'
-      enddo ! while(EKEmax-EKEmin>tolerance)
-
-    else
-      EKE = 0.
-    endif
     if (CS%MEKE_equilibrium_alt) then
-      if (CS%MEKE_GEOMETRIC) then
-        Lgrid = sqrt(G%areaT(i,j))               ! Grid scale
-        Ldeform =Lgrid * MIN(1.0,MEKE%Rd_dx_h(i,j))          ! Deformation scale
-        Lfrict = (US%Z_to_m * G%bathyT(i,j)) / CS%cdrag  ! Frictional arrest scale
-        ! gamma_b^2 is the ratio of bottom eddy energy to mean column eddy energy
-        ! used in calculating bottom drag
-        bottomFac2 = CS%MEKE_CD_SCALE**2
-        if (Lfrict*CS%MEKE_Cb>0.) bottomFac2 = bottomFac2 + 1./( 1. + CS%MEKE_Cb*(Ldeform/Lfrict) )**0.8
-        bottomFac2 = max(bottomFac2, CS%MEKE_min_gamma)
-        ! Equation 1 of Jansen et al. (2015), balancing the GEOMETRIC GM coefficient against
-        ! bottom drag (Equations 3 and 12)
-        ! TODO: create a run time parameter for limitting SN.
-        MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * MIN(SN,1.e-7) * US%Z_to_m*G%bathyT(i,j))**2 / (CS%cdrag**2 * bottomFac2**3)
-      else
-        MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
-      endif
+      MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
     else
+
+      FatH = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
+                   (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1))) ! Coriolis parameter at h points
+
+      ! Since zero-bathymetry cells are masked, this avoids calculations on land
+      if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.) then
+        beta_topo_x = 0. ; beta_topo_y = 0.
+      else
+        !### Consider different combinations of these estimates of topographic beta, and the use
+        !    of the water column thickness instead of the bathymetric depth.
+        beta_topo_x = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                     (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
+                 / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
+             +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
+                 / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
+        !### There is a bug in the 4th lne below, where IdxCu should be IdyCv.
+        beta_topo_y = CS%MEKE_topographic_beta * FatH * 0.5 * ( &
+                     (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
+                 / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
+                     (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdxCu(i,J-1) &
+                 / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
+      endif
+      beta =  sqrt((G%dF_dx(i,j) - beta_topo_x)**2 + &
+                   (G%dF_dy(i,j) - beta_topo_y)**2 )
+
+      I_H = US%L_to_m*GV%Rho0 * I_mass(i,j)
+
+      if (KhCoeff*SN*I_H>0.) then
+        ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
+        EKEmin = 0.   ! Use the trivial root as the left bracket
+        ResMin = 0.   ! Need to detect direction of left residual
+        EKEmax = 0.01*US%m_s_to_L_T**2 ! First guess at right bracket
+        useSecant = .false. ! Start using a bisection method
+
+        ! First find right bracket for which resid<0
+        resid = 1.0*US%m_to_L**2*US%T_to_s**3 ; n1 = 0
+        do while (resid>0.)
+          n1 = n1 + 1
+          EKE = EKEmax
+          call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, G%bathyT(i,j), &
+                                    MEKE%Rd_dx_h(i,j), SN, EKE, &
+                                    bottomFac2, barotrFac2, LmixScale, LRhines, LEady)
+          ! TODO: Should include resolution function in Kh
+          Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
+          src = Kh * (SN * SN)
+          drag_rate = I_H * sqrt(drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
+          ldamping = CS%MEKE_damping + drag_rate * bottomFac2
+          resid = src - ldamping * EKE
+          ! if (debugIteration) then
+          !   write(0,*) n1, 'EKE=',EKE,'resid=',resid
+          !   write(0,*) 'EKEmin=',EKEmin,'ResMin=',ResMin
+          !   write(0,*) 'src=',src,'ldamping=',ldamping
+          !   write(0,*) 'gamma-b=',bottomFac2,'gamma-t=',barotrFac2
+          !   write(0,*) 'drag_visc=',drag_rate_visc(i,j),'Ubg2=',Ubg2
+          ! endif
+          if (resid>0.) then    ! EKE is to the left of the root
+            EKEmin = EKE        ! so we move the left bracket here
+            EKEmax = 10. * EKE  ! and guess again for the right bracket
+            if (resid<ResMin) useSecant = .true.
+            ResMin = resid
+            if (US%L_T_to_m_s**2*EKEmax > 2.e17) then
+              if (debugIteration) stop 'Something has gone very wrong'
+              debugIteration = .true.
+              resid = 1. ; n1 = 0
+              EKEmin = 0. ; ResMin = 0.
+              EKEmax = 0.01*US%m_s_to_L_T**2
+              useSecant = .false.
+            endif
+          endif
+        enddo ! while(resid>0.) searching for right bracket
+        ResMax = resid
+
+        ! Bisect the bracket
+        n2 = 0 ; EKEerr = EKEmax - EKEmin
+        do while (US%L_T_to_m_s**2*EKEerr>tolerance)
+          n2 = n2 + 1
+          if (useSecant) then
+            EKE = EKEmin + (EKEmax - EKEmin) * (ResMin / (ResMin - ResMax))
+          else
+            EKE = 0.5 * (EKEmin + EKEmax)
+          endif
+          EKEerr = min( EKE-EKEmin, EKEmax-EKE )
+          ! TODO: Should include resolution function in Kh
+          Kh = (KhCoeff * sqrt(2.*barotrFac2*EKE) * LmixScale)
+          src = Kh * (SN * SN)
+          drag_rate = I_H * sqrt( drag_rate_visc(i,j)**2 + cd2 * ( 2.0*bottomFac2*EKE + Ubg2 ) )
+          ldamping = CS%MEKE_damping + drag_rate * bottomFac2
+          resid = src - ldamping * EKE
+          if (useSecant .and. resid>ResMin) useSecant = .false.
+          if (resid>0.) then              ! EKE is to the left of the root
+            EKEmin = EKE                  ! so we move the left bracket here
+            if (resid<ResMin) useSecant = .true.
+            ResMin = resid                ! Save this for the secant method
+          elseif (resid<0.) then          ! EKE is to the right of the root
+            EKEmax = EKE                  ! so we move the right bracket here
+            ResMax = resid                ! Save this for the secant method
+          else
+            exit                          ! resid=0 => EKE is exactly at the root
+          endif
+          if (n2>200) stop 'Failing to converge?'
+        enddo ! while(EKEmax-EKEmin>tolerance)
+      else
+        EKE = 0.
+      endif
       MEKE%MEKE(i,j) = EKE
     endif
   enddo ; enddo
