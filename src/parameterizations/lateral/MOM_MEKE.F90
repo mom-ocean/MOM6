@@ -30,6 +30,8 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
   ! Parameters
+  real, dimension(:,:), pointer :: equilibrium_value => NULL() !< The equilbrium value
+                        !! of MEKE to be calculated at each time step [L2 T-2 ~> m2 s-2]
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
   real :: MEKE_GMECoeff !< Efficiency of conversion of MEKE into ME by GME [nondim]
@@ -47,6 +49,8 @@ type, public :: MEKE_CS ; private
                         !! GEOMETRIC thickness diffusion.
   logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
                         !! equilibrium value of MEKE.
+  logical :: MEKE_equilibrium_restoring !< If true, restore MEKE back to its equilibrium value,
+                        !!  which is calculated at each time step.
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                         !! than the streamfunction for the MEKE GM source term.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
@@ -77,6 +81,8 @@ type, public :: MEKE_CS ; private
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
+  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
+
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
@@ -89,6 +95,7 @@ type, public :: MEKE_CS ; private
   integer :: id_KhMEKE_u = -1, id_KhMEKE_v = -1, id_Ku = -1, id_Au = -1
   integer :: id_Le = -1, id_gamma_b = -1, id_gamma_t = -1
   integer :: id_Lrhines = -1, id_Leady = -1
+  integer :: id_MEKE_equilibrium = -1
   !!@}
 
   ! Infrastructure
@@ -323,6 +330,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           src(i,j) = src(i,j) - CS%MEKE_GMcoeff*I_mass(i,j)*MEKE%GM_src(i,j)
         enddo ; enddo
       endif
+    endif
+
+    if (CS%MEKE_equilibrium_restoring) then
+      call MEKE_equilibrium_restoring(CS, MEKE, G, GV, US, SN_u, SN_v)
+      do j=js,je ; do i=is,ie
+        src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - CS%equilibrium_value(i,j))
+      enddo ; enddo
     endif
 
     ! Increase EKE by a full time-steps worth of source
@@ -772,6 +786,38 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
 end subroutine MEKE_equilibrium
 
 
+!< This subroutine calculates a new equilibrium value for MEKE at each time step. This is not copied into
+!! MEKE%MEKE; rather, it is used as a restoring term to nudge MEKE%MEKE back to an equilibrium value
+subroutine MEKE_equilibrium_restoring(CS, MEKE, G, GV, US, SN_u, SN_v)
+  type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
+  type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
+  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_type),                   pointer       :: MEKE !< A structure with MEKE data.
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
+  ! Local variables
+  real :: SN   ! The local Eady growth rate [T-1 ~> s-1]
+  integer :: i, j, is, ie, js, je, n1, n2
+  real :: cd2
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  cd2 = CS%cdrag**2
+
+!$OMP do
+  do j=js,je ; do i=is,ie
+    ! SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
+    ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
+    SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
+
+    CS%equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
+  enddo ; enddo
+
+  if (CS%id_MEKE_equilibrium>0) call post_data(CS%id_MEKE_equilibrium, CS%equilibrium_value, CS%diag)
+
+end subroutine MEKE_equilibrium_restoring
+
+
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
@@ -937,6 +983,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                            ! run to the representation in a restart file.
   real    :: L_rescale     ! A rescaling factor for length from the internal representation in this
                            ! run to the representation in a restart file.
+  real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   logical :: laplacian, biharmonic, useVarMix, coldStart
   ! This include declares and sets the variable "version".
@@ -1002,6 +1049,19 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
                  "If true, use an alternative formula for computing the (equilibrium)"//&
                  "initial value of MEKE.", default=.false.)
+  if (CS%MEKE_equilibrium_alt) then
+    call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
+                   "If true, restore MEKE back to its equilibrium value, which is calculated at"//&
+                   "each time step.", default=.false.)
+    if (CS%MEKE_equilibrium_restoring) then
+      call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
+                     "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
+                     default=1e6, scale=US%T_to_s)
+      allocate(CS%equilibrium_value(isd:ied,jsd:jed)) ; CS%equilibrium_value(:,:) = 0.0
+      CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
+    endif
+
+  endif
   call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
                  "The efficiency of the conversion of mean energy into "//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&
@@ -1191,6 +1251,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
      'Zonal diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
     CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
      'Meridional diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+  endif
+
+  if (CS%MEKE_equilibrium_restoring) then
+    CS%id_MEKE_equilibrium = register_diag_field('ocean_model', 'MEKE_equilibrium', diag%axesT1, Time, &
+     'Equilibrated Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
   endif
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
