@@ -29,8 +29,8 @@ type, public :: VarMix_CS
                                   !! when the deformation radius is well resolved.
   logical :: Resoln_scaled_KhTh   !< If true, scale away the thickness diffusivity
                                   !! when the deformation radius is well resolved.
-  logical :: Depth_scaled_KhTh    !< If true, the interface depth diffusivity is scaled away
-                                  !! when the depth is shallower than a reference depth.
+  logical :: Depth_scaled_KhTh    !< If true, KHTH is scaled away when the depth is
+                                  !! shallower than a reference depth.
   logical :: Resoln_scaled_KhTr   !< If true, scale away the tracer diffusivity
                                   !! when the deformation radius is well resolved.
   logical :: interpolate_Res_fn   !< If true, interpolate the resolution function
@@ -154,7 +154,7 @@ public calc_QG_Leith_viscosity, calc_depth_function
 
 contains
 
-!> Calculates and stires the non-dimensional depth functions.
+!> Calculates the non-dimensional depth functions.
 subroutine calc_depth_function(G, CS)
   type(ocean_grid_type),                    intent(in) :: G  !< Ocean grid structure
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
@@ -974,11 +974,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
   call get_param(param_file, mdl, "DEPTH_SCALED_KHTH", CS%Depth_scaled_KhTh, &
-                 "If true, the interface depth diffusivity is scaled away "//&
-                 "when the depth is shallower than a reference depth: "//&
-                 "KHTH = MIN(1,H/H0)**N * KHTH, where H0 is a reference"//&
-                 "depth, controlled via DEPTH_SCALED_KHTH_H0, and the"//&
-                 "exponent (N) is controlled via DEPTH_SCALED_KHTH_EXP.",&
+                 "If true, KHTH is scaled away when the depth is shallower"//&
+                 "than a reference depth: KHTH = MIN(1,H/H0)**N * KHTH, "//&
+                 "where H0 is a reference depth, controlled via DEPTH_SCALED_KHTH_H0, "//&
+                 "and the exponent (N) is controlled via DEPTH_SCALED_KHTH_EXP.",&
                  default=.false.)
   call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", CS%Resoln_scaled_KhTh, &
                  "If true, the interface depth diffusivity is scaled away "//&
