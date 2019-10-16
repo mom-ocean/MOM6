@@ -565,7 +565,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call enable_averaging(cycle_time, Time_start + real_to_time(cycle_time), &
                             CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix)
-      call calc_depth_function(h, CS%tv, G, GV, US, CS%VarMix)
+      call calc_depth_function(G, CS%VarMix)
       call disable_averaging(CS%diag)
     endif
   endif
@@ -1404,7 +1404,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
           if (associated(CS%VarMix)) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
-            call calc_depth_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
+            call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, US, CS%VarMix)
           endif
           call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
@@ -1430,7 +1430,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
           if (associated(CS%VarMix)) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
-            call calc_depth_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
+            call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, REAL(dt_offline), G, GV, US, CS%VarMix)
           endif
           call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &

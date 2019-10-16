@@ -155,20 +155,16 @@ public calc_QG_Leith_viscosity, calc_depth_function
 contains
 
 !> Calculates and stires the non-dimensional depth functions.
-subroutine calc_depth_function(h, tv, G, GV, US, CS)
-  type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
-  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
+subroutine calc_depth_function(G, CS)
+  type(ocean_grid_type),                    intent(in) :: G  !< Ocean grid structure
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
 
   ! Local variables
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j
   real    :: H0 ! local variable for reference depth
   real    :: expo ! exponent used in the depth dependent scaling
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_depth_function:"// &
