@@ -803,12 +803,12 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
         ! Intermediate steps for tendency of tracer concentration and tracer content.
         if (present(dt)) then
-          if (Tr%id_remap_conc>0) then
+          if (Tr%id_remap_conc > 0) then
             do k=1,GV%ke
-              work_conc(i,j,k) = (u_column(k)    - Tr%t(i,j,k)      ) * Idt
+              work_conc(i,j,k) = (u_column(k) - Tr%t(i,j,k)) * Idt
             enddo
           endif
-          if (Tr%id_remap_cont>0. .or. Tr%id_remap_cont_2d>0) then
+          if (Tr%id_remap_cont > 0 .or. Tr%id_remap_cont_2d > 0) then
             do k=1,GV%ke
               work_cont(i,j,k) = (u_column(k)*h2(k) - Tr%t(i,j,k)*h1(k)) * Idt
             enddo
