@@ -16,9 +16,10 @@ use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
+use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
 use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
-use MOM_io, only : check_if_open
+use MOM_io, only : check_if_open, register_axis, NORTH_FACE, EAST_FACE, CENTER
+use MOM_io, only : get_horizontal_grid_logic
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -1187,11 +1188,11 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   character(len=240) :: filepath
   character(len=40)  :: mdl = "write_ocean_geometry_file"
   character(len=200) :: dim_names(4)
+  character(len=8) :: hor_grid
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
   type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
-  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   real :: L_to_m_scale ! A unit conversion factor from L to m.
@@ -1201,11 +1202,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isg, ieg ! global start and end indices for writing axis data
   integer :: num_dims ! counter for variable dimensions
-  integer :: total_axes ! counter for all coordinate axes in file
-  integer, dimension(4) :: dim_lengths
   logical :: multiple_files
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
-  logical :: axis_found, variable_found ! If true, the axis or variable is registered to the file
+  logical :: use_lath, use_lonh, use_latq, use_lonq
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
@@ -1263,7 +1262,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
   else
-    filepath = trim(directory) // "ocean_geometry"
+    filepath = trim(directory) // "ocean_geometry.nc"
   endif
 
   out_h(:,:) = 0.0
@@ -1282,75 +1281,58 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   !                 file_threading, dG=G)
   ! old write API: mpp_write(unit, field, domain, data, tstamp)
 
-  ! allocate the axis data and attribute types for the file
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
-
   ! open the file
-  if (.not. (check_if_open(fileObjWrite)) .and. is_root_pe()) then
+  if (.not. check_if_open(fileObjWrite)) then
      file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
                                      G, is_restart=.false.)
+     if (is_root_pe()) print *, "Opened the file ", trim(filepath) 
   endif
-  ! loop through the variables, and get the global dimension names and lengths for the file
-  total_axes=0      
-  do i=1,size(vars)  
-     num_dims=0
+  ! register the axes
+  if (.not.(dimension_exists(fileObjWrite, "geolatb"))) &
+     call register_axis(fileObjWrite, "geolatb", size(out_q,2))
+  if (.not.(dimension_exists(fileObjWrite, "geolonb"))) &
+     call register_axis(fileObjWrite, "geolonb", size(out_q,1))
+  if (.not.(dimension_exists(fileObjWrite, "geolat"))) &
+     call register_axis(fileObjWrite, "geolat", size(out_h,2))
+  if (.not.(dimension_exists(fileObjWrite, "geolon"))) &
+     call register_axis(fileObjWrite, "geolon", size(out_h,1))
     
-     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
-                                     dim_names, dim_lengths, num_dims,dG=G)
-     if (num_dims <= 0) then
-         call MOM_error(FATAL, &
-                        "MOM_shared_initialization:write_ocean_geometry_file: num_dims is an invalid value.")
-     endif
-
-     ! register the variable dimensions to the file if the corresponding global axes are not registered
-     do j=1,num_dims
-        axis_found = dimension_exists(fileObjWrite, dim_names(j))
-        if (.not.(axis_found)) then
-            total_axes=total_axes+1
-            call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, dG=G)
-            call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
-        endif
-     enddo
-  
-     ! register the fields and attributes for non-coordinate variable 'i'
+  ! register the field variables and attributes
+  do i=1,size(vars) 
+     num_dims = 0
      if (.not. variable_exists(fileObjWrite, trim(vars(i)%name))) then 
+       
+        call get_horizontal_grid_logic(vars(i)%hor_grid, use_lath, use_lonh, use_latq, use_lonq)
+
+        if (use_lath) then
+           num_dims = num_dims+1
+           dim_names(num_dims)(1:len_trim('geolat')) = 'geolat'
+        elseif (use_latq) then
+           num_dims = num_dims+1
+           dim_names(num_dims)(1:len_trim('geolatb')) ='geolatb'
+        endif
+
+        if (use_lonh) then
+           num_dims = num_dims+1
+           dim_names(1)(1:len_trim('geolon')) = 'geolon'
+        elseif (use_lonq) then
+           num_dims = num_dims+1 
+           dim_names(num_dims)(1:len_trim('geolonb')) ='geolonb'
+        endif
+
+        if (is_root_pe()) print *, "About to register variable ", trim(vars(i)%name)
+ 
         call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
         call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
         call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
      endif
   enddo
 
-  ! register and write the coordinate variables (axes) to the file,
-  do i=1,total_axes
-     if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
-        if (associated(axis_data_CS%data(i)%p) .and. is_root_pe()) then
-           call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
-                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-
-           if (axis_data_CS%axis(i)%is_domain_decomposed) then
-              call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), isg, ieg)
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
-
-           else
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-           endif
-
-           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                            'long_name',axis_data_CS%axis(i)%longname)
-
-           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                            'units',trim(axis_data_CS%axis(i)%units))
-
-        endif
-     endif
-  enddo 
-  
-  ! write the fields that are not coordinate variables
+  ! write the fields, including the coordinate variables
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
+  if (is_root_pe()) print *, "About to write variable ", trim(vars(1)%name)
   !call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
+   
   call write_data(fileObjWrite, vars(1)%name, out_q)
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
   !call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
@@ -1359,7 +1341,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   call write_data(fileObjWrite, vars(2)%name, out_q)
   call write_data(fileObjWrite, vars(3)%name, G%geoLatT)
   call write_data(fileObjWrite, vars(4)%name, G%geoLonT)
-
+   if (is_root_pe()) print *, "About to write variable ", trim(vars(5)%name)
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
   !call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
   call write_data(fileObjWrite, vars(5)%name, out_h)
@@ -1425,10 +1407,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   endif
 
   ! close the file
-  if (check_if_open(fileObjWrite) .and. is_root_pe()) call close_file(fileObjWrite)
-
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
 
   !call mpp_close_file(unit)
 
