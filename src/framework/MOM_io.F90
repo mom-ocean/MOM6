@@ -89,6 +89,7 @@ public :: get_compute_domain_dimension_indices
 public :: get_dimension_size
 public :: get_global_io_domain_indices
 public :: get_horizontal_grid_position
+public :: get_horizontal_grid_logic
 public :: get_time_units
 public :: get_var_dimension_features
 public :: get_variable_dimension_names
@@ -531,38 +532,38 @@ end subroutine reopen_file
 subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length)
    type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
    character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
-   integer, optional, intent(in) :: axis_length !< length of axis/dimension
-                                                !! (only needed for Layer, Interface, Time, and Period)
-   select case (trim(axis_name))
-         
+   integer, optional, intent(in) :: axis_length !< length of axis/dimension ;only needed for Layer, Interface, Time,
+                                                !! Period
+   select case (trim(axis_name))      
          case ('latq'); call register_axis(fileObj,'latq','y', domain_position=NORTH_FACE)
          case ('lath'); call register_axis(fileObj,'lath','y', domain_position=CENTER) 
          case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=EAST_FACE) 
          case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=CENTER)
          case ('Layer')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
                      "axis_length argument required to register the Layer axis")
             endif 
             call register_axis(fileObj,'Layer',axis_length)
          case ('Interface')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
                      "axis_length argument required to register the Interface axis")
             endif 
             call register_axis(fileObj,'Interface',axis_length)
          case ('Time')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_DD: "//&
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
                      "axis_length argument required to register the Time axis")
             endif 
             call register_axis(fileObj,'Time', axis_length)
          case ('Period')
             if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_DD:"//&
+                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
                      "axis_length argument required to register the Period axis")
             endif 
             call register_axis(fileObj,'Period',axis_length)
+     
    end select
 end subroutine MOM_register_axis_DD
 
@@ -651,21 +652,8 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   use_lonh = .false.
   use_latq = .false.
   use_lonq = .false.
-
-  select case (trim(hor_grid))
-     case ('h') ; use_lath = .true. ; use_lonh = .true.
-     case ('q') ; use_latq = .true. ; use_lonq = .true.
-     case ('u') ; use_lath = .true. ; use_lonq = .true.
-     case ('v') ; use_latq = .true. ; use_lonh = .true.
-     case ('T')  ; use_lath = .true. ; use_lonh = .true.
-     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-     case ('1') ; 
-     case default
-        call MOM_error(FATAL, "MOM_io:get_var_dimension_features "//&
-                        "Unrecognized hor_grid argument "//trim(hor_grid))
-  end select
+  
+  call get_horizontal_grid_logic(hor_grid, use_lath,use_lonh,use_latq,use_lonq)
   
   ! add longitude name to dimension name array
   if (use_lonh) then
@@ -893,6 +881,30 @@ subroutine get_horizontal_grid_position(grid_string_id, x_pos,y_pos)
 
 end subroutine get_horizontal_grid_position
 
+!> return the logic 
+subroutine get_horizontal_grid_logic(grid_string_id, use_lath,use_lonh,use_latq,use_lonq)
+  character(len=*), intent(in) :: grid_string_id !< horizontal grid string
+  logical, intent(out) :: use_lath, use_lonh, use_latq, use_lonq !< logic indicating the x,y grid coordinates
+                                                                 !! corresponding to hor_grid value
+  use_lath = .false.
+  use_lonh = .false.
+  use_latq = .false.
+  use_lonq = .false.
+  select case (trim(grid_string_id))
+     case ('h') ; use_lath = .true. ; use_lonh = .true.
+     case ('q') ; use_latq = .true. ; use_lonq = .true.
+     case ('u') ; use_lath = .true. ; use_lonq = .true.
+     case ('v') ; use_latq = .true. ; use_lonh = .true.
+     case ('T')  ; use_lath = .true. ; use_lonh = .true.
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
+     case ('1') ; 
+     case default
+        call MOM_error(FATAL, "MOM_io:get_var_dimension_features "//&
+                        "Unrecognized hor_grid argument "//trim(grid_string_id))
+  end select
+end subroutine get_horizontal_grid_logic
 !> get the size of a variable in bytes
 function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_zlevels) result(var_sz)
   character(len=*), intent(in) :: hor_grid !< horizontal grid string
