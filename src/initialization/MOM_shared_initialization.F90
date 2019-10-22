@@ -1289,36 +1289,38 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   endif
   ! register the axes
   if (.not.(dimension_exists(fileObjWrite, "geolatb"))) &
-     call register_axis(fileObjWrite, "geolatb", size(out_q,2))
+     call register_axis(fileObjWrite, "geolatb", "y", domain_position=NORTH_FACE)
   if (.not.(dimension_exists(fileObjWrite, "geolonb"))) &
-     call register_axis(fileObjWrite, "geolonb", size(out_q,1))
+     call register_axis(fileObjWrite, "geolonb", "x", domain_position=EAST_FACE)
   if (.not.(dimension_exists(fileObjWrite, "geolat"))) &
-     call register_axis(fileObjWrite, "geolat", size(out_h,2))
+     call register_axis(fileObjWrite, "geolat", "y")
   if (.not.(dimension_exists(fileObjWrite, "geolon"))) &
-     call register_axis(fileObjWrite, "geolon", size(out_h,1))
+     call register_axis(fileObjWrite, "geolon","x")
     
   ! register the field variables and attributes
   do i=1,size(vars) 
-     num_dims = 0
      if (.not. variable_exists(fileObjWrite, trim(vars(i)%name))) then 
-       
+        num_dims = 0
+        dim_names(:) = ""
         call get_horizontal_grid_logic(vars(i)%hor_grid, use_lath, use_lonh, use_latq, use_lonq)
 
         if (use_lath) then
            num_dims = num_dims+1
            dim_names(num_dims)(1:len_trim('geolat')) = 'geolat'
+            
         elseif (use_latq) then
            num_dims = num_dims+1
            dim_names(num_dims)(1:len_trim('geolatb')) ='geolatb'
         endif
-
+        
         if (use_lonh) then
            num_dims = num_dims+1
-           dim_names(1)(1:len_trim('geolon')) = 'geolon'
+           dim_names(num_dims)(1:len_trim('geolon')) = 'geolon'
         elseif (use_lonq) then
            num_dims = num_dims+1 
            dim_names(num_dims)(1:len_trim('geolonb')) ='geolonb'
         endif
+        if (is_root_pe()) print *, "lat, lon ", trim(dim_names(1)), trim(dim_names(2)) 
 
         if (is_root_pe()) print *, "About to register variable ", trim(vars(i)%name)
  
@@ -1333,7 +1335,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (is_root_pe()) print *, "About to write variable ", trim(vars(1)%name)
   !call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
    
-  call write_data(fileObjWrite, vars(1)%name, out_q)
+  call write_data(fileObjWrite, vars(1)%name, out_q(isdB:iedB,jsdB:jedB))!, corner=(/1,1/), edge_lengths=(/size(out_q,1),size(out_q,2)/))
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
   !call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
   !call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
