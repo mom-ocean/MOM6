@@ -334,7 +334,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     if (CS%MEKE_equilibrium_restoring) then
-      call MEKE_equilibrium_restoring(CS, MEKE, G, GV, US, SN_u, SN_v)
+      call MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
       do j=js,je ; do i=is,ie
         src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - CS%equilibrium_value(i,j))
       enddo ; enddo
@@ -808,35 +808,34 @@ end subroutine MEKE_equilibrium
 
 !< This subroutine calculates a new equilibrium value for MEKE at each time step. This is not copied into
 !! MEKE%MEKE; rather, it is used as a restoring term to nudge MEKE%MEKE back to an equilibrium value
-subroutine MEKE_equilibrium_restoring(CS, MEKE, G, GV, US, SN_u, SN_v)
+subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
-  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
-  type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type.
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
-  type(MEKE_type),                   pointer       :: MEKE !< A structure with MEKE data.
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   ! Local variables
-  real :: SN   ! The local Eady growth rate [T-1 ~> s-1]
-  integer :: i, j, is, ie, js, je, n1, n2
-  real :: cd2
+  real :: SN                      ! The local Eady growth rate [T-1 ~> s-1]
+  integer :: i, j, is, ie, js, je ! local indices
+  real :: cd2                     ! bottom drag
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   cd2 = CS%cdrag**2
+
+  if (.not. associated(CS%equilibrium_value)) allocate(CS%equilibrium_value(SZI_(G),SZJ_(G)))
+  CS%equilibrium_value(:,:) = 0.0
 
 !$OMP do
   do j=js,je ; do i=is,ie
     ! SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
-
     CS%equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
   enddo ; enddo
 
   if (CS%id_MEKE_equilibrium>0) call post_data(CS%id_MEKE_equilibrium, CS%equilibrium_value, CS%diag)
 
 end subroutine MEKE_equilibrium_restoring
-
 
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
@@ -1077,7 +1076,6 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
       call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
                      "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
                      default=1e6, scale=US%T_to_s)
-      allocate(CS%equilibrium_value(isd:ied,jsd:jed)) ; CS%equilibrium_value(:,:) = 0.0
       CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
     endif
 
