@@ -17,9 +17,9 @@ use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
-use MOM_io, only : register_field, variable_exists, dimension_exists, get_global_io_domain_indices
-use MOM_io, only : check_if_open, register_axis, NORTH_FACE, EAST_FACE, CENTER
-use MOM_io, only : get_horizontal_grid_logic
+use MOM_io, only : register_field, variable_exists, dimension_exists, get_compute_domain_dimension_indices
+use MOM_io, only : check_if_open, register_axis, NORTH_FACE, EAST_FACE
+use MOM_io, only : get_horizontal_grid_logic, get_global_io_domain_indices, FmsNetcdfFile_t
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -1193,6 +1193,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
   type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  !type(FmsNetcdfFile_t) :: fileObjWrite
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   real :: L_to_m_scale ! A unit conversion factor from L to m.
@@ -1200,7 +1201,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer :: nFlds_used
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  integer :: isg, ieg ! global start and end indices for writing axis data
+  integer :: sg, eg ! start and end indices for global io domain
+  integer, dimension(:), allocatable :: domain_indices
   integer :: num_dims ! counter for variable dimensions
   logical :: multiple_files
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
@@ -1209,6 +1211,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
+  real, pointer, dimension(:) :: coord_data => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1288,39 +1291,85 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
      if (is_root_pe()) print *, "Opened the file ", trim(filepath) 
   endif
   ! register the axes
-  if (.not.(dimension_exists(fileObjWrite, "geolatb"))) &
-     call register_axis(fileObjWrite, "geolatb", "y", domain_position=NORTH_FACE)
-  if (.not.(dimension_exists(fileObjWrite, "geolonb"))) &
-     call register_axis(fileObjWrite, "geolonb", "x", domain_position=EAST_FACE)
-  if (.not.(dimension_exists(fileObjWrite, "geolat"))) &
-     call register_axis(fileObjWrite, "geolat", "y")
-  if (.not.(dimension_exists(fileObjWrite, "geolon"))) &
-     call register_axis(fileObjWrite, "geolon","x")
+  if (.not. dimension_exists(fileObjWrite, "lath")) &
+     call register_axis(fileObjWrite, "lath","y")
+  if (.not. dimension_exists(fileObjWrite, "lonh")) &
+     call register_axis(fileObjWrite, "lonh", "x")
+  if (.not. dimension_exists(fileObjWrite, "latq")) &
+     call register_axis(fileObjWrite, "latq","y", domain_position=NORTH_FACE)
+  if (.not. dimension_exists(fileObjWrite, "lonq")) &
+     call register_axis(fileObjWrite, "lonq", "x", domain_position=EAST_FACE)
+  ! write the axis data and attributes
+  !>@note: the latitude and longitude data and metadata are defined according to MOM_io::create_file subroutine
+  coord_data=>NULL()
+
+  if (.not. variable_exists(fileObjWrite, 'lath')) then
+     call register_field(fileObjWrite, 'lath', 'double', dimensions=(/'lath'/))
+     !call get_global_io_domain_indices(fileObjWrite, 'lath', sg, eg)
+     call get_compute_domain_dimension_indices(fileObjWrite,'lath',domain_indices)
+     coord_data=>G%gridLatT(G%jsg:G%jeg)
+     call write_data(fileObjWrite,'lath', coord_data(domain_indices))
+     call register_variable_attribute(fileObjWrite, 'lath', 'units', G%y_axis_units)
+     call register_variable_attribute(fileObjWrite, 'lath', 'long_name', 'Latitude')
     
+  endif
+
+  if (.not. variable_exists(fileObjWrite, 'lonh')) then
+     call register_field(fileObjWrite, 'lonh', 'double', dimensions=(/'lonh'/))
+     coord_data => G%gridLonT(G%isg:G%ieg)
+     !call get_global_io_domain_indices(fileObjWrite, 'lonh', sg, eg)
+     call write_data(fileObjWrite,'lonh', coord_data)
+     call register_variable_attribute(fileObjWrite, 'lonh', 'units', G%x_axis_units)
+     call register_variable_attribute(fileObjWrite, 'lonh', 'long_name', 'Longitude')
+     coord_data => NULL()
+  endif
+
+  if (.not. variable_exists(fileObjWrite, 'latq')) then
+     call register_field(fileObjWrite, 'latq', 'double', dimensions=(/'latq'/))
+     coord_data => G%gridLatB(G%JsgB:G%JegB)
+     call get_global_io_domain_indices(fileObjWrite, 'latq', sg, eg)
+     call write_data(fileObjWrite,'latq', coord_data(sg:eg))
+     call register_variable_attribute(fileObjWrite, 'latq', 'units', G%y_axis_units)
+     call register_variable_attribute(fileObjWrite, 'latq', 'long_name', 'Latitude')
+    
+  endif
+  
+  if (.not. variable_exists(fileObjWrite, 'lonq')) then
+     call register_field(fileObjWrite, 'lonq', 'double', dimensions=(/'lonq'/))
+     !call get_global_io_domain_indices(fileObjWrite, 'lonq', sg, eg)
+     coord_data=>G%gridLonB(G%IsgB:G%IegB)
+     call write_data(fileObjWrite,'lonq', coord_data)
+     call register_variable_attribute(fileObjWrite, 'lonq', 'units', G%x_axis_units)
+     call register_variable_attribute(fileObjWrite, 'lonq', 'long_name', 'Longitude')
+     
+  endif
+
   ! register the field variables and attributes
   do i=1,size(vars) 
      if (.not. variable_exists(fileObjWrite, trim(vars(i)%name))) then 
         num_dims = 0
         dim_names(:) = ""
         call get_horizontal_grid_logic(vars(i)%hor_grid, use_lath, use_lonh, use_latq, use_lonq)
-
-        if (use_lath) then
-           num_dims = num_dims+1
-           dim_names(num_dims)(1:len_trim('geolat')) = 'geolat'
-            
-        elseif (use_latq) then
-           num_dims = num_dims+1
-           dim_names(num_dims)(1:len_trim('geolatb')) ='geolatb'
-        endif
+  
         
         if (use_lonh) then
            num_dims = num_dims+1
-           dim_names(num_dims)(1:len_trim('geolon')) = 'geolon'
+           dim_names(num_dims)(1:len_trim('lonh')) = 'lonh'
         elseif (use_lonq) then
            num_dims = num_dims+1 
-           dim_names(num_dims)(1:len_trim('geolonb')) ='geolonb'
+           dim_names(num_dims)(1:len_trim('lonq')) = 'lonq'
         endif
-        if (is_root_pe()) print *, "lat, lon ", trim(dim_names(1)), trim(dim_names(2)) 
+
+        if (use_lath) then
+           num_dims = num_dims+1
+           dim_names(num_dims)(1:len_trim('lath')) = 'lath'
+            
+        elseif (use_latq) then
+           num_dims = num_dims+1
+           dim_names(num_dims)(1:len_trim('latq')) ='latq'
+        endif
+        
+        if (is_root_pe()) print *, "lat, lon ", trim(dim_names(2)),' ', trim(dim_names(1)) 
 
         if (is_root_pe()) print *, "About to register variable ", trim(vars(i)%name)
  
@@ -1335,7 +1384,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (is_root_pe()) print *, "About to write variable ", trim(vars(1)%name)
   !call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
    
-  call write_data(fileObjWrite, vars(1)%name, out_q(isdB:iedB,jsdB:jedB))!, corner=(/1,1/), edge_lengths=(/size(out_q,1),size(out_q,2)/))
+  call write_data(fileObjWrite, vars(1)%name, out_q)!, corner=(/1,1/), edge_lengths=(/size(out_q,1),size(out_q,2)/))
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
   !call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
   !call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
