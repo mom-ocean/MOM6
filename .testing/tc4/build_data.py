@@ -30,7 +30,7 @@ def t_fc(x, y, z, radius=5.0, tmag=1.0):
 
 
 ny, nx = x.shape
-nz = 10
+nz = 3
 z = (np.arange(nz) * zbot0) / nz
 
 temp = t_fc(x, y, z)
