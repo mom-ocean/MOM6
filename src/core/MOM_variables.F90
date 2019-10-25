@@ -50,25 +50,21 @@ type, public :: surface
     ocean_mass, &  !< The total mass of the ocean [kg m-2].
     ocean_heat, &  !< The total heat content of the ocean in [degC kg m-2].
     ocean_salt, &  !< The total salt content of the ocean in [kgSalt m-2].
-    salt_deficit   !< The salt needed to maintain the ocean column at a minimum
+    taux_shelf, &  !< The zonal stresses on the ocean under shelves [Pa].
+    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [Pa].
+    TempxPmE, &    !< The net inflow of water into the ocean times the temperature at which this
+                   !! inflow occurs during the call to step_MOM [degC kg m-2].
+    salt_deficit, & !< The salt needed to maintain the ocean column at a minimum
                    !! salinity of 0.01 PSU over the call to step_MOM [kgSalt m-2].
+    internal_heat  !< Any internal or geothermal heat sources that are applied to the ocean
+                   !! integrated over the call to step_MOM [degC kg m-2].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
                    !! absolute salinity in [g/kg].
-  real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), & !< The zonal stresses on the ocean under shelves [Pa].
-    tauy_shelf => NULL()    !< The meridional stresses on the ocean under shelves [Pa].
   real, pointer, dimension(:,:) :: frazil => NULL()
                 !< The energy needed to heat the ocean column to the freezing point during the call
                 !! to step_MOM [J m-2].
-  real, pointer, dimension(:,:) :: TempxPmE => NULL()
-                !< The net inflow of water into the ocean times the temperature at which this inflow
-                !! occurs during the call to step_MOM [degC kg m-2]. This should be prescribed in the
-                !! forcing fields, but as it often is not, this is a useful heat budget diagnostic.
-  real, pointer, dimension(:,:) :: internal_heat => NULL()
-                !< Any internal or geothermal heat sources that are applied to the ocean integrated
-                !! over the call to step_MOM [degC kg m-2].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -105,11 +101,11 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
                          !! at a minimum salinity of MIN_SALINITY since the last time
-                         !! that calculate_surface_state was called, [gSalt m-2].
+                         !! that calculate_surface_state was called, [ppt R Z ~> gSalt m-2].
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
                          !! temperature at which this inflow occurs since the
-                         !! last call to calculate_surface_state [degC kg m-2].
+                         !! last call to calculate_surface_state [degC R Z ~> degC kg m-2].
                          !! This should be prescribed in the forcing fields, but
                          !! as it often is not, this is a useful heat budget diagnostic.
   real, dimension(:,:), pointer :: internal_heat => NULL()
@@ -127,8 +123,8 @@ type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
     T => NULL(), & !< Pointer to the temperature state variable [degC]
     S => NULL(), & !< Pointer to the salinity state variable [ppt ~> PSU or g/kg]
-    u => NULL(), & !< Pointer to the zonal velocity [m s-1]
-    v => NULL(), & !< Pointer to the meridional velocity [m s-1]
+    u => NULL(), & !< Pointer to the zonal velocity [L T-1 ~> m s-1]
+    v => NULL(), & !< Pointer to the meridional velocity [L T-1 ~> m s-1]
     h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
   real, pointer, dimension(:,:,:) :: &
     uh => NULL(), & !<  Pointer to zonal transports [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -211,8 +207,8 @@ type, public :: vertvisc_type
                              !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
                              !! to [kg Z3 m-3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [Pa].
-    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [Pa].
+    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
+    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
   real, pointer, dimension(:,:) :: tbl_thick_shelf_u => NULL()
                 !< Thickness of the viscous top boundary layer under ice shelves at u-points [Z ~> m].
   real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
@@ -299,7 +295,7 @@ contains
 !> Allocates the fields for the surface (return) properties of
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn, use_meltpot)
+                                  gas_fields_ocn, use_meltpot, use_iceshelves)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
@@ -312,9 +308,11 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
   logical,     optional, intent(in)    :: use_meltpot      !< If true, allocate the space for melt potential
+  logical,     optional, intent(in)    :: use_iceshelves   !< If true, allocate the space for the stresses
+                                                           !! under ice shelves.
 
   ! local variables
-  logical :: use_temp, alloc_integ, use_melt_potential
+  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -325,6 +323,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
   use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
+  alloc_iceshelves = .false. ; if (present(use_iceshelves)) alloc_iceshelves = use_iceshelves
 
   if (sfc_state%arrays_allocated) return
 
@@ -349,8 +348,15 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
     if (use_temp) then
       allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
       allocate(sfc_state%ocean_salt(isd:ied,jsd:jed)) ; sfc_state%ocean_salt(:,:) = 0.0
+      allocate(sfc_state%TempxPmE(isd:ied,jsd:jed))   ; sfc_state%TempxPmE(:,:) = 0.0
+      allocate(sfc_state%salt_deficit(isd:ied,jsd:jed))  ; sfc_state%salt_deficit(:,:) = 0.0
+      allocate(sfc_state%internal_heat(isd:ied,jsd:jed)) ; sfc_state%internal_heat(:,:) = 0.0
     endif
-    allocate(sfc_state%salt_deficit(isd:ied,jsd:jed)) ; sfc_state%salt_deficit(:,:) = 0.0
+  endif
+
+  if (alloc_iceshelves) then
+    allocate(sfc_state%taux_shelf(IsdB:IedB,jsd:jed)) ; sfc_state%taux_shelf(:,:) = 0.0
+    allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB)) ; sfc_state%tauy_shelf(:,:) = 0.0
   endif
 
   if (present(gas_fields_ocn)) &
@@ -459,9 +465,9 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   if (associated(tv%frazil)) &
     call hchksum(tv%frazil, mesg//" tv%frazil", G%HI)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%R_to_kg_m3*G%US%Z_to_m)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

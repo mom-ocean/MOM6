@@ -222,7 +222,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! Local variables
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
-  ! coordinate variable potential density [kg m-3].
+  ! coordinate variable potential density [R ~> kg m-3].
   real :: Rcv(SZI_(G),SZJ_(G),SZK_(G))
   ! Two temporary work arrays
   real :: work_3d(SZI_(G),SZJ_(G),SZK_(G))
@@ -464,10 +464,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
     if (associated(tv%eqn_of_state)) then
       pressure_1d(:) = tv%P_Ref
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js-1,je+1
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, &
-                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state)
+                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state, scale=US%kg_m3_to_R)
       enddo ; enddo
     else ! Rcv should not be used much in this case, so fill in sensible values.
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
@@ -842,7 +842,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
+                              z_top, z_bot, 0.0, US%R_to_kg_m3*GV%Rho0, GV%mks_g_Earth*US%Z_to_m, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -850,7 +850,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
         enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          mass(i,j) = mass(i,j) + (GV%H_to_m*GV%Rlay(k))*h(i,j,k)
+          mass(i,j) = mass(i,j) + (GV%H_to_m*US%R_to_kg_m3*GV%Rlay(k))*h(i,j,k)
         enddo ; enddo ; enddo
       endif
     else
@@ -1563,10 +1563,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if (CS%id_e_D>0) call safe_alloc_ptr(CS%e_D,isd,ied,jsd,jed,nz+1)
 
   CS%id_Rml = register_diag_field('ocean_model', 'Rml', diag%axesTL, Time, &
-      'Mixed Layer Coordinate Potential Density', 'kg m-3')
+      'Mixed Layer Coordinate Potential Density', 'kg m-3', conversion=US%R_to_kg_m3)
 
   CS%id_Rcv = register_diag_field('ocean_model', 'Rho_cv', diag%axesTL, Time, &
-      'Coordinate Potential Density', 'kg m-3')
+      'Coordinate Potential Density', 'kg m-3', conversion=US%R_to_kg_m3)
 
   CS%id_rhopot0 = register_diag_field('ocean_model', 'rhopot0', diag%axesTL, Time, &
       'Potential density referenced to surface', 'kg m-3')
@@ -1794,9 +1794,9 @@ subroutine register_surface_diags(Time, G, IDs, diag, tv)
   endif
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', 'psu m-2 s-1')
+         'Salt sink in ocean due to ice flux', 'psu m-2 s-1', conversion=G%US%R_to_kg_m3*G%US%Z_to_m)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
-         'Heat flux into ocean from mass flux into ocean', 'W m-2')
+         'Heat flux into ocean from mass flux into ocean', 'W m-2', conversion=G%US%R_to_kg_m3*G%US%Z_to_m)
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
          'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
 
@@ -2006,7 +2006,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
 
   id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
-       'kg m-3', cmor_field_name='rhozero', &
+       'kg m-3', cmor_field_name='rhozero', conversion=US%R_to_kg_m3, &
        cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
        cmor_long_name='reference sea water density for boussinesq approximation')
   if (id > 0) call post_data(id, GV%Rho0, diag, .true.)

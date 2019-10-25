@@ -246,7 +246,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [H L2 T-2 ~> m3 s-2 or kg s-2]
     bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution
                   ! [H L2 T-2 ~> m3 s-2 or kg s-2]
-    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [kg m-2 L2 T-3 ~> W m-2]
+    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [R L2 T-3 ~> W m-2]
     ! Leith_Kh_h, & ! Leith Laplacian viscosity at h-points [m2 s-1]
     ! Leith_Ah_h, & ! Leith bi-harmonic viscosity at h-points [m4 s-1]
     ! beta_h,     & ! Gradient of planetary vorticity at h-points [L-1 T-1 ~> m-1 s-1]
@@ -261,9 +261,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     boundary_mask ! A mask that zeroes out cells with at least one land edge [nondim]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
-    dvdx, dudy, & ! components in the shearing strain [T-1 s-1]
+    dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
     dDel2vdx, dDel2udy, & ! Components in the biharmonic equivalent of the shearing strain [L-2 T-1 ~> m-2 s-1]
-    dvdx_bt, dudy_bt, & ! components in the barotropic shearing strain [T-1 s-1]
+    dvdx_bt, dudy_bt, & ! components in the barotropic shearing strain [T-1 ~> s-1]
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) including metric terms [T-1 ~> s-1]
     sh_xy_bt, &   ! barotropic horizontal shearing strain (du/dy + dv/dx) inc. metric terms [T-1 ~> s-1]
     str_xy, &     ! str_xy is the cross term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2]
@@ -302,10 +302,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     max_diss_rate, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
     target_diss_rate_GME, & ! the maximum theoretical dissipation plus the amount spuriously dissipated
                      ! by friction [L2 T-3 ~> m2 s-3]
-    FrictWork, &     ! work done by MKE dissipation mechanisms [kg m-2 L2 T-3 ~> W m-2]
-    FrictWork_diss, & ! negative definite work done by MKE dissipation mechanisms [kg m-2 L2 T-3 ~> W m-2]
-    FrictWorkMax, &   ! maximum possible work done by MKE dissipation mechanisms [kg m-2 L2 T-3 ~> W m-2]
-    FrictWork_GME, &  ! work done by GME [kg m-2 L2 T-3 ~> W m-2]
+    FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
+    FrictWork_diss, & ! negative definite work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
+    FrictWorkMax, &   ! maximum possible work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
+    FrictWork_GME, &  ! work done by GME [R L2 T-3 ~> W m-2]
     div_xx_h         ! horizontal divergence [T-1 ~> s-1]
   ! real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -1205,8 +1205,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           ! This is the maximum possible amount of energy that can be converted
           ! per unit time, according to theory (multiplied by h)
           max_diss_rate(i,j,k) = 2.0*MEKE%MEKE(i,j) * sqrt(grad_vel_mag_h(i,j))
-          FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
-          FrictWorkMax(i,j,k) = -max_diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
+          FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_RZ
+          FrictWorkMax(i,j,k) = -max_diss_rate(i,j,k) * h(i,j,k) * GV%H_to_RZ
 
         ! Determine how much work GME needs to do to reach the "target" ratio between
         ! the amount of work actually done and the maximum allowed by theory. Note that
@@ -1217,7 +1217,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           endif
 
         else
-          FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_kg_m2
+
+          FrictWork_diss(i,j,k) = diss_rate(i,j,k) * h(i,j,k) * GV%H_to_RZ
         endif ; endif
 
       enddo ; enddo
@@ -1283,7 +1284,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       if (associated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
-          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * grad_vel_mag_bt_h(i,j)
+          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_RZ * grad_vel_mag_bt_h(i,j)
         enddo ; enddo
       endif
 
@@ -1348,7 +1349,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
       ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       ! This is the old formulation that includes energy diffusion
-      FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
+      FrictWork(i,j,k) = GV%H_to_RZ * ( &
               (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
        +0.25*((str_xy(I,J)*(                                     &
@@ -1409,7 +1410,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                 RoScl = Sh_F_pow / (1.0 + Sh_F_pow) ! = 1 - f^n/(f^n+c*D^n)
               endif
             endif
-            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * ( &
+            MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_RZ * ( &
                   ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
                   -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
            +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
@@ -1418,7 +1419,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                   +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
                        (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
                       +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
-                  +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
+                  +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                             &
                        (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
                       +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
                   +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
@@ -1432,13 +1433,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif ! MEKE%backscatter_Ro_c
       endif !use GME
 
-      if (CS%use_GME .and. associated(MEKE)) then
-        if (associated(MEKE%GME_snk)) then
-          do j=js,je ; do i=is,ie
-            MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
-          enddo ; enddo
-        endif
-      endif
+      if (CS%use_GME .and. associated(MEKE)) then ; if (associated(MEKE%GME_snk)) then
+        do j=js,je ; do i=is,ie
+          MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
+        enddo ; enddo
+      endif ; endif
 
     endif ; endif ! find_FrictWork and associated(mom_src)
 
@@ -1512,8 +1511,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                            ! [T2 L-2 ~> s2 m-2]
   real :: Ah_Limit         ! coefficient [T-1 ~> s-1] used, along with the
                            ! grid spacing, to limit biharmonic viscosity
-  real :: Kh               ! Lapacian horizontal viscosity [L2 s-1]
-  real :: Ah               ! biharmonic horizontal viscosity [L4 s-1]
+  real :: Kh               ! Lapacian horizontal viscosity [L2 T-1 ~> m2 s-1]
+  real :: Ah               ! biharmonic horizontal viscosity [L4 T-1 ~> m4 s-1]
   real :: Kh_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing gives Lap visc
   real :: Ah_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing cubed gives bih visc
   real :: Ah_time_scale    ! damping time-scale for biharmonic visc [T ~> s]
@@ -2210,26 +2209,28 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
 
       CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
       'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', &
-      'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
-      'Integral work done by lateral friction terms', 'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
+      'Integral work done by lateral friction terms', &
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
 
   CS%id_FrictWork_diss = register_diag_field('ocean_model','FrictWork_diss',diag%axesTL,Time,&
       'Integral work done by lateral friction terms (excluding diffusion of energy)', &
-      'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
 
   if (associated(MEKE)) then
     if (associated(MEKE%mom_src)) then
       CS%id_FrictWorkMax = register_diag_field('ocean_model', 'FrictWorkMax', diag%axesTL, Time,&
           'Maximum possible integral work done by lateral friction terms', &
-          'W m-2', conversion=US%s_to_T**3*US%L_to_m**2)
+          'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2)
     endif
   endif
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
-      'Depth integrated work done by lateral friction', 'W m-2', conversion=US%s_to_T**3*US%L_to_m**2, &
+      'Depth integrated work done by lateral friction', &
+      'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%s_to_T**3*US%L_to_m**2, &
       cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')

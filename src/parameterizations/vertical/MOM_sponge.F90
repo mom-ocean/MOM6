@@ -11,6 +11,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 ! Planned extension:  Support for time varying sponge targets.
@@ -56,7 +57,7 @@ type, public :: sponge_CS ; private
   integer, pointer :: col_j(:) => NULL() !< Array of the j-indicies of each of the columns being damped.
   real, pointer :: Iresttime_col(:) => NULL() !< The inverse restoring time of each column.
   real, pointer :: Rcv_ml_ref(:) => NULL() !< The value toward which the mixed layer
-                             !! coordinate-density is being damped [kg m-3].
+                             !! coordinate-density is being damped [R ~> kg m-3].
   real, pointer :: Ref_eta(:,:) => NULL() !< The value toward which the interface
                              !! heights are being damped [Z ~> m].
   type(p3d) :: var(MAX_FIELDS_) !< Pointers to the fields that are being damped.
@@ -66,7 +67,7 @@ type, public :: sponge_CS ; private
   real, pointer :: Iresttime_im(:) => NULL() !< The inverse restoring time of
                              !! each row for i-mean sponges.
   real, pointer :: Rcv_ml_ref_im(:) => NULL() !! The value toward which the i-mean
-                             !< mixed layer coordinate-density is being damped [kg m-3].
+                             !< mixed layer coordinate-density is being damped [R ~> kg m-3].
   real, pointer :: Ref_eta_im(:,:) => NULL() !< The value toward which the i-mean
                              !! interface heights are being damped [Z ~> m].
   type(p2d) :: Ref_val_im(MAX_FIELDS_) !< The values toward which the i-means of
@@ -273,12 +274,12 @@ end subroutine set_up_sponge_field
 subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in) :: sp_val !< The reference values of the mixed layer density [kg m-3]
+                         intent(in) :: sp_val !< The reference values of the mixed layer density [R ~> kg m-3]
   type(sponge_CS),       pointer    :: CS   !< A pointer to the control structure for this module that is
                                             !! set by a previous call to initialize_sponge.
   real, dimension(SZJ_(G)), &
                optional, intent(in) :: sp_val_i_mean !< the reference values of the zonal mean mixed
-                                            !! layer density [kg m-3], for use if Iresttime_i_mean > 0.
+                                            !! layer density [R ~> kg m-3], for use if Iresttime_i_mean > 0.
 !   This subroutine stores the reference value for mixed layer density.  It is
 ! handled differently from other values because it is only used in determining
 ! which layers can be inflated.
@@ -317,9 +318,10 @@ end subroutine set_up_sponge_ML_density
 
 !> This subroutine applies damping to the layers thicknesses, mixed layer buoyancy, and a variety of
 !! tracers for every column where there is damping.
-subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
+subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
   real,                    intent(in)    :: dt  !< The amount of time covered by this call [s].
@@ -334,7 +336,7 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   type(sponge_CS),         pointer       :: CS  !< A pointer to the control structure for this module
                                                 !! that is set by a previous call to initialize_sponge.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(inout) :: Rcv_ml !<  The coordinate density of the mixed layer [kg m-3].
+                 optional, intent(inout) :: Rcv_ml !<  The coordinate density of the mixed layer [R ~> kg m-3].
 
 ! This subroutine applies damping to the layers thicknesses, mixed
 ! layer buoyancy, and a variety of tracers for every column where
