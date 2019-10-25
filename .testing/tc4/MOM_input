@@ -397,3 +397,6 @@ MAXCPU = 2.88E+04               !   [wall-clock seconds] default = -1.0
                                 ! processors used.
 
 ! === module MOM_file_parser ===
+
+DIAG_AS_CHKSUM = True
+DEBUG = True

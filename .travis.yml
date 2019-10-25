@@ -17,6 +17,7 @@ addons:
     packages:
     - tcsh pkg-config netcdf-bin libnetcdf-dev libnetcdff-dev openmpi-bin libopenmpi-dev gfortran
     - doxygen graphviz flex bison cmake
+    - python-numpy python-netcdf4
 
 jobs:
   include:
