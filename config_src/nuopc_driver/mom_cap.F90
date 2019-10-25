@@ -313,6 +313,7 @@
 !> This module contains a set of subroutines that are required by NUOPC.
 module MOM_cap_mod
 use constants_mod,            only: constants_init
+use data_override_mod,        only: data_override_init, data_override
 use diag_manager_mod,         only: diag_manager_init, diag_manager_end
 use field_manager_mod,        only: field_manager_init, field_manager_end
 use fms_mod,                  only: fms_init, fms_end, open_namelist_file, check_nml_error
@@ -975,6 +976,11 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   else
      call ocean_model_init(ocean_public, ocean_state, Time, Time)
   endif
+
+#ifndef CESMCOUPLED
+! for runoff in EMC 
+  call data_override_init(Ocean_domain_in = Ocean_public%domain) 
+#endif
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
@@ -1922,6 +1928,8 @@ subroutine ModelAdvance(gcomp, rc)
           file=__FILE__)) &
           return  ! bail out
 
+  call ice_ocn_bnd_from_data(Ice_ocean_boundary, Time, Time_step_coupled) ! for runoff            
+
      !---------------
      ! Update MOM6
      !---------------
@@ -2525,4 +2533,18 @@ subroutine shr_file_getLogUnit(nunit)
 end subroutine shr_file_getLogUnit
 #endif
 
-end module MOM_cap_mod
+  subroutine ice_ocn_bnd_from_data(x, Time, Time_step_coupled)
+! get forcing data from data_overide
+      type (ice_ocean_boundary_type) :: x
+      type(Time_type), intent(in)    :: Time, Time_step_coupled
+
+      type(Time_type)                :: Time_next
+      character(len=*),parameter  :: subname='(mom_cap:ice_ocn_bnd_from_data)'
+
+      Time_next = Time + Time_step_coupled
+!      call data_override('OCN', 'runoff',  x%runoff  , Time_next)
+      call data_override('OCN', 'runoff',   x%rofl_flux   , Time_next) 
+
+  end subroutine ice_ocn_bnd_from_data
+
+end module mom_cap_mod
