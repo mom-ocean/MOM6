@@ -1859,7 +1859,8 @@ subroutine write_static_fields(G, GV, US, tv, diag)
 
   ! Local variables
   integer :: id
-
+  logical :: use_temperature
+  
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_north')
   if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
@@ -2011,12 +2012,15 @@ subroutine write_static_fields(G, GV, US, tv, diag)
        cmor_long_name='reference sea water density for boussinesq approximation')
   if (id > 0) call post_data(id, GV%Rho0, diag, .true.)
 
-  id = register_static_field('ocean_model','C_p', diag%axesNull, &
-       'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
-       cmor_standard_name='specific_heat_capacity_of_sea_water', &
-       cmor_long_name='specific_heat_capacity_of_sea_water')
-  if (id > 0) call post_data(id, tv%C_p, diag, .true.)
-
+  use_temperature = associated(tv%T)  
+  if (use_temperature) then
+     id = register_static_field('ocean_model','C_p', diag%axesNull, &
+          'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
+          cmor_standard_name='specific_heat_capacity_of_sea_water', &
+          cmor_long_name='specific_heat_capacity_of_sea_water')
+     if (id > 0) call post_data(id, tv%C_p, diag, .true.)
+  endif
+  
 end subroutine write_static_fields
 
 
