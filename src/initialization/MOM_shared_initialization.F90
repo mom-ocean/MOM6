@@ -1286,62 +1286,74 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
   ! open the file
   if (.not. check_if_open(fileObjWrite)) then
-     file_open_success = MOM_open_file(fileObjWrite, filepath, "write", &
+     file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", &
                                      G, is_restart=.false.)
+     !file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
      if (is_root_pe()) print *, "Opened the file ", trim(filepath) 
   endif
   ! register the axes
   if (.not. dimension_exists(fileObjWrite, "lath")) &
      call register_axis(fileObjWrite, "lath","y")
+     do i=1,size(G%gridLatT)
+        if (is_root_pe()) write(*,'(F5.2)'), G%gridLatT(i)
+     enddo
+     !call register_axis(fileObjWrite, "lath",size(G%gridLatT))
   if (.not. dimension_exists(fileObjWrite, "lonh")) &
      call register_axis(fileObjWrite, "lonh", "x")
+     !call register_axis(fileObjWrite, "lonh",size(G%gridLonT))
   if (.not. dimension_exists(fileObjWrite, "latq")) &
      call register_axis(fileObjWrite, "latq","y", domain_position=NORTH_FACE)
+     !call register_axis(fileObjWrite, "latq",size(G%gridLatB(G%JsgB:G%JegB)))
   if (.not. dimension_exists(fileObjWrite, "lonq")) &
      call register_axis(fileObjWrite, "lonq", "x", domain_position=EAST_FACE)
+     !call register_axis(fileObjWrite, "lonq",size(G%gridLonB(G%IsgB:G%IegB)))
   ! write the axis data and attributes
   !>@note: the latitude and longitude data and metadata are defined according to MOM_io::create_file subroutine
   coord_data=>NULL()
 
   if (.not. variable_exists(fileObjWrite, 'lath')) then
-     call register_field(fileObjWrite, 'lath', 'double', dimensions=(/'lath'/))
-     !call get_global_io_domain_indices(fileObjWrite, 'lath', sg, eg)
-     call get_compute_domain_dimension_indices(fileObjWrite,'lath',domain_indices)
-     coord_data=>G%gridLatT(G%jsg:G%jeg)
-     call write_data(fileObjWrite,'lath', coord_data(domain_indices))
+     call get_global_io_domain_indices(fileObjWrite, 'lath', sg, eg)
+     !call get_compute_domain_dimension_indices(fileObjWrite,'lath',domain_indices)
+     coord_data=>G%gridLatT(sg:eg)
+     !if (is_root_pe()) then
+       call register_field(fileObjWrite, 'lath', 'double', dimensions=(/'lath'/))
+       call write_data(fileObjWrite,'lath', coord_data)
+    ! endif
      call register_variable_attribute(fileObjWrite, 'lath', 'units', G%y_axis_units)
      call register_variable_attribute(fileObjWrite, 'lath', 'long_name', 'Latitude')
-    
   endif
 
   if (.not. variable_exists(fileObjWrite, 'lonh')) then
-     call register_field(fileObjWrite, 'lonh', 'double', dimensions=(/'lonh'/))
      coord_data => G%gridLonT(G%isg:G%ieg)
      !call get_global_io_domain_indices(fileObjWrite, 'lonh', sg, eg)
-     call write_data(fileObjWrite,'lonh', coord_data)
+     !if (is_root_pe()) then
+        call register_field(fileObjWrite, 'lonh', 'double', dimensions=(/'lonh'/))
+        call write_data(fileObjWrite,'lonh', coord_data)
+     !endif
      call register_variable_attribute(fileObjWrite, 'lonh', 'units', G%x_axis_units)
      call register_variable_attribute(fileObjWrite, 'lonh', 'long_name', 'Longitude')
-     coord_data => NULL()
   endif
 
   if (.not. variable_exists(fileObjWrite, 'latq')) then
-     call register_field(fileObjWrite, 'latq', 'double', dimensions=(/'latq'/))
      coord_data => G%gridLatB(G%JsgB:G%JegB)
-     call get_global_io_domain_indices(fileObjWrite, 'latq', sg, eg)
-     call write_data(fileObjWrite,'latq', coord_data(sg:eg))
+     !call get_global_io_domain_indices(fileObjWrite, 'latq', sg, eg)
+     !if (is_root_pe()) then
+       call register_field(fileObjWrite, 'latq', 'double', dimensions=(/'latq'/))
+       call write_data(fileObjWrite,'latq', coord_data)
+    ! endif
      call register_variable_attribute(fileObjWrite, 'latq', 'units', G%y_axis_units)
      call register_variable_attribute(fileObjWrite, 'latq', 'long_name', 'Latitude')
-    
   endif
   
   if (.not. variable_exists(fileObjWrite, 'lonq')) then
-     call register_field(fileObjWrite, 'lonq', 'double', dimensions=(/'lonq'/))
      !call get_global_io_domain_indices(fileObjWrite, 'lonq', sg, eg)
      coord_data=>G%gridLonB(G%IsgB:G%IegB)
-     call write_data(fileObjWrite,'lonq', coord_data)
+     !if (is_root_pe()) then
+        call register_field(fileObjWrite, 'lonq', 'double', dimensions=(/'lonq'/))
+        call write_data(fileObjWrite,'lonq', coord_data)
+     !endif
      call register_variable_attribute(fileObjWrite, 'lonq', 'units', G%x_axis_units)
-     call register_variable_attribute(fileObjWrite, 'lonq', 'long_name', 'Longitude')
-     
+     call register_variable_attribute(fileObjWrite, 'lonq', 'long_name', 'Longitude') 
   endif
 
   ! register the field variables and attributes
@@ -1350,7 +1362,6 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
         num_dims = 0
         dim_names(:) = ""
         call get_horizontal_grid_logic(vars(i)%hor_grid, use_lath, use_lonh, use_latq, use_lonq)
-  
         
         if (use_lonh) then
            num_dims = num_dims+1
@@ -1384,7 +1395,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (is_root_pe()) print *, "About to write variable ", trim(vars(1)%name)
   !call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
    
-  call write_data(fileObjWrite, vars(1)%name, out_q)!, corner=(/1,1/), edge_lengths=(/size(out_q,1),size(out_q,2)/))
+  call write_data(fileObjWrite, vars(1)%name, out_q)
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
   !call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
   !call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
