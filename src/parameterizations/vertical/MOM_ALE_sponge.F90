@@ -10,6 +10,7 @@
 
 module MOM_ALE_sponge
 
+
 ! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_coms, only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
@@ -390,7 +391,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
   logical :: spongeDataOngrid = .false.
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
   character(len=10)  :: remapScheme
-  
+
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_sponge called with an associated "// &
                             "control structure.")
@@ -574,7 +575,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   type(time_type),         intent(in) :: Time  !< The current model time
   type(ocean_grid_type),   intent(in) :: G     !< Grid structure (in).
   type(verticalGrid_type), intent(in) :: GV    !< ocean vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type  
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                    target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
   type(ALE_sponge_CS),     pointer    :: CS    !< Sponge control structure (in/out).
@@ -596,7 +597,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return
-  ! initialize time interpolator module 
+  ! initialize time interpolator module
   call time_interp_external_init()
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
   CS%fldno = CS%fldno + 1
@@ -774,7 +775,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   real, dimension(:), allocatable :: hsrc       ! Source thicknesses [Z ~> m].
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: tmpT1d  
+  real, dimension(:), allocatable :: tmpT1d
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
   integer :: col, total_sponge_cols
   real, allocatable, dimension(:), target :: z_in, z_edges_in
@@ -782,7 +783,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real :: h_neglect, h_neglect_edge
   real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
   integer :: nPoints
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (.not.associated(CS)) return
 
