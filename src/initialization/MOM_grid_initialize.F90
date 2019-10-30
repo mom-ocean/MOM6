@@ -252,7 +252,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   allocate(exni(npei)) ; allocate(exnj(npej))
   call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
   allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo+1 
+  SGdom%nihalo = 2*G%domain%nihalo+1
   SGdom%njhalo = 2*G%domain%njhalo+1
   SGdom%niglobal = 2*G%domain%niglobal
   SGdom%njglobal = 2*G%domain%njglobal
