@@ -1002,7 +1002,7 @@ end function set_u_at_v
 !! A bulk Richardson criterion or the thickness of the topmost NKML layers (with a bulk mixed layer)
 !! are currently used.  The thicknesses are given in terms of fractional layers, so that this
 !! thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, symmetrize)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetrize)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -1018,7 +1018,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
-  real,                    intent(in)    :: dt_in_T !< Time increment [T ~> s].
+  real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to vertvisc_init.
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
@@ -1141,7 +1141,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
 
   OBC => CS%OBC
   use_EOS = associated(tv%eqn_of_state)
-  dt_Rho0 = dt_in_T / GV%H_to_RZ
+  dt_Rho0 = dt / GV%H_to_RZ
   h_neglect = GV%H_subroundoff
   h_tiny = 2.0*GV%Angstrom_H + h_neglect
   g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / (GV%Rho0)
@@ -1193,7 +1193,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
     endif
   enddo ; endif
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt_in_T,G,GV,US,CS,use_EOS,dt_Rho0, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     h_neglect,h_tiny,g_H_Rho0,js,je,OBC,Isq,Ieq,nz,  &
   !$OMP                                     U_bg_sq,mask_v,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml)
   do j=js,je  ! u-point loop
@@ -1428,7 +1428,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt_in_T, G, GV, US, CS, sym
 
   enddo ! j-loop at u-points
 
-  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt_in_T,G,GV,US,CS,use_EOS,dt_Rho0, &
+  !$OMP parallel do default(private) shared(u,v,h,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     h_neglect,h_tiny,g_H_Rho0,is,ie,OBC,Jsq,Jeq,nz, &
   !$OMP                                     U_bg_sq,cdrag_sqrt,cdrag_sqrt_Z,Rho0x400_G,nkml,mask_u)
   do J=Jsq,Jeq  ! v-point loop

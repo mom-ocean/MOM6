@@ -96,7 +96,7 @@ contains
 !> Calculates thickness diffusion coefficients and applies thickness diffusion to layer
 !! thicknesses, h. Diffusivities are limited to ensure stability.
 !! Also returns along-layer mass fluxes used in the continuity equation.
-subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix, CDp, CS)
+subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
@@ -106,7 +106,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
                                                                      !! [L2 H ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamics structure
-  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
+  real,                                      intent(in)    :: dt     !< Time increment [T ~> s]
   type(MEKE_type),                           pointer       :: MEKE   !< MEKE control structure
   type(VarMix_CS),                           pointer       :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                      intent(inout) :: CDp    !< Diagnostics for the continuity equation
@@ -180,15 +180,15 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix
   endif
 
 
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt_in_T,G,CS)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
   do j=js,je ; do I=is-1,ie
     KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
-      (dt_in_T * (G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
+      (dt * (G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
   enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt_in_T,G,CS)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
   do j=js-1,je ; do I=is,ie
     KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
-      (dt_in_T * (G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
+      (dt * (G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
 
   ! Calculates interface heights, e, in [Z ~> m].
@@ -382,7 +382,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix
 !$OMP end parallel
 
   if (CS%detangle_interfaces) then
-    call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt_in_T, G, GV, US, &
+    call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, US, &
                            CS, int_slope_u, int_slope_v)
   endif
 
@@ -403,10 +403,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
   if (use_stored_slopes) then
-    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, G, GV, US, MEKE, CS, &
+    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
                                 int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
   else
-    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, G, GV, US, MEKE, CS, &
+    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
                                 int_slope_u, int_slope_v)
   endif
 
@@ -475,18 +475,18 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt_in_T, G, GV, US, MEKE, VarMix
 
   endif
 
-  !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt_in_T,vhtr,CDp,vhD,h,G,GV)
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
-      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k) * dt_in_T
+      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k) * dt
       if (associated(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k) * dt_in_T
+      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k) * dt
       if (associated(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
     enddo ; enddo
     do j=js,je ; do i=is,ie
-      h(i,j,k) = h(i,j,k) - dt_in_T * G%IareaT(i,j) * &
+      h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
           ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
       if (h(i,j,k) < GV%Angstrom_H) h(i,j,k) = GV%Angstrom_H
     enddo ; enddo
@@ -510,7 +510,7 @@ end subroutine thickness_diffuse
 !> Calculates parameterized layer transports for use in the continuity equation.
 !! Fluxes are limited to give positive definite thicknesses.
 !! Called by thickness_diffuse().
-subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, G, GV, US, MEKE, &
+subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, &
                                   CS, int_slope_u, int_slope_v, slope_x, slope_y)
   type(ocean_grid_type),                       intent(in)  :: G      !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)  :: GV     !< Vertical grid structure
@@ -527,7 +527,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),   intent(out) :: vhD    !< Meridional mass fluxes
                                                                      !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(:,:),                        pointer     :: cg1    !< Wave speed [L T-1 ~> m s-1]
-  real,                                        intent(in)  :: dt_in_T  !< Time increment [T ~> s]
+  real,                                        intent(in)  :: dt     !< Time increment [T ~> s]
   type(MEKE_type),                             pointer     :: MEKE   !< MEKE control structure
   type(thickness_diffuse_CS),                  pointer     :: CS     !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: int_slope_u !< Ratio that determine how much of
@@ -640,7 +640,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke ; IsdB = G%IsdB
 
-  I4dt = 0.25 / (dt_in_T)
+  I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
   G_scale = GV%g_Earth * GV%H_to_Z
 
@@ -667,7 +667,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
   find_work = (associated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt_in_T, T, S, G, GV, 1, larger_h_denom=.true.)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, 1, larger_h_denom=.true.)
   endif
 
   if (CS%use_FGNV_streamfn .and. .not. associated(cg1)) call MOM_error(FATAL, &
@@ -1330,7 +1330,7 @@ subroutine streamfn_solver(nk, c2_h, hN2, sfn)
 end subroutine streamfn_solver
 
 !> Modifies thickness diffusivities to untangle layer structures
-subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt_in_T, G, GV, US, CS, &
+subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, US, CS, &
                              int_slope_u, int_slope_v)
   type(ocean_grid_type),                       intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< Vertical grid structure
@@ -1346,7 +1346,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt_in_T, 
   real, dimension(SZI_(G),SZJB_(G)),           intent(in)    :: Kh_v_CFL !< Maximum stable thickness diffusivity
                                                                      !! at v points [L2 T-1 ~> m2 s-1]
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< Thermodynamics structure
-  real,                                        intent(in)    :: dt_in_T !< Time increment [T ~> s]
+  real,                                        intent(in)    :: dt   !< Time increment [T ~> s]
   type(thickness_diffuse_CS),                  pointer       :: CS   !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: int_slope_u !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from
@@ -1444,7 +1444,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt_in_T, 
   ! distributing the diffusivities more effectively (with wt1 & wt2), but this
   ! means that the additions to a single interface can be up to twice as large.
   Kh_scale = 0.5
-  if (CS%detangle_time > dt_in_T) Kh_scale = 0.5 * dt_in_T / CS%detangle_time
+  if (CS%detangle_time > dt) Kh_scale = 0.5 * dt / CS%detangle_time
 
   do j=js-1,je+1 ; do i=is-1,ie+1
     de_top(i,j,k_top) = 0.0 ; de_bot(i,j) = 0.0
@@ -1493,7 +1493,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt_in_T, 
 
   ! Limit the diffusivities
 
-  I_4t = Kh_scale / (4.0 * dt_in_T)
+  I_4t = Kh_scale / (4.0 * dt)
 
   do n=1,2
     if (n==1) then ; jsh = js ; ish = is-1

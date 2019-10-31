@@ -395,13 +395,13 @@ end subroutine calc_resoln_function
 
 !> Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et al.
 !! style scaling of diffusivity
-subroutine calc_slope_functions(h, tv, dt_in_T, G, GV, US, CS)
+subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS)
   type(ocean_grid_type),                    intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamic variables
-  real,                                     intent(in)    :: dt_in_T !< Time increment [T ~> s]
+  real,                                     intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: &
@@ -415,7 +415,7 @@ subroutine calc_slope_functions(h, tv, dt_in_T, G, GV, US, CS)
   if (CS%calculate_Eady_growth_rate) then
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_stored_slopes) then
-      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_in_T*CS%kappa_smooth, &
+      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
       call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)

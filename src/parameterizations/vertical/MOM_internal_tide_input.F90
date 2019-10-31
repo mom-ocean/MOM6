@@ -71,7 +71,7 @@ end type int_tide_input_type
 contains
 
 !> Sets the model-state dependent internal tide energy sources.
-subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt_in_T, G, GV, US, CS)
+subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
@@ -83,7 +83,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt_in_T, G, GV, US, CS
   type(forcing),                             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
   type(int_tide_input_type),                 intent(inout) :: itide !< A structure containing fields related
                                                                  !! to the internal tide sources.
-  real,                                      intent(in)    :: dt_in_T !< The time increment [T ~> s].
+  real,                                      intent(in)    :: dt !< The time increment [T ~> s].
   type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -109,7 +109,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt_in_T, G, GV, US, CS
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt_in_T, T_f, S_f, G, GV, larger_h_denom=.true.)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt, T_f, S_f, G, GV, larger_h_denom=.true.)
   endif
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)

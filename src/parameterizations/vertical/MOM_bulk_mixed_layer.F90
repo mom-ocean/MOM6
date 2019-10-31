@@ -184,7 +184,7 @@ contains
 !!    For a traditional Kraus-Turner mixed layer, the values are:
 !!      pen_SW_frac = 0.0, pen_SW_scale = 0.0 m, mstar = 1.25,
 !!      nstar = 0.4, TKE_decay = 0.0, conv_decay = 0.0
-subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, US, CS, &
+subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, CS, &
                           optics, Hml, aggregate_FW_forcing, dt_diag, last_call)
   type(ocean_grid_type),      intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV     !< The ocean's vertical grid structure.
@@ -203,7 +203,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
   type(forcing),              intent(inout) :: fluxes !< A structure containing pointers to any
                                                       !! possible forcing fields.  Unused fields
                                                       !! have NULL ptrs.
-  real,                       intent(in)    :: dt_in_T !< Time increment [T ~> s].
+  real,                       intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: ea     !< The amount of fluid moved downward into a
                                                       !! layer; this should be increased due to
@@ -370,7 +370,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
   if (CS%nkml > 1) Inkmlm1 = 1.0 / REAL(CS%nkml-1)
 
   Irho0 = 1.0 / (GV%Rho0)
-  dt__diag = dt_in_T ; if (present(dt_diag)) dt__diag = dt_diag
+  dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   Idt_diag = 1.0 / (dt__diag)
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
 
@@ -403,7 +403,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
 
   ! Determine whether to zero out diagnostics before accumulation.
   reset_diags = .true.
-  if (present(dt_diag) .and. write_diags .and. (dt__diag > dt_in_T)) &
+  if (present(dt_diag) .and. write_diags .and. (dt__diag > dt)) &
     reset_diags = .false.  ! This is the second call to mixedlayer.
 
   if (reset_diags) then
@@ -530,7 +530,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
     ! net_heat     = heat via surface fluxes [degC H ~> degC m or degC kg m-2]
     ! net_salt     = salt via surface fluxes [ppt H ~> dppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
-    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T, &
+    call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd,&
                   tv, aggregate_FW_forcing)
@@ -542,7 +542,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
                                dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
                                netMassInOut, netMassOut, Net_heat, Net_salt,  &
                                nsw, Pen_SW_bnd, opacity_band, Conv_En,        &
-                               dKE_FC, j, ksort, G, GV, US, CS, tv, fluxes, dt_in_T, &
+                               dKE_FC, j, ksort, G, GV, US, CS, tv, fluxes, dt, &
                                aggregate_FW_forcing)
 
     if (id_clock_conv>0) call cpu_clock_end(id_clock_conv)
@@ -556,7 +556,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
     if (id_clock_mech>0) call cpu_clock_begin(id_clock_mech)
 
     call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
-                           TKE, TKE_river, Idecay_len_TKE, cMKE, dt_in_T, Idt_diag, &
+                           TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                            j, ksort, G, GV, US, CS)
 
     ! Here the mechanically driven entrainment occurs.
@@ -565,7 +565,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
                                 cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
                                 Idecay_len_TKE, j, ksort, G, GV, US, CS)
 
-    call absorbRemainingSW(G, GV, US, h(:,1:), opacity_band, nsw, optics, j, dt_in_T, &
+    call absorbRemainingSW(G, GV, US, h(:,1:), opacity_band, nsw, optics, j, dt, &
                            CS%H_limit_fluxes, CS%correct_absorption, CS%absorb_all_SW, &
                            T(:,1:), Pen_SW_bnd, eps, ksort, htot, Ttot)
 
@@ -639,11 +639,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt_in_T, ea, eb, G, GV, 
     if (id_clock_detrain>0) call cpu_clock_begin(id_clock_detrain)
     if (CS%nkbl == 1) then
       call mixedlayer_detrain_1(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
-                                GV%Rlay(:), dt_in_T, dt__diag, d_ea, d_eb, j, G, GV, US, CS, &
+                                GV%Rlay(:), dt, dt__diag, d_ea, d_eb, j, G, GV, US, CS, &
                                 dRcv_dT, dRcv_dS, max_BL_det)
     elseif (CS%nkbl == 2) then
       call mixedlayer_detrain_2(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
-                                GV%Rlay(:), dt_in_T, dt__diag, d_ea, j, G, GV, US, CS, &
+                                GV%Rlay(:), dt, dt__diag, d_ea, j, G, GV, US, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
     else ! CS%nkbl not = 1 or 2
       ! This code only works with 1 or 2 buffer layers.
@@ -935,7 +935,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,             &
                                  netMassInOut, netMassOut, Net_heat, Net_salt, &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_En,       &
-                                 dKE_FC, j, ksort, G, GV, US, CS, tv, fluxes, dt_in_T,      &
+                                 dKE_FC, j, ksort, G, GV, US, CS, tv, fluxes, dt,      &
                                  aggregate_FW_forcing)
   type(ocean_grid_type),    intent(in)    :: G     !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV    !< The ocean's vertical grid structure.
@@ -1016,7 +1016,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   type(forcing),            intent(inout) :: fluxes  !< A structure containing pointers to any
                                                    !! possible forcing fields.  Unused fields
                                                    !! have NULL ptrs.
-  real,                     intent(in)    :: dt_in_T    !< Time increment [T ~> s].
+  real,                     intent(in)    :: dt    !< Time increment [T ~> s].
   logical,                  intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
                                                    !! outgoing surface freshwater fluxes are
                                                    !! combined before being applied, instead of
@@ -1066,7 +1066,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   Angstrom = GV%Angstrom_H
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
   g_H2_2Rho0 = (GV%g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0)
-  Idt = 1.0 / dt_in_T
+  Idt = 1.0 / dt
   is = G%isc ; ie = G%iec ; nz = GV%ke
 
   do i=is,ie ; if (ksort(i,1) > 0) then
@@ -1303,7 +1303,7 @@ end subroutine mixedlayer_convection
 !>   This subroutine determines the TKE available at the depth of free
 !! convection to drive mechanical entrainment.
 subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
-                             TKE, TKE_river, Idecay_len_TKE, cMKE, dt_in_T, Idt_diag, &
+                             TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                              j, ksort, G, GV, US, CS)
   type(ocean_grid_type),      intent(in)    :: G       !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV      !< The ocean's vertical grid structure.
@@ -1338,7 +1338,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   real, dimension(2,SZI_(G)), intent(out)   :: cMKE    !< Coefficients of HpE and HpE^2 in
                                                        !! calculating the denominator of MKE_rate,
                                                        !! [H-1 ~> m-1 or m2 kg-1] and [H-2 ~> m-2 or m4 kg-2].
-  real,                       intent(in)    :: dt_in_T      !< The time step [T ~> s].
+  real,                       intent(in)    :: dt      !< The time step [T ~> s].
   real,                       intent(in)    :: Idt_diag !< The inverse of the accumulated diagnostic
                                                        !! time interval [T-1 ~> s-1].
   integer,                    intent(in)    :: j       !< The j-index to work on.
@@ -1371,7 +1371,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   integer :: is, ie, nz, i
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
-  diag_wt = dt_in_T * Idt_diag
+  diag_wt = dt * Idt_diag
 
   if (CS%omega_frac >= 1.0) absf = 2.0*CS%omega
   do i=is,ie
@@ -1402,7 +1402,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 !  scales contribute to mixed layer deepening at similar rates, even though
 !  small scales are dissipated more rapidly (implying they are less efficient).
 !     Ih = 1.0/(16.0*0.41*U_star*dt)
-    Ih = GV%H_to_Z/(3.0*0.41*U_star*dt_in_T)
+    Ih = GV%H_to_Z/(3.0*0.41*U_star*dt)
     cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*GV%H_to_Z) * Ih
 
     if (Idecay_len_TKE(i) > 0.0) then
@@ -1421,7 +1421,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
       if (totEn_Z > 0.0) then
         nstar_FC = CS%nstar * totEn_Z / (totEn_Z + 0.2 * &
-                        sqrt(0.5 * dt_in_T * (absf*(htot(i)*GV%H_to_Z))**3 * totEn_Z))
+                        sqrt(0.5 * dt * (absf*(htot(i)*GV%H_to_Z))**3 * totEn_Z))
       else
         nstar_FC = CS%nstar
       endif
@@ -1431,7 +1431,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       if (Conv_En(i) > 0.0) then
         totEn_Z = US%L_to_Z**2 * (Conv_En(i) + TKE_CA * (htot(i) / h_CA(i)) )
         nstar_FC = CS%nstar * totEn_Z / (totEn_Z + 0.2 * &
-                        sqrt(0.5 * dt_in_T * (absf*(htot(i)*GV%H_to_Z))**3 * totEn_Z))
+                        sqrt(0.5 * dt * (absf*(htot(i)*GV%H_to_Z))**3 * totEn_Z))
       else
         nstar_FC = CS%nstar
       endif
@@ -1439,7 +1439,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       totEn_Z = US%L_to_Z**2 * (Conv_En(i) + TKE_CA)
       if (TKE_CA > 0.0) then
         nstar_CA = CS%nstar * totEn_Z / (totEn_Z + 0.2 * &
-                        sqrt(0.5 * dt_in_T * (absf*(h_CA(i)*GV%H_to_Z))**3 * totEn_Z))
+                        sqrt(0.5 * dt * (absf*(h_CA(i)*GV%H_to_Z))**3 * totEn_Z))
       else
         nstar_CA = CS%nstar
       endif
@@ -1461,11 +1461,11 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
     dKE_conv = dKE_CA(i,1) * MKE_rate_CA + dKE_FC(i) * MKE_rate_FC
 ! At this point, it is assumed that cTKE is positive and stored in TKE_CA!
 ! Note: Removed factor of 2 in u*^3 terms.
-    TKE(i) = (dt_in_T*CS%mstar)*((US%Z_to_L**2*(U_star*U_Star*U_Star))*exp_kh) + &
+    TKE(i) = (dt*CS%mstar)*((US%Z_to_L**2*(U_star*U_Star*U_Star))*exp_kh) + &
              (exp_kh * dKE_conv + nstar_FC*Conv_En(i) + nstar_CA * TKE_CA)
 
     if (CS%do_rivermix) then ! Add additional TKE at river mouths
-      TKE(i) = TKE(i) + TKE_river(i)*dt_in_T*exp_kh
+      TKE(i) = TKE(i) + TKE_river(i)*dt*exp_kh
     endif
 
     if (CS%TKE_diagnostics) then
@@ -2201,7 +2201,7 @@ end subroutine resort_ML
 !> This subroutine moves any water left in the former mixed layers into the
 !! two buffer layers and may also move buffer layer water into the interior
 !! isopycnal layers.
-subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea, j, G, GV, US, CS, &
+subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, US, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -2215,7 +2215,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea
                                                             !! density [R ~> kg m-3].
   real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt  !< The target value of Rcv for each
                                                             !! layer [R ~> kg m-3].
-  real,                               intent(in)    :: dt_in_T   !< Time increment [T ~> s].
+  real,                               intent(in)    :: dt   !< Time increment [T ~> s].
   real,                               intent(in)    :: dt_diag !< The diagnostic time step [T ~> s].
   real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea !< The upward increase across a layer in
                                                             !! the entrainment from above
@@ -2371,7 +2371,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea
   if (CS%nkbl /= 2) call MOM_error(FATAL, "MOM_mixed_layer"// &
                         "CS%nkbl must be 2 in mixedlayer_detrain_2.")
 
-  if (dt_in_T < CS%BL_detrain_time) then ; dPE_time_ratio = CS%BL_detrain_time / (dt_in_T)
+  if (dt < CS%BL_detrain_time) then ; dPE_time_ratio = CS%BL_detrain_time / (dt)
   else ; dPE_time_ratio = 1.0 ; endif
 
   do i=is,ie
@@ -3092,7 +3092,7 @@ end subroutine mixedlayer_detrain_2
 !> This subroutine moves any water left in the former mixed layers into the
 !! single buffer layers and may also move buffer layer water into the interior
 !! isopycnal layers.
-subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea, d_eb, &
+subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_eb, &
                                 j, G, GV, US, CS, dRcv_dT, dRcv_dS, max_BL_det)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -3106,7 +3106,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea
                                                             !! density [R ~> kg m-3].
   real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt !< The target value of Rcv for each
                                                             !! layer [R ~> kg m-3].
-  real,                               intent(in)    :: dt_in_T   !< Time increment [T ~> s].
+  real,                               intent(in)    :: dt   !< Time increment [T ~> s].
   real,                               intent(in)    :: dt_diag !< The accumulated time interval for
                                                             !! diagnostics [T ~> s].
   real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea !< The upward increase across a layer in
@@ -3159,7 +3159,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt_in_T, dt_diag, d_ea
   if (CS%nkbl /= 1) call MOM_error(FATAL,"MOM_mixed_layer: "// &
                         "CS%nkbl must be 1 in mixedlayer_detrain_1.")
 
-  dt_Time = dt_in_T / CS%BL_detrain_time
+  dt_Time = dt / CS%BL_detrain_time
   g_H2_2Rho0dt = (GV%g_Earth * GV%H_to_Z**2) / (2.0 * GV%Rho0 * dt_diag)
   g_H2_2dt = (GV%g_Earth * GV%H_to_Z**2) / (2.0 * dt_diag)
 

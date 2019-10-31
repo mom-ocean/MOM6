@@ -380,7 +380,7 @@ contains
 !! 0.0 and 1.0 determining the scheme.  In practice, bebt must be of
 !! order 0.2 or greater.  A forwards-backwards treatment of the
 !! Coriolis terms is always used.
-subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, pbce, &
+subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, &
                   eta_PF_in, U_Cor, V_Cor, accel_layer_u, accel_layer_v, &
                   eta_out, uhbtav, vhbtav, G, GV, US, CS, &
                   visc_rem_u, visc_rem_v, etaav, OBC, BT_cont, eta_PF_start, &
@@ -394,7 +394,7 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
                                                                     !! velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in  !< The initial barotropic free surface height
                                                          !! anomaly or column mass anomaly [H ~> m or kg m-2].
-  real,                                      intent(in)  :: dt_in_T  !< The time increment to integrate over [T ~> s].
+  real,                                      intent(in)  :: dt      !< The time increment to integrate over [T ~> s].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations,
                                                                        !! [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
@@ -652,7 +652,7 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   MS%isdw = CS%isdw ; MS%iedw = CS%iedw ; MS%jsdw = CS%jsdw ; MS%jedw = CS%jedw
 
-  Idt = 1.0 / dt_in_T
+  Idt = 1.0 / dt
   accel_underflow = CS%vel_underflow * Idt
 
   use_BT_cont = .false.
@@ -709,17 +709,17 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
   isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
   jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
 
-  nstep = CEILING(dt_in_T/CS%dtbt - 0.0001)
+  nstep = CEILING(dt/CS%dtbt - 0.0001)
   if (is_root_PE() .and. (nstep /= CS%nstep_last)) then
     write(mesg,'("btstep is using a dynamic barotropic timestep of ", ES12.6, &
-               & " seconds, max ", ES12.6, ".")') (US%T_to_s*dt_in_T/nstep), US%T_to_s*CS%dtbt_max
+               & " seconds, max ", ES12.6, ".")') (US%T_to_s*dt/nstep), US%T_to_s*CS%dtbt_max
     call MOM_mesg(mesg, 3)
   endif
   CS%nstep_last = nstep
 
   ! Set the actual barotropic time step.
   Instep = 1.0 / real(nstep)
-  dtbt = dt_in_T * Instep
+  dtbt = dt * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
   mass_accel_to_Z = 1.0 / GV%Rho0
@@ -738,7 +738,7 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
       (CS%id_uhbt_hifreq > 0) .or. (CS%id_vhbt_hifreq > 0)) then
     do_hifreq_output = query_averaging_enabled(CS%diag, time_int_in, time_end_in)
     if (do_hifreq_output) &
-      time_bt_start = time_end_in - real_to_time(US%T_to_s*dt_in_T)
+      time_bt_start = time_end_in - real_to_time(US%T_to_s*dt)
   endif
 
 !--- begin setup for group halo update
@@ -1260,7 +1260,7 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
 !$OMP                               find_etaav,jsvf,jevf,isvf,ievf,eta_sum,eta_wtd, &
 !$OMP                               ubt_sum,uhbt_sum,PFu_bt_sum,Coru_bt_sum,ubt_wtd,&
 !$OMP                               ubt_trans,vbt_sum,vhbt_sum,PFv_bt_sum,          &
-!$OMP                               Corv_bt_sum,vbt_wtd,vbt_trans,eta_src,dt_in_T,dtbt,  &
+!$OMP                               Corv_bt_sum,vbt_wtd,vbt_trans,eta_src,dt,dtbt,  &
 !$OMP                               Rayleigh_u, Rayleigh_v,                         &
 !$OMP                               use_BT_Cont,BTCL_u,uhbt0,BTCL_v,vhbt0,eta,Idt,US)  &
 !$OMP                       private(u_max_cor,v_max_cor,eta_cor_max,Htot)
@@ -1358,7 +1358,7 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
         ! CFL_cor.
         u_max_cor = G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
         v_max_cor = G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
-        eta_cor_max = dt_in_T * (CS%IareaT(i,j) * &
+        eta_cor_max = dt * (CS%IareaT(i,j) * &
                    (((find_uhbt(u_max_cor, BTCL_u(I,j), US) + uhbt0(I,j)) - &
                      (find_uhbt(-u_max_cor, BTCL_u(I-1,j), US) + uhbt0(I-1,j))) + &
                     ((find_vhbt(v_max_cor, BTCL_v(i,J), US) + vhbt0(i,J)) - &
@@ -1374,8 +1374,8 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
       endif
     endif ; enddo ; enddo
   else ; do j=js,je ; do i=is,ie
-    if (abs(CS%eta_cor(i,j)) > dt_in_T*CS%eta_cor_bound(i,j)) &
-      CS%eta_cor(i,j) = sign(dt_in_T*CS%eta_cor_bound(i,j), CS%eta_cor(i,j))
+    if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
+      CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j), CS%eta_cor(i,j))
   enddo ; enddo ; endif ; endif
   !$OMP do
   do j=js,je ; do i=is,ie
@@ -1489,9 +1489,9 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
   if (project_velocity) then ; eta_PF_BT => eta ; else ; eta_PF_BT => eta_pred ; endif
 
   if (CS%dt_bt_filter >= 0.0) then
-    dt_filt = 0.5 * max(0.0, min(CS%dt_bt_filter, 2.0*dt_in_T))
+    dt_filt = 0.5 * max(0.0, min(CS%dt_bt_filter, 2.0*dt))
   else
-    dt_filt = 0.5 * max(0.0, dt_in_T * min(-CS%dt_bt_filter, 2.0))
+    dt_filt = 0.5 * max(0.0, dt * min(-CS%dt_bt_filter, 2.0))
   endif
   nfilter = ceiling(dt_filt / dtbt)
 
@@ -1549,21 +1549,21 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
 
     if (CS%clip_velocity) then
       do j=jsv,jev ; do I=isv-1,iev
-        if ((ubt(I,j) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+        if ((ubt(I,j) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           ! Add some error reporting later.
-          ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt_in_T * G%dy_Cu(I,j)))
-        elseif ((ubt(I,j) * (dt_in_T * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
+        elseif ((ubt(I,j) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
-          ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dy_Cu(I,j)))
+          ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
         endif
       enddo ; enddo
       do J=jsv-1,jev ; do i=isv,iev
-        if ((vbt(i,J) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+        if ((vbt(i,J) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           ! Add some error reporting later.
-          vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt_in_T * G%dx_Cv(i,J)))
-        elseif ((vbt(i,J) * (dt_in_T * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
+          vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
+        elseif ((vbt(i,J) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
           ! Add some error reporting later.
-          vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt_in_T * G%dx_Cv(i,J)))
+          vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
         endif
       enddo ; enddo
     endif
@@ -2139,13 +2139,13 @@ subroutine btstep(U_in, V_in, eta_in, dt_in_T, bc_accel_u, bc_accel_v, forces, p
     ! symmetric-memory computational domain, not in the wide halo regions.
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
       if (OBC%segnum_u(I,j) /= OBC_NONE) then
-        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt_in_T
+        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
         do k=1,nz ; accel_layer_u(I,j,k) = u_accel_bt(I,j) ; enddo
       endif
     enddo ; enddo ; endif
     if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
       if (OBC%segnum_v(i,J) /= OBC_NONE) then
-        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_first(i,J)) / dt_in_T
+        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_first(i,J)) / dt
         do k=1,nz ; accel_layer_v(i,J,k) = v_accel_bt(i,J) ; enddo
       endif
     enddo ; enddo ; endif

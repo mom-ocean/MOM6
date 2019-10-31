@@ -149,7 +149,7 @@ contains
 
 !> Calls subroutines in this file that are needed to refract, propagate,
 !! and dissipate energy density of the internal tide.
-subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in_T, &
+subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                               G, GV, US, CS)
   type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
@@ -163,7 +163,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide !< Barotropic velocity read
                                                         !! from file [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency [T-1 ~> s-1].
-  real,                             intent(in)    :: dt_in_T !< Length of time over which to advance
+  real,                             intent(in)    :: dt !< Length of time over which to advance
                                                         !! the internal tides [T ~> s].
   type(int_tide_CS),                pointer       :: CS !< The control structure returned by a
                                                         !! previous call to int_tide_init.
@@ -223,7 +223,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt_in_T*frac_per_sector*(1.0-CS%q_itides) * &
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*(1.0-CS%q_itides) * &
                             TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo ; enddo
   elseif (CS%energized_angle <= CS%nAngle) then
@@ -233,7 +233,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt_in_T*frac_per_sector*(1.0-CS%q_itides) * &
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*(1.0-CS%q_itides) * &
                             TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo
   else
@@ -251,7 +251,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
 
   ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
-    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt_in_T, &
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, &
                  G, US, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
 
@@ -278,7 +278,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
 
   ! Propagate the waves.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt_in_T, &
+    call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, &
                    G, US, CS, CS%NAngle)
   enddo ; enddo
 
@@ -300,7 +300,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
 
   ! Apply the other half of the refraction.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt_in_T, &
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, &
                  G, US, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
 
@@ -338,7 +338,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
     ! Calculate loss rate and apply loss over the time step ; apply the same drag timescale
     ! to each En component (technically not correct; fix later)
     CS%TKE_leak_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * CS%decay_rate ! loss rate [R Z3 T-3 ~> W m-2]
-    CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt_in_T * CS%decay_rate) ! implicit update
+    CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt * CS%decay_rate) ! implicit update
     enddo ; enddo ; enddo ; enddo ; enddo
   endif
   ! Check for En<0 - for debugging, delete later
@@ -367,7 +367,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
       ! Calculate loss rate and apply loss over the time step ; apply the same drag timescale
       ! to each En component (technically not correct; fix later)
       CS%TKE_quad_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * drag_scale(i,j) ! loss rate
-      CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt_in_T * drag_scale(i,j)) ! implicit update
+      CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt * drag_scale(i,j)) ! implicit update
     enddo ; enddo ; enddo ; enddo ; enddo
   endif
   ! Check for En<0 - for debugging, delete later
@@ -406,7 +406,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
   if (CS%apply_wave_drag) then
     ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, US, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
-                             CS%TKE_itidal_loss, dt_in_T, full_halos=.false.)
+                             CS%TKE_itidal_loss, dt, full_halos=.false.)
   endif
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
@@ -442,13 +442,13 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
           if (Fr2_max > 1.0) then
             En_initial = sum(CS%En(i,j,:,fr,m)) ! for debugging
             ! Calculate effective decay rate [s-1] if breaking occurs over a time step
-            loss_rate = (1.0 - Fr2_max) / (Fr2_max * dt_in_T)
+            loss_rate = (1.0 - Fr2_max) / (Fr2_max * dt)
             do a=1,CS%nAngle
               ! Determine effective dissipation rate (Wm-2)
               CS%TKE_Froude_loss(i,j,a,fr,m) = CS%En(i,j,a,fr,m) * abs(loss_rate)
               ! Update energy
               En_new = CS%En(i,j,a,fr,m)/Fr2_max ! for debugging
-              En_check = CS%En(i,j,a,fr,m) - CS%TKE_Froude_loss(i,j,a,fr,m)*dt_in_T ! for debugging
+              En_check = CS%En(i,j,a,fr,m) - CS%TKE_Froude_loss(i,j,a,fr,m)*dt ! for debugging
               ! Re-scale (reduce) energy due to breaking
               CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m)/Fr2_max
               ! Check (for debugging only)
@@ -461,7 +461,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt_in
             enddo
             ! Check (for debugging)
             Delta_E_check = En_initial - sum(CS%En(i,j,:,fr,m))
-            TKE_Froude_loss_check = abs(Delta_E_check)/dt_in_T
+            TKE_Froude_loss_check = abs(Delta_E_check)/dt
             TKE_Froude_loss_tot = sum(CS%TKE_Froude_loss(i,j,:,fr,m))
             if (abs(TKE_Froude_loss_check - TKE_Froude_loss_tot) > 1e-10) then
               call MOM_error(WARNING, "MOM_internal_tides: something is wrong with Fr energy update.", &
@@ -632,7 +632,7 @@ end subroutine sum_En
 
 !> Calculates the energy lost from the propagating internal tide due to
 !! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
-subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt_in_T, full_halos)
+subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
   type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
   type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
@@ -650,7 +650,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
                              intent(out)   :: TKE_loss    !< Energy loss rate [R Z3 T-3 ~> W m-2]
                                                  !! (q*rho*kappa*h^2*N*U^2).
-  real,                      intent(in)    :: dt_in_T !< Time increment [T ~> s].
+  real,                      intent(in)    :: dt !< Time increment [T ~> s].
   logical,optional,          intent(in)    :: full_halos  !< If true, do the calculation over the
                                                  !! entirecomputational domain.
   ! Local variables
@@ -691,7 +691,7 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
         frac_per_sector = En(i,j,a,fr,m)/En_tot
         TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot           ! Wm-2
         loss_rate = TKE_loss(i,j,a,fr,m) / (En(i,j,a,fr,m) + En_negl) ! [T-1 ~> s-1]
-        En(i,j,a,fr,m) = En(i,j,a,fr,m) / (1.0 + dt_in_T*loss_rate)
+        En(i,j,a,fr,m) = En(i,j,a,fr,m) / (1.0 + dt*loss_rate)
       enddo
     else
       ! no loss if no energy
@@ -703,8 +703,8 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
     !  do a=1,CS%nAngle
     !    frac_per_sector = En(i,j,a,fr,m)/En_tot
     !    TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot
-    !    if (TKE_loss(i,j,a,fr,m)*dt_in_T <= En(i,j,a,fr,m))then
-    !      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt_in_T
+    !    if (TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
+    !      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
     !    else
     !      call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
     !                        " setting En to zero.", all_print=.true.)
@@ -742,7 +742,7 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
 end subroutine get_lowmode_loss
 
 !> Implements refraction on the internal waves at a single frequency.
-subroutine refract(En, cn, freq, dt_in_T, G, US, NAngle, use_PPMang)
+subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure.
   integer,               intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -753,7 +753,7 @@ subroutine refract(En, cn, freq, dt_in_T, G, US, NAngle, use_PPMang)
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
                          intent(in)    :: cn   !< Baroclinic mode speed [L T-1 ~> m s-1].
   real,                  intent(in)    :: freq !< Wave frequency [T-1 ~> s-1].
-  real,                  intent(in)    :: dt_in_T !< Time step [T ~> s].
+  real,                  intent(in)    :: dt   !< Time step [T ~> s].
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   logical,               intent(in)    :: use_PPMang !< If true, use PPM for advection rather
                                                !! than upwind.
@@ -786,7 +786,7 @@ subroutine refract(En, cn, freq, dt_in_T, G, US, NAngle, use_PPMang)
   Ifreq = 1.0 / freq
   cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
-  dt_Angle_size = dt_in_T / Angle_size
+  dt_Angle_size = dt / Angle_size
 
   do A=asd,aed
     angle = (real(A) - 0.5) * Angle_size
@@ -856,7 +856,7 @@ subroutine refract(En, cn, freq, dt_in_T, G, US, NAngle, use_PPMang)
     else
       ! Use PPM
       do i=is,ie
-        call PPM_angular_advect(En2d(i,:),CFL_ang(i,j,:),Flux_E(i,:),NAngle,dt_in_T,stencil)
+        call PPM_angular_advect(En2d(i,:),CFL_ang(i,j,:),Flux_E(i,:),NAngle,dt,stencil)
       enddo
     endif
 
@@ -872,10 +872,10 @@ end subroutine refract
 
 !> This subroutine calculates the 1-d flux for advection in angular space using a monotonic
 !! piecewise parabolic scheme. This needs to be called from within i and j spatial loops.
-subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt_in_T, halo_ang)
+subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
   integer,                   intent(in)    :: NAngle  !< The number of wave orientations in the
                                                       !! discretized wave energy spectrum.
-  real,                      intent(in)    :: dt_in_T !< Time increment [T ~> s].
+  real,                      intent(in)    :: dt      !< Time increment [T ~> s].
   integer,                   intent(in)    :: halo_ang !< The halo size in angular space
   real, dimension(1-halo_ang:NAngle+halo_ang),   &
                              intent(in)    :: En2d    !< The internal gravity wave energy density as a
@@ -893,7 +893,7 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt_in_T, halo_ang)
   integer :: a
   real :: aR, aL, dMx, dMn, Ep, Ec, Em, dA, mA, a6
 
-  I_dt = 1 / dt_in_T
+  I_dt = 1 / dt
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
   I_Angle_size = 1 / Angle_size
   Flux_En(:) = 0
@@ -922,7 +922,7 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt_in_T, halo_ang)
       flux = u_ang*( aR + 0.5 * CFL_ang(A) * ( ( aL - aR ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
       !flux = u_ang*( aR - 0.5 * CFL_ang(A) * ( ( aR - aL ) - a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
       ! CALCULATE AMOUNT FLUXED (Jm-2)
-      Flux_En(A) = dt_in_T * flux
+      Flux_En(A) = dt * flux
       !Flux_En(A) = (dt * I_Angle_size) * flux
     else
       ! Implementation of PPM-H3
@@ -946,14 +946,14 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt_in_T, halo_ang)
       flux = u_ang*( aR + 0.5 * CFL_ang(A) * ( ( aL - aR ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
       !flux = u_ang*( aL + 0.5 * CFL_ang(A) * ( ( aR - aL ) + a6 * ( 1. - 2./3. * CFL_ang(A) ) ) )
       ! CALCULATE AMOUNT FLUXED (Jm-2)
-      Flux_En(A) = dt_in_T * flux
+      Flux_En(A) = dt * flux
       !Flux_En(A) = (dt * I_Angle_size) * flux
     endif
   enddo
 end subroutine PPM_angular_advect
 
 !> Propagates internal waves at a single frequency.
-subroutine propagate(En, cn, freq, dt_in_T, G, US, CS, NAngle)
+subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   integer,               intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -964,7 +964,7 @@ subroutine propagate(En, cn, freq, dt_in_T, G, US, CS, NAngle)
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
                          intent(in)    :: cn   !< Baroclinic mode speed [L T-1 ~> m s-1].
   real,                  intent(in)    :: freq !< Wave frequency [T-1 ~> s-1].
-  real,                  intent(in)    :: dt_in_T !< Time step [T ~> s].
+  real,                  intent(in)    :: dt   !< Time step [T ~> s].
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(int_tide_CS),     pointer       :: CS   !< The control structure returned by a
                                                !! previous call to int_tide_init.
@@ -1023,7 +1023,7 @@ subroutine propagate(En, cn, freq, dt_in_T, G, US, CS, NAngle)
     do a=1,na
       ! Apply the propagation WITH CORNER ADVECTION/FINITE VOLUME APPROACH.
       LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie
-      call propagate_corner_spread(En(:,:,a), a, NAngle, speed, dt_in_T, G, CS, LB)
+      call propagate_corner_spread(En(:,:,a), a, NAngle, speed, dt, G, CS, LB)
     enddo ! a-loop
   else
     ! IMPLEMENT PPM ADVECTION IN HORIZONTAL-----------------------
@@ -1058,7 +1058,7 @@ subroutine propagate(En, cn, freq, dt_in_T, G, US, CS, NAngle)
 
     ! Apply propagation in x-direction (reflection included)
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_x(En(:,:,:), speed_x, Cgx_av(:), dCgx(:), dt_in_T, G, US, CS%nAngle, CS, LB)
+    call propagate_x(En(:,:,:), speed_x, Cgx_av(:), dCgx(:), dt, G, US, CS%nAngle, CS, LB)
 
     ! Check for energy conservation on computational domain (for debugging)
     !call sum_En(G,CS,En(:,:,:),'post-propagate_x')
@@ -1069,7 +1069,7 @@ subroutine propagate(En, cn, freq, dt_in_T, G, US, CS, NAngle)
     ! Apply propagation in y-direction (reflection included)
     ! LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie ! Use if no teleport
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_y(En(:,:,:), speed_y, Cgy_av(:), dCgy(:), dt_in_T, G, US, CS%nAngle, CS, LB)
+    call propagate_y(En(:,:,:), speed_y, Cgy_av(:), dCgy(:), dt, G, US, CS%nAngle, CS, LB)
 
     ! Check for energy conservation on computational domain (for debugging)
     !call sum_En(G,CS,En(:,:,:),'post-propagate_y')
@@ -1080,7 +1080,7 @@ end subroutine propagate
 !> This subroutine does first-order corner advection. It was written with the hopes
 !! of smoothing out the garden sprinkler effect, but is too numerically diffusive to
 !! be of much use as of yet. It is not yet compatible with reflection schemes (BDM).
-subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt_in_T, G, CS, LB)
+subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS, LB)
   type(ocean_grid_type),  intent(in)    :: G     !< The ocean's grid structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed),   &
                           intent(inout) :: En    !< The energy density integrated over an angular
@@ -1091,7 +1091,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt_in_T, 
   integer,                intent(in)    :: energized_wedge !< Index of current ray direction.
   integer,                intent(in)    :: NAngle !< The number of wave orientations in the
                                                  !! discretized wave energy spectrum.
-  real,                   intent(in)    :: dt_in_T  !< Time increment [T ~> s].
+  real,                   intent(in)    :: dt    !< Time increment [T ~> s].
   type(int_tide_CS),      pointer       :: CS    !< The control structure returned by a previous
                                                  !! call to continuity_PPM_init.
   type(loop_bounds_type), intent(in)    :: LB    !< A structure with the active energy loop bounds.
@@ -1146,8 +1146,8 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt_in_T, 
       elseif (theta > TwoPi) then
         theta = theta - TwoPi
       endif
-      cos_thetaDT = cos(theta)*dt_in_T
-      sin_thetaDT = sin(theta)*dt_in_T
+      cos_thetaDT = cos(theta)*dt
+      sin_thetaDT = sin(theta)*dt
 
       ! corner point coordinates of advected fluid parcel ----------
       xg = x(I,J); yg = y(I,J)
@@ -1345,7 +1345,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt_in_T, 
 end subroutine propagate_corner_spread
 
 !> Propagates the internal wave energy in the logical x-direction.
-subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt_in_T, G, US, Nangle, CS, LB)
+subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
   integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1358,7 +1358,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt_in_T, G, US, Nangle, CS, LB
   real, dimension(Nangle), intent(in)    :: Cgx_av !< The average x-projection in each angular band.
   real, dimension(Nangle), intent(in)    :: dCgx !< The difference in x-projections between the
                                                !! edges of each angular band.
-  real,                    intent(in)    :: dt_in_T !< Time increment [T ~> s].
+  real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
                                                !! to continuity_PPM_init.
@@ -1392,13 +1392,13 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt_in_T, G, US, Nangle, CS, LB
         cg_p(I) = speed_x(I,j) * (Cgx_av(a))
       enddo
       call zonal_flux_En(cg_p, En(:,j,a), EnL(:,j), EnR(:,j), flux1, &
-                         dt_in_T, G, US, j, ish, ieh, CS%vol_CFL)
+                         dt, G, US, j, ish, ieh, CS%vol_CFL)
       do I=ish-1,ieh ; flux_x(I,j) = flux1(I); enddo
     enddo
 
     do j=jsh,jeh ; do i=ish,ieh
-      Fdt_m(i,j,a) = dt_in_T*flux_x(I-1,j) ! left face influx  (J)
-      Fdt_p(i,j,a) = -dt_in_T*flux_x(I,j)  ! right face influx (J)
+      Fdt_m(i,j,a) = dt*flux_x(I-1,j) ! left face influx  (J)
+      Fdt_p(i,j,a) = -dt*flux_x(I,j)  ! right face influx (J)
     enddo ; enddo
 
   enddo ! a-loop
@@ -1420,7 +1420,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt_in_T, G, US, Nangle, CS, LB
 end subroutine propagate_x
 
 !> Propagates the internal wave energy in the logical y-direction.
-subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt_in_T, G, US, Nangle, CS, LB)
+subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
   integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1433,7 +1433,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt_in_T, G, US, Nangle, CS, LB
   real, dimension(Nangle), intent(in)    :: Cgy_av !< The average y-projection in each angular band.
   real, dimension(Nangle), intent(in)    :: dCgy !< The difference in y-projections between the
                                                !! edges of each angular band.
-  real,                    intent(in)    :: dt_in_T !< Time increment [T ~> s].
+  real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
                                                !! to continuity_PPM_init.
@@ -1468,13 +1468,13 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt_in_T, G, US, Nangle, CS, LB
         cg_p(i) = speed_y(i,J) * (Cgy_av(a))
       enddo
       call merid_flux_En(cg_p, En(:,:,a), EnL(:,:), EnR(:,:), flux1, &
-                         dt_in_T, G, US, J, ish, ieh, CS%vol_CFL)
+                         dt, G, US, J, ish, ieh, CS%vol_CFL)
       do i=ish,ieh ; flux_y(i,J) = flux1(i); enddo
     enddo
 
     do j=jsh,jeh ; do i=ish,ieh
-      Fdt_m(i,j,a) = dt_in_T*flux_y(i,J-1) ! south face influx (J)
-      Fdt_p(i,j,a) = -dt_in_T*flux_y(i,J)  ! north face influx (J)
+      Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
+      Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
       !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
       !  call MOM_error(WARNING, "propagate_y: OutFlux>Available prior to reflection", .true.)
       !  write(mesg,*) "flux_y_south=",flux_y(i,J-1),"flux_y_north=",flux_y(i,J),"En=",En(i,j,a), &

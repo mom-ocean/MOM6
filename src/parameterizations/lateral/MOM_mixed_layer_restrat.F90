@@ -88,7 +88,7 @@ contains
 !> Driver for the mixed-layer restratification parameterization.
 !! The code branches between two different implementations depending
 !! on whether the bulk-mixed layer or a general coordinate are in use.
-subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt_in_T, MLD, VarMix, G, GV, US, CS)
+subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, US, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
@@ -99,7 +99,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt_in_T, MLD, VarMix, G
                                                                      !! [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
+  real,                                      intent(in)    :: dt     !< Time increment [T ~> s]
   real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by the
                                                                      !! PBL scheme [H ~> m or kg m-2]
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
@@ -109,15 +109,15 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt_in_T, MLD, VarMix, G
          "Module must be initialized before it is used.")
 
   if (GV%nkml>0) then
-    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US, CS)
+    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   else
-    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD, VarMix, G, GV, US, CS)
+    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, US, CS)
   endif
 
 end subroutine mixedlayer_restrat
 
 !> Calculates a restratifying flow in the mixed layer.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in, VarMix, G, GV, US, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix, G, GV, US, CS)
   ! Arguments
   type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
@@ -129,7 +129,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
                                                                      !!   [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
+  real,                                      intent(in)    :: dt     !< Time increment [T ~> s]
   real, dimension(:,:),                      pointer       :: MLD_in !< Mixed layer depth provided by the
                                                                      !! PBL scheme [m] (not H)
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
@@ -250,8 +250,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1,scale=GV%H_to_m)
       call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
     endif
-    aFac = CS%MLE_MLD_decay_time / ( dt_in_T + CS%MLE_MLD_decay_time )
-    bFac = dt_in_T / ( dt_in_T + CS%MLE_MLD_decay_time )
+    aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
       ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
@@ -267,8 +267,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       call hchksum(CS%MLD_filtered_slow,'mixed_layer_restrat: MLD_filtered_slow',G%HI,haloshift=1,scale=GV%H_to_m)
       call hchksum(MLD_fast,'mixed_layer_restrat: MLD fast',G%HI,haloshift=1,scale=GV%H_to_m)
     endif
-    aFac = CS%MLE_MLD_decay_time2 / ( dt_in_T + CS%MLE_MLD_decay_time2 )
-    bFac = dt_in_T / ( dt_in_T + CS%MLE_MLD_decay_time2 )
+    aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
     do j = js-1, je+1 ; do i = is-1, ie+1
       ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
@@ -284,7 +284,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   uDml_slow(:) = 0.0 ; vDml_slow(:) = 0.0
-  I4dt = 0.25 / (dt_in_T)
+  I4dt = 0.25 / dt
   g_Rho0 = GV%g_Earth / GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
@@ -298,7 +298,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt_in_T,vhml,vhtr,   &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_LFront,    &
 !$OMP                               res_upscale,                                       &
@@ -426,7 +426,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       enddo
       do k=1,nz
         uhml(I,j,k) = a(k)*uDml(I) + b(k)*uDml_slow(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt_in_T
+        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
       enddo
     endif
 
@@ -502,7 +502,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       enddo
       do k=1,nz
         vhml(i,J,k) = a(k)*vDml(i) + b(k)*vDml_slow(i)
-        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt_in_T
+        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
 
@@ -512,7 +512,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
 
 !$OMP do
   do j=js,je ; do k=1,nz ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt_in_T*G%IareaT(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel
@@ -559,7 +559,7 @@ end subroutine mixedlayer_restrat_general
 
 
 !> Calculates a restratifying flow assuming a 2-layer bulk mixed layer.
-subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US, CS)
+subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
@@ -570,7 +570,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
                                                                      !!   [H L2 ~> m3 or kg]
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
+  real,                                      intent(in)    :: dt     !< Time increment [T ~> s]
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
   ! Local variables
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -618,7 +618,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
   if ((nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
-  I4dt       = 0.25 / (dt_in_T)
+  I4dt       = 0.25 / dt
   g_Rho0     = GV%g_Earth / GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
@@ -631,7 +631,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,   &
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt_in_T,vhml,vhtr,   &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
 !$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
@@ -699,7 +699,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
       enddo
       do k=1,nkml
         uhml(I,j,k) = a(k)*uDml(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt_in_T
+        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
       enddo
     endif
 
@@ -745,7 +745,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
       enddo
       do k=1,nkml
         vhml(i,J,k) = a(k)*vDml(i)
-        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt_in_T
+        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
 
@@ -755,7 +755,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
 
 !$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt_in_T*G%IareaT(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel

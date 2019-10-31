@@ -382,7 +382,7 @@ end subroutine adjust_salt
 !> Insert salt from brine rejection into the first layer below the mixed layer
 !! which both contains mass and in which the change in layer density remains
 !! stable after the addition of salt via brine rejection.
-subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_lay)
+subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt, id_brine_lay)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -394,7 +394,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
   integer,                 intent(in)    :: nkmb !< The number of layers in the mixed and buffer layers
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init
-  real,                    intent(in)    :: dt_in_T !< The thermodynamic time step [T ~> s].
+  real,                    intent(in)    :: dt   !< The thermodynamic time step [T ~> s].
   integer,                 intent(in)    :: id_brine_lay !< The handle for a diagnostic of
                                                  !! which layer receivees the brine.
 
@@ -432,7 +432,7 @@ subroutine insert_brine(h, tv, G, GV, US, fluxes, nkmb, CS, dt_in_T, id_brine_la
     salt(:)=0.0 ; dzbr(:)=0.0
 
     do i=is,ie ; if (G%mask2dT(i,j) > 0.) then
-      salt(i) = dt_in_T * (1000. * fluxes%salt_flux(i,j))
+      salt(i) = dt * (1000. * fluxes%salt_flux(i,j))
     endif ; enddo
 
     do k=1,nz
@@ -846,7 +846,7 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
                                     SkinBuoyFlux )
@@ -854,7 +854,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  real,                    intent(in)    :: dt_in_T !< Time-step over which forcing is applied [T ~> s]
+  real,                    intent(in)    :: dt !< Time-step over which forcing is applied [T ~> s]
   type(forcing),           intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),       pointer       :: optics !< Optical properties container
   integer,                 intent(in)    :: nsw !< The number of frequency bands of penetrating
@@ -945,7 +945,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   if (.not.associated(fluxes%sw)) return
 
 #define _OLD_ALG_
-  Idt = 1.0 / dt_in_T
+  Idt = 1.0 / dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
@@ -974,7 +974,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,US,optics,fluxes,    &
   !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
-  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt_in_T,     &
+  !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt,     &
   !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho,     &
   !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
@@ -1058,14 +1058,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
     !   but do change answers.
     !-----------------------------------------------------------------------------------------
     if (calculate_buoyancy) then
-      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T,          &
+      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,          &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW,                &
                   net_Heat_rate=netheat_rate, net_salt_rate=netsalt_rate,                 &
                   netmassinout_rate=netmassinout_rate, pen_sw_bnd_rate=pen_sw_bnd_rate)
     else
-      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt_in_T,          &
+      call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt,          &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW=nonpenSW)
@@ -1135,9 +1135,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             if (GV%Boussinesq) then
-              RivermixConst = -0.5*(CS%rivermix_depth*dt_in_T) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
+              RivermixConst = -0.5*(CS%rivermix_depth*dt) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
             else
-              RivermixConst = -0.5*(CS%rivermix_depth*dt_in_T) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
+              RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
             endif
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
                             (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
@@ -1260,7 +1260,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
           hGrounding(numberOfGroundings) = netMassIn(i)+netMassOut(i)
         endif
 !$OMP end critical
-        if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - (netMassIn(i)+netMassOut(i))/dt_in_T
+        if (CS%id_createdH>0) CS%createdH(i,j) = CS%createdH(i,j) - (netMassIn(i)+netMassOut(i))/dt
       endif
 
     enddo ! i
@@ -1282,14 +1282,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
     endif
 
     if (calculate_energetics) then
-      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
         cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
-      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt_in_T, H_limit_fluxes, &
+      call absorbRemainingSW(G, GV, US, h2d, opacityBand, nsw, optics, j, dt, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd)
     endif
 
@@ -1344,7 +1344,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt_in_T, fluxes, optics, nsw,
       ! netPen_rate is the netSW as a function of depth, but only the surface value is used here,
       ! in which case the values of dt, h, optics and H_limit_fluxes are irrelevant.  Consider
       ! writing a shorter and simpler variant to handle this very limited case.
-      ! call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt_in_T, &
+      ! call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt, &
       !                     H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
 

@@ -200,7 +200,7 @@ contains
 !! viscosity associated with processes 1,2 and 4 listed above, which is stored in
 !! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
 !! visc%Kv_shear
-subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T, &
+subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, US, CS, Kd_lay, Kd_int)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -222,7 +222,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
                                                    !!  properties of the ocean.
   type(vertvisc_type),       intent(inout) :: visc !< Structure containing vertical viscosities, bottom
                                                    !! boundary layer properies, and related fields.
-  real,                      intent(in)    :: dt_in_T   !< Time increment [T ~> s].
+  real,                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_diffusivity_CS),  pointer       :: CS   !< Module control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(out)   :: Kd_lay !< Diapycnal diffusivity of each layer [Z2 T-1 ~> m2 s-1].
@@ -280,7 +280,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
     ! These hard-coded dimensional parameters are being replaced.
     kappa_dt_fill = US%m_to_Z**2 * 1.e-3 * 7200.
   else
-    kappa_dt_fill = CS%Kd_smooth * dt_in_T
+    kappa_dt_fill = CS%Kd_smooth * dt
   endif
   Omega2     = CS%omega * CS%omega
 
@@ -353,7 +353,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
                            (GV%Z_to_H**2)*kappa_dt_fill, halo=1)
 
       call calc_kappa_shear_vertex(u, v, h, T_adj, S_adj, tv, fluxes%p_surf, visc%Kd_shear, &
-                                   visc%TKE_turb, visc%Kv_shear_Bu, dt_in_T, G, GV, US, CS%kappaShear_CSp)
+                                   visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, US, CS%kappaShear_CSp)
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
         call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear", G%HI, scale=US%Z2_T_to_m2_s)
@@ -363,7 +363,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
     else
       ! Changes: visc%Kd_shear ;  Sets: visc%Kv_shear and visc%TKE_turb
       call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
-                                 visc%Kv_shear, dt_in_T, G, GV, US, CS%kappaShear_CSp)
+                                 visc%Kv_shear, dt, G, GV, US, CS%kappaShear_CSp)
       if (CS%debug) then
         call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI, scale=US%Z2_T_to_m2_s)
         call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, scale=US%Z2_T_to_m2_s)
@@ -465,7 +465,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt_in_T,
       endif
     endif
 
-    call find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt_in_T, G, GV, US, CS, TKE_to_Kd, &
+    call find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, TKE_to_Kd, &
                         maxTKE, kb)
     if (associated(dd%maxTKE)) then ; do k=1,nz ; do i=is,ie
       dd%maxTKE(i,j,k) = maxTKE(i,k)
