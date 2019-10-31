@@ -88,7 +88,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
                                        ! can be simply discarded [H L2 ~> m3 or kg].
 
   real :: landvolfill                   ! An arbitrary? nonzero cell volume [H L2 ~> m3 or kg].
-  real :: Idt                           ! 1/dt [s-1].
+  real :: Idt                           ! 1/dt [T-1 ~> s-1].
   logical :: domore_u(SZJ_(G),SZK_(G))  ! domore__ indicate whether there is more
   logical :: domore_v(SZJB_(G),SZK_(G)) ! advection to be done in the corresponding
                                         ! row or column.
@@ -122,7 +122,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
   ntr = Reg%ntr
   do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
-  Idt = 1.0/dt
+  Idt = 1.0 / (US%s_to_T*dt)
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
@@ -339,7 +339,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u !< If true, there is more advection to be
                                                                   !! done in this u-row
-  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
+  real,                                      intent(in)    :: Idt !< The inverse of dt [T-1 ~> s-1]
   integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
@@ -380,7 +380,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,u_L_in,u_L_out  ! terms used for time-stepping OBC reservoirs
   type(OBC_segment_type), pointer :: segment=>NULL()
-  real    :: dt ! the inverse of Idt, needed for time-stepping of tracer reservoirs
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
@@ -390,7 +389,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
   min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
-  dt=1.0/Idt
 
 ! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
   do I=is-1,ie ; CFL(I) = 0.0 ; enddo
@@ -696,7 +694,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   type(ocean_OBC_type),                      pointer       :: OBC !< specifies whether, where, and what OBCs are used
   logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v !< If true, there is more advection to be
                                                                   !! done in this v-row
-  real,                                      intent(in)    :: Idt !< The inverse of dt [s-1]
+  real,                                      intent(in)    :: Idt !< The inverse of dt [T-1 ~> s-1]
   integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
@@ -736,7 +734,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,v_L_in,v_L_out  ! terms used for time-stepping OBC reservoirs
-  real  :: dt ! The inverse of Idt, needed for segment reservoir time-stepping
   type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
 
@@ -747,7 +744,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   min_h = 0.1*GV%Angstrom_H
   h_neglect = GV%H_subroundoff
-  dt=1.0/Idt
   !do i=is,ie ; ts2(i) = 0.0 ; enddo
 
   ! We conditionally perform work on tracer points: calculating the PLM slope,
