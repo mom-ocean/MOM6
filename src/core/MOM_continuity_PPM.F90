@@ -867,7 +867,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        !! value of du [L T-1 ~> m s-1].
   real, dimension(SZIB_(G)),                 intent(in)    :: du_min_CFL  !< Minimum acceptable
                        !! value of du [L T-1 ~> m s-1].
-  real,                                      intent(in)    :: dt   !< Time increment [s].
+  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   real, dimension(SZIB_(G),SZK_(G)),         intent(in)    :: visc_rem !< Both the fraction of the

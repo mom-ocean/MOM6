@@ -185,7 +185,7 @@ contains
 ! =============================================================================
 
 !> Step the MOM6 dynamics using an unsplit quasi-2nd order Runge-Kutta scheme
-subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt_in_s, forces, &
+subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
                   VarMix, MEKE)
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
@@ -205,7 +205,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt_i
                                                               !! viscosities, and related fields.
   type(time_type),                   intent(in)    :: Time_local   !< The model time at the end of
                                                               !! the time step.
-  real,                              intent(in)    :: dt_in_s      !< The baroclinic dynamics time step [s].
+  real,                              intent(in)    :: dt      !< The baroclinic dynamics time step [T ~> s].
   type(mech_forcing),                intent(in)    :: forces  !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< A pointer (perhaps NULL) to
                                                               !! the surface pressure at the beginning
@@ -238,14 +238,12 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt_i
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
-  real :: dt        ! The dynamics time step [T ~> s]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic
                     ! time stepping [T ~> s].
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  dt = US%s_to_T*dt_in_s
   dt_pred = dt * CS%BE
 
   h_av(:,:,:) = 0; hp(:,:,:) = 0

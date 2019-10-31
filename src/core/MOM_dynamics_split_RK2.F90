@@ -233,7 +233,7 @@ contains
 
 !> RK2 splitting for time stepping MOM adiabatic dynamics
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
-                 Time_local, dt_in_s, forces, p_surf_begin, p_surf_end, &
+                 Time_local, dt, forces, p_surf_begin, p_surf_end, &
                  uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, US, CS, calc_dtbt, VarMix, MEKE, thickness_diffuse_CSp, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
@@ -248,7 +248,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
   type(vertvisc_type),               intent(inout) :: visc         !< vertical visc, bottom drag, and related
   type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
-  real,                              intent(in)    :: dt_in_s           !< time step [s]
+  real,                              intent(in)    :: dt           !< time step [T ~> s]
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at start of this dynamic
                                                                    !! time step [Pa]
@@ -317,7 +317,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     u_av, & ! The zonal velocity time-averaged over a time step [L T-1 ~> m s-1].
     v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
-  real :: dt        ! The dynamics time step [T ~> s]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
 
   logical :: dyn_p_surf
@@ -332,8 +331,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
-
-  dt = US%s_to_T*dt_in_s
 
   sym=.false.;if (G%Domain%symmetric) sym=.true.  ! switch to include symmetric domain in checksums
 
@@ -954,7 +951,7 @@ end subroutine register_restarts_dyn_split_RK2
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
-                      diag, CS, restart_CS, dt_in_s, Accel_diag, Cont_diag, MIS, &
+                      diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                       visc, dirs, ntrunc, calc_dtbt)
@@ -976,7 +973,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
   type(MOM_restart_CS),             pointer       :: restart_CS !< restart control structure
-  real,                             intent(in)    :: dt_in_s    !< time step [s]
+  real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis
   type(cont_diag_ptrs),     target, intent(inout) :: Cont_diag  !< points to terms in continuity equation
@@ -1178,7 +1175,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied ; h_tmp(i,j,k) = h(i,j,k) ; enddo ; enddo ; enddo
-    call continuity(u, v, h, h_tmp, uh, vh, US%s_to_T*dt_in_s, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       CS%h_av(i,j,k) = 0.5*(h(i,j,k) + h_tmp(i,j,k))

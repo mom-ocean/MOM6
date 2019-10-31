@@ -182,7 +182,7 @@ contains
 
 !> Step the MOM6 dynamics using an unsplit mixed 2nd order (for continuity) and
 !! 3rd order (for the inviscid momentum equations) order scheme
-subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt_in_s, forces, &
+subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
                   VarMix, MEKE, Waves)
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
@@ -197,7 +197,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt_in_s, forces, 
                                  !! viscosities, bottom drag viscosities, and related fields.
   type(time_type),         intent(in)    :: Time_local   !< The model time at the end
                                                          !! of the time step.
-  real,                    intent(in)    :: dt_in_s     !< The dynamics time step [s].
+  real,                    intent(in)    :: dt     !< The dynamics time step [T ~> s].
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   real, dimension(:,:),    pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                    !! pressure at the start of this dynamic step [Pa].
@@ -227,13 +227,11 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt_in_s, forces, 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up, upp ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp, vpp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(:,:), pointer :: p_surf => NULL()
-  real :: dt        ! The dynamics time step [T ~> s]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  dt = US%s_to_T*dt_in_s
   dt_pred = dt / 3.0
 
   h_av(:,:,:) = 0; hp(:,:,:) = 0

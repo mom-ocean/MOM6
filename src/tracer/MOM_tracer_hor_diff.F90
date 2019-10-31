@@ -96,11 +96,11 @@ contains
 !! using the diffusivity in CS%KhTr, or using space-dependent diffusivity.
 !! Multiple iterations are used (if necessary) so that there is no limit
 !! on the acceptable time increment.
-subroutine tracer_hordiff(h, dt_in_s, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
+subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
-  real,                       intent(in)    :: dt_in_s      !< time step [s]
+  real,                       intent(in)    :: dt      !< time step [T ~> s]
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
   type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
@@ -156,7 +156,6 @@ subroutine tracer_hordiff(h, dt_in_s, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_o
   real :: h_neglect  ! A thickness that is so small it is usually lost
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: Kh_loc     ! The local value of Kh [L2 T-1 ~> m2 s-1].
-  real :: dt         ! The timestep [T ~> s]
   real :: Res_Fn     ! The local value of the resolution function [nondim].
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing [nondim].
   real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points.
@@ -177,7 +176,6 @@ subroutine tracer_hordiff(h, dt_in_s, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_o
   call cpu_clock_begin(id_clock_diffuse)
 
   ntr = Reg%ntr
-  dt = US%s_to_T*dt_in_s
   Idt = 1.0 / dt
   h_neglect = GV%H_subroundoff
 

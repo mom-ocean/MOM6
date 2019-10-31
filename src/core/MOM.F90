@@ -867,7 +867,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 end subroutine step_MOM
 
 !> Time step the ocean dynamics, including the momentum and continuity equations
-subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
+subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt_in_s, dt_thermo, &
                              bbl_time_int, CS, Time_local, Waves)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
@@ -876,7 +876,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   real, dimension(:,:), pointer     :: p_surf_end !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the end of this dynamic step,
                                                   !! intent in [Pa].
-  real,               intent(in)    :: dt         !< time interval covered by this call [s].
+  real,               intent(in)    :: dt_in_s         !< time interval covered by this call [s].
   real,               intent(in)    :: dt_thermo  !< time interval covered by any updates that may
                                                   !! span multiple dynamics steps [s].
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
@@ -917,11 +917,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   showCallTree = callTree_showQuery()
 
   call cpu_clock_begin(id_clock_dynamics)
-  dt_in_T = US%s_to_T*dt
+  dt_in_T = US%s_to_T*dt_in_s
 
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
-    call enable_averaging(dt_thermo, Time_local+real_to_time(dt_thermo-dt), CS%diag)
+    call enable_averaging(dt_thermo, Time_local+real_to_time(dt_thermo-dt_in_s), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
     if (associated(CS%VarMix)) &
       call calc_slope_functions(h, CS%tv, dt_in_T, G, GV, US, CS%VarMix)
@@ -940,7 +940,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
     call enable_averaging(bbl_time_int, &
-              Time_local + real_to_time(bbl_time_int-dt), CS%diag)
+              Time_local + real_to_time(bbl_time_int-dt_in_s), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
     call set_viscous_BBL(CS%u(:,:,:), CS%v(:,:,:), CS%h, CS%tv, CS%visc, G, GV, US, &
@@ -964,7 +964,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
       endif
     endif
 
-    call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
+    call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt_in_T, forces, &
                 p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                 CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
                 CS%MEKE, CS%thickness_diffuse_CSp, waves=waves)
@@ -979,11 +979,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     ! useful for debugging purposes.
 
     if (CS%use_RK2) then
-      call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
+      call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt_in_T, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
     else
-      call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
+      call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt_in_T, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, Waves=Waves)
     endif
@@ -1035,15 +1035,15 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   call disable_averaging(CS%diag)
 
   ! Advance the dynamics time by dt.
-  CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt
-  CS%t_dyn_rel_thermo = CS%t_dyn_rel_thermo + dt
-  if (abs(CS%t_dyn_rel_thermo) < 1e-6*dt) CS%t_dyn_rel_thermo = 0.0
-  CS%t_dyn_rel_diag = CS%t_dyn_rel_diag + dt
+  CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt_in_s
+  CS%t_dyn_rel_thermo = CS%t_dyn_rel_thermo + dt_in_s
+  if (abs(CS%t_dyn_rel_thermo) < 1e-6*dt_in_s) CS%t_dyn_rel_thermo = 0.0
+  CS%t_dyn_rel_diag = CS%t_dyn_rel_diag + dt_in_s
 
   call cpu_clock_end(id_clock_dynamics)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-  call enable_averaging(dt, Time_local, CS%diag)
+  call enable_averaging(dt_in_s, Time_local, CS%diag)
   ! These diagnostics are available after every time dynamics step.
   if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
   if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
@@ -1087,9 +1087,9 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
   call enable_averaging(CS%t_dyn_rel_adv, Time_local, CS%diag)
 
-  call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
+  call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, US%s_to_T*CS%t_dyn_rel_adv, G, GV, US, &
                      CS%tracer_adv_CSp, CS%tracer_Reg)
-  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, US, &
+  call tracer_hordiff(h, US%s_to_T*CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, US, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
   call update_segment_tracer_reservoirs(G, GV, CS%uhtr, CS%vhtr, h, CS%OBC, &
@@ -1194,7 +1194,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_diabatic)
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
+                  US%s_to_T*dtdia, Time_end_thermo, G, GV, US, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -1407,7 +1407,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, US%s_to_T*REAL(dt_offline), G, GV, US, CS%VarMix)
           endif
-          call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
+          call tracer_hordiff(CS%h, US%s_to_T*REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1432,7 +1432,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, US%s_to_T*REAL(dt_offline), G, GV, US, CS%VarMix)
           endif
-          call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
+          call tracer_hordiff(CS%h, US%s_to_T*REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1467,7 +1467,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. skip_diffusion) then
-      call tracer_hordiff(h_end, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
+      call tracer_hordiff(h_end, US%s_to_T*REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, US, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
     endif
 
@@ -2301,7 +2301,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
               G, GV, US, param_file, diag, CS%dyn_split_RK2_CSp, restart_CSp, &
-              CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
+              US%s_to_T*CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
               CS%thickness_diffuse_CSp,                                      &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
               CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt)
@@ -2362,7 +2362,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                               CS%sponge_CSp, CS%ALE_sponge_CSp)
   endif
 
-  call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
+  call tracer_advect_init(Time, G, US, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, US, param_file, diag, CS%tv%eqn_of_state, &
                             CS%tracer_diff_CSp)
 

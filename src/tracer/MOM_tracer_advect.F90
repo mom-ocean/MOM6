@@ -58,7 +58,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                            intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face [H L2 ~> m3 or kg]
   type(ocean_OBC_type),    pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                    intent(in)    :: dt    !< time increment [s]
+  real,                    intent(in)    :: dt    !< time increment [T ~> s]
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
   type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
@@ -122,7 +122,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
   ntr = Reg%ntr
   do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
-  Idt = 1.0 / (US%s_to_T*dt)
+  Idt = 1.0 / dt
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
@@ -1047,9 +1047,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 end subroutine advect_y
 
 !> Initialize lateral tracer advection module
-subroutine tracer_advect_init(Time, G, param_file, diag, CS)
+subroutine tracer_advect_init(Time, G, US, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time        !< current model time
   type(ocean_grid_type),   intent(in)    :: G           !< ocean grid structure
+  type(unit_scale_type),   intent(in)    :: US          !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file  !< open file to parse for model parameters
   type(diag_ctrl), target, intent(inout) :: diag        !< regulates diagnostic output
   type(tracer_advect_CS),  pointer       :: CS          !< module control structure
@@ -1072,7 +1073,7 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DT", CS%dt, fail_if_missing=.true., &
-          desc="The (baroclinic) dynamics time step.", units="s")
+          desc="The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "TRACER_ADVECTION_SCHEME", mesg, &
           desc="The horizontal transport scheme for tracers:\n"//&

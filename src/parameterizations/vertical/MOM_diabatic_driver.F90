@@ -254,7 +254,7 @@ contains
 
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
-subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt_in_s, Time_end, &
+subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                     G, GV, US, CS, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
@@ -272,7 +272,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt_in_s, Time_end,
                                                                         !! equations, to enable the later derived
                                                                         !! diagnostics, like energy budgets
   type(cont_diag_ptrs),                      intent(inout) :: CDp       !< points to terms in continuity equations
-  real,                                      intent(in)    :: dt_in_s   !< time increment [s]
+  real,                                      intent(in)    :: dt        !< time increment [T ~> s]
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
@@ -283,14 +283,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt_in_s, Time_end,
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn_IGW   ! baroclinic internal gravity wave speeds
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
-  real :: dt ! The time step converted to T units [T ~> s]
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
 
   if (G%ke == 1) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  dt = dt_in_s * US%s_to_T
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
          "Module must be initialized before it is used.")
