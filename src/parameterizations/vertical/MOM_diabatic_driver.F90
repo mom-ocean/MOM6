@@ -981,8 +981,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
         ea_t(i,j,k) = ea_s(i,j,k) ; eb_t(i,j,k) = eb_s(i,j,k)
       enddo ; enddo ; enddo
       if (CS%tracer_tridiag) then
-        call tracer_vertdiff(hold, ea_t, eb_t, US%T_to_s*dt, tv%T, G, GV)
-        call tracer_vertdiff(hold, ea_s, eb_s, US%T_to_s*dt, tv%S, G, GV)
+        call tracer_vertdiff(hold, ea_t, eb_t, dt, tv%T, G, GV)
+        call tracer_vertdiff(hold, ea_s, eb_s, dt, tv%S, G, GV)
       else
         call triDiagTS(G, GV, is, ie, js, je, hold, ea_s, eb_s, tv%T, tv%S)
       endif
@@ -1017,8 +1017,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
          "and Kd_salt (diabatic)")
 
     ! Changes T and S via the tridiagonal solver; no change to h
-      call tracer_vertdiff(h, ea_t, eb_t, US%T_to_s*dt, tv%T, G, GV)
-      call tracer_vertdiff(h, ea_s, eb_s, US%T_to_s*dt, tv%S, G, GV)
+      call tracer_vertdiff(h, ea_t, eb_t, dt, tv%T, G, GV)
+      call tracer_vertdiff(h, ea_s, eb_s, dt, tv%S, G, GV)
 
       ! In ALE-mode, layer thicknesses do not change. Therefore, we can use h below
       if (CS%diabatic_diff_tendency_diag) &
@@ -1699,8 +1699,8 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     enddo
 
   ! Changes T and S via the tridiagonal solver; no change to h
-    call tracer_vertdiff(h, ea_t, eb_t, US%T_to_s*dt, tv%T, G, GV)
-    call tracer_vertdiff(h, ea_s, eb_s, US%T_to_s*dt, tv%S, G, GV)
+    call tracer_vertdiff(h, ea_t, eb_t, dt, tv%T, G, GV)
+    call tracer_vertdiff(h, ea_s, eb_s, dt, tv%S, G, GV)
 
 
     ! In ALE-mode, layer thicknesses do not change. Therefore, we can use h below
@@ -2429,8 +2429,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
         ! between the buffer layers and the interior.
         ! Changes: T, S
         if (CS%tracer_tridiag) then
-          call tracer_vertdiff(hold, ea, eb, US%T_to_s*dt, tv%T, G, GV)
-          call tracer_vertdiff(hold, ea, eb, US%T_to_s*dt, tv%S, G, GV)
+          call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
+          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
         else
           call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
         endif
@@ -2521,8 +2521,8 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
       ! Changes T and S via the tridiagonal solver; no change to h
       if (CS%tracer_tridiag) then
-        call tracer_vertdiff(hold, ea, eb, US%T_to_s*dt, tv%T, G, GV)
-        call tracer_vertdiff(hold, ea, eb, US%T_to_s*dt, tv%S, G, GV)
+        call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
+        call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
       else
         call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
       endif
