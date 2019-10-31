@@ -2348,7 +2348,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
   if (associated(CS%sponge_CSp)) &
-    call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
+    call init_sponge_diags(Time, G, GV, US, diag, CS%sponge_CSp)
 
   if (associated(CS%ALE_sponge_CSp)) &
     call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp)

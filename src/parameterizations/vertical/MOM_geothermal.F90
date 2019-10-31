@@ -26,7 +26,7 @@ type, public :: geothermal_CS ; private
   real    :: dRcv_dT_inplace !<   The value of dRcv_dT above which (dRcv_dT is
                              !! negative) the water is heated in place instead
                              !! of moving upward between layers [R degC-1 ~> kg m-3 degC-1].
-  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [W m-2].
+  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [J m-2 T-1 ~> W m-2].
   real    :: geothermal_thick !< The thickness over which geothermal heating is
                              !! applied [m] (not [H]).
   logical :: apply_geothermal !< If true, geothermal heating will be applied
@@ -58,7 +58,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, US, CS, halo)
                                                                 !! to any available thermodynamic
                                                                 !! fields. Absent fields have NULL
                                                                 !! ptrs.
-  real,                                     intent(in)    :: dt !< Time increment [s].
+  real,                                     intent(in)    :: dt !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The amount of fluid moved
                                                                 !! downward into a layer; this
                                                                 !! should be increased due to mixed
@@ -391,7 +391,8 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   character(len=48)  :: thickness_units
   ! Local variables
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
-  real :: scale
+  real :: scale  ! A constant heat flux or dimensionally rescaled scaling factor
+                 ! [J m-2 T-1 ~> W m-2] or [s T-1 ~> 1]
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -410,7 +411,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
                  "The constant geothermal heat flux, a rescaling "//&
                  "factor for the heat flux read from GEOTHERMAL_FILE, or "//&
                  "0 to disable the geothermal heating.", &
-                 units="W m-2 or various", default=0.0)
+                 units="W m-2 or various", default=0.0, scale=US%T_to_s)
   CS%apply_geothermal = .not.(scale == 0.0)
   if (.not.CS%apply_geothermal) return
 
@@ -453,7 +454,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
 
   ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
-        'Geothermal heat flux into ocean', 'W m-2',                    &
+        'Geothermal heat flux into ocean', 'W m-2', conversion=US%s_to_T, &
         cmor_field_name='hfgeou', cmor_units='W m-2',                  &
         cmor_standard_name='upward_geothermal_heat_flux_at_sea_floor', &
         cmor_long_name='Upward geothermal heat flux at sea floor', &
@@ -464,15 +465,15 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_internal_heat_heat_tendency=register_diag_field('ocean_model', &
         'internal_heat_heat_tendency', diag%axesTL, Time,              &
         'Heat tendency (in 3D) due to internal (geothermal) sources',  &
-        'W m-2', v_extensive=.true.)
+        'W m-2', conversion=US%s_to_T, v_extensive=.true.)
   CS%id_internal_heat_temp_tendency=register_diag_field('ocean_model', &
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
-        'degC s-1', v_extensive=.true.)
+        'degC s-1', conversion=US%s_to_T, v_extensive=.true.)
   CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
-        trim(thickness_units), conversion=GV%H_to_MKS, v_extensive=.true.)
+        trim(thickness_units), conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
 
 end subroutine geothermal_init
 

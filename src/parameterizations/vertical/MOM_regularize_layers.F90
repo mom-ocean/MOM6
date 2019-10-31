@@ -83,7 +83,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
                                                   !! have NULL ptrs.
-  real,                       intent(in)    :: dt !< Time increment [s].
+  real,                       intent(in)    :: dt !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
                                                   !! layer; this should be increased due to mixed
@@ -122,7 +122,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
                                                   !! have NULL ptrs.
-  real,                       intent(in)    :: dt !< Time increment [s].
+  real,                       intent(in)    :: dt !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
                                                   !! layer; this should be increased due to mixed
