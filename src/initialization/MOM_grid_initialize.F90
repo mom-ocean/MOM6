@@ -425,20 +425,25 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   file_open_success = MOM_open_file(fileObjRead_noDD, filename, "read", .false.)
   
   ndims = get_variable_num_dimensions(fileObjRead_noDD, "x", broadcast=.true.)
+  !ndims = get_variable_num_dimensions(fileObjRead, "x", broadcast=.true.)
   allocate(dim_sizes(ndims))
   call get_variable_size(fileObjRead_noDD, "x", dim_sizes, broadcast=.true.)
-  allocate(tmpGlbl(dim_sizes(1),2))
+  !call get_variable_size(fileObjRead, "x", dim_sizes, broadcast=.true.)
+  !allocate(tmpGlbl(dim_sizes(1),2))
+  allocate(tmpGlbl(dim_sizes(1),dim_sizes(2)))
   nread(1) = dim_sizes(1)
+  nread(2) = dim_sizes(2)
 
 !  allocate( tmpGlbl(ni+1,2) )
 !  if (is_root_PE()) &
 !    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
 !    call broadcast(tmpGlbl, 2*(ni+1), root_PE())
-  call read_data(fileObjRead_noDD, "x", tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
-
+  !call read_data(fileObjRead_noDD, "x", tmpGlbl,corner=start(1:2), edge_lengths=nread(1:2))
+  call read_data(fileObjRead_noDD, "x", tmpGlbl)
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
+    !if (is_root_pe()) WRITE(*,'(A,I3,A, I3, A,F6.3)') "J, tmpindex, G%gridLonT(J) ",i ," ",2*(i-G%isg)+2, " ", G%gridLonT(i)
   enddo
   ! Note that the dynamic grid always uses symmetric memory for the global
   ! arrays G%gridLatB and G%gridLonB.
@@ -446,6 +451,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! assume first and last indices have same data to define end points on the B grid
   do I=G%isg-1,G%ieg
     G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
+    !if (is_root_pe()) WRITE(*,'(A,I3,A, I3, A,F6.3)') "J, tmpindex, G%gridLonB(J) ",i ," ",2*(i-G%isg)+3, " ", G%gridLonB(i)
   enddo
  
   deallocate( tmpGlbl )
@@ -453,27 +459,44 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
 
   ndims = get_variable_num_dimensions(fileObjRead_noDD, "y", broadcast=.true.)
+  !ndims = get_variable_num_dimensions(fileObjRead, "y", broadcast=.true.)
   allocate(dim_sizes(ndims))
   call get_variable_size(fileObjRead_noDD, "y", dim_sizes, broadcast=.true.)
-  allocate(tmpGlbl(1,dim_sizes(2)))
+  !call get_variable_size(fileObjRead, "y", dim_sizes, broadcast=.true.)
+  !allocate(tmpGlbl(1,dim_sizes(2)))
+  allocate(tmpGlbl(dim_sizes(1),dim_sizes(2)))
+  nread(1) = dim_sizes(1)
   nread(2) = dim_sizes(2)
-
+  if (is_root_pe()) then
+      WRITE(*,'(A,I3)') "dimsizes(1) for lats is ", dim_sizes(1)
+      WRITE(*,'(A,I3)') "dimsizes, nread(2) for lats is ", nread(2)
+  endif
 ! start(1) = int(ni/4)+1 ; nread(2) = nj+1
 ! allocate( tmpGlbl(1, nj+1) )
 ! if (is_root_PE()) &
 !   call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
 !   call broadcast(tmpGlbl, nj+1, root_PE())
 
-  call read_data(fileObjRead_noDD, "y", tmpGlbl, corner=start(1:2), edge_lengths=nread(1:2))
-   
-  do j=G%jsg,G%jeg
-    G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
+  !call read_data(fileObjRead_noDD, "y", tmpGlbl, corner=start(1:2), edge_lengths=nread(1:2))
+  call read_data(fileObjRead_noDD, "y", tmpGlbl)
+  do i=1,size(tmpGlbl,1)
+  !do j=G%jsg,G%jeg
+    do j=G%jeg,G%jeg
+    G%gridLatT(j) = tmpGlbl(i,2*(j-G%jsg)+2)
+    if (is_root_pe()) then
+       WRITE(*, '(A,I3)') "Lon index is ", i
+       WRITE(*,'(A,I3,A,I3,A, F6.3)') "j, tmpindex, G%gridLatT(j) ",j ," ",2*(j-G%jsg)+2," ",G%gridLatT(j)
+    endif
+        
+  enddo
   enddo
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
+   ! if (is_root_pe()) WRITE(*,'(A,I3,A, I3, A,F6.3)') "J, tmpindex, G%gridLatB(J) ",j ," ",2*(j-G%jsg)+3, " ", G%gridLatB(J)
   enddo
  
   call close_file(fileObjRead_noDD)
+  !call close_file(fileObjRead)
   deallocate( tmpGlbl )
   deallocate(dim_sizes)
 
