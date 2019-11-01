@@ -3,52 +3,44 @@ module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_domains, only : pe_here, num_PEs, MOM_domain_type
-use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase, append_substring
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : fieldtype
-use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
-use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : get_var_dimension_features
-use MOM_io, only : get_horizontal_grid_position
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
 use MOM_io, only : axis_data_type
 use MOM_io, only : MOM_get_axis_data
-use MOM_io, only : MOM_open_file
-use MOM_io, only : MOM_register_axis
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum, mpp_pe, mpp_max
-use fms2_io_mod,     only: fms2_register_restart_field => register_restart_field, &
-                           fms2_register_field => register_field, &
-                           fms2_register_axis => register_axis, &
-                           register_variable_attribute, &
-                           fms2_read_data => read_data, &
-                           fms2_read_restart => read_restart, &
-                           fms2_write_restart => write_restart,&
-                           fms2_write_data => write_data, &
-                           fms2_close_file => close_file, &
-                           fms2_global_att_exists => global_att_exists, &
-                           fms2_attribute_exists => variable_att_exists, &
-                           fms2_get_global_attribute => get_global_attribute, &
-                           fms2_get_compute_domain_dimension_indices => get_compute_domain_dimension_indices, &
-                           fms2_get_global_io_domain_indices => get_global_io_domain_indices, &
-                           fms2_get_variable_attribute => get_variable_attribute, &
-                           fms2_get_variable_names => get_variable_names, &
-                           fms2_get_dimension_size => get_dimension_size, &
-                           fms2_get_num_variables => get_num_variables, &
-                           fms2_variable_exists => variable_exists, &
-                           fms2_dimension_exists => dimension_exists, &
-                           file_exists, &
-                           FmsNetcdfDomainFile_t, unlimited
+! New FMS-IO interfaces
+use MOM_io, only: fms2_register_restart_field => register_restart_field, &
+                  register_field, &
+                  register_axis, &
+                  register_variable_attribute, &
+                  read_data, &
+                  read_restart, &
+                  write_restart,&
+                  write_data, &
+                  close_file, &
+                  MOM_open_file, &
+                  MOM_register_axis, &
+                  global_att_exists, &
+                  get_global_attribute, &
+                  get_global_io_domain_indices, &
+                  get_dimension_size, &
+                  variable_exists, &
+                  dimension_exists, &
+                  file_exists, &
+                  FmsNetcdfDomainFile_t, &
+                  unlimited
 #include <fms_platform.h>
 !!                           
 implicit none ; private
@@ -880,7 +872,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: is, ie
   integer :: substring_index
   integer :: horgrid_position = 1
-  integer :: x_pos, y_pos
   integer :: num_dims, total_axes
   integer :: var_periods
   logical :: file_open_success = .false.
@@ -984,18 +975,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
 
      ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-     !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-     !! more axes. As of May 2019, only up to 7 axes are registered to the MOM restart files.
-     !! The arrays here are size 20 as a precaution. 
-     allocate(axis_data_CS%axis(20))
-     allocate(axis_data_CS%data(20))
+     !>@NOTE the user should increase the allocated array sizes to accommodate 
+     !! more axes. As of 11/2019, only 7 axes are registered to the MOM restart files.
+     allocate(axis_data_CS%axis(7))
+     allocate(axis_data_CS%data(7))
 
      total_axes=0 ! total number of axes registered and written to restart file
      do m=start_var,CS%novars
-
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                            z_grid=z_grid, t_grid=t_grid, caller="save_restart")
-
         
         var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
      
@@ -1015,7 +1003,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         endif
         
         do i=1,num_dims
-           if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
+           if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
               total_axes=total_axes+1
               call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i))
               call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
@@ -1026,22 +1014,22 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
      ! register the axis variables and their attributes, and write the axes
      do i=1,total_axes
-        if (.not.(fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+        if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
            if (associated(axis_data_CS%data(i)%p)) then
               if (axis_data_CS%axis(i)%is_domain_decomposed) then
-                 call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+                 call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
 
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p(is:ie), &
                                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-                 call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
+                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
 
               else
                  call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                   axis_data_CS%data(i)%p, &
                                                   dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-                 call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
               endif
 
               call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
@@ -1063,14 +1051,12 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
      next_var = m
      
      do m=start_var,next_var-1
-        if (.not.(fms2_variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then 
+        if (.not.(variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then 
            units=''
            longname=''
            call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                               z_grid=z_grid, t_grid=t_grid, longname=longname, &
                               units=units, caller="save_restart")
-
-           call get_horizontal_grid_position(hor_grid,x_pos,y_pos)
          
            call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
         
@@ -1125,8 +1111,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         endif
      enddo
     
-     call fms2_write_restart(fileObjWrite)
-     call fms2_close_file(fileObjWrite)
+     call write_restart(fileObjWrite)
+     call close_file(fileObjWrite)
     
      if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
      if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
@@ -1182,128 +1168,119 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   ic_time = time_type_to_real(time) / 86400.0
   time_units = get_time_units(ic_time*86400.0)
 
-  ! open the netCDF file
-  ! check if file already exists and can be appended
+  ! open the netCDF file, and check if file already exists and can be appended
   file_open_success = MOM_open_file(fileObjWrite, trim(base_file_name), "write", & 
                                    G, is_restart = .false.)
   
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes. As of May 2019, only up to 7 axes are registered to the MOM IC files.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
+  !>@NOTE the user may need to increase the allocated array sizes to accommodate 
+  !! more  axes. As of 11/2019, only 7 axes are registered to the MOM IC files.
+  allocate(axis_data_CS%axis(7))
+  allocate(axis_data_CS%data(7))
 
   ! loop through the variables in the control structure, 
   total_axes=0 
   
   do m=1,CS%novars
-     t_grid=''
-     z_grid=''
-     hor_grid=''   
-     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                        z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
+    t_grid=''
+    z_grid=''
+    hor_grid=''   
+    call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                       z_grid=z_grid, t_grid=t_grid, caller="MOM_restart:write_initial_conditions")
 
-     ! get the dimension names and lengths for variable 'm'                                
-     ! note: 4d variables are lon x lat x vertical level x time
-     num_dims=0 
-     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+    ! get the dimension names and lengths for variable 'm'                                
+    ! note: 4d variables are lon x lat x vertical level x time
+    num_dims=0 
+    call get_var_dimension_features(hor_grid, z_grid, t_grid, &
                                      dim_names, dim_lengths, num_dims,G=G,GV=GV)
-     if (num_dims <= 0) then
-         call MOM_error(FATAL,"MOM_restart:write_initial_conditions: num_dims is an invalid value.")
-     endif
+    if (num_dims <= 0) &
+      call MOM_error(FATAL,"MOM_restart:write_initial_conditions: num_dims is an invalid value.")
  
     ! register the variable dimensions to the file if the corresponding global axes are not registered
-
-     do i=1,num_dims
-        if (.not.(fms2_dimension_exists(fileObjWrite, dim_names(i)))) then
-            total_axes=total_axes+1
-            call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+    do i=1,num_dims
+      if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
+        total_axes=total_axes+1
+        call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                    time_val=(/ic_time/), time_units=time_units)
-            call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
-        endif
-     enddo
+        call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
+      endif
+    enddo
   enddo
      
-     ! register and write the coordinate variables (axes) to the file
-     do i=1,total_axes
-        if (.not.(fms2_variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
-           if (associated(axis_data_CS%data(i)%p)) then
-              call fms2_register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
-                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+  ! register and write the coordinate variables (axes) to the file
+  do i=1,total_axes
+    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+      if (associated(axis_data_CS%data(i)%p)) then
+        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+                                "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-              if (axis_data_CS%axis(i)%is_domain_decomposed) then
+        if (axis_data_CS%axis(i)%is_domain_decomposed) then
 
-                 call fms2_get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
-                 call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
+          call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+          call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
 
-              else
-                 call fms2_write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-              endif
-
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                               'long_name',axis_data_CS%axis(i)%longname)
-
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                               'units',trim(axis_data_CS%axis(i)%units))
-
-           endif
+        else
+          call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
         endif
-     enddo
+
+        call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                         "long_name",axis_data_CS%axis(i)%longname)
+
+        call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                         "units",trim(axis_data_CS%axis(i)%units))
+      endif
+    endif
+  enddo
   
   ! register and write the field variables to the initial conditions file
   do m=1,CS%novars
-     units=''
-     longname=''
-     call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                        z_grid=z_grid, t_grid=t_grid, longname=longname, &
-                        units=units, caller="save_restart")
-   
-     num_dims = 0
+    units=''
+    longname=''
+    call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                       z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                       units=units, caller="save_restart") 
+    num_dims = 0
 
-     call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+    call get_var_dimension_features(hor_grid, z_grid, t_grid, &
                                      dim_names, dim_lengths, num_dims, G=G, GV=GV)
-
-   
-     if (associated(CS%var_ptr3d(m)%p)) then
-        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+  
+    if (associated(CS%var_ptr3d(m)%p)) then
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
                               dimensions=dim_names(1:num_dims))
 
-        call fms2_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p)
  
-     elseif (associated(CS%var_ptr2d(m)%p)) then
-
-        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
-                             dimensions=dim_names(1:num_dims))
-
-        call fms2_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
- 
-     elseif (associated(CS%var_ptr4d(m)%p)) then
-        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+    elseif (associated(CS%var_ptr2d(m)%p)) then
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
                               dimensions=dim_names(1:num_dims))
-        call fms2_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
- 
-     elseif (associated(CS%var_ptr1d(m)%p)) then
-     ! need to explicitly define dim_names array for 1-D variable
-        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", & 
-                            dimensions=(/dim_names(1)/))
-        call fms2_write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
- 
-     elseif (associated(CS%var_ptr0d(m)%p)) then
-     ! need to explicitly define dim_names array for scalar variable
-        call fms2_register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
-                            dimensions=(/dim_names(1)/))
-        call fms2_write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr0d(m)%p)     
-     endif
 
-     ! register the variable attributes
-     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
-     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p)
+ 
+    elseif (associated(CS%var_ptr4d(m)%p)) then
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=dim_names(1:num_dims))
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p)
+ 
+    elseif (associated(CS%var_ptr1d(m)%p)) then
+      ! need to explicitly define dim_names array for 1-D variable
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", & 
+                              dimensions=(/dim_names(1)/))
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p)
+ 
+    elseif (associated(CS%var_ptr0d(m)%p)) then
+      ! need to explicitly define dim_names array for scalar variable
+      call register_field(fileObjWrite, CS%restart_field(m)%var_name, "double", &
+                              dimensions=(/dim_names(1)/))
+      call write_data(fileObjWrite, CS%restart_field(m)%var_name,CS%var_ptr0d(m)%p)     
+    endif
+
+    ! register the variable attributes
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "units", units)
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname) 
       
   enddo
-
   ! close the IC file and deallocate the allocatable arrays
-  call fms2_close_file(fileObjWrite)
-
+  call close_file(fileObjWrite)
  
   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
@@ -1361,11 +1338,10 @@ subroutine restore_state(filename, directory, day, G, CS)
   str_index = 0
   ! get the base restart file name
   temp_file_name=''
-  if ((LEN_TRIM(filename) == 1 .and. filename(1:1) == 'F') & 
-     .or. trim(filename)=='r') then
-     temp_file_name = trim(CS%restartfile)
+  if ((LEN_TRIM(filename) == 1 .and. filename(1:1) == 'F') .or. (trim(filename)=='r')) then
+    temp_file_name = trim(CS%restartfile)
   else
-     temp_file_name = trim(filename)
+    temp_file_name = trim(filename)
   endif
 
   ! append '.nc.' to the file name if it is missing
@@ -1381,18 +1357,18 @@ subroutine restore_state(filename, directory, day, G, CS)
   !Open the restart file.
   
   file_open_success = MOM_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
-                                     G, is_restart=.true.)
+                                  G, is_restart=.true.)
   
   if (is_root_pe() .and. file_open_success) then
      call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(directory)//trim(base_file_name))
   endif
 
-  call fms2_get_dimension_size(fileObjRead, "Time", ntime)
+  call get_dimension_size(fileObjRead, "Time", ntime)
   if (ntime .lt. 1) then
     call MOM_error(FATAL, "MOM_restart: less than one time level in restart file.")
   endif
   allocate(time_vals(ntime))
-  call fms2_read_data(fileObjRead, "Time", time_vals)
+  call read_data(fileObjRead, "Time", time_vals)
   t1 = time_vals(1)
   deallocate(time_vals)
   t2 = t1
@@ -1406,7 +1382,7 @@ subroutine restore_state(filename, directory, day, G, CS)
  ! Register the horizontal axes that correspond to x and y of the domain.
   axis_names = (/'lath', 'lonh', 'latq', 'lonq'/)
   do i = 1,size(axis_names)
-    if (fms2_dimension_exists(fileObjRead, trim(axis_names(i)))) then
+    if (dimension_exists(fileObjRead, trim(axis_names(i)))) then
       call MOM_register_axis(fileObjRead, trim(axis_names(i)))
     endif
   enddo
@@ -1431,7 +1407,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     endif
 
     !Check if the variable is mandatory and present in the restart file(s)
-    if (.not. fms2_variable_exists(fileObjRead, trim(varname))) then
+    if (.not. variable_exists(fileObjRead, trim(varname))) then
       if (CS%restart_field(m)%mand_var) then
         call MOM_error(FATAL, "MOM_restart: Unable to find mandatory variable " &
                               //trim(varname)//" in restart files.")
@@ -1462,9 +1438,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo
 
   !Read in restart data and then close the file.
-  call fms2_read_restart(fileObjRead)
+  call read_restart(fileObjRead)
 
-  call fms2_close_file(fileObjRead)
+  call close_file(fileObjRead)
           
 end subroutine restore_state
 
@@ -1618,10 +1594,9 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
         ! check if file already exists and can be appendedf
         fexists = MOM_open_file(fileObjRead, trim(filepath), "read", & 
                                   G, is_restart = .true.)
-
         if (fexists) then
-           if (fms2_global_att_exists(fileObjRead,'NumFilesInSet')) then
-              call fms2_get_global_attribute(fileObjRead, 'NumFilesInSet', num_restart)
+           if (global_att_exists(fileObjRead,'NumFilesInSet')) then
+              call get_global_attribute(fileObjRead, 'NumFilesInSet', num_restart)
            else
               num_restart = num_restart + 1
            endif
@@ -1635,10 +1610,9 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
             call MOM_error(WARNING,"MOM_restart: Unable to find restart file(s) with base name : "//trim(filepath))
         endif
 
-        call fms2_close_file(fileObjRead)
+        call close_file(fileObjRead)
  
-     enddo ! while (err == 0) loop
-      
+     enddo ! while (err == 0) loop      
   enddo ! while (start_char < strlen(filename)) loop
 
   num_files = num_restart
