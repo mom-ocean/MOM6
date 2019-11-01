@@ -1864,8 +1864,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   elseif (use_temperature) then
-    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, tv%T, ALE_CSp)
-    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, tv%S, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp)
   endif
 
 end subroutine initialize_sponges_file

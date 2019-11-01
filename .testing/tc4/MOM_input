@@ -386,6 +386,11 @@ DAYMAX = 0.25                    !   [days]
                                 ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
                                 ! also sets the potential end time of the present run segment if the end time is
                                 ! not set via ocean_solo_nml in input.nml.
+				
+ENERGYSAVEDAYS = 0.125          !   [days] default = 1.44E+04
+                                ! The interval in units of TIMEUNIT between saves of the
+                                ! energies of the run and other globally summed diagnostics.
+				
 RESTART_CONTROL = 3             ! default = 1
                                 ! An integer whose bits encode which restart files are written. Add 2 (bit 1)
                                 ! for a time-stamped file, and odd (bit 0) for a non-time-stamped file. A
