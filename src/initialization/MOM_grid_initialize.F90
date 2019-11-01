@@ -489,8 +489,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
       xidx = i
     endif 
   enddo
-  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx value is invalid)
-  if (ymax2 .LT. -100) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is invalid)
+  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx value is invalid")
+  if (ymax2 .LT. -100.0) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is invalid")
 
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(xidx,2*(j-G%jsg)+2)
@@ -526,8 +526,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     endif 
   enddo
 
-  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx value is invalid)
-  if (ymax2 .LT. -100) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is invalid)
+  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx value is invalid")
+  if (ymax2 .LT. -100.0) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is invalid")
 
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(xidx,2*(j-G%jsg)+3)
