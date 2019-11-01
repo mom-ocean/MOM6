@@ -539,77 +539,68 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
   ! allocate the axis data and attribute types for the vertical grid file
-  !>@NOTE the user may need to increase the allocated array sizes to accomodate 
-  !! more than 20 axes.
-  allocate(axis_data_CS%axis(20))
-  allocate(axis_data_CS%data(20))
+  !>@NOTE the user will need to increase the allocatable axis_data_CS array sizes to accomodate 
+  !! new axes
+  allocate(axis_data_CS%axis(2))
+  allocate(axis_data_CS%data(2))
 
-  if (.not. check_if_open(fileObjWrite)) then 
-     if ( is_root_pe() ) then
-        file_open_success = MOM_open_file(fileObjWrite, filepath, "write", is_restart=.false.)
-     endif
-  endif
+  ! open the file
+  if (.not. check_if_open(fileObjWrite)) &
+    file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file
-  if (check_if_open(fileObjWrite)) then       
-     total_axes=0
+  total_axes=0
 
-     do i=1,size(vars) 
-        num_dims=0
+  do i=1,size(vars) 
+    num_dims=0
     
-        call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
-                                     dim_names, dim_lengths, num_dims,GV=GV)
-        if (num_dims <= 0) then
-           call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
-        endif
+    call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
+                                    dim_names, dim_lengths, num_dims,GV=GV)
+    if (num_dims <= 0) &
+        call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
 
-        ! register the variable dimensions to the file if the corresponding global axes are not registered
-        do j=1,num_dims
-           if (.not.(dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.))) then
-              total_axes=total_axes+1
-              call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
-              call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
-           endif
-        enddo
-     enddo
+    ! register the variable dimensions to the file if the corresponding global axes are not registered
+    do j=1,num_dims
+      if (.not.(dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.))) then
+        total_axes=total_axes+1
+        call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
+        call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+      endif
+    enddo
+  enddo
 
-     ! register and write the coordinate variables (axes) to the file
-     do i=1,total_axes
-        if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
-           if (associated(axis_data_CS%data(i)%p)) then
-              call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+  ! register and write the coordinate variables (axes) to the file
+  do i=1,total_axes
+    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+      if (associated(axis_data_CS%data(i)%p)) then
+        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
                                    "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-              call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+        call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
 
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+        call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                'long_name',axis_data_CS%axis(i)%longname)
 
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+        call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                'units',trim(axis_data_CS%axis(i)%units))
-
-           endif
-        endif
-     enddo 
+      endif
+    endif
+  enddo 
   
-     do i=1,size(vars)
-        if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
-           ! register the field variable  
-           call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
-           ! register the variable attributes
-           call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
-           call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
-        endif
-     enddo
+  do i=1,size(vars)
+    if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
+      ! register the field variable  
+      call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
+      ! register the variable attributes
+      call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+      call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+    endif
+  enddo
 
-     ! write the variables to the file
-     call write_data(fileObjWrite, vars(1)%name, GV%Rlay(1:GV%ke))
-     call write_data(fileObjWrite, vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(1:GV%ke))
+  ! write the variables to the file
+  call write_data(fileObjWrite, vars(1)%name, GV%Rlay(1:GV%ke))
+  call write_data(fileObjWrite, vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(1:GV%ke))
 
-  endif
-
-  if (check_if_open(fileObjWrite)) then
-     if (is_root_pe()) call close_file(fileObjWrite)
-  endif
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
 
   deallocate(axis_data_CS%axis)
   deallocate(axis_data_CS%data)
