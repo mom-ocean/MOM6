@@ -39,13 +39,16 @@ use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 use fms2_io_mod,          only: check_if_open, &
                                 get_dimension_size, &
                                 get_compute_domain_dimension_indices, &
+                                get_global_attribute, &
                                 get_global_io_domain_indices, &
                                 get_num_variables, &
                                 get_variable_dimension_names, &
                                 get_variable_num_dimensions, &
                                 get_variable_size, &
-                                get_variable_unlimited_dimension_index, &                                                          
+                                get_variable_unlimited_dimension_index, &
+                                global_att_exists, &                                                          
                                 read_data, &
+                                read_restart, &
                                 register_restart_field, &
                                 register_axis, &
                                 register_field, &
@@ -53,6 +56,7 @@ use fms2_io_mod,          only: check_if_open, &
                                 open_file, &
                                 close_file, &
                                 write_data, &
+                                write_restart, &
                                 attribute_exists => variable_att_exists, &
                                 variable_exists, &
                                 dimension_exists, &
@@ -88,6 +92,7 @@ public :: FmsNetcdfUnstructuredDomainFile_t
 public :: get_compute_domain_dimension_indices
 public :: get_dimension_size
 public :: get_global_io_domain_indices
+public :: get_global_attribute
 public :: get_horizontal_grid_position
 public :: get_horizontal_grid_logic
 public :: get_time_units
@@ -97,15 +102,19 @@ public :: get_variable_byte_size
 public :: get_variable_num_dimensions
 public :: get_variable_size
 public :: get_variable_unlimited_dimension_index
+public :: global_att_exists
 public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_axis
 public :: read_data
+public :: read_restart
 public :: register_axis
 public :: register_field
+public :: register_restart_field
 public :: register_variable_attribute
 public :: variable_exists
 public :: write_data
+public :: write_restart
 public :: unlimited
 
 !> Type for describing a variable, typically a tracer
