@@ -75,12 +75,14 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     pres, T_int, S_int, &
     gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
   real, dimension(SZK_(G)) :: &
-    Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
+    Igl, Igu, Igd ! The inverse of the reduced gravity across an interface times
+                  ! the thickness of the layer below (Igl) or above (Igu) it.
+                  ! Igd is provided for the tridiagonal solver.  [s2 m-2]
   real, dimension(SZK_(G),SZI_(G)) :: &
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
     Hc, Tc, Sc, Rc
+  real, dimension(SZK_(G)) :: Hc_H        ! Hc(:) rescaled from Z to thickness
   real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
   real :: lam, dlam, lam0
   real :: min_h_frac
@@ -145,8 +147,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 !$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2)  &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
-!$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
-!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam,     &
+!$OMP                                  drho_dS,drxh_sum,kc,Hc,Hc_H,Tc,Sc,I_Hnew,gprime,&
+!$OMP                                  Rc,speed2_tot,Igl,Igu,Igd,lam0,lam,lam_it,dlam, &
 !$OMP                                  mode_struct,sum_hc,N2min,gp,hw,                 &
 !$OMP                                  ms_min,ms_max,ms_sq,                            &
 !$OMP                                  det,ddet,detKm1,ddetKm1,detKm2,ddetKm2,det_it,ddet_it)
@@ -424,7 +426,10 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             endif
 
             if (calc_modal_structure) then
-              call tdma6(kc, -igu, igu+igl, -igl, lam, mode_struct)
+              do k = 1,kc
+                Igd(k) = Igu(k) + Igl(k)
+              enddo
+              call tdma6(kc, -Igu, Igd, -Igl, lam, mode_struct)
               ms_min = mode_struct(1)
               ms_max = mode_struct(1)
               ms_sq = mode_struct(1)**2
@@ -456,8 +461,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             endif
             ! Note that remapping_core_h requires that the same units be used
             ! for both the source and target grid thicknesses, here [H ~> m or kg m-2].
-            call remapping_core_h(CS%remapping_CS, kc, GV%Z_to_H*Hc(:), mode_struct, &
-                                  nz, h(i,j,:), modal_structure(i,j,:), 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            do k = 1,kc
+              Hc_H(k) = GV%Z_to_H * Hc(k)
+            enddo
+            call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                  nz, h(i,j,:), modal_structure(i,j,:), &
+                                  1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
           endif
         else
           cg1(i,j) = 0.0
