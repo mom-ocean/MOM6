@@ -18,7 +18,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
 use MOM_io, only : file_exists
-use MOM_io, only : MOM_read_data, MOM_read_vector
+!use MOM_io, only : MOM_read_data, MOM_read_vector
 use MOM_io, only : slasher
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
@@ -1718,8 +1718,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
-  integer, dimension(4) :: siz
+  !integer, dimension(4) :: siz
+  integer :: ndims
   integer :: nz_data  ! The size of the sponge source grid
+  integer, allocatable :: dim_sizes
   character(len=40) :: potemp_var, salin_var, Idamp_var, eta_var
   character(len=40) :: mdl = "initialize_sponges_file"
   character(len=200) :: damping_file, state_file  ! Strings for filenames
@@ -1794,7 +1796,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
-    enddo ; enddo
+    enddo ; enddo                                                                                                                                                           
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
@@ -1805,12 +1807,18 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     deallocate(eta)
   elseif (.not. new_sponges) then ! ALE mode
 
-    call field_size(filename,eta_var,siz,no_domain=.true.)
+    !call field_size(filename,eta_var,siz,no_domain=.true.)
+    
+    ! get the number of dimensions and the dimension sizes for eta_var 
+    ndims = get_variable_num_dimensions(fileObjReadNoDD, eta_var, broadcast=.true.)
+    allocate(dim_sizes(ndims))
+    call get_variable_size(fileObjReadNoDD, eta_var, dim_sizes, broadcast=.true.)    
+
     if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
       call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
 
 !   ALE_CSp%time_dependent_target = .false.
-!   if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.
+!   if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.                                                                                                                  
     nz_data = siz(3)-1
     allocate(eta(isd:ied,jsd:jed,nz_data+1))
     allocate(h(isd:ied,jsd:jed,nz_data))
