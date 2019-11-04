@@ -200,10 +200,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer :: xidx, yidx1, yidx2
   integer, dimension(:), allocatable :: dim_sizes
   logical, dimension(:), allocatable :: yuseT, yuseB ! Masks for geoLatT and geoLatB
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read 
-                                            ! returned by call to MOM_open_file
-  type(FmsNetcdfFile_t) :: fileObjRead_noDD  ! FMS file object for non-domain-decomposed read 
-                                            ! returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read returned by call to 
+                                             ! MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjReadNoDD ! FMS file object for non-domain-decomposed read returned by call to 
+                                           ! MOM_open_file
   logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
   
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
@@ -286,7 +286,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! open the file for domain-decomposed read
   file_open_success = MOM_open_file(fileObjRead, filename, "read", SGdom, .false.)
   ! tmpZ is defined on the data domain
-  tmpZ(:,:) = 999.
+  tmpZ(:,:) = 999.0
   ! register the global axes
   call register_axis(fileObjRead, 'nxp','x', domain_position=EAST_FACE)
   call register_axis(fileObjRead, 'nx','x', domain_position=CENTER)
@@ -300,7 +300,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   else
     call pass_var(tmpZ, SGdom, position=CORNER, inner_halo=0)
   endif
-  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
+  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.0)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -317,12 +317,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   !   call pass_var(G%geoLonBu, G%domain, position=CORNER)
 
   ! Read Y from the supergrid
-  tmpZ(:,:) = 999.
+  tmpZ(:,:) = 999.0
  
   call read_data(fileObjRead, 'y', tmpZ)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
-  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
+  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.0)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLatT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -338,12 +338,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read DX,DY from the supergrid
  
-  tmpU(:,:) = 0. ; tmpV(:,:) = 0.
+  tmpU(:,:) = 0.0 ; tmpV(:,:) = 0.0
   call read_data(fileObjRead, 'dx', tmpV)
   call read_data(fileObjRead, 'dy', tmpU)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
-  call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
-  call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
+  call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.0)
+  call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.0)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
@@ -366,14 +366,14 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   enddo ; enddo
 
   ! Read AREA from the supergrid
-  tmpT(:,:) = 0.
+  tmpT(:,:) = 0.0
   call read_data(fileObjRead, 'area', tmpT)
   
   ! Done with domain-decomposed read; close the file
   call close_file(fileObjRead)
 
   call pass_var(tmpT, SGdom)
-  call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
+  call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.0)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
@@ -411,44 +411,39 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).
  
-  ! open the file for non-domain decomposed read
-  file_open_success = MOM_open_file(fileObjRead_noDD, filename, "read", .false.)
+  ! open the file for non-domain-decomposed read
+  file_open_success = MOM_open_file(fileObjReadNoDD, filename, "read", .false.)
 
   ! get the number of dimensions and the dimension sizes for 'x'  
-  ndims = get_variable_num_dimensions(fileObjRead_noDD, "x", broadcast=.true.)
+  ndims = get_variable_num_dimensions(fileObjReadNoDD, "x", broadcast=.true.)
   allocate(dim_sizes(ndims))
-  call get_variable_size(fileObjRead_noDD, "x", dim_sizes, broadcast=.true.)
+  call get_variable_size(fileObjReadNoDD, "x", dim_sizes, broadcast=.true.)
   ! allocate the tmpGlobal array
   allocate(tmpGlbl(dim_sizes(1),2))
  
   ! read x into the tmpGlbl buffer
-  call read_data(fileObjRead_noDD, "x", tmpGlbl)
+  call read_data(fileObjReadNoDD, "x", tmpGlbl)
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
-    !if (is_root_pe()) WRITE(*,'(A,I3,A, I3, A,F6.3)') "J, tmpindex, G%gridLonT(J) ",i ," ",2*(i-G%isg)+2, " ", G%gridLonT(i)
   enddo
-  ! Note that the dynamic grid always uses symmetric memory for the global
-  ! arrays G%gridLatB and G%gridLonB.
-  ! The global arrays returned by new io do not have the extra indices that match ni+1 and nj+1
-  ! assume first and last indices have same data to define end points on the B grid
+
   do I=G%isg-1,G%ieg
     G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
-    !if (is_root_pe()) WRITE(*,'(A,I3,A, I3, A,F6.3)') "J, tmpindex, G%gridLonB(J) ",i ," ",2*(i-G%isg)+3, " ", G%gridLonB(i)
   enddo
  
-  deallocate( tmpGlbl )
+  deallocate(tmpGlbl)
   deallocate(dim_sizes)
 
   ! get the number of dimensions and the dimension sizes for 'x'  
-  ndims = get_variable_num_dimensions(fileObjRead_noDD, "y", broadcast=.true.)
+  ndims = get_variable_num_dimensions(fileObjReadNoDD, "y", broadcast=.true.)
   allocate(dim_sizes(ndims))
-  call get_variable_size(fileObjRead_noDD, "y", dim_sizes, broadcast=.true.)
+  call get_variable_size(fileObjReadNoDD, "y", dim_sizes, broadcast=.true.)
   ! allocate the tmpGlobal array
   allocate(tmpGlbl(dim_sizes(1),dim_sizes(2)))
  
   ! read y into the tmpGlbl buffer
-  call read_data(fileObjRead_noDD, "y", tmpGlbl)
+  call read_data(fileObjReadNoDD, "y", tmpGlbl)
   
   ! create a mask for the geoLatT values in the tmpGlbl array
   allocate(yuseT(dim_sizes(2)))
@@ -457,8 +452,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     yuseT(2*(j-G%jsg)+2)=.TRUE.
   enddo
  
-  ! note: the following indexing procedures search for global x values that correspond to the full ranges of 
-  ! y (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq). 
+  ! note: the following indexing procedures search for global x values that correspond to the full ranges of y
+  ! (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq). 
   ! Defining the gridLatT and gridLatB values using the previous values in tmpGlbl(1,:) did not result in the correct
   ! diagnostic index values due to different indexing conventions for non-domain-decomposed IO in the new and previous
   ! procedures. 
@@ -466,9 +461,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! get the index for the x-dimension with the maximum geoLatT value in the tmpGlbl array
   xidx = 0
   yidx1 = 0
-  ymax1 = -999.0
+  ymax1 = 999.0
   yidx2 = 0
-  ymax2 = -999.0
+  ymax2 = 999.0
 
   do i=1,dim_sizes(1)
     ! find index of the maximum geoLatT value for the ith x-dimension
@@ -481,15 +476,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
       xidx = i
     endif 
   enddo
-  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx value is invalid")
-  if ((ymax2 .LT. 0.0) .OR. (ymax2 .GT. 91.0)) call MOM_error(FATAL, &
-                                                    "set_grid_metrics_from_mosaic: ymax2 value is invalid")
+
+  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx is < 1")
+  if (ymax2 .GT. 90.0) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 is > 90.0)
+
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(xidx,2*(j-G%jsg)+2)
-    !if (is_root_pe()) then
-    !   WRITE(*, '(A,I3)') "Lon index is ", i
-    !   WRITE(*,'(A,I3,A,I3,A, F6.3)') "j, tmpindex, G%gridLatT(j) ",j ," ",2*(j-G%jsg)+2," ",G%gridLatT(j)
-    !endif       
   enddo
 
   allocate(yuseB(dim_sizes(2)))
@@ -502,9 +494,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! get the index for the x-dimension with the maximum geoLatB value in the tmpGlbl array
   xidx = 0
   yidx1 = 0
-  ymax1 = -999.0
+  ymax1 = 999.0
   yidx2 = 0
-  ymax2 = -999.0
+  ymax2 = 999.0
 
   do i=1,dim_sizes(1)
     ! find index of the maximum geoLatB value for the ith x-dimension
@@ -518,16 +510,15 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     endif 
   enddo
 
-  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx value is invalid")
-  if ((ymax2 .LT. 0.0) .OR. (ymax2 .GT. 91.0)) call MOM_error(FATAL, &
-                                                    "set_grid_metrics_from_mosaic: ymax2 value is invalid")
+  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx is < 1")
+  if (ymax2 .GT. 90.0) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is > 90.0")
+
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(xidx,2*(j-G%jsg)+3)
-   ! if (is_root_pe()) WRITE(*,'(A,I3,A, I3, A,F6.3)') "J, tmpindex, G%gridLatB(J) ",j ," ",2*(j-G%jsg)+3, " ", G%gridLatB(J)
   enddo
  
-  call close_file(fileObjRead_noDD)
-  deallocate( tmpGlbl )
+  call close_file(fileObjReadNoDD)
+  deallocate(tmpGlbl)
   deallocate(dim_sizes)
   deallocate(yuseT)
   deallocate(yuseB)
