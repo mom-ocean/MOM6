@@ -182,12 +182,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
 
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt_in_T,G,CS)
   do j=js,je ; do I=is-1,ie
     KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
       (dt_in_T * (G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
   enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt_in_T,G,CS)
   do j=js-1,je ; do I=is,ie
     KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
       (dt_in_T * (G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
@@ -198,7 +198,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
-!$OMP                               MEKE,Resoln_scaled,KH_u,          &
+!$OMP                               MEKE,Resoln_scaled,KH_u,G,use_QG_Leith,use_Visbeck,&
 !$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
 !$OMP                               int_slope_v,khth_use_ebt_struct)
 !$OMP do
@@ -207,8 +207,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   enddo ; enddo
 
   if (use_VarMix) then
-!$OMP do
     if (use_Visbeck) then
+!$OMP do
       do j=js,je ; do I=is-1,ie
         Khth_loc_u(I,j) = Khth_loc_u(I,j) + &
           CS%KHTH_Slope_Cff*VarMix%L2u(I,j) * VarMix%SN_u(I,j)
@@ -217,8 +217,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
-!$OMP do
     if (CS%MEKE_GEOMETRIC) then
+!$OMP do
       do j=js,je ; do I=is-1,ie
         Khth_loc_u(I,j) = Khth_loc_u(I,j) + G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * &
                           0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
@@ -267,16 +267,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   if (use_VarMix) then
-!$OMP do
     if (use_QG_Leith) then
+!$OMP do
       do k=1,nz ; do j=js,je ; do I=is-1,ie
         KH_u(I,j,k) = VarMix%KH_u_QG(I,j,k)
       enddo ; enddo ; enddo
     endif
   endif
 
-!$OMP do
   if (CS%use_GME_thickness_diffuse) then
+!$OMP do
     do k=1,nz+1 ; do j=js,je ; do I=is-1,ie
       CS%KH_u_GME(I,j,k) = KH_u(I,j,k)
     enddo ; enddo ; enddo
@@ -288,16 +288,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   enddo ; enddo
 
   if (use_VarMix) then
-!$OMP do
     if (use_Visbeck) then
+!$OMP do
       do J=js-1,je ; do i=is,ie
         Khth_loc(i,j) = Khth_loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
       enddo ; enddo
     endif
   endif
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
-!$OMP do
     if (CS%MEKE_GEOMETRIC) then
+!$OMP do
       do j=js-1,je ; do I=is,ie
         Khth_loc(I,j) = Khth_loc(I,j) + G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * &
                         0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
@@ -349,24 +349,24 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   if (use_VarMix) then
-!$OMP do
     if (use_QG_Leith) then
+!$OMP do
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         KH_v(i,J,k) = VarMix%KH_v_QG(i,J,k)
       enddo ; enddo ; enddo
     endif
   endif
 
-!$OMP do
   if (CS%use_GME_thickness_diffuse) then
+!$OMP do
     do k=1,nz+1 ; do J=js-1,je ; do i=is,ie
       CS%KH_v_GME(i,J,k) = KH_v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
   if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
-!$OMP do
     if (CS%MEKE_GEOMETRIC) then
+!$OMP do
       do j=js,je ; do I=is,ie
         !### This will not give bitwise rotational symmetry.  Add parentheses.
         MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
@@ -477,7 +477,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   endif
 
-  !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt_in_T,vhtr,CDp,vhD,h,G,GV)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k) * dt_in_T
@@ -720,7 +720,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
 !$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  uhD,h_avail,G_scale,work_u,CS,slope_x,cg1,   &
 !$OMP                                  diag_sfn_x, diag_sfn_unlim_x,N2_floor,       &
-!$OMP                                  present_slope_x,G_rho0) &
+!$OMP                                  present_slope_x,G_rho0,Slope_x_PE,hN2_x_PE)  &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
@@ -973,7 +973,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
 !$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
 !$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,cg1,   &
 !$OMP                                  diag_sfn_y, diag_sfn_unlim_y,N2_floor,       &
-!$OMP                                  present_slope_y,G_rho0) &
+!$OMP                                  present_slope_y,G_rho0,Slope_y_PE,hN2_y_PE) &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
