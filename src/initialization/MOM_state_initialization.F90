@@ -17,9 +17,12 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : file_exists
-!use MOM_io, only : MOM_read_data, MOM_read_vector
+use MOM_io, only : file_exists, MOM_open_file, close_file, register_axis
+use MOM_io, only : get_variable_size, get_variable_num_dimensions
+use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
+use MOM_io, only : read_data, FmsNetcdfDomainFile_t, FmsNetcdfFile_t
 use MOM_io, only : slasher
+!use MOM_io, only : MOM_read_data, MOM_read_vector
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query
@@ -1721,15 +1724,18 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   !integer, dimension(4) :: siz
   integer :: ndims
   integer :: nz_data  ! The size of the sponge source grid
-  integer, allocatable :: dim_sizes
+  integer, allocatable :: dim_sizes(:)
   character(len=40) :: potemp_var, salin_var, Idamp_var, eta_var
   character(len=40) :: mdl = "initialize_sponges_file"
   character(len=200) :: damping_file, state_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
+  character(len=40), allocatable :: dim_names ! array for variable dimension names
 
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
   logical :: new_sponges ! True if using the newer sponges which do not
                          ! need to reside on the model horizontal grid.
+  type(FmsNetcdfFile_t) :: fileObjRead ! FMS file object for non-domain-decomposed read returned by call to 
+                                       ! MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1772,12 +1778,20 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename)) &
-    call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+    call MOM_error(FATAL, " initialize_sponges: Unable to find "//trim(filename))
 
   if (new_sponges .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
-  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
+  ! open the file for domain-decomposed read
+  file_open_success = MOM_open_file(fileObjRead, filename, "read", .false.)
+  if (.not.file_open_success(filObjRead)) call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+  ! get the number of global dimensions and the dimension names
+  ndims = get_num_dimensions(fileObjRead, broadcast=.true.)
+  allocate(dim_names(ndims))
+ 
+  call read_data(fileObjRead, "Idamp", Idamp)
+  !call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
 
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
@@ -1792,7 +1806,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
   if (.not. use_ALE) then
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    call read_data(fileObjRead, eta_var, eta)
+    call scale_data(eta, US%m_to_Z)
 
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
@@ -1814,17 +1830,19 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     allocate(dim_sizes(ndims))
     call get_variable_size(fileObjReadNoDD, eta_var, dim_sizes, broadcast=.true.)    
 
-    if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
+    if (dim_sizes(1) /= G%ieg-G%isg+1 .or. dim_sizes(2) /= G%jeg-G%jsg+1) &
       call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
 
 !   ALE_CSp%time_dependent_target = .false.
 !   if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.                                                                                                                  
-    nz_data = siz(3)-1
+    nz_data = dim_sizes(3)-1
     allocate(eta(isd:ied,jsd:jed,nz_data+1))
     allocate(h(isd:ied,jsd:jed,nz_data))
 
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
-
+    !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    call read_data(fileObjRead, eta_var, eta)
+    call scale_data(eta, US%m_to_Z)
+    
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
@@ -1839,6 +1857,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
     deallocate(eta)
     deallocate(h)
+    deallocate(dim_sizes)
   else
     ! Initialize sponges without supplying sponge grid
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
@@ -1854,8 +1873,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     ! inflated without causing static instabilities.
     do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
-    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
+    !call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+    !call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
+    call read_data(fileObjRead, potemp_var, tmp)
+    call read_data(fileObjRead, salin_var, tmp2)
 
     do j=js,je
       call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), &
@@ -1867,15 +1888,18 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
   ! The remaining calls to set_up_sponge_field can be in any order.
   if ( use_temperature .and. .not. new_sponges) then
-    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+    !call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+    call read_data(fileObjRead,potemp_var, tmp)
     call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
-    call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
+    !call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
+    call read_data(fileObjRead, salin_var, tmp)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   elseif (use_temperature) then
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, tv%T, ALE_CSp)
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, tv%S, ALE_CSp)
   endif
 
+  deallocate(dim_names)
 end subroutine initialize_sponges_file
 
 !> This subroutine sets the 4 bottom depths at velocity points to be the
