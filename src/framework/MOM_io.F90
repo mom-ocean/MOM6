@@ -20,6 +20,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_size, old_fms_read_data => read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
+use MOM_string_functions  only : extract_word
 use mpp_mod,              only : mpp_max 
 use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
@@ -47,8 +48,10 @@ use fms2_io_mod,          only: check_if_open, &
                                 get_variable_dimension_names, &
                                 get_variable_num_dimensions, &
                                 get_variable_size, &
+                                get_variable_units, &
                                 get_variable_unlimited_dimension_index, &
-                                global_att_exists, &                                                            read_data, &
+                                global_att_exists, &
+                                read_data, &
                                 read_restart, &
                                 register_restart_field, &
                                 register_axis, &
@@ -81,6 +84,7 @@ public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
+public :; scale_data
 ! new FMS-IO routines and wrappers
 public :: attribute_exists
 public :: check_if_open
@@ -105,6 +109,7 @@ public :: get_variable_dimension_names
 public :: get_variable_byte_size
 public :: get_variable_num_dimensions
 public :: get_variable_size
+public :: get_variable_units
 public :: get_variable_unlimited_dimension_index
 public :: global_att_exists
 public :: MOM_get_axis_data
@@ -191,6 +196,15 @@ interface MOM_read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
 end interface
+
+! interface to scale data after reading in a field
+interface scale_data
+  module procedure scale_data_4d
+  module procedure scale_data_3d
+  module procedure scale_data_2d
+  module procedure scale_data_1d
+end interface 
+
 
 contains
 
@@ -1612,9 +1626,9 @@ end subroutine MOM_read_data_4d
 !> This function uses the fms_io function read_data to read a pair of distributed
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
                               timelevel, stagger, scalar_pair, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  type(FmsNetcdfDomainFile_t) :: fileObj !< netcdf file object returned by call to MOM_open_file
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
   real, dimension(:,:),   intent(inout) :: u_data    !< The 2 dimensional array into which the
@@ -1629,18 +1643,44 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
                                                      !! by before they are returned.
   integer :: is, ie, js, je
   integer :: u_pos, v_pos
+  integer :: start(2), nread(2)
+  character(len=32), dimension(2) :: dim_names_u, dim_names_v
+  character(len=32), u_units, v_units
+
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL, "MOM_read_vector_2d: netcdf fileObj not open.")
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
   if (present(stagger)) then
-    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
-    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
+    if (stagger == CGRID_NE .or. stagger == BGRID_NE ) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
+  
+  start(:) = 1
+  if present(timelevel) then
+     start(1) = timelevel 
+     nread(1) = timelevel
+  endif
+  
+  !call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+   !              timelevel=timelevel, position=u_pos)
+  !call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+  !               timelevel=timelevel, position=v_pos)
+  
+  call get_variable_dimension_names(u_fieldname, dim_names_u, broadcast=.true.)
+  call get_variable_dimension_names(v_fieldname, dim_names_v, broadcast=.true.)
+  call get_variable_units(fileObj, u_fieldname, u_units)
+  do i=1,2
+    if (is_dimension_unlimited(fileobj, dim_names_u(i))) then 
+       call register_axis(fileObj, dim_names_u(i), unlimited)
+    else
+       
+    endif
+       call register_axis(fileObj, dim_names_u(i),'x', domain_position=u_pos)
+       call register_axis(fileObj, dim_names_u(i),'y', domain_position=v_pos)
+  enddo
 
-  call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=u_pos)
-  call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=v_pos)
+  call read_data(fileObj,u_fieldname, u_data, corner=start, nread)
+  call read_data(fileObj,v_fieldname, v_data, corner=start)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
@@ -1657,8 +1697,9 @@ end subroutine MOM_read_vector_2d
 !> This function uses the fms_io function read_data to read a pair of distributed
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+subroutine MOM_read_vector_3d(fileObj, filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
                               timelevel, stagger, scalar_pair, scale)
+  type(FmsNetcdfDomainFile_t) :: fileObj !< netcdf file object returned by call to MOM_open_file
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -1699,6 +1740,56 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
 
 end subroutine MOM_read_vector_3d
 
+subroutine scale_data_1d(data, scale_factor)
+  real, dimension(:), intent(inout) :: data !< The 1-dimensional data array
+  real, intent(in) :: scale_factor !< Scale factor
+
+  if (scale_factor /= 1.0) then
+    data(:) = scale_factor*data(:)
+  endif
+end subroutine scale_data_1d
+
+subroutine scale_data_2d(data, scale_factor, MOM_domain)
+  real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array
+  real, intent(in) :: scale_factor !< Scale factor
+  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The domain that describes the decomposition
+  ! local
+  integer :: is, ie, js, je
+
+  if (scale_factor /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+    data(is:ie,js:je) = scale_factor*data(is:ie,js:je)
+  endif
+end subroutine scale_data_2d
+
+subroutine scale_data_3d(data, scale_factor, MOM_domain)
+  real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array
+  real, intent(in) :: scale_factor !< Scale factor
+  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The domain that describes the decomposition
+  ! local
+  integer :: is, ie, js, je
+
+  if (scale_factor /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+    data(is:ie,js:je,:) = scale_factor*data(is:ie,js:je,:)
+  endif
+end subroutine scale_data_3d
+
+subroutine scale_data_4d(data, scale_factor, MOM_domain)
+  real, dimension(:,:,:,:), intent(inout) :: data !< The 4-dimensional data array
+  real, intent(in) :: scale_factor !< Scale factor
+  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The domain that describes the decomposition
+  ! local
+  integer :: is, ie, js, je
+
+  if (scale_factor /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+    data(is:ie,js:je,:,:) = scale_factor*data(is:ie,js:je,:,:)
+  endif
+end subroutine scale_data_4d
 
 !> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)
