@@ -21,6 +21,7 @@ use MOM_io, only : file_exists, MOM_open_file, close_file, register_axis
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
 use MOM_io, only : read_data, FmsNetcdfDomainFile_t, FmsNetcdfFile_t
+use MOM_io, only : scale_data
 use MOM_io, only : slasher
 !use MOM_io, only : MOM_read_data, MOM_read_vector
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
@@ -671,7 +672,10 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
   if (file_has_thickness) then
     !### Consider adding a parameter to use to rescale h.
     if (just_read) return ! All run-time parameters have been read, so return.
-    call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
+    !call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
+    call read_data(fileObjRead, "h", h)
+    call scale_data(h, GV%m_to_H, G%Domain)
+    call trim(area_varname), "h" h)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -679,7 +683,9 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
                  "would indicate.", default=.false., do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
 
-    call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    !call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    call read_data(fileObjRead, "eta", eta)
+    call scale_data(eta, US%m_to_Z, G%Domain)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, eta, h)
@@ -889,8 +895,9 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
   call log_param(param_file, mdl, "INPUTDIR/INTERFACE_IC_FILE", filename)
 
   e0(:) = 0.0
-  call MOM_read_data(filename, eta_var, e0(:), scale=US%m_to_Z)
-
+  !call MOM_read_data(filename, eta_var, e0(:), scale=US%m_to_Z)
+  call read_data(fileObjRead, eta_var, e0(:))
+  call scale_data(e0(:),US%m_to_Z)
   if ((abs(e0(1)) - 0.0) > 0.001) then
     ! This list probably starts with the interior interface, so shift it up.
     do k=nz+1,2,-1 ; e0(K) = e0(K-1) ; enddo
@@ -1053,8 +1060,9 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
-
+  !call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
+  call read_data(fileObjRead, eta_srf_var, eta_sfc)
+  call scale_data(eta_sfc,scale_factor, G%domain)
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
 
@@ -1113,6 +1121,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
+  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -1138,7 +1147,11 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  !call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  call read_data(fileObjRead, p_surf_var, p_surf)
+  call scale_data(p_surf, scale_factor, G%domain)
+
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   if (use_remapping) then
     allocate(remap_CS)
@@ -1447,6 +1460,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   character(len=200) :: ts_file, salt_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "initialize_temp_salt_from_file"
   character(len=64)  :: temp_var, salt_var ! Temperature and salinity names in files
+  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -1475,14 +1489,20 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
+  if (.not.(check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
+
   ! Read the temperatures and salinities from netcdf files.
-  call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+  !call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+  call read_data(fileObjRead, temp_var, T)
 
   salt_filename = trim(inputdir)//trim(salt_file)
   if (.not.file_exists(salt_filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
 
-  call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
+  !call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
+  call read_data(fileObjRead, salt_var, S)
+
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_from_file
@@ -1503,6 +1523,7 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, ts_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "initialize_temp_salt_from_profile"
+  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -1520,10 +1541,15 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
   call log_param(param_file, mdl, "INPUTDIR/TS_FILE", filename)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_profile: Unable to open "//trim(filename))
+  if (.not.(check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", is_restart=.false.)
 
   ! Read the temperatures and salinities from a netcdf file.
-  call MOM_read_data(filename, "PTEMP", T0(:))
-  call MOM_read_data(filename, "SALT",  S0(:))
+  !call MOM_read_data(filename, "PTEMP", T0(:))
+  !call MOM_read_data(filename, "SALT",  S0(:))
+  call read_data(fileObjRead, "PTEMP", T0)
+  call read_data(fileObjRead, "SALT",S0)
+
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
@@ -1802,13 +1828,15 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   if (.not.file_exists(filename)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
+  if (.not. (check_if_open(fileObjRead))) call MOM_open_file(fileObjRead, filename, "read", .false.)
+
   ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
     !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
     call read_data(fileObjRead, eta_var, eta)
-    call scale_data(eta, US%m_to_Z)
+    call scale_data(eta, US%m_to_Z, G%Domain)
 
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
@@ -1841,7 +1869,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
     !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
     call read_data(fileObjRead, eta_var, eta)
-    call scale_data(eta, US%m_to_Z)
+    call scale_data(eta, US%m_to_Z, G%Domain)
     
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
@@ -1898,6 +1926,8 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, tv%T, ALE_CSp)
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, tv%S, ALE_CSp)
   endif
+  
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   deallocate(dim_names)
 end subroutine initialize_sponges_file
@@ -2197,8 +2227,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
     if (.not.file_exists(shelf_file)) call MOM_error(FATAL, &
       "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
 
-    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
-
+    !call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
+    call read_data(fileObjRead, trim(area_varname), area_shelf_h)
     ! Initialize frac_shelf_h with zeros (open water everywhere)
     frac_shelf_h(:,:) = 0.0
     ! Compute fractional ice shelf coverage of h
