@@ -1036,6 +1036,8 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   character(len=200) :: filename, eta_srf_var  ! Strings for file/path
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
+  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
@@ -1059,10 +1061,13 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
                  "units of m", units="variable", default=1.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
-
+  ! open file
+  if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
   !call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
   call read_data(fileObjRead, eta_srf_var, eta_sfc)
   call scale_data(eta_sfc,scale_factor, G%domain)
+  ! close file 
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
 
@@ -1146,6 +1151,8 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
                  default=.false., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
+
+  if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
 
   !call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
   call read_data(fileObjRead, p_surf_var, p_surf)
@@ -1282,6 +1289,7 @@ subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_para
   character(len=40)  :: mdl = "initialize_velocity_from_file" ! This subroutine's name.
   character(len=200) :: filename,velocity_file,inputdir ! Strings for file/path
   logical :: just_read    ! If true, just read parameters but set nothing.
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf domain-decomposed file object returned by call to MOM_open_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -1298,11 +1306,14 @@ subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_para
   filename = trim(inputdir)//trim(velocity_file)
   call log_param(param_file, mdl, "INPUTDIR/VELOCITY_FILE", filename)
 
-  if (.not.file_exists(filename)) call MOM_error(FATAL, &
-         " initialize_velocity_from_file: Unable to open "//trim(filename))
-
+  if (.not.file_exists(filename)) call MOM_error(FATAL, & 
+         " initialize_velocity_from_file: Unable to find "//trim(filename))
+  ! open file for domain-decomposed read
+  if (.not.check_if_open(fileObjRead)) call open_file(fileObjRead, filename, "read",G,.false.)
   !  Read the velocities from a netcdf file.
-  call MOM_read_vector(filename, "u", "v", u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
+  call MOM_read_vector(fileObjRead, "u", "v", u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
+  
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead))
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file
