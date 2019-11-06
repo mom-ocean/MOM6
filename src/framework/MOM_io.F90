@@ -114,7 +114,7 @@ public :: get_variable_unlimited_dimension_index
 public :: global_att_exists
 public :: MOM_get_axis_data
 public :: MOM_open_file
-public :: MOM_register_axis
+public :: MOM_register_diagnostic_axis
 public :: read_data
 public :: read_restart
 public :: register_axis
@@ -556,78 +556,30 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 end subroutine reopen_file
 
 !> register an axis to a domain-decomposed file
-subroutine MOM_register_axis_DD(fileObj, axis_name, axis_length)
-   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
-   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
-   integer, optional, intent(in) :: axis_length !< length of axis/dimension ;only needed for Layer, Interface, Time,
+!! This routine specifies 
+subroutine MOM_register_diagnostic_axis(fileObj, axis_name, axis_length)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
+  character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
+  integer, optional, intent(in) :: axis_length !< length of axis/dimension ;only needed for Layer, Interface, Time,
                                                 !! Period
-   select case (trim(axis_name))      
-         case ('latq'); call register_axis(fileObj,'latq','y', domain_position=NORTH_FACE)
-         case ('lath'); call register_axis(fileObj,'lath','y', domain_position=CENTER) 
-         case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=EAST_FACE) 
-         case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=CENTER)
-         case ('Layer')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Layer axis")
-            endif 
-            call register_axis(fileObj,'Layer',axis_length)
-         case ('Interface')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Interface axis")
-            endif 
-            call register_axis(fileObj,'Interface',axis_length)
-         case ('Time')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Time axis")
-            endif 
-            call register_axis(fileObj,'Time', axis_length)
-         case ('Period')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Period axis")
-            endif 
-            call register_axis(fileObj,'Period',axis_length)
-     
-   end select
-end subroutine MOM_register_axis_DD
+  select case (trim(axis_name))      
+    case ('latq'); call register_axis(fileObj,'latq','y', domain_position=NORTH_FACE)
+    case ('lath'); call register_axis(fileObj,'lath','y', domain_position=CENTER) 
+    case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=EAST_FACE) 
+    case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=CENTER)
+    case default
+      if (.not. present(axis_length)) call MOM_error(FATAL,"MOM_io:register_axis_DD: "//&
+                        "An axis_length argument is required to register the axis "//trim(axis_name))
+      call register_axis(fileObj, axis_name, axis_length) 
+  end select
+end subroutine MOM_register_diagnostic_axis
 
 !> register an axis to a non domain-decomposed file
-!! @note non-domain-decomposed files will not contain lat,lon coordinate axes
-!! because MOM does not use an unstructured grid
 subroutine MOM_register_axis_noDD(fileObj, axis_name, axis_length)
-   type(FmsNetcdfFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
-   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
-   integer, optional, intent(in) :: axis_length !< length of axis/dimension
-                                                !! (only needed for Layer, Interface, Time, and Period)
-   select case (trim(axis_name))
-         case ('Layer')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Layer axis")
-            endif 
-            call register_axis(fileObj,'Layer',axis_length)
-         case ('Interface')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Interface axis")
-            endif 
-            call register_axis(fileObj,'Interface',axis_length)
-         case ('Time')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Time axis")
-            endif 
-            call register_axis(fileObj,'Time', axis_length)
-         case ('Period')
-            if (.not.(present(axis_length))) then
-                call MOM_error(FATAL,"MOM_io::register_axis_noDD: "//&
-                     "axis_length argument required to register the Period axis")
-            endif 
-            call register_axis(fileObj,'Period',axis_length)
-   end select
+  type(FmsNetcdfFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
+  character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
+  integer, intent(in) :: axis_length !< length of axis/dimension
+  call register_axis(fileObj, axis_name, axis_length)
 end subroutine MOM_register_axis_noDD
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
@@ -1643,10 +1595,9 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
                                                      !! by before they are returned.
   integer :: is, ie, js, je
   integer :: u_pos, v_pos
-  integer :: start(2), nread(2)
-  character(len=32), dimension(2) :: dim_names_u, dim_names_v
-  character(len=32), u_units, v_units
-
+  integer :: start(2), nread(2), dim_sizes_u(2), dim_sizes_v(2)
+  character(len=32), dimension(2) :: dim_names_u, dim_names_v, units_u, units_v
+  
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL, "MOM_read_vector_2d: netcdf fileObj not open.")
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
@@ -1656,27 +1607,36 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
   endif
   
   start(:) = 1
+  call get_variable_size(fileObj, u_fieldname, dim_sizes_u, broadcast=.true.)
+  call get_variable_size(fileObj, v_fieldname, dim_sizes_v, broadcast=.true.)
+
   if present(timelevel) then
-     start(1) = timelevel 
-     nread(1) = timelevel
+    start(1) = timelevel 
+    dim_sizes_u(1) = timelevel
+    dim_sizes_v(1) = timelevel
   endif
-  
   !call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
    !              timelevel=timelevel, position=u_pos)
   !call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
   !               timelevel=timelevel, position=v_pos)
   
-  call get_variable_dimension_names(u_fieldname, dim_names_u, broadcast=.true.)
-  call get_variable_dimension_names(v_fieldname, dim_names_v, broadcast=.true.)
-  call get_variable_units(fileObj, u_fieldname, u_units)
+  call get_variable_dimension_names(fileObj, u_fieldname, dim_names_u, broadcast=.true.)
+  call get_variable_dimension_names(fileObj, v_fieldname, dim_names_v, broadcast=.true.)
+ 
   do i=1,2
-    if (is_dimension_unlimited(fileobj, dim_names_u(i))) then 
-       call register_axis(fileObj, dim_names_u(i), unlimited)
-    else
-       
-    endif
-       call register_axis(fileObj, dim_names_u(i),'x', domain_position=u_pos)
-       call register_axis(fileObj, dim_names_u(i),'y', domain_position=v_pos)
+    call get_variable_units(u_fieldname, dim_names_u(i), units_u(i))
+    call get_variable_units(u_fieldname, dim_names_v(i), units_v(i))
+    select case (trim(lowercase(units_u(i)))
+      case ("degrees_east"); call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
+      case ("degrees_north"); call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
+      case default
+        call register_axis(fileObj, dim_names_u(i),dim_sizes_u(i))   
+  
+  do i=1,2
+    do j=1,size(axis_names)
+      call MOM_register_diagnostic_axis(fileObj, dim_names_u(i), )
+      else
+     
   enddo
 
   call read_data(fileObj,u_fieldname, u_data, corner=start, nread)

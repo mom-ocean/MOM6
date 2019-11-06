@@ -21,7 +21,7 @@ use MOM_io, only : file_exists, MOM_open_file, close_file, register_axis
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
 use MOM_io, only : read_data, FmsNetcdfDomainFile_t, FmsNetcdfFile_t
-use MOM_io, only : scale_data
+use MOM_io, only : MOM_read_vector, scale_data
 use MOM_io, only : slasher
 !use MOM_io, only : MOM_read_data, MOM_read_vector
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
