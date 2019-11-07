@@ -98,7 +98,7 @@ $(BUILD)/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
 $(BUILD)/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
-$(BUILD)/openmp/MOM6: MOMFLAGS=NETCDF=3 OPENMP=1
+$(BUILD)/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1
 
 $(BUILD)/asymmetric/path_names: GRID_SRC=config_src/dynamic
 $(BUILD)/%/path_names: GRID_SRC=config_src/dynamic_symmetric
