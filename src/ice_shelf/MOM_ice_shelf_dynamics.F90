@@ -14,7 +14,7 @@ use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNE
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
-use MOM_io, only : file_exists, slasher, MOM_read_data
+use MOM_io, only : file_exists, slasher, MOM_open_file, close_file, read_data, check_if_open, FmsNetcdfDomainFile_t
 use MOM_restart, only : register_restart_field, query_initialized
 use MOM_restart, only : MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time
@@ -286,6 +286,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
   logical :: debug
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf_dyn.F90, initialize_ice_shelf_dyn: "// &
@@ -481,7 +482,12 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       if (.not.file_exists(filename)) call MOM_error(FATAL, &
          " calving mask file: Unable to open "//trim(filename))
 
-      call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)
+      !call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)
+      ! open file for domain-decomposed read
+      if (.not.check_if_open(fileObjRead)) call open_file(fileObjRead, filename, "read", G, .false.)
+      call read_data(fileObjRead, trim(var_name), CS%calve_mask)
+      if (check_if_open(fileObjRead)) call close_file(fileObjRead))
+
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         if (CS%calve_mask(i,j) > 0.0) CS%calve_mask(i,j) = 1.0
       enddo ; enddo

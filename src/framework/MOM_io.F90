@@ -51,6 +51,7 @@ use fms2_io_mod,          only: check_if_open, &
                                 get_variable_units, &
                                 get_variable_unlimited_dimension_index, &
                                 global_att_exists, &
+                                is_dimension_unlimited, &
                                 read_data, &
                                 read_restart, &
                                 register_restart_field, &
@@ -112,6 +113,7 @@ public :: get_variable_size
 public :: get_variable_units
 public :: get_variable_unlimited_dimension_index
 public :: global_att_exists
+public :: is_dimension_unlimited
 public :: MOM_get_axis_data
 public :: MOM_open_file
 public :: MOM_register_diagnostic_axis
@@ -177,11 +179,6 @@ interface MOM_open_file
   module procedure MOM_open_file_DD_dyn_horgrid
   module procedure MOM_open_file_noDD
 end interface
-!> Register axes to a netCDF file
-interface MOM_register_axis
-  module procedure MOM_register_axis_DD
-  module procedure MOM_register_axis_noDD
-end interface 
 
 !> Read a data field from a file
 interface MOM_read_data
@@ -555,8 +552,7 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 
 end subroutine reopen_file
 
-!> register an axis to a domain-decomposed file
-!! This routine specifies 
+!> register an axis to a domain-decomposed file with diagnostic data 
 subroutine MOM_register_diagnostic_axis(fileObj, axis_name, axis_length)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
   character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file

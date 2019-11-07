@@ -5,7 +5,8 @@ module MOM_ice_shelf_initialize
 
 use MOM_grid, only : ocean_grid_type
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_io, only: MOM_read_data, file_exists, slasher
+use MOM_io, only: file_exists, check_if_open, slasher, FmsNetcdfDomainFile_t
+use MOM_io, only: MOM_open_file, close_file, register_axis, read_data, scale_data
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_unit_scaling, only : unit_scale_type
 use user_shelf_init, only: USER_init_ice_thickness
@@ -76,6 +77,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
   real :: len_sidestress, mask, udh
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf domain-decomposed file object returned by call to MOM_open_file
 
   call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_thickness_from_file: reading thickness")
 
@@ -99,9 +101,19 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
+  
+  !call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
+  !call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
 
-  call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
-  call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
+  ! open file for domain-decomposed read
+  if (.not.check_if_open(fileObjRead)) call open_file(fileObjRead, filename, "read", G,.false.)
+  !  read in the data
+  call read_data(fileObjRead, trim(thickness_varname), h_shelf)
+  call scale_data(h_shelf, US%m_to_Z, G%Domain)
+  call read_data(fileObjRead, trim(area_varname), area_shelf_h)
+
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead))
 
 !  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                 "This specifies how the ice domain boundary is specified", &

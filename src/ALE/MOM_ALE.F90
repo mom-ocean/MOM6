@@ -25,7 +25,7 @@ use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
 !use MOM_io,               only : create_file, write_field, mpp_close_file
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis, file_exists
+use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_diagnostic_axis, file_exists
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
 use MOM_interface_heights,only : find_eta
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
@@ -1262,7 +1262,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
       if (.not.(dimension_exists(fileObjWrite, dim_names(j)))) then
         total_axes=total_axes+1
         call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
-        call MOM_register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+        call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
       endif
     enddo
   enddo

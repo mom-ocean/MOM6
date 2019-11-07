@@ -31,7 +31,7 @@ use MOM_io, only: fms2_register_restart_field => register_restart_field, &
                   write_data, &
                   close_file, &
                   MOM_open_file, &
-                  MOM_register_axis, &
+                  MOM_register_diagnostic_axis, &
                   global_att_exists, &
                   get_global_attribute, &
                   get_global_io_domain_indices, &
@@ -1005,7 +1005,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         do i=1,num_dims
            if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
               total_axes=total_axes+1
-              call MOM_register_axis(fileObjWrite, dim_names(i), dim_lengths(i))
+              call MOM_register_diagnostic_axis(fileObjWrite, dim_names(i), dim_lengths(i))
               call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                      time_val=(/restart_time/), time_units=restart_time_units)
            endif
@@ -1202,7 +1202,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
         total_axes=total_axes+1
         call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                    time_val=(/ic_time/), time_units=time_units)
-        call MOM_register_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
+        call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
       endif
     enddo
   enddo
@@ -1383,7 +1383,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   axis_names = (/'lath', 'lonh', 'latq', 'lonq'/)
   do i = 1,size(axis_names)
     if (dimension_exists(fileObjRead, trim(axis_names(i)))) then
-      call MOM_register_axis(fileObjRead, trim(axis_names(i)))
+      call MOM_register_diagnostic_axis(fileObjRead, trim(axis_names(i)))
     endif
   enddo
 
