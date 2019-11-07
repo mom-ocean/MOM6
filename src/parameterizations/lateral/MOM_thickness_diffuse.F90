@@ -1270,26 +1270,26 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt_in_T, 
     enddo
   endif
 
-
-  !if (find_work) then ; do j=js,je ; do i=is,ie ; do k=nz,1,-1
-  if (find_work) then ; do j=js,je ; do i=is,ie
-    ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
-    Work_h = 0.5 * G%IareaT(i,j) * &
-      ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
-    PE_release_h = -0.25*(KH_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
-                          Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &
-                          Kh_v(i,J,k)*(Slope_y_PE(i,J,k)**2) * hN2_y_PE(i,J,k) + &
-                          Kh_v(i,J-1,k)*(Slope_y_PE(i,J-1,k)**2) * hN2_y_PE(i,J-1,k))
-    if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
-      if (CS%GM_src_alt) then
-        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%L_to_m**2*US%m_to_Z*PE_release_h
-      else
-        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%m_to_L**2*US%T_to_s**3*Work_h
+  if (find_work) then
+    do j=js,je ; do i=is,ie
+      Work_h = 0.5 * G%IareaT(i,j) * &
+        ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
+      if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
+      if (associated(MEKE) .and. associated(MEKE%GM_src) .and. .not. CS%GM_src_alt ) then
+        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%m_to_L**2*US%T_to_s**3* Work_h
       endif
-    endif ; endif
-  !enddo ; enddo ; enddo ; endif
-  enddo ; enddo ; endif
+    enddo ; enddo
+
+    if (associated(MEKE) .and. associated(MEKE%GM_src) .and. CS%GM_src_alt) then
+      do j=js,je ; do i=is,ie ; do k=nz,1,-1
+        PE_release_h = -0.25*(Kh_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
+          Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &
+          Kh_v(i,J,k)*(Slope_y_PE(i,J,k)**2) * hN2_y_PE(i,J,k) + &
+          Kh_v(i,J-1,k)*(Slope_y_PE(i,J-1,k)**2) * hN2_y_PE(i,J-1,k))
+        MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + US%L_to_m**2*US%m_to_Z*PE_release_h
+      enddo ; enddo ; enddo
+    endif
+  endif
 
   if (CS%id_slope_x > 0) call post_data(CS%id_slope_x, CS%diagSlopeX, CS%diag)
   if (CS%id_slope_y > 0) call post_data(CS%id_slope_y, CS%diagSlopeY, CS%diag)
@@ -2006,9 +2006,6 @@ end subroutine thickness_diffuse_end
 !! wave-speed or the equivalent barotropic mode wave-speed.
 !! \f$N_*^2 = \max(N^2,0)\f$ is a non-negative form of the square of the Brunt-Vaisala frequency.
 !! The parameter \f$\gamma_F\f$ is used to reduce the vertical smoothing length scale.
-!! This elliptic form for \f$ \psi \f$ is turned on with the logical <code>KHTH_USE_FGNV_STREAMFUNCTION</code>.
-!!
-!! Thickness diffusivities are calculated independently at u- and v-points using the following expression
 !! \f[
 !! \kappa_h = \left( \kappa_o + \alpha_{s} L_{s}^2 < S N > + \alpha_{M} \kappa_{M} \right) r(\Delta x,L_d)
 !! \f]
