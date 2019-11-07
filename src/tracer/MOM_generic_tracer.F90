@@ -29,7 +29,9 @@ module MOM_generic_tracer
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
   use MOM_hor_index, only : hor_index_type
-  use MOM_io, only : file_exists, MOM_read_data, slasher
+  use MOM_io, only : MOM_open_file, close_file, read_data, FmsNetcdfDomainFile_t, slasher
+  use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_variable_dimension_names
+  use MOM_io, only : file_exists, check_if_open
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -238,6 +240,8 @@ contains
                                                                  !! ALE sponges.
 
     character(len=fm_string_len), parameter :: sub_name = 'initialize_MOM_generic_tracer'
+    character(len=40) :: units
+    character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
     logical :: OK
     integer :: i, j, k, isc, iec, jsc, jec, nk
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
@@ -246,6 +250,9 @@ contains
     real, dimension(:,:,:), pointer     :: tr_ptr
     real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
     integer, dimension(G%isd:G%ied, G%jsd:G%jed)        :: grid_kmt
+    integer :: ndims
+    integer, allocatable, dimension(:) :: dim_sizes ! variable dimension sizes
+    type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
@@ -260,7 +267,7 @@ contains
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
 
-    do
+    do 
       if (INDEX(CS%IC_file, '_NULL_') /= 0) then
          call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
@@ -329,7 +336,33 @@ contains
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                   "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
                   " for tracer "//trim(g_tracer_name))
-            call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
+            !call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
+            ! open file
+            if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, trim(CS%IC_file), "read", G, .false.)
+            ! get variable dimension names and lengths
+            ndims = get_variable_num_dimensions(fileObjRead, trim(g_tracer_name))
+            allocate(dim_sizes(ndims))
+            allocate(dim_names(ndims))
+            call get_variable_size(fileObjRead, trim(g_tracer_name), dim_sizes, broadcast=.true.)
+            call get_variable_dimension_names(fileObjRead, trim(g_tracer_name), dim_names)
+            ! register the axes
+            do i=1,ndims
+              units=""
+              call get_variable_units(fileObjRead, dim_names(i), units)
+              select case (trim(lowercase(units)))
+                case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")
+                case ("degrees_north"); call register_axis(fileObjRead, dim_names(i),"y")
+              case default
+                call register_axis(fileObjRead, dim_names(i), dim_sizes(i))     
+              end select
+            enddo
+            !read the data
+            call read_data(fileObjRead, trim(g_tracer_name), tr_ptr)
+            ! close file 
+            if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+
+            deallocate(dim_sizes)
+            deallocate(dim_names)
           endif
         else
           call MOM_error(FATAL,"initialize_MOM_generic_tracer: "//&

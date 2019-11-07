@@ -180,14 +180,6 @@ interface MOM_open_file
   module procedure MOM_open_file_noDD
 end interface
 
-!> Read a data field from a file
-interface MOM_read_data
-  module procedure MOM_read_data_4d
-  module procedure MOM_read_data_3d
-  module procedure MOM_read_data_2d
-  module procedure MOM_read_data_1d
-end interface
-
 !> Read a pair of data fields representing the two components of a vector from a file
 interface MOM_read_vector
   module procedure MOM_read_vector_3d
@@ -1575,7 +1567,7 @@ end subroutine MOM_read_data_4d
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+                              timelevel, stagger, scale)
   type(FmsNetcdfDomainFile_t) :: fileObj !< netcdf file object returned by call to MOM_open_file
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -1586,12 +1578,11 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
-  integer :: is, ie, js, je
+  integer :: is, ie, js, je, i
   integer :: u_pos, v_pos
-  integer :: start(2), nread(2), dim_sizes_u(2), dim_sizes_v(2)
+  integer, dimension(2) :: start, dim_sizes_u, dim_sizes_v
   character(len=32), dimension(2) :: dim_names_u, dim_names_v, units_u, units_v
   
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL, "MOM_read_vector_2d: netcdf fileObj not open.")
@@ -1601,42 +1592,45 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
     if (stagger == CGRID_NE .or. stagger == BGRID_NE ) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
-  
-  start(:) = 1
-  call get_variable_size(fileObj, u_fieldname, dim_sizes_u, broadcast=.true.)
-  call get_variable_size(fileObj, v_fieldname, dim_sizes_v, broadcast=.true.)
 
-  if present(timelevel) then
-    start(1) = timelevel 
-    dim_sizes_u(1) = timelevel
-    dim_sizes_v(1) = timelevel
-  endif
   !call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
    !              timelevel=timelevel, position=u_pos)
   !call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
   !               timelevel=timelevel, position=v_pos)
-  
+  start(:) = 1
+  call get_variable_size(fileObj, u_fieldname, dim_sizes_u, broadcast=.true.)
+  call get_variable_size(fileObj, v_fieldname, dim_sizes_v, broadcast=.true.)
   call get_variable_dimension_names(fileObj, u_fieldname, dim_names_u, broadcast=.true.)
   call get_variable_dimension_names(fileObj, v_fieldname, dim_names_v, broadcast=.true.)
  
   do i=1,2
     call get_variable_units(u_fieldname, dim_names_u(i), units_u(i))
-    call get_variable_units(u_fieldname, dim_names_v(i), units_v(i))
     select case (trim(lowercase(units_u(i)))
       case ("degrees_east"); call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
       case ("degrees_north"); call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
       case default
-        call register_axis(fileObj, dim_names_u(i),dim_sizes_u(i))   
-  
+        if (is_dimension_unlimited(fileObj, dim_names_u(i)) then
+          if (present(timelevel)) then
+            start(i) = timelevel
+            dim_sizes_u(i) = 1
+            dim_sizes_v(i) = 1
+          endif
+        endif
+        call register_axis(fileObj, dim_names_u(i),dim_sizes_u(i))
+    end select
+  enddo 
   do i=1,2
-    do j=1,size(axis_names)
-      call MOM_register_diagnostic_axis(fileObj, dim_names_u(i), )
-      else
-     
-  enddo
+     if (trim(lowercase(dim_names_v(i))) .ne. trim(lowercase(dim_names_u(i)))) then 
+       call get_variable_units(v_fieldname, dim_names_v(i), units_v(i))
+       select case (trim(lowercase(units_v(i)))
+         case ("degrees_east"); call register_axis(fileObj, dim_names_v(i), "x", domain_position=v_pos)
+         case ("degrees_north"); call register_axis(fileObj, dim_names_v(i), "y", domain_position=v_pos)  
+       end select
+     endif
+  enddo 
 
-  call read_data(fileObj,u_fieldname, u_data, corner=start, nread)
-  call read_data(fileObj,v_fieldname, v_data, corner=start)
+  call read_data(fileObj,u_fieldname, u_data, corner=start, edge_lengths=dim_sizes_u)
+  call read_data(fileObj,v_fieldname, v_data, corner=start, edge_lengths=dim_sizes_v)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
@@ -1649,14 +1643,12 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
 
 end subroutine MOM_read_vector_2d
 
-
 !> This function uses the fms_io function read_data to read a pair of distributed
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_3d(fileObj, filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+subroutine MOM_read_vector_3d(fileObj, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scale)
   type(FmsNetcdfDomainFile_t) :: fileObj !< netcdf file object returned by call to MOM_open_file
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
   real, dimension(:,:,:), intent(inout) :: u_data    !< The 3 dimensional array into which the
@@ -1666,12 +1658,15 @@ subroutine MOM_read_vector_3d(fileObj, filename, u_fieldname, v_fieldname, u_dat
   type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
   integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
-  logical,      optional, intent(in)    :: scalar_pair !< If true, a pair of scalars are to be read.cretized
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
-
-  integer :: is, ie, js, je
+  integer :: is, ie, js, je, i
   integer :: u_pos, v_pos
+  integer :: u_pos, v_pos
+  integer, dimension(3) :: start, dim_sizes_u, dim_sizes_v
+  character(len=32), dimension(3) :: dim_names_u, dim_names_v, units_u, units_v
+
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL, "MOM_read_vector_3d: netcdf fileObj not open.")
 
   u_pos = EAST_FACE ; v_pos = NORTH_FACE
   if (present(stagger)) then
@@ -1680,10 +1675,53 @@ subroutine MOM_read_vector_3d(fileObj, filename, u_fieldname, v_fieldname, u_dat
     elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
   endif
 
-  call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=u_pos)
-  call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=v_pos)
+  !call old_fms_read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+  !               timelevel=timelevel, position=u_pos)
+  !call old_fms_read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+  !               timelevel=timelevel, position=v_pos)
+  start(:) = 1
+  call get_variable_size(fileObj, u_fieldname, dim_sizes_u, broadcast=.true.)
+  call get_variable_size(fileObj, v_fieldname, dim_sizes_v, broadcast=.true.)
+  call get_variable_dimension_names(fileObj, u_fieldname, dim_names_u, broadcast=.true.)
+  call get_variable_dimension_names(fileObj, v_fieldname, dim_names_v, broadcast=.true.)
+ 
+  do i=1,3
+    call get_variable_units(u_fieldname, dim_names_u(i), units_u(i))
+    select case (trim(lowercase(units_u(i)))
+      case ("degrees_east"); call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
+      case ("degrees_north"); call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
+      case default
+        if (is_dimension_unlimited(fileObj, dim_names_u(i)) then
+          if (present(timelevel)) then
+            start(i)=timelevel
+            dim_sizes_u(i) = 1
+            dim_sizes_v(i) = 1
+          endif
+        endif
+        call register_axis(fileObj, dim_names_u(i),dim_sizes_u(i))
+    end select
+  enddo 
+  do i=1,3
+     if (trim(lowercase(dim_names_v(i))) .ne. trim(lowercase(dim_names_u(i)))) then 
+       call get_variable_units(v_fieldname, dim_names_v(i), units_v(i))
+       select case (trim(lowercase(units_v(i)))
+         case ("degrees_east"); call register_axis(fileObj, dim_names_v(i), "x", domain_position=v_pos)
+         case ("degrees_north"); call register_axis(fileObj, dim_names_v(i), "y", domain_position=v_pos)  
+       end select
+     endif
+  enddo 
+
+  call read_data(fileObj,u_fieldname, u_data, corner=start, edge_lengths=dim_sizes_u)
+  call read_data(fileObj,v_fieldname, v_data, corner=start, edge_lengths=dim_sizes_v)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
+    u_data(is:ie,js:je) = scale*u_data(is:ie,js:je)
+    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
+    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
+    v_data(is:ie,js:je) = scale*v_data(is:ie,js:je)
+  endif ; endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)

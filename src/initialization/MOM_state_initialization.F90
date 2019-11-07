@@ -17,8 +17,8 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : file_exists, MOM_open_file, close_file, register_axis
-use MOM_io, only : get_variable_size, get_variable_num_dimensions
+use MOM_io, only : file_exists, check_if_open, MOM_open_file, close_file, register_axis
+use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_variable_dimension_names
 use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
 use MOM_io, only : read_data, FmsNetcdfDomainFile_t, FmsNetcdfFile_t
 use MOM_io, only : MOM_read_vector, scale_data
@@ -649,6 +649,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
   character(len=40)  :: mdl = "initialize_thickness_from_file" ! This subroutine's name.
   character(len=200) :: filename, thickness_file, inputdir, mesg ! Strings for file/path
   integer :: i, j, k, is, ie, js, je, nz
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -673,7 +674,12 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     !### Consider adding a parameter to use to rescale h.
     if (just_read) return ! All run-time parameters have been read, so return.
     !call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
+    ! open file for domain-decomposed read
+    if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
     call read_data(fileObjRead, "h", h)
+    ! close the file
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+    ! scale the data
     call scale_data(h, GV%m_to_H, G%Domain)
     call trim(area_varname), "h" h)
   else
@@ -684,7 +690,12 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     if (just_read) return ! All run-time parameters have been read, so return.
 
     !call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    ! open file for domain-decomposed read
+    if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
     call read_data(fileObjRead, "eta", eta)
+    ! close the file
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+    ! scale the data
     call scale_data(eta, US%m_to_Z, G%Domain)
 
     if (correct_thickness) then
@@ -873,6 +884,7 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
   character(len=200) :: filename, eta_file, inputdir ! Strings for file/path
   character(len=72)  :: eta_var
   integer :: i, j, k, is, ie, js, je, nz
+  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -896,8 +908,14 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
 
   e0(:) = 0.0
   !call MOM_read_data(filename, eta_var, e0(:), scale=US%m_to_Z)
+  ! open file for non-domain-decomposed read 
+  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
   call read_data(fileObjRead, eta_var, e0(:))
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+  ! scale the data
   call scale_data(e0(:),US%m_to_Z)
+
   if ((abs(e0(1)) - 0.0) > 0.001) then
     ! This list probably starts with the interior interface, so shift it up.
     do k=nz+1,2,-1 ; e0(K) = e0(K-1) ; enddo
@@ -1034,9 +1052,14 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   character(len=40)  :: mdl = "depress_surface" ! This subroutine's name.
   character(len=200) :: inputdir, eta_srf_file ! Strings for file/path
   character(len=200) :: filename, eta_srf_var  ! Strings for file/path
+  character(len=40) :: units
+  character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
-  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
+  integer :: ndims
+  integer, allocatable, dimension(:) :: dim_sizes ! variable dimension sizes
+  
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -1054,7 +1077,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
                  default="SSH", do_not_log=just_read)
   filename = trim(inputdir)//trim(eta_srf_file)
   if (.not.just_read) &
-    call log_param(param_file,  mdl, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+    call log_param(param_file,  mdl,  case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")"INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
   call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_SCALE", scale_factor, &
                  "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into "//&
@@ -1062,12 +1085,34 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
   ! open file
-  if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
+  if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
+  ! get variable dimension names and lengths
+  ndims = get_variable_num_dimensions(fileObjRead, eta_srf_var)
+  allocate(dim_sizes(ndims))
+  allocate(dim_names(ndims))
+  call get_variable_size(fileObjRead, eta_srf_var, dim_sizes, broadcast=.true.)
+  call get_variable_dimension_names(fileObjRead, eta_srf_var, dim_names)
+  ! register the axes
+  do i=1,ndims
+    units=""
+    call get_variable_units(fileObjRead, dim_names(i), units)
+    select case (trim(lowercase(units)))
+      case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")
+      case ("degrees_north"); call register_axis(fileObjRead, dim_names(i),"y")
+      case default
+        call register_axis(fileObjRead, dim_names(i), dim_sizes(i))     
+    end select
+  enddo
   !call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
+  ! read the data
   call read_data(fileObjRead, eta_srf_var, eta_sfc)
+  ! scale the data
   call scale_data(eta_sfc,scale_factor, G%domain)
   ! close file 
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+
+  deallocate(dim_sizes)
+  deallocate(dim_names)
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
 
@@ -1087,7 +1132,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
       do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
     elseif (eta(i,j,1) > eta_sfc(i,j)) then
       ! Remove any mass that is above the target free surface.
-      do k=1,nz
+      do k=1,nzcall get_variable_size(fileObjRead, eta_srf_var, dim_sizes, broadcast=.true.)
         if (eta(i,j,K) <= eta_sfc(i,j)) exit
         if (eta(i,j,K+1) >= eta_sfc(i,j)) then
           h(i,j,k) = GV%Angstrom_H
@@ -1097,7 +1142,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
         endif
       enddo
     endif
-  endif ; enddo ; enddo
+  endif ; enddo ; enddocall get_variable_size(fileObjRead, eta_srf_var, dim_sizes, broadcast=.true.)
 
 end subroutine depress_surface
 
@@ -1120,13 +1165,16 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity and temperature within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
+  character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
   real :: scale_factor   ! A file-dependent scaling vactor for the input pressurs.
   real :: min_thickness  ! The minimum layer thickness, recast into Z units.
   integer :: i, j, k
+  integer :: ndims
+  integer, allocatable, dimension(:) :: dim_sizes ! variable dimension sizes
   logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
-  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -1152,13 +1200,35 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
+  if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
+   
+  ! get variable dimension names and lengths
+  ndims = get_variable_num_dimensions(fileObjRead, p_surf_var)
+  allocate(dim_sizes(ndims))
+  allocate(dim_names(ndims))
+  call get_variable_size(fileObjRead, p_surf_var, dim_sizes)
+  call get_variable_dimension_names(fileObjRead, p_surf_var, dim_names)
+  ! register the axes
+  do i=1,ndims
+    units=""
+    call get_variable_units(fileObjRead, dim_names(i), units)
+    select case (trim(lowercase(units)))
+      case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")
+      case ("degrees_north"); call register_axis(fileObjRead, dim_names(i),"y")
+      case default
+        call register_axis(fileObjRead, dim_names(i), dim_sizes(i))     
+    end select
+  enddo
 
   !call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  ! read the data
   call read_data(fileObjRead, p_surf_var, p_surf)
+  ! scale the data
   call scale_data(p_surf, scale_factor, G%domain)
 
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+  deallocate(dim_names)
+  deallocate(dim_sizes)
 
   if (use_remapping) then
     allocate(remap_CS)
@@ -1313,7 +1383,7 @@ subroutine initialize_velocity_from_file(u, v, G, US, param_file, just_read_para
   !  Read the velocities from a netcdf file.
   call MOM_read_vector(fileObjRead, "u", "v", u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
   
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead))
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file

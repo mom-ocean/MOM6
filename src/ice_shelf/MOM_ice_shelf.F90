@@ -21,9 +21,10 @@ use MOM_grid_initialize, only : set_grid_metrics
 use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
-use MOM_io, only : file_exists, get_variable_size, get_variable_num_dimensions, is_dimension_unlimited
+use MOM_io, only : file_exists, get_variable_size, is_dimension_unlimited
 use MOM_io, only : MOM_open_file, close_file, read_data, check_if_open, FmsNetcdfDomainFile_t
-use MOM_io, only : slasher, fieldtype
+use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
+use MOM_io, only : slasher
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, time_type_to_real, time_type_to_real, real_to_time
@@ -1100,13 +1101,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
+  character(len=40), allocatable :: dim_names
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
   integer, allocatable, dimension(:) :: dim_sizes, ndims, start
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
   character(len=240) :: Tideamp_file
   real    :: utide
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf domain-decomposed file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
@@ -1326,16 +1328,18 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
     !call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
     ! open file for domain-decomposed read
-    if (.not.check_if_open(fileObjRead)) call open_file(fileObjRead, filename, "read", G, .false.)
+    if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
    ! get the number of dimensions and the dimension sizes for 'tideamp'  
     ndims = get_variable_num_dimensions(fileObjReadNo, "tideamp", broadcast=.true.)
+    allocate(dim_names(ndims))
     allocate(dim_sizes(ndims))
     allocate(start(ndims))
-    start(:) = 1
+    start(ndims) = 1
+    call get_variable_dimension_names(fileObjRead, "tideamp", dim_names)
     call get_variable_size(fileObjRead, "tideamp", dim_sizes)
    ! set the read_length index for the unlimited dimension (time)
     do i=1,ndims
-      if (is_dimension_unlimited(fileObjRead, "tideamp")) then
+      if (is_dimension_unlimited(fileObjRead, dim_names(i))) then
         dim_sizes(i) = 1
       endif
     enddo
@@ -1343,8 +1347,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
     ! read the data
     call read_data(fileObjRead, "tideamp", CS%utide, corner=start, edge_lengths=dim_sizes)
     ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead))
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
     deallocate(dim_sizes)
+    deallocate(dim_names)
     deallocate(start)
 
   else

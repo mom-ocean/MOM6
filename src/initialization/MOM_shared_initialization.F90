@@ -11,15 +11,14 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : mpp_close_file, create_file, fieldtype, file_exists
-use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
-use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : fieldtype, MOM_read_vector
+use MOM_io, only : slasher, vardesc, var_desc
+use MOM_io, only : MOM_open_file, close_file, read_data, write_data
 use MOM_io, only : register_variable_attribute, register_axis, register_field
 use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
-use MOM_io, only : variable_exists, dimension_exists
-use MOM_io, only : check_if_open, NORTH_FACE, EAST_FACE
-use MOM_io, only : get_horizontal_grid_logic
+use MOM_io, only : file_exists, variable_exists, dimension_exists, check_if_open
+use MOM_io, only : NORTH_FACE, EAST_FACE
+use MOM_io, only : FmsNetcdfDomainFile_t, get_horizontal_grid_logic
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -154,6 +153,7 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
   character(len=200) :: filename, topo_file, inputdir ! Strings for file/path
   character(len=200) :: topo_varname                  ! Variable name in file
   character(len=40)  :: mdl = "initialize_topography_from_file" ! This subroutine's name.
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -180,7 +180,15 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
                          ! exist. We need to ensure the depth in masked-out PEs appears to be that
                          ! of land so this line does that in the halo regions. For non-masked PEs
                          ! the halo region is filled properly with a later pass_var().
-  call MOM_read_data(filename, trim(topo_varname), D, G%Domain, scale=m_to_Z)
+  
+  ! call MOM_read_data(filename, trim(topo_varname), D, G%Domain, scale=m_to_Z)
+  ! open file for domain-decomposed read
+  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G,.false.)
+  !  read in the data
+  call read_data(fileObjRead, trim(topo_varname), D)
+  call scale_data(D, m_to_Z, G%Domain)
+   ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   call apply_topography_edits_from_file(D, G, param_file, US)
 
@@ -766,6 +774,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf file object returned by call to MOM_open_file
   ! These checks apply regardless of the chosen option.
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
@@ -781,12 +790,17 @@ subroutine reset_face_lengths_file(G, param_file, US)
   call log_param(param_file, mdl, "INPUTDIR/CHANNEL_WIDTH_FILE", filename)
 
   if (is_root_pe()) then ; if (.not.file_exists(filename)) &
-    call MOM_error(FATAL," reset_face_lengths_file: Unable to open "//&
+    call MOM_error(FATAL," reset_face_lengths_file: Unable to find "//&
                            trim(filename))
   endif
 
-  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=m_to_L)
+  ! open file for domain-decomposed read
+  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
+
+  call MOM_read_vector(fileObjRead, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=m_to_L)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead))
 
   do j=jsd,jed ; do I=IsdB,IedB
     if (L_to_m*G%dy_Cu(I,j) > L_to_m*G%dyCu(I,j)) then
@@ -1274,8 +1288,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
                  "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
-  file_threading = SINGLE_FILE
-  if (multiple_files) file_threading = MULTIPLE
+  !file_threading = SINGLE_FILE
+  !if (multiple_files) file_threading = MULTIPLE
 
   !call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
   !                 file_threading, dG=G)

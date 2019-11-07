@@ -5,8 +5,12 @@ module MOM_regridding
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
-use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
-use MOM_io,            only : slasher
+! use MOM_io_only :: field_exists, field_size, MOM_read_data
+use MOM_io, only : slasher
+use MOM_io, only : MOM_open_file, close_file, register_axis, read_data
+use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_variable_dimension_names
+use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
+use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, file_exists, check_if_open
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -213,6 +217,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                                      100., 100., 100., 100., 100., 100., 100., 175., &
                                      250., 375., 500., 500., 500., 500., 500., 500., &
                                      500., 500., 500., 500., 500., 500., 500., 500. /)
+  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -337,6 +342,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
             "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+    if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, fileName, "read", .false.)
 
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
@@ -709,6 +715,9 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     deallocate(h_max)
   endif
+
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   if (allocated(dz)) deallocate(dz)
 end subroutine initialize_regridding
