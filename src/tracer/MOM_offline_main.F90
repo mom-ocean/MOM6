@@ -17,10 +17,12 @@ use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_error_handler,        only : callTree_enter, callTree_leave
-use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser,           only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
-use MOM_io,                   only : MOM_read_data, MOM_read_vector
+use MOM_io,                   only : MOM_read_vector, get_variable_size
+use MOM_io,                   only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io,                   only : check_if_open, file_exists, FmsNetcdfDomainFile_t
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
@@ -1447,15 +1449,17 @@ end subroutine offline_transport_init
 !> Coordinates the allocation and reading in all time levels of uh, vh, hend, temp, and salt from files. Used
 !! when read_all_ts_uvh
 subroutine read_all_input(CS)
-  type(offline_transport_CS), intent(inout)  :: CS !< Control structure for offline module
+  type(offline_transport_CS), intent(inout) :: CS !< Control structure for offline module
 
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz, t, ntime
   integer :: IsdB, IedB, JsdB, JedB
+  integer, dimension(4) :: dimSizesh_end, dimSizesTemp, dimSizeSalt, start
 
   nz = CS%GV%ke ; ntime = CS%numtime
   isd  = CS%G%isd   ; ied  = CS%G%ied  ; jsd  = CS%G%jsd  ; jed  = CS%G%jed
   IsdB = CS%G%IsdB  ; IedB = CS%G%IedB ; JsdB = CS%G%JsdB ; JedB = CS%G%JedB
-
+  type(FmsNetcdfDomainFile_t) :: fileObjReadSnap, fileObjReadMean ! netcdf domain-decomposed file object returned 
+                                                                !by call to MOM_open_file
   ! Extra safety check that we're not going to overallocate any arrays
   if (CS%read_all_ts_uvh) then
     if (allocated(CS%uhtr_all)) call MOM_error(FATAL, "uhtr_all is already allocated")
@@ -1471,16 +1475,37 @@ subroutine read_all_input(CS)
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
 
     call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
+    ! open file for domain-decomposed read
+    if (.not.check_if_open(fileObjReadSnap)) call MOM_open_file(fileObjReadSnap, CS%snap_file, "read", G, .false.)
+    if (.not.check_if_open(fileObjReadMean)) call MOM_open_file(fileObjReadMean, CS%mean_file, "read", G, .false.)
+
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjReadSnap,"h_end", xUnits="degrees_east", yUnits="degrees_north")
+    ! note: temp and salt have same axes, so only registering temp axes
+    call MOM_register_variable_axes(fileObjReadMean,"temp", xUnits="degrees_east", yUnits="degrees_north")
+    ! get the dimension sizes
+    call get_variable_size(fileObjReadSnap, "h_end", dimSizesh_end)
+    call get_variable_size(fileObjReadMean, "temp", dimSizesTemp)
+    call get_variable_size(fileObjReadMean, "salt", dimSizesSalt)
+    
+    dimSizesh_end(4)=1
+    dimSizesTemp(4)=1
+    dimSizesSalt(4)=1
+     
+    start(:)=1
     do t = 1,ntime
-      call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
+      start(4) = t
+      call MOM_read_vector(fileObjReadSnap, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, timelevel=t)
-      call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        timelevel=t, position=CENTER)
-      call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        timelevel=t, position=CENTER)
-      call MOM_read_data(CS%mean_file,'salt', CS%salt_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        timelevel=t, position=CENTER)
+      call read_data(fileObjReadSnap,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), corner=start, &
+        edge_lengths=dimSizesh_end)
+      call read_data(fileObjReadMean,'temp', CS%temp_all(:,:,1:CS%nk_input,t), corner=start, &
+        edge_lengths=dimSizesTemp)
+      call read_data(fileObjReadMean,'salt', CS%salt_all(:,:,1:CS%nk_input,t), corner=start, &
+                     edge_lengths=dimSizesSalt)
     enddo
+    if (check_if_open(fileObjReadSnap)) call close_file(fileObjReadSnap)
+    if (check_if_open(fileObjReadMean)) call close_file(fileObjReadMean)
   endif
 
 end subroutine read_all_input

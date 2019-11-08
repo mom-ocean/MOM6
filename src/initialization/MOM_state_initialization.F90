@@ -17,13 +17,11 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : file_exists, check_if_open, MOM_open_file, close_file, register_axis
-use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_variable_dimension_names
-use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
-use MOM_io, only : read_data, FmsNetcdfDomainFile_t, FmsNetcdfFile_t
+use MOM_io, only : file_exists, check_if_open, MOM_open_file, close_file, read_data
+use MOM_io, only : get_variable_size, get_variable_num_dimensions
+use MOM_io, only : MOM_register_variable_axes, FmsNetcdfDomainFile_t, FmsNetcdfFile_t
 use MOM_io, only : MOM_read_vector, scale_data
 use MOM_io, only : slasher
-!use MOM_io, only : MOM_read_data, MOM_read_vector
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query
@@ -676,6 +674,8 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     !call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
     ! open file for domain-decomposed read
     if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjRead, "h", xUnits="degrees_east", yUnits="degrees_north")
     call read_data(fileObjRead, "h", h)
     ! close the file
     if (check_if_open(fileObjRead)) call close_file(fileObjRead)
@@ -692,6 +692,8 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     !call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
     ! open file for domain-decomposed read
     if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjRead, "eta", xUnits="degrees_east", yUnits="degrees_north")
     call read_data(fileObjRead, "eta", eta)
     ! close the file
     if (check_if_open(fileObjRead)) call close_file(fileObjRead)
@@ -1052,12 +1054,8 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   character(len=40)  :: mdl = "depress_surface" ! This subroutine's name.
   character(len=200) :: inputdir, eta_srf_file ! Strings for file/path
   character(len=200) :: filename, eta_srf_var  ! Strings for file/path
-  character(len=40) :: units
-  character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
-  integer :: ndims
-  integer, allocatable, dimension(:) :: dim_sizes ! variable dimension sizes
   
   type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
@@ -1077,7 +1075,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
                  default="SSH", do_not_log=just_read)
   filename = trim(inputdir)//trim(eta_srf_file)
   if (.not.just_read) &
-    call log_param(param_file,  mdl,  case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")"INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+    call log_param(param_file,  mdl, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
   call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_SCALE", scale_factor, &
                  "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into "//&
@@ -1086,33 +1084,15 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   if (just_read) return ! All run-time parameters have been read, so return.
   ! open file
   if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
-  ! get variable dimension names and lengths
-  ndims = get_variable_num_dimensions(fileObjRead, eta_srf_var)
-  allocate(dim_sizes(ndims))
-  allocate(dim_names(ndims))
-  call get_variable_size(fileObjRead, eta_srf_var, dim_sizes, broadcast=.true.)
-  call get_variable_dimension_names(fileObjRead, eta_srf_var, dim_names)
-  ! register the axes
-  do i=1,ndims
-    units=""
-    call get_variable_units(fileObjRead, dim_names(i), units)
-    select case (trim(lowercase(units)))
-      case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")
-      case ("degrees_north"); call register_axis(fileObjRead, dim_names(i),"y")
-      case default
-        call register_axis(fileObjRead, dim_names(i), dim_sizes(i))     
-    end select
-  enddo
-  !call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
+  ! register the variable axes
+  call MOM_register_variable_axes(fileObjRead, eta_srf_var, xUnits="degrees_east", yUnits="degrees_north")
   ! read the data
   call read_data(fileObjRead, eta_srf_var, eta_sfc)
   ! scale the data
   call scale_data(eta_sfc,scale_factor, G%domain)
   ! close file 
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-
-  deallocate(dim_sizes)
-  deallocate(dim_names)
+ 
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
 
@@ -1132,7 +1112,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
       do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
     elseif (eta(i,j,1) > eta_sfc(i,j)) then
       ! Remove any mass that is above the target free surface.
-      do k=1,nzcall get_variable_size(fileObjRead, eta_srf_var, dim_sizes, broadcast=.true.)
+      do k=1,nz
         if (eta(i,j,K) <= eta_sfc(i,j)) exit
         if (eta(i,j,K+1) >= eta_sfc(i,j)) then
           h(i,j,k) = GV%Angstrom_H
@@ -1142,7 +1122,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
         endif
       enddo
     endif
-  endif ; enddo ; enddocall get_variable_size(fileObjRead, eta_srf_var, dim_sizes, broadcast=.true.)
+  endif ; enddo ; enddo
 
 end subroutine depress_surface
 
@@ -1165,12 +1145,9 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b ! Top and bottom edge values for reconstructions
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_t, T_b ! of salinity and temperature within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
-  character(len=40), allocatable, dimension(:) :: dim_names ! variable dimension names
   real :: scale_factor   ! A file-dependent scaling vactor for the input pressurs.
   real :: min_thickness  ! The minimum layer thickness, recast into Z units.
   integer :: i, j, k
-  integer :: ndims
-  integer, allocatable, dimension(:) :: dim_sizes ! variable dimension sizes
   logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
@@ -1201,34 +1178,14 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   if (just_read) return ! All run-time parameters have been read, so return.
 
   if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
-   
-  ! get variable dimension names and lengths
-  ndims = get_variable_num_dimensions(fileObjRead, p_surf_var)
-  allocate(dim_sizes(ndims))
-  allocate(dim_names(ndims))
-  call get_variable_size(fileObjRead, p_surf_var, dim_sizes)
-  call get_variable_dimension_names(fileObjRead, p_surf_var, dim_names)
-  ! register the axes
-  do i=1,ndims
-    units=""
-    call get_variable_units(fileObjRead, dim_names(i), units)
-    select case (trim(lowercase(units)))
-      case ("degrees_east"); call register_axis(fileObjRead, dim_names(i),"x")
-      case ("degrees_north"); call register_axis(fileObjRead, dim_names(i),"y")
-      case default
-        call register_axis(fileObjRead, dim_names(i), dim_sizes(i))     
-    end select
-  enddo
-
-  !call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  ! register the variable axes
+  call MOM_register_variable_axes(fileObjRead, p_surf_var, xUnits="degrees_east", yUnits="degrees_north")
   ! read the data
   call read_data(fileObjRead, p_surf_var, p_surf)
   ! scale the data
   call scale_data(p_surf, scale_factor, G%domain)
 
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-  deallocate(dim_names)
-  deallocate(dim_sizes)
 
   if (use_remapping) then
     allocate(remap_CS)
@@ -1541,7 +1498,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   character(len=200) :: ts_file, salt_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "initialize_temp_salt_from_file"
   character(len=64)  :: temp_var, salt_var ! Temperature and salinity names in files
-  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netCDF domain-decomposed file object returned by call to MOM_open_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -1570,19 +1527,29 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
-  if (.not.(check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
+  ! open the TS file
+  if (.not.(check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
 
   ! Read the temperatures and salinities from netcdf files.
   !call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+  ! register the variable axes
+  call MOM_register_variable_axes(fileObjRead, temp_var, xUnits="degrees_east", yUnits="degrees_north")
+  ! read the data
   call read_data(fileObjRead, temp_var, T)
+  ! close the TS file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   salt_filename = trim(inputdir)//trim(salt_file)
   if (.not.file_exists(salt_filename)) call MOM_error(FATAL, &
-     " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
-
+     " initialize_temp_salt_from_file: Unable to find "//trim(salt_filename))
+  ! open the salt file
+  if (.not.(check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, salt_filename, "read", G, .false.)
+  ! register the variable axes
+  call MOM_register_variable_axes(fileObjRead, salt_var, xUnits="degrees_east", yUnits="degrees_north")
   !call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
+  ! read the data
   call read_data(fileObjRead, salt_var, S)
-
+  ! close the salt file
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
   call callTree_leave(trim(mdl)//'()')
@@ -1836,13 +1803,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   character(len=40) :: mdl = "initialize_sponges_file"
   character(len=200) :: damping_file, state_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
-  character(len=40), allocatable :: dim_names ! array for variable dimension names
-
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
   logical :: new_sponges ! True if using the newer sponges which do not
                          ! need to reside on the model horizontal grid.
-  type(FmsNetcdfFile_t) :: fileObjRead ! FMS file object for non-domain-decomposed read returned by call to 
-                                       ! MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for non-domain-decomposed read returned by call to 
+                                            ! MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1890,15 +1855,15 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   if (new_sponges .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
-  ! open the file for domain-decomposed read
-  file_open_success = MOM_open_file(fileObjRead, filename, "read", .false.)
+  ! open the damping file for domain-decomposed read
+  file_open_success = MOM_open_file(fileObjRead, filename, "read", G, .false.)
   if (.not.file_open_success(filObjRead)) call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
-  ! get the number of global dimensions and the dimension names
-  ndims = get_num_dimensions(fileObjRead, broadcast=.true.)
-  allocate(dim_names(ndims))
- 
+  ! register the variable axes
+  call MOM_register_variable_axes(fileObjRead, "Idamp", xUnits="degrees_east", yUnits="degrees_north")
   call read_data(fileObjRead, "Idamp", Idamp)
   !call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
+  ! close the damping file
+  if (check_if_open(fileObjRead) call close_file(fileObjRead)
 
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
@@ -1909,19 +1874,24 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   if (.not.file_exists(filename)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-  if (.not. (check_if_open(fileObjRead))) call MOM_open_file(fileObjRead, filename, "read", .false.)
+  if (.not. (check_if_open(fileObjRead))) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
 
   ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjRead, eta_var, xUnits="degrees_east", yUnits="degrees_north")
     !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    ! read the data
     call read_data(fileObjRead, eta_var, eta)
+    ! close the state file
+    if (check_if_open(fileObjRead) call close_file(fileObjRead)
+    ! scale the data
     call scale_data(eta, US%m_to_Z, G%Domain)
 
     do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%bathyT(i,j)
-    enddo ; enddo                                                                                                                                                           
+      eta(i,j,nz+1) = -G%bathyT(i,j)   enddo ;enddo                                                                                                                                                           
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
@@ -1933,11 +1903,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   elseif (.not. new_sponges) then ! ALE mode
 
     !call field_size(filename,eta_var,siz,no_domain=.true.)
-    
+    if (.not. (check_if_open(fileObjRead))) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
     ! get the number of dimensions and the dimension sizes for eta_var 
-    ndims = get_variable_num_dimensions(fileObjReadNoDD, eta_var, broadcast=.true.)
+    ndims = get_variable_num_dimensions(fileObjRead, eta_var, broadcast=.true.)
     allocate(dim_sizes(ndims))
-    call get_variable_size(fileObjReadNoDD, eta_var, dim_sizes, broadcast=.true.)    
+    call get_variable_size(fileObjRead, eta_var, dim_sizes, broadcast=.true.)    
 
     if (dim_sizes(1) /= G%ieg-G%isg+1 .or. dim_sizes(2) /= G%jeg-G%jsg+1) &
       call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
@@ -1947,9 +1917,14 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     nz_data = dim_sizes(3)-1
     allocate(eta(isd:ied,jsd:jed,nz_data+1))
     allocate(h(isd:ied,jsd:jed,nz_data))
-
+    
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjRead, eta_var, xUnits="degrees_east", yUnits="degrees_north")
     !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
     call read_data(fileObjRead, eta_var, eta)
+    ! close the file
+    if (check_if_open(fileObjRead) call close_file(fileObjRead)
+    ! scale the data
     call scale_data(eta, US%m_to_Z, G%Domain)
     
     do j=js,je ; do i=is,ie
@@ -1976,12 +1951,16 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   ! sponge. By default, momentum is advected vertically within the
   ! sponge, but momentum is typically not damped within the sponge.
 
+  if (.not. (check_if_open(fileObjRead))) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
+
   if ( GV%nkml>0 .and. .not. new_sponges) then
     ! This call to set_up_sponge_ML_density registers the target values of the
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
     do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjRead, potemp_var, xUnits="degrees_east", yUnits="degrees_north")
     !call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
     !call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
     call read_data(fileObjRead, potemp_var, tmp)
@@ -1998,7 +1977,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   ! The remaining calls to set_up_sponge_field can be in any order.
   if ( use_temperature .and. .not. new_sponges) then
     !call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    call read_data(fileObjRead,potemp_var, tmp)
+    call read_data(fileObjRead, potemp_var, tmp)
     call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
     !call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call read_data(fileObjRead, salin_var, tmp)
@@ -2010,7 +1989,6 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
-  deallocate(dim_names)
 end subroutine initialize_sponges_file
 
 !> This subroutine sets the 4 bottom depths at velocity points to be the
@@ -2147,6 +2125,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real :: zTopOfCell, zBottomOfCell ! Heights in Z units [Z ~> m].
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   logical :: use_ice_shelf
@@ -2306,10 +2285,16 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   ! This is needed for building an ALE grid under ice shelves
   if (use_ice_shelf) then
     if (.not.file_exists(shelf_file)) call MOM_error(FATAL, &
-      "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
-
+      "MOM_temp_salt_initialize_from_Z: Unable to find shelf file "//trim(shelf_file))
+    ! open the shelf file
+    if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, shelf_file, "read", G, .false.)
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObj, trim(area_varname), xUnits="degrees_east", yUnits="degrees_north")
     !call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
+    ! read the data
     call read_data(fileObjRead, trim(area_varname), area_shelf_h)
+    ! close the shelf file
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
     ! Initialize frac_shelf_h with zeros (open water everywhere)
     frac_shelf_h(:,:) = 0.0
     ! Compute fractional ice shelf coverage of h

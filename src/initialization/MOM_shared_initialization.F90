@@ -14,7 +14,7 @@ use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : fieldtype, MOM_read_vector
 use MOM_io, only : slasher, vardesc, var_desc
 use MOM_io, only : MOM_open_file, close_file, read_data, write_data
-use MOM_io, only : register_variable_attribute, register_axis, register_field
+use MOM_io, only : register_variable_attribute, register_axis, register_field,  MOM_register_variable_axes
 use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
 use MOM_io, only : file_exists, variable_exists, dimension_exists, check_if_open
 use MOM_io, only : NORTH_FACE, EAST_FACE
@@ -184,8 +184,11 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
   ! call MOM_read_data(filename, trim(topo_varname), D, G%Domain, scale=m_to_Z)
   ! open file for domain-decomposed read
   if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G,.false.)
+  ! regiser the axes 
+  call MOM_register_variable_axes(fileObjRead, trim(topo_varname), xUnits="degrees_east", yUnits="degrees_north")
   !  read in the data
   call read_data(fileObjRead, trim(topo_varname), D)
+  ! scale the data
   call scale_data(D, m_to_Z, G%Domain)
    ! close the file
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)

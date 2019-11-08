@@ -21,9 +21,8 @@ use MOM_grid_initialize, only : set_grid_metrics
 use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
-use MOM_io, only : file_exists, get_variable_size, is_dimension_unlimited
-use MOM_io, only : MOM_open_file, close_file, read_data, check_if_open, FmsNetcdfDomainFile_t
-use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
+use MOM_io, only : MOM_open_file, close_file, read_data, MOM_register_variable_axes 
+use MOM_io, only : check_if_open, FmsNetcdfDomainFile_t, file_exists
 use MOM_io, only : slasher
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
@@ -1329,20 +1328,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
     !call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
     ! open file for domain-decomposed read
     if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
-   ! get the number of dimensions and the dimension sizes for 'tideamp'  
-    ndims = get_variable_num_dimensions(fileObjReadNo, "tideamp", broadcast=.true.)
-    allocate(dim_names(ndims))
-    allocate(dim_sizes(ndims))
-    allocate(start(ndims))
-    start(ndims) = 1
-    call get_variable_dimension_names(fileObjRead, "tideamp", dim_names)
-    call get_variable_size(fileObjRead, "tideamp", dim_sizes)
-   ! set the read_length index for the unlimited dimension (time)
-    do i=1,ndims
-      if (is_dimension_unlimited(fileObjRead, dim_names(i))) then
-        dim_sizes(i) = 1
-      endif
-    enddo
+    ! register the variable axes
+    call MOM_register_variable_axes(fileObjRead, "tideamp", xUnits="degrees_east", yUnits="degrees_north")
     
     ! read the data
     call read_data(fileObjRead, "tideamp", CS%utide, corner=start, edge_lengths=dim_sizes)

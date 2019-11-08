@@ -9,7 +9,9 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io, only : check_if_open, file_exists, FmsNetcdfDomainFile_t
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -228,6 +230,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -260,7 +263,9 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   !  Read the tracer concentrations from a netcdf file.
         if (.not.file_exists(CS%IC_file)) &
           call MOM_error(FATAL, "initialize_oil_tracer: "// &
-                                 "Unable to open "//CS%IC_file)
+                                 "Unable to find "//CS%IC_file)
+        ! open file for domain-decomposed read
+        if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%IC_file, "read", G,.false.)
 
         if (CS%Z_IC_file) then
           OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name, &
@@ -273,7 +278,11 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                     trim(CS%IC_file)//".")
           endif
         else
-          call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+          ! register the variable axes
+          call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
+          !call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+          ! read the data
+          call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m))
         endif
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
@@ -287,7 +296,8 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
     endif ! restart
   enddo ! Tracer loop
-
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
   if (associated(OBC)) then
   ! Put something here...
   endif

@@ -560,7 +560,7 @@ end subroutine MOM_register_diagnostic_axis
 !> register axes associated with a variable from a domain-decomposed netCDF file
 !> @note The user must specify units for variables with longitude/x-axis and/or latitude/y-axis axes to obtain 
 !! the correct domain decomposition for the data buffer. 
-function MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosition, yPosition)
+subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosition, yPosition)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
   character(len=*), intent(in), optional :: xUnits !< x-axis (longitude) units to search for
   character(len=*), intent(in), optional :: yUnits !< y-axis (latitude) units to search for
@@ -600,7 +600,7 @@ function MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosi
   
   deallocate(dimSizes)
   deallocate(dimNames)
-function MOM_register_variable_axes
+subroutine MOM_register_variable_axes
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
