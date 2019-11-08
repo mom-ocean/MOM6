@@ -5,7 +5,7 @@ module MOM_offline_main
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
-use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs, ALE_offline_tracer_final
+use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs
 use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -354,7 +354,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
         call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_offline)
+      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%dt_offline)
       call cpu_clock_end(id_clock_ALE)
 
       if (CS%debug) then
@@ -1038,7 +1038,8 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
     call pass_var(h, CS%G%Domain)
     call pass_var(CS%tv%T, CS%G%Domain)
     call pass_var(CS%tv%S, CS%G%Domain)
-    call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, CS%debug)
+    call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, &
+                            CS%debug, CS%OBC)
     if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag)
     if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag)
     if (CS%id_uhtr_regrid>0) call post_data(CS%id_uhtr_regrid, CS%uhtr, CS%diag)
