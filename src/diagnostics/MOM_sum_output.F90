@@ -18,7 +18,7 @@ use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_fil
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_diagnostic_axis
+use MOM_io, only : axis_data_type, MOM_get_axis_data, register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : get_variable_unlimited_dimension_index
@@ -461,7 +461,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
-  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS netcdf file object returned by call to MOM_open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   type(data_struct) :: output_data ! structure for output_data
 
@@ -1050,8 +1050,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                  total_axes=total_axes+1
                  call MOM_get_axis_data(axis_data_CS, output_data%dim_names(i,j), total_axes, G=G, GV=GV, &
                                      time_val=(/reday/), time_units='days')
-                 call MOM_register_diagnostic_axis(fileObjWrite, trim(output_data%dim_names(i,j)), &
-                                                               output_data%dim_lengths(i,j))
+                 call register_axis(fileObjWrite, trim(output_data%dim_names(i,j)), output_data%dim_lengths(i,j))
               endif
            enddo
            
