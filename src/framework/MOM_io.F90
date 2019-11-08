@@ -143,7 +143,6 @@ type, public :: vardesc
                                            !! convert from intensive to extensive
 end type vardesc
 
-
 !> A type for making arrays of pointers to 1-d arrays
 type p1d
   real, dimension(:), pointer :: p => NULL() !< A pointer to a 1d array
@@ -154,9 +153,7 @@ type axis_atts
   character(len=64)  :: name                    !< Names of the axis
   character(len=48)  :: units                   !< Physical dimensions of the axis
   character(len=240) :: longname                !< Long name of the axis
-  character(len=8)   :: axis                    !< Name of the cartesian axis: X,Y,Z,T
-  character(len=8)   :: positive                !< Positive-definite direction: 
-                                                !! up, down, east, west, north, south
+  character(len=8)   :: positive                !< Positive-definite direction: up, down, east, west, north, south
   integer            :: horgrid_position        !< Horizontal grid position
   integer            :: x_position              !< x-direction grid position
   integer            :: y_position              !< y-direction grid position
@@ -556,19 +553,11 @@ subroutine MOM_register_diagnostic_axis(fileObj, axis_name, axis_length)
     case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=EAST_FACE) 
     case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=CENTER)
     case default
-      if (.not. present(axis_length)) call MOM_error(FATAL,"MOM_io:register_axis_DD: "//&
+      if (.not. present(axis_length)) call MOM_error(FATAL,"MOM_io:register_diagnostic_axis: "//&
                         "An axis_length argument is required to register the axis "//trim(axis_name))
       call register_axis(fileObj, axis_name, axis_length) 
   end select
 end subroutine MOM_register_diagnostic_axis
-
-!> register an axis to a non domain-decomposed file
-subroutine MOM_register_axis_noDD(fileObj, axis_name, axis_length)
-  type(FmsNetcdfFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
-  character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
-  integer, intent(in) :: axis_length !< length of axis/dimension
-  call register_axis(fileObj, axis_name, axis_length)
-end subroutine MOM_register_axis_noDD
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
@@ -620,7 +609,7 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   use_latq = .false.
   use_lonq = .false.
   
-  call get_horizontal_grid_logic(hor_grid, use_lath,use_lonh,use_latq,use_lonq)
+  call get_horizontal_grid_logic(hor_grid, use_lath, use_lonh, use_latq, use_lonq)
   
   ! add longitude name to dimension name array
   if (use_lonh) then
@@ -663,7 +652,7 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
         dim_lengths(num_dims) = size(GV%sInterface(1:GV%ke+1))
      case ('1') ! Do nothing.
      case default
-        call MOM_error(FATAL, "MOM_io: get_dimension_var_features: "//&
+        call MOM_error(FATAL, "MOM_io: get_var_dimension_features: "//&
                       " has an unrecognized z_grid argument"//trim(z_grid))
   end select
   
@@ -692,8 +681,7 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
 
 end subroutine get_var_dimension_features
 
-!> get the axis data from the name and return the 
-!! structure with data and meta data
+!> Populate the axis_data structure with data and attributes for diagnostic and restart files
 subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, & 
                              G, dG, GV, time_val, time_units)
 
@@ -748,7 +736,6 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
-        axis_data_CS%axis(axis_number)%axis  = 'Y'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('lonh')
         axis_data_CS%data(axis_number)%p(isg:ieg)=>gridLonT(isg:ieg)
@@ -756,14 +743,12 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%horgrid_position  = CENTER
         axis_data_CS%axis(axis_number)%longname = 'Longitude'
         axis_data_CS%axis(axis_number)%units = x_axis_units
-        axis_data_CS%axis(axis_number)%axis = 'X'
         axis_data_CS%axis(axis_number)%is_domain_decomposed  = .true.
      case('latq')
         axis_data_CS%data(axis_number)%p(JsgB:JegB)=>gridLatB(JsgB:JegB)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Latitude'
         axis_data_CS%axis(axis_number)%units = y_axis_units
-        axis_data_CS%axis(axis_number)%axis = 'Y'
         axis_data_CS%axis(axis_number)%horgrid_position = NORTH_FACE
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('lonq')
@@ -771,7 +756,6 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%data(axis_number)%p(IsgB:IegB)=>gridLonB(IsgB:IegB)
         axis_data_CS%axis(axis_number)%longname  = 'Longitude'
         axis_data_CS%axis(axis_number)%units = x_axis_units
-        axis_data_CS%axis(axis_number)%axis = 'X'
         axis_data_CS%axis(axis_number)%horgrid_position = EAST_FACE
         axis_data_CS%axis(axis_number)%is_domain_decomposed = .true.
      case('Layer')
@@ -779,19 +763,14 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Layer pseudo-depth, -z*'
         axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
-        axis_data_CS%axis(axis_number)%axis = 'Z'
         axis_data_CS%axis(axis_number)%positive  = 'up'
-        axis_data_CS%axis(axis_number)%horgrid_position  = CENTER ! dummy value for the domain-decomposed write
      case('Interface')
         axis_data_CS%data(axis_number)%p=>GV%sInterface(1:GV%ke+1)
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Interface pseudo-depth, -z*'
         axis_data_CS%axis(axis_number)%units = GV%zAxisUnits
-        axis_data_CS%axis(axis_number)%axis = 'Z'
         axis_data_CS%axis(axis_number)%positive = 'up'
-        axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Time')
-        
         if (.not.(present(time_val))) then
            call MOM_error(FATAL, "MOM_io::get_axis_data: requires time_val"//&
                           " and time_units arguments for "//trim(axis_name))
@@ -799,15 +778,14 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
 
         axis_data_CS%data(axis_number)%p=>time_val
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
-        axis_data_CS%axis(axis_number)%longname  = 'Time'
+        axis_data_CS%axis(axis_number)%longname = 'Time'
 
         if (present(time_units)) then
-           axis_data_CS%axis(axis_number)%units  = time_units
+           axis_data_CS%axis(axis_number)%units = time_units
         else
-           axis_data_CS%axis(axis_number)%units  = 'days'
+           axis_data_CS%axis(axis_number)%units = 'days'
         endif
         axis_data_CS%axis(axis_number)%axis = 'T'
-        axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
      case('Period')
         if (.not.(present(time_val))) then
            call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//&
@@ -817,7 +795,6 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
         axis_data_CS%data(axis_number)%p=>time_val
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Periods for cyclical variables'
-        axis_data_CS%axis(axis_number)%horgrid_position = CENTER ! dummy value for the domain-decomposed write
         axis_data_CS%axis(axis_number)%axis = 'T'
      case default
         call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
