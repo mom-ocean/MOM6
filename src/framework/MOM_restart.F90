@@ -1276,8 +1276,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
 
     ! register the variable attributes
     call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "units", units)
-    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname) 
-      
+    call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, "long_name", longname)       
   enddo
   ! close the IC file and deallocate the allocatable arrays
   call close_file(fileObjWrite)

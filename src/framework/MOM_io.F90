@@ -681,9 +681,8 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
 
 end subroutine get_var_dimension_features
 
-!> Populate the axis_data structure with data and attributes for diagnostic and restart files
-subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, & 
-                             G, dG, GV, time_val, time_units)
+!> Populate the axis_data structure with axis data and attributes for diagnostic and restart files
+subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G, dG, GV, time_val, time_units)
 
   type(axis_data_type), intent(inout) :: axis_data_CS !< structure containing the axis data and metadata
   character(len=*), intent(in) :: axis_name !< name of the axis
