@@ -155,8 +155,6 @@ type axis_atts
   character(len=240) :: longname                !< Long name of the axis
   character(len=8)   :: positive                !< Positive-definite direction: up, down, east, west, north, south
   integer            :: horgrid_position        !< Horizontal grid position
-  integer            :: x_position              !< x-direction grid position
-  integer            :: y_position              !< y-direction grid position
   logical            :: is_domain_decomposed    !< if .true. the axis data are domain-decomposed
                                                 !! and need to be indexed by the compute domain
                                                 !! before passing to write_data
@@ -541,23 +539,68 @@ subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit
 
 end subroutine reopen_file
 
-!> register an axis to a domain-decomposed file with diagnostic data 
-subroutine MOM_register_diagnostic_axis(fileObj, axis_name, axis_length)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< file object returned by prior call to open_file
-  character(len=*), intent(in) :: axis_name !< name of the restart file axis to register to file
-  integer, optional, intent(in) :: axis_length !< length of axis/dimension ;only needed for Layer, Interface, Time,
-                                                !! Period
-  select case (trim(axis_name))      
+!> register a MOM diagnostic axis to a domain-decomposed file 
+subroutine MOM_register_diagnostic_axis(fileObj, axisName, axisLength)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  character(len=*), intent(in) :: axisName !< name of the axis to register to file
+  integer, intent(in), optional :: axisLength !< length of axis/dimension ;only needed for Layer, Interface, Time,
+                                               !! Period
+  select case (trim(axisName))      
     case ('latq'); call register_axis(fileObj,'latq','y', domain_position=NORTH_FACE)
     case ('lath'); call register_axis(fileObj,'lath','y', domain_position=CENTER) 
     case ('lonq'); call register_axis(fileObj,'lonq','x', domain_position=EAST_FACE) 
     case ('lonh'); call register_axis(fileObj,'lonh','x', domain_position=CENTER)
     case default
-      if (.not. present(axis_length)) call MOM_error(FATAL,"MOM_io:register_diagnostic_axis: "//&
-                        "An axis_length argument is required to register the axis "//trim(axis_name))
-      call register_axis(fileObj, axis_name, axis_length) 
+      if (.not. present(axisLength)) call MOM_error(FATAL,"MOM_io:register_diagnostic_axis: "//&
+                        "An axis_length argument is required to register the axis "//trim(axisName))
+      call register_axis(fileObj, axisName, axisLength) 
   end select
 end subroutine MOM_register_diagnostic_axis
+
+!> register axes associated with a variable from a domain-decomposed netCDF file
+!> @note The user must specify units for variables with longitude/x-axis and/or latitude/y-axis axes to obtain 
+!! the correct domain decomposition for the data buffer. 
+function MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosition, yPosition)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  character(len=*), intent(in), optional :: xUnits !< x-axis (longitude) units to search for
+  character(len=*), intent(in), optional :: yUnits !< y-axis (latitude) units to search for
+  integer, intent(in), optional :: xPosition !< domain position of the x-axis
+  integer, intent(in), optional :: yPosition !< domain position of the y-axis
+  ! local
+  character(len=40 :: units ! units corresponding to a specific variable dimension
+  character(len=40), allocatable, dimension(:) :: dimNames ! variable dimension names
+  integer :: ndims ! number of dimensions
+  integer :: xPos, yPos ! domain positions for x and y axes. Default is CENTER
+  integer, allocatable, dimension(:) :: dimSizes ! variable dimension sizes
+   
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: "//&
+                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"//&
+                                                  "before passing the fileObj argument to this function."
+  xPos=CENTER
+  yPos=CENTER
+  if (present(xPosition)) xPos=xPosition
+  if (present(yPosition)) yPos=yPosition
+ ! get variable dimension names and lengths
+  ndims = get_variable_num_dimensions(fileObj, trim(variableName))
+  allocate(dimSizes(ndims))
+  allocate(dimNames(ndims))
+  call get_variable_size(fileObj, trim(variableName), dimSizes, broadcast=.true.)
+  call get_variable_dimension_names(fileObj, trim(variableName), dimNames)
+  ! register the axes
+  do i=1,ndims
+    units=""
+    call get_variable_units(fileObjRead, dim_names(i), units)
+    select case (trim(lowercase(units)))
+      case (trim(lowercase(xUnits))); call register_axis(fileObjRead, dim_names(i),"x", domain_position=xPos)
+      case (trim(lowercase(yUnits))); call register_axis(fileObjRead, dim_names(i),"y", domain_position=yPos)
+      case default
+        call register_axis(fileObjRead, dimNames(i), dimSizes(i))     
+    end select
+  enddo
+  
+  deallocate(dimSizes)
+  deallocate(dimNames)
+function MOM_register_variable_axes
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
@@ -584,7 +627,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
  
   character(len=8) :: t_grid
   character(len=8) :: t_grid_read
-  integer :: x_pos, y_pos
   integer :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   real, pointer, dimension(:) :: gridLatT => NULL(), & ! The latitude or longitude of T or B points for
      gridLatB => NULL(), & ! the purpose of labeling the output axes.
@@ -722,8 +764,6 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
   axis_data_CS%axis(axis_number)%longname = ''
   axis_data_CS%axis(axis_number)%units = ''
   axis_data_CS%axis(axis_number)%horgrid_position = 0
-  axis_data_CS%axis(axis_number)%x_position = CENTER
-  axis_data_CS%axis(axis_number)%y_position = CENTER
   axis_data_CS%axis(axis_number)%is_domain_decomposed = .false.
   axis_data_CS%axis(axis_number)%positive = ''
   axis_data_CS%data(axis_number)%p => NULL()
