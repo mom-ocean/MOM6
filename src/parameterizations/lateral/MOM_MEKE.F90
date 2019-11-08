@@ -43,6 +43,8 @@ type, public :: MEKE_CS ; private
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
+  logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
+                        !! equilibrium value of MEKE.
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                         !! than the streamfunction for the MEKE GM source term.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
@@ -775,8 +777,11 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     else
       EKE = 0.
     endif
-    MEKE%MEKE(i,j) = EKE
-!    MEKE%MEKE(i,j) = (US%Z_to_L*G%bathyT(i,j) * SN / (8*CS%cdrag))**2
+    if (CS%MEKE_equilibrium_alt) then
+      MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+    else
+      MEKE%MEKE(i,j) = EKE
+    endif
   enddo ; enddo
 
 end subroutine MEKE_equilibrium
@@ -1005,6 +1010,9 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
                  "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation "//&
                  "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+  call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
+                 "If true, use an alternative formula for computing the (equilibrium)"//&
+                 "initial value of MEKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
                  "The efficiency of the conversion of mean energy into "//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&
