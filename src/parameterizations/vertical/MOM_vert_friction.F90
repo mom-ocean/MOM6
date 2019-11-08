@@ -1011,7 +1011,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   endif
 
 ! Offer diagnostic fields for averaging.
-  if (CS%id_Kv_slow > 0) call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
+  if (associated(visc%Kv_slow) .and. (CS%id_Kv_slow > 0)) &
+      call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
   if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
   if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
   if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)

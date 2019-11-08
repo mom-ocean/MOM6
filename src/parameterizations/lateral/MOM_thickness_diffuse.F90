@@ -1267,7 +1267,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     enddo
   endif
 
-
   if (find_work) then ; do j=js,je ; do i=is,ie
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
@@ -1277,6 +1276,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
+
   if (find_work .and. CS%GM_src_alt .and. associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
     do j=js,je ; do i=is,ie ; do k=nz,1,-1
       PE_release_h = -0.25*(KH_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
@@ -2002,9 +2002,6 @@ end subroutine thickness_diffuse_end
 !! wave-speed or the equivalent barotropic mode wave-speed.
 !! \f$N_*^2 = \max(N^2,0)\f$ is a non-negative form of the square of the Brunt-Vaisala frequency.
 !! The parameter \f$\gamma_F\f$ is used to reduce the vertical smoothing length scale.
-!! This elliptic form for \f$ \psi \f$ is turned on with the logical <code>KHTH_USE_FGNV_STREAMFUNCTION</code>.
-!!
-!! Thickness diffusivities are calculated independently at u- and v-points using the following expression
 !! \f[
 !! \kappa_h = \left( \kappa_o + \alpha_{s} L_{s}^2 < S N > + \alpha_{M} \kappa_{M} \right) r(\Delta x,L_d)
 !! \f]
