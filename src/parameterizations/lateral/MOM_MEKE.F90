@@ -43,6 +43,8 @@ type, public :: MEKE_CS ; private
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
+  logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
+                        !! equilibrium value of MEKE.
   logical :: GM_src_alt !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                         !! than the streamfunction for the MEKE GM source term.
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
@@ -128,7 +130,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     del4MEKE, &     ! Time-integrated MEKE tendency arising from the biharmonic of MEKE [L2 T-2 ~> m2 s-2].
     LmixScale, &    ! Eddy mixing length [L ~> m].
     barotrFac2, &   ! Ratio of EKE_barotropic / EKE [nondim]
-    bottomFac2      ! Ratio of EKE_bottom / EKE [nondim]
+    bottomFac2, &   ! Ratio of EKE_bottom / EKE [nondim]
+    tmp             ! Temporary variable for diagnostic computation
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     MEKE_uflux, &   ! The zonal advective and diffusive flux of MEKE with different units in different
@@ -575,10 +578,29 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     ! Offer fields for averaging.
+
+    if (any([CS%id_Ue, CS%id_Ub, CS%id_Ut] > 0)) &
+      tmp(:,:) = 0.
+
     if (CS%id_MEKE>0) call post_data(CS%id_MEKE, MEKE%MEKE, CS%diag)
-    if (CS%id_Ue>0) call post_data(CS%id_Ue, sqrt(max(0.,2.0*MEKE%MEKE)), CS%diag)
-    if (CS%id_Ub>0) call post_data(CS%id_Ub, sqrt(max(0.,2.0*MEKE%MEKE*bottomFac2)), CS%diag)
-    if (CS%id_Ut>0) call post_data(CS%id_Ut, sqrt(max(0.,2.0*MEKE%MEKE*barotrFac2)), CS%diag)
+    if (CS%id_Ue>0) then
+      do j=js,je ; do i=is,ie
+        tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j)))
+      enddo ; enddo
+      call post_data(CS%id_Ue, tmp, CS%diag)
+    endif
+    if (CS%id_Ub>0) then
+      do j=js,je ; do i=is,ie
+        tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j) * bottomFac2(i,j)))
+      enddo ; enddo
+      call post_data(CS%id_Ub, tmp, CS%diag)
+    endif
+    if (CS%id_Ut>0) then
+      do j=js,je ; do i=is,ie
+        tmp(i,j) = sqrt(max(0., 2. * MEKE%MEKE(i,j) * barotrFac2(i,j)))
+      enddo ; enddo
+      call post_data(CS%id_Ut, tmp, CS%diag)
+    endif
     if (CS%id_Kh>0) call post_data(CS%id_Kh, MEKE%Kh, CS%diag)
     if (CS%id_Ku>0) call post_data(CS%id_Ku, MEKE%Ku, CS%diag)
     if (CS%id_Au>0) call post_data(CS%id_Au, MEKE%Au, CS%diag)
@@ -755,8 +777,11 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     else
       EKE = 0.
     endif
-    MEKE%MEKE(i,j) = EKE
-!    MEKE%MEKE(i,j) = (US%Z_to_L*G%bathyT(i,j) * SN / (8*CS%cdrag))**2
+    if (CS%MEKE_equilibrium_alt) then
+      MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+    else
+      MEKE%MEKE(i,j) = EKE
+    endif
   enddo ; enddo
 
 end subroutine MEKE_equilibrium
@@ -985,6 +1010,9 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
                  "If MEKE_GEOMETRIC is true, uses the GM coefficient formulation "//&
                  "from the GEOMETRIC framework (Marshall et al., 2012).", default=.false.)
+  call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
+                 "If true, use an alternative formula for computing the (equilibrium)"//&
+                 "initial value of MEKE.", default=.false.)
   call get_param(param_file, mdl, "MEKE_FRCOEFF", CS%MEKE_FrCoeff, &
                  "The efficiency of the conversion of mean energy into "//&
                  "MEKE.  If MEKE_FRCOEFF is negative, this conversion "//&

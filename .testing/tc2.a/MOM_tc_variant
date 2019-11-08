@@ -1,0 +1,3 @@
+#override TOPO_CONFIG = "spoon"
+#override REMAPPING_SCHEME = "PPM_H4"
+#override REGRIDDING_COORDINATE_MODE = "SIGMA"
