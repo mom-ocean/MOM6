@@ -41,6 +41,7 @@ use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
 #endif
 use time_utils_mod,           only: esmf2fms_time
+use data_override_mod,        only: data_override_init, data_override
 
 use, intrinsic :: iso_fortran_env, only: output_unit
 
