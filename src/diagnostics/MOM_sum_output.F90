@@ -18,7 +18,7 @@ use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_fil
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_axis
+use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_diagnostic_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : get_variable_unlimited_dimension_index
@@ -922,10 +922,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   ! open the file for writing
   if (.not.(check_if_open(fileObjWrite)) .and. is_root_pe()) then
-     if (.not. (MOM_open_file(fileObjWrite, trim(energypath_nc), "write", &
-                                       is_restart=.false.))) then
-        call MOM_error(FATAL,"MOM_sum_output:write_energy: File " &
-                       // trim(energypath_nc) //"not opened.")
+     if (.not. (MOM_open_file(fileObjWrite, trim(energypath_nc), "write", is_restart=.false.))) then
+        call MOM_error(FATAL,"MOM_sum_output:write_energy: File "//trim(energypath_nc)//"not opened.")
      endif
 
      ! allocate the output data variable dimension attributes 
@@ -1019,21 +1017,19 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                nullify(output_data%var_ptr2d(i)%p)
            endif
         enddo
-        
-  
+ 
         deallocate(output_data%var_ptr0d)
         deallocate(output_data%var_ptr1d)
         deallocate(output_data%var_ptr2d)
-
      else
        !! loop through the variables, get the global dimension names and lengths, 
        !! and register the dimensions to the file
 
         ! allocate the axis data and attribute types for the file
-        !>@NOTE the user may need to increase the allocated array sizes to accommodate 
-        !! more than 10 axes.
-        allocate(axis_data_CS%axis(10))
-        allocate(axis_data_CS%data(10))
+        !>@NOTE The axes written to the file are 'Time', 'Layer', 'Interface'; the user should increase the size of the 
+        !! the axis and data attributes to accommodate more axes if necessary.
+        allocate(axis_data_CS%axis(3))
+        allocate(axis_data_CS%data(3))
 
         ntsteps=0
 
@@ -1054,7 +1050,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                  total_axes=total_axes+1
                  call MOM_get_axis_data(axis_data_CS, output_data%dim_names(i,j), total_axes, G=G, GV=GV, &
                                      time_val=(/reday/), time_units='days')
-                 call MOM_register_axis(fileObjWrite, trim(output_data%dim_names(i,j)), &
+                 call MOM_register_diagnostic_axis(fileObjWrite, trim(output_data%dim_names(i,j)), &
                                                                output_data%dim_lengths(i,j))
               endif
            enddo
@@ -1096,7 +1092,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
      ! close the file
      if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
-
   endif
 
   if (allocated(output_data%num_dims)) deallocate(output_data%num_dims)
