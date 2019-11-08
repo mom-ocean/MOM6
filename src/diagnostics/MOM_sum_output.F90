@@ -15,7 +15,7 @@ use MOM_interface_heights, only : find_eta
 !use MOM_io, only : flush_file, create_file, reopen_file
 use MOM_io, only : fieldtype, mpp_open_file, flush_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
-use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io, only : APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_axis_data, register_axis
@@ -1058,7 +1058,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
            if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
            
               call register_field(fileObjWrite, vars(i)%name, "double", &
-                                  dimensions=output_data%dim_names(i,1:output_data%num_dims(i)))
+                                 dimensions=output_data%dim_names(i,1:output_data%num_dims(i)))
               call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
               call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
            
