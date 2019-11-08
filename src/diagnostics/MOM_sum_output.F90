@@ -18,7 +18,7 @@ use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_fil
 use MOM_io, only : APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_axis_data, register_axis
+use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : get_variable_unlimited_dimension_index
@@ -1048,7 +1048,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
               ! register the variable dimensions to the file if the corresponding global axes are not registered
               if (.not.(dimension_exists(fileObjWrite, output_data%dim_names(i,j)))) then
                  total_axes=total_axes+1
-                 call MOM_get_axis_data(axis_data_CS, output_data%dim_names(i,j), total_axes, G=G, GV=GV, &
+                 call MOM_get_diagnostic_axis_data(axis_data_CS, output_data%dim_names(i,j), total_axes, G=G, GV=GV, &
                                      time_val=(/reday/), time_units='days')
                  call register_axis(fileObjWrite, trim(output_data%dim_names(i,j)), output_data%dim_lengths(i,j))
               endif

@@ -14,7 +14,7 @@ use MOM_io, only : get_var_dimension_features
 use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
 use MOM_io, only : axis_data_type
-use MOM_io, only : MOM_get_axis_data
+use MOM_io, only : MOM_get_diagnostic_axis_data
 
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
@@ -1006,7 +1006,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
            if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
               total_axes=total_axes+1
               call MOM_register_diagnostic_axis(fileObjWrite, dim_names(i), dim_lengths(i))
-              call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+              call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                      time_val=(/restart_time/), time_units=restart_time_units)
            endif
         enddo  
@@ -1170,11 +1170,11 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
 
   ! open the netCDF file, and check if file already exists and can be appended
   file_open_success = MOM_open_file(fileObjWrite, trim(base_file_name), "write", & 
-                                   G, is_restart = .false.)
+                                  G, is_restart = .false.)
   
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
   !>@NOTE the user may need to increase the allocated array sizes to accommodate 
-  !! more  axes. As of 11/2019, only 7 axes are registered to the MOM IC files.
+  !! more  axes. As of 11/2019, only 7 axes are registered to the MOM_IC.nc file.
   allocate(axis_data_CS%axis(7))
   allocate(axis_data_CS%data(7))
 
@@ -1200,7 +1200,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
     do i=1,num_dims
       if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
         total_axes=total_axes+1
-        call MOM_get_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+        call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
                                    time_val=(/ic_time/), time_units=time_units)
         call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
       endif

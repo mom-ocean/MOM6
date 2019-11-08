@@ -114,7 +114,7 @@ public :: get_variable_units
 public :: get_variable_unlimited_dimension_index
 public :: global_att_exists
 public :: is_dimension_unlimited
-public :: MOM_get_axis_data
+public :: MOM_get_diagnostic_axis_data
 public :: MOM_open_file
 public :: MOM_register_diagnostic_axis
 public :: read_data
@@ -682,7 +682,7 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
 end subroutine get_var_dimension_features
 
 !> Populate the axis_data structure with data and attributes for diagnostic and restart files
-subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, & 
+subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, & 
                              G, dG, GV, time_val, time_units)
 
   type(axis_data_type), intent(inout) :: axis_data_CS !< structure containing the axis data and metadata
@@ -801,7 +801,7 @@ subroutine MOM_get_axis_data(axis_data_CS, axis_name, axis_number, &
                        " is an unrecognized axis")
   end select
 
-end subroutine MOM_get_axis_data
+end subroutine MOM_get_diagnostic_axis_data
 
 !> get the position parameter value from the horizontal grid (hor_grid) string id
 subroutine get_horizontal_grid_position(grid_string_id, x_pos,y_pos)

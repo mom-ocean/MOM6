@@ -14,7 +14,7 @@ use MOM_io, only : fieldtype, file_exists
 use MOM_io, only : slasher, vardesc, var_desc
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, read_data, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_axis_data, MOM_register_diagnostic_axis
+use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists
 use MOM_io, only : check_if_open
 use MOM_string_functions, only : uppercase
@@ -573,7 +573,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
     do j=1,num_dims
       if (.not.(dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.))) then
         total_axes=total_axes+1
-        call MOM_get_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
+        call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
         call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
       endif
     enddo
