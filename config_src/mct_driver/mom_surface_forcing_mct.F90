@@ -145,8 +145,8 @@ end type surface_forcing_CS
 !> Structure corresponding to forcing, but with the elements, units, and conventions
 !! that exactly conform to the use for MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: rofl_flux         =>NULL() !< liquid runoff [W/m2]
-  real, pointer, dimension(:,:) :: rofi_flux         =>NULL() !< ice runoff [W/m2]
+  real, pointer, dimension(:,:) :: rofl_flux         =>NULL() !< liquid runoff [kg/m2/s]
+  real, pointer, dimension(:,:) :: rofi_flux         =>NULL() !< ice runoff [kg/m2/s]
   real, pointer, dimension(:,:) :: u_flux            =>NULL() !< i-direction wind stress [Pa]
   real, pointer, dimension(:,:) :: v_flux            =>NULL() !< j-direction wind stress [Pa]
   real, pointer, dimension(:,:) :: t_flux            =>NULL() !< sensible heat flux [W/m2]
