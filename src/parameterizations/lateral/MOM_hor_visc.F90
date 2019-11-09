@@ -1704,7 +1704,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh) then
-      ALLOC_(CS%Kh_Max_xx(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xx(:,:) = 0.0
+      ALLOC_(CS%Kh_Max_xx(Isd:Ied,Jsd:Jed)) ; CS%Kh_Max_xx(:,:) = 0.0
       ALLOC_(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xy(:,:) = 0.0
     endif
     if (CS%Smagorinsky_Kh) then
@@ -1966,7 +1966,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     enddo ; enddo
     if (CS%debug) then
       call hchksum(CS%Kh_Max_xx, "Kh_Max_xx", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
-      call Bchksum(CS%Kh_Max_xx, "Kh_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
+      call Bchksum(CS%Kh_Max_xy, "Kh_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
     endif
   endif
 
@@ -2028,7 +2028,7 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     enddo ; enddo
     if (CS%debug) then
       call hchksum(CS%Ah_Max_xx, "Ah_Max_xx", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
-      call Bchksum(CS%Ah_Max_xx, "Ah_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
+      call Bchksum(CS%Ah_Max_xy, "Ah_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
     endif
   endif
 
