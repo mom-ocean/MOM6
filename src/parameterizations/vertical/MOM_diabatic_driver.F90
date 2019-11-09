@@ -17,7 +17,7 @@ use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference
 use MOM_diabatic_aux,        only : set_pen_shortwave
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
-use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averaging, disable_averaging
+use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averages, disable_averaging
 use MOM_diag_mediator,       only : diag_grid_storage, diag_grid_storage_init, diag_grid_storage_end
 use MOM_diag_mediator,       only : diag_copy_diag_to_storage, diag_copy_storage_to_diag
 use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
@@ -329,7 +329,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! the end of the diabatic processes.
   if (associated(tv%T) .AND. associated(tv%frazil)) then
     ! For frazil diagnostic, the first call covers the first half of the time step
-    call enable_averaging(0.5*US%T_to_s*dt, Time_end - real_to_time(0.5*US%T_to_s*dt), CS%diag)
+    call enable_averages(0.5*dt, Time_end - real_to_time(0.5*US%T_to_s*dt), CS%diag)
     if (CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
@@ -390,7 +390,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (associated(tv%T) .AND. associated(tv%frazil)) then
-    call enable_averaging(0.5*US%T_to_s*dt, Time_end, CS%diag)
+    call enable_averages(0.5*dt, Time_end, CS%diag)
     if (CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
@@ -416,7 +416,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
 
   ! Diagnose mixed layer depths.
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
   if (CS%id_MLD_003 > 0 .or. CS%id_subMLN2 > 0 .or. CS%id_mlotstsq > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03*US%kg_m3_to_R, G, GV, US, CS%diag, &
                                         id_N2subML=CS%id_subMLN2, id_MLDsq=CS%id_mlotstsq, dz_subML=CS%dz_subML_N2)
@@ -555,7 +555,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 !   if (showCallTree) call callTree_enter("diabatic_ALE(), MOM_diabatic_driver.F90")
 
   ! For all other diabatic subroutines, the averaging window should be the entire diabatic timestep
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%use_geothermal) then
     halo = CS%halo_TS_diff
@@ -1192,7 +1192,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   call disable_averaging(CS%diag)
   ! Diagnose the diapycnal diffusivities and other related quantities.
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
   if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
@@ -1340,7 +1340,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
          "The ALE algorithm must be enabled when using MOM_diabatic_driver.")
 
   ! For all other diabatic subroutines, the averaging window should be the entire diabatic timestep
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%use_geothermal) then
     halo = CS%halo_TS_diff
@@ -1875,7 +1875,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call disable_averaging(CS%diag)
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
   if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
@@ -2031,7 +2031,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   eaml => eatr ; ebml => ebtr
 
   ! For all other diabatic subroutines, the averaging window should be the entire diabatic timestep
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
     halo = CS%halo_TS_diff
@@ -2833,7 +2833,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   call disable_averaging(CS%diag)
   ! Diagnose the diapycnal diffusivities and other related quantities.
-  call enable_averaging(US%T_to_s*dt, Time_end, CS%diag)
+  call enable_averages(dt, Time_end, CS%diag)
 
   if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
   if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)

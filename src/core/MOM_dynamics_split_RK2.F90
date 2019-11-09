@@ -12,7 +12,7 @@ use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,         only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator,     only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,     only : diag_mediator_init, enable_averages
 use MOM_diag_mediator,     only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,     only : register_diag_field, register_static_field
 use MOM_diag_mediator,     only : set_diag_mediator_grid, diag_ctrl, diag_update_remap_grids
@@ -405,7 +405,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! PFu = d/dx M(h,T,S)
 ! pbce = dM/deta
-  if (CS%begw == 0.0) call enable_averaging(US%T_to_s*dt, Time_local, CS%diag)
+  if (CS%begw == 0.0) call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
@@ -474,7 +474,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     enddo ; enddo
   enddo
 
-  call enable_averaging(US%T_to_s*dt, Time_local, CS%diag)
+  call enable_averages(dt, Time_local, CS%diag)
   call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
@@ -631,7 +631,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   enddo ; enddo ; enddo
 
   ! The correction phase of the time step starts here.
-  call enable_averaging(US%T_to_s*dt, Time_local, CS%diag)
+  call enable_averages(dt, Time_local, CS%diag)
 
   ! Calculate a revised estimate of the free-surface height correction to be
   ! used in the next call to btstep.  This call is at this point so that
