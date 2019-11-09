@@ -80,11 +80,6 @@ type, public :: OBC_segment_data_type
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
 
-!> Tracer segment data structure, for putting into an array of objects, not all the same shape.
-!type, public :: segment_tracer_type
-!  real, dimension(:,:,:), pointer :: tr         => NULL()  !< tracer concentration array
-!end type segment_tracer_type
-
 !> Tracer on OBC segment data structure, for putting into a segment tracer registry.
 type, public :: OBC_segment_tracer_type
   real, dimension(:,:,:), pointer :: t          => NULL()  !< tracer concentration array
@@ -133,8 +128,9 @@ type, public :: OBC_segment_type
   logical :: z_values_needed!< Whether or not external zeta OBC fields are needed.
   logical :: g_values_needed!< Whether or not external gradient OBC fields are needed.
   integer :: direction      !< Boundary faces one of the four directions.
-  logical :: is_N_or_S      !< True is the OB is facing North or South and exists on this PE.
-  logical :: is_E_or_W      !< True is the OB is facing East or West and exists on this PE.
+  logical :: is_N_or_S      !< True if the OB is facing North or South and exists on this PE.
+  logical :: is_E_or_W      !< True if the OB is facing East or West and exists on this PE.
+  logical :: is_E_or_W_2    !< True if the OB is facing East or West anywhere.
   type(OBC_segment_data_type), pointer, dimension(:) :: field=>NULL()   !<  OBC data
   integer :: num_fields     !< number of OBC data fields (e.g. u_normal,u_parallel and eta for Flather)
   character(len=32), pointer, dimension(:) :: field_names=>NULL() !< field names for this segment
@@ -234,6 +230,13 @@ type, public :: ocean_OBC_type
                                                       !! use in the biharmonic viscosity term.
   logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
   real :: g_Earth                                     !< The gravitational acceleration [m s-2].
+  logical, pointer, dimension(:) :: &
+                   tracer_x_reservoirs_used => NULL() !< Dimensioned by the number of tracers, set globally,
+                                                      !! true for those with x reservoirs (needed for restarts).
+  logical, pointer, dimension(:) :: &
+                   tracer_y_reservoirs_used => NULL() !< Dimensioned by the number of tracers, set globally,
+                                                      !! true for those with y reservoirs (needed for restarts).
+  integer                       :: ntr = 0            !< number of tracers
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     segment => NULL()   !< List of segment objects.
@@ -256,6 +259,8 @@ type, public :: ocean_OBC_type
   real, pointer, dimension(:,:,:) :: rx_normal => NULL()  !< Array storage for restarts
   real, pointer, dimension(:,:,:) :: ry_normal => NULL()  !< Array storage for restarts
   real, pointer, dimension(:,:,:) :: cff_normal => NULL()  !< Array storage for restarts
+  real, pointer, dimension(:,:,:,:) :: tres_x => NULL()  !< Array storage for restarts
+  real, pointer, dimension(:,:,:,:) :: tres_y => NULL()  !< Array storage for restarts
   real :: silly_h  !< A silly value of thickness outside of the domain that
                    !! can be used to test the independence of the OBCs to
                    !! this external data [H ~> m or kg m-2].
@@ -433,6 +438,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%segment(l)%direction = OBC_NONE
       OBC%segment(l)%is_N_or_S = .false.
       OBC%segment(l)%is_E_or_W = .false.
+      OBC%segment(l)%is_E_or_W_2 = .false.
       OBC%segment(l)%Velocity_nudging_timescale_in = 0.0
       OBC%segment(l)%Velocity_nudging_timescale_out = 0.0
       OBC%segment(l)%num_fields = 0
@@ -533,7 +539,6 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=20)  :: segnam, suffix
   character(len=32)  :: varnam, fieldname
   real               :: value
-  integer            :: orient
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   character(len=128) :: inputdir
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -626,13 +631,6 @@ subroutine initialize_segment_data(G, OBC, PF)
     endif
 
     allocate(segment%field(num_fields))
-
-! This should be happening with the x_values_needed.
-!   if (segment%Flather) then
-!     if (num_fields < 3) call MOM_error(FATAL, &
-!          "MOM_open_boundary, initialize_segment_data: "//&
-!          "Need at least three inputs for Flather")
-!   endif
     segment%num_fields = num_fields
 
     segment%temp_segment_data_exists=.false.
@@ -951,6 +949,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF, reentrant_y)
 
   enddo ! a_loop
 
+  OBC%segment(l_seg)%is_E_or_W_2 = .true.
+
   if (I_obc<=G%HI%IsdB+1 .or. I_obc>=G%HI%IedB-1) return ! Boundary is not on tile
   if (Je_obc<=G%HI%JsdB .or. Js_obc>=G%HI%JedB) return ! Segment is not on tile
 
@@ -1241,7 +1241,7 @@ end subroutine parse_segment_str
    logical, optional, intent(in)            :: debug      !< If present and true, write verbose debugging messages
    ! Local variables
    character(len=128) :: word1, word2, word3, method
-   integer :: lword, nfields, n, m, orient
+   integer :: lword, nfields, n, m
    logical :: continue,dbg
    character(len=32), dimension(MAX_OBC_FIELDS) :: flds
 
@@ -1314,6 +1314,71 @@ end subroutine parse_segment_str
  end subroutine parse_segment_data_str
 
 
+!> Parse all the OBC_SEGMENT_%%%_DATA strings again
+!! to see which need tracer reservoirs (all pes need to know).
+ subroutine parse_for_tracer_reservoirs(OBC, PF, use_temperature)
+  type(ocean_OBC_type),   intent(inout) :: OBC !< Open boundary control structure
+  type(param_file_type),  intent(in)    :: PF  !< Parameter file handle
+  logical,                intent(in) :: use_temperature !< If true, T and S are used
+
+  ! Local variables
+  integer :: n,m,num_fields
+  character(len=256) :: segstr, filename
+  character(len=20)  :: segnam, suffix
+  character(len=32)  :: varnam, fieldname
+  real               :: value
+  character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
+  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
+  character(len=256) :: mesg    ! Message for error messages.
+
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
+    write(suffix,"('_segment_',i3.3)") n
+    ! Clear out any old values
+    segstr = ''
+    call get_param(PF, mdl, segnam, segstr)
+    if (segstr == '') cycle
+
+    call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
+    if (num_fields == 0) cycle
+
+    ! At this point, just search for TEMP and SALT as tracers 1 and 2.
+    do m=1,num_fields
+      call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
+      if (trim(filename) /= 'none') then
+        if (fields(m) == 'TEMP') then
+          if (segment%is_E_or_W_2) then
+            OBC%tracer_x_reservoirs_used(1) = .true.
+          else
+            OBC%tracer_y_reservoirs_used(1) = .true.
+          endif
+        endif
+        if (fields(m) == 'SALT') then
+          if (segment%is_E_or_W_2) then
+            OBC%tracer_x_reservoirs_used(2) = .true.
+          else
+            OBC%tracer_y_reservoirs_used(2) = .true.
+          endif
+        endif
+      endif
+    enddo
+    ! Alternately, set first two to true if use_temperature is true
+    if (use_temperature) then
+      if (segment%is_E_or_W_2) then
+        OBC%tracer_x_reservoirs_used(1) = .true.
+        OBC%tracer_x_reservoirs_used(2) = .true.
+      else
+        OBC%tracer_y_reservoirs_used(1) = .true.
+        OBC%tracer_y_reservoirs_used(2) = .true.
+      endif
+    endif
+  enddo
+
+  return
+
+end subroutine parse_for_tracer_reservoirs
+
 !> Parse an OBC_SEGMENT_%%%_PARAMS string
  subroutine parse_segment_param_real(segment_str, var, param_value, debug )
    character(len=*),  intent(in)  :: segment_str !< A string in form of
@@ -1323,7 +1388,7 @@ end subroutine parse_segment_str
    logical, optional, intent(in)  :: debug       !< If present and true, write verbose debugging messages
    ! Local variables
    character(len=128) :: word1, word2, word3, method
-   integer :: lword, nfields, n, m, orient
+   integer :: lword, nfields, n, m
    logical :: continue,dbg
    character(len=32), dimension(MAX_OBC_FIELDS) :: flds
 
@@ -1446,6 +1511,11 @@ subroutine open_boundary_dealloc(OBC)
   if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%segnum_u)) deallocate(OBC%segnum_u)
   if (associated(OBC%segnum_v)) deallocate(OBC%segnum_v)
+  if (associated(OBC%rx_normal)) deallocate(OBC%rx_normal)
+  if (associated(OBC%ry_normal)) deallocate(OBC%ry_normal)
+  if (associated(OBC%cff_normal)) deallocate(OBC%cff_normal)
+  if (associated(OBC%tres_x)) deallocate(OBC%tres_x)
+  if (associated(OBC%tres_y)) deallocate(OBC%tres_y)
   deallocate(OBC)
 end subroutine open_boundary_dealloc
 
@@ -1610,6 +1680,45 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
 
 end subroutine open_boundary_impose_land_mask
 
+!> Make sure the OBC tracer reservoirs are initialized.
+subroutine setup_OBC_tracer_reservoirs(G, OBC)
+  type(ocean_grid_type),      intent(inout) :: G          !< Ocean grid structure
+  type(ocean_OBC_type),       pointer       :: OBC !< Open boundary control structure
+  ! Local variables
+  type(OBC_segment_type), pointer :: segment => NULL()
+  integer :: i, j, k, m, n
+
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (associated(segment%tr_Reg)) then
+      if (segment%is_E_or_W) then
+        I = segment%HI%IsdB
+        do m=1,OBC%ntr
+          if (associated(segment%tr_Reg%Tr(m)%tres)) then
+            do k=1,G%ke
+              do j=segment%HI%jsd,segment%HI%jed
+                OBC%tres_x(I,j,k,m) = segment%tr_Reg%Tr(m)%t(i,j,k)
+              enddo
+            enddo
+          endif
+        enddo
+      else
+        J = segment%HI%JsdB
+        do m=1,OBC%ntr
+          if (associated(segment%tr_Reg%Tr(m)%tres)) then
+            do k=1,G%ke
+              do i=segment%HI%isd,segment%HI%ied
+                OBC%tres_y(i,J,k,m) = segment%tr_Reg%Tr(m)%t(i,J,k)
+              enddo
+            enddo
+          endif
+        enddo
+      endif
+    endif
+  enddo
+
+end subroutine setup_OBC_tracer_reservoirs
+
 !> Apply radiation conditions to 3D  u,v at open boundaries
 subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
@@ -1637,7 +1746,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   real, pointer, dimension(:,:,:) :: cff_tangential=>NULL()
   real :: eps   ! A small velocity squared [L2 T-2 ~> m2 s-2]?
   type(OBC_segment_type), pointer :: segment => NULL()
-  integer :: i, j, k, is, ie, js, je, nz, n
+  integer :: i, j, k, is, ie, js, je, m, nz, n
   integer :: is_obc, ie_obc, js_obc, je_obc
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1652,7 +1761,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
   !! Copy previously calculated phase velocity from global arrays into segments
   !! This is terribly inefficient and temporary solution for continuity across restarts
   !! and needs to be revisited in the future.
-  if (OBC%gamma_uv > 0.0) then
+  if (OBC%gamma_uv < 1.0) then
     do n=1,OBC%number_of_segments
       segment=>OBC%segment(n)
       if (.not. segment%on_pe) cycle
@@ -1693,6 +1802,36 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
     enddo
   endif
 
+  ! Now tracers (if any)
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (associated(segment%tr_Reg)) then
+      if (segment%is_E_or_W) then
+        I = segment%HI%IsdB
+        do m=1,OBC%ntr
+          if (associated(segment%tr_Reg%Tr(m)%tres)) then
+            do k=1,G%ke
+              do j=segment%HI%jsd,segment%HI%jed
+                segment%tr_Reg%Tr(m)%tres(I,j,k) = OBC%tres_x(I,j,k,m)
+              enddo
+            enddo
+          endif
+        enddo
+      else
+        J = segment%HI%JsdB
+        do m=1,OBC%ntr
+          if (associated(segment%tr_Reg%Tr(m)%tres)) then
+            do k=1,G%ke
+              do i=segment%HI%isd,segment%HI%ied
+                segment%tr_Reg%Tr(m)%tres(i,J,k) = OBC%tres_y(i,J,k,m)
+              enddo
+            enddo
+          endif
+        enddo
+      endif
+    endif
+  enddo
+
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
   do n=1,OBC%number_of_segments
@@ -1708,7 +1847,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdx = (u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sasha for I-1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            else
              rx_avg = rx_new
@@ -1720,7 +1859,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
            endif
          elseif (segment%oblique) then
@@ -1737,7 +1876,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            rx_new = US%L_T_to_m_s**2*dhdt*dhdx
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            ry_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdy,-cff_new))
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -1753,7 +1892,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                               (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
                                min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
                             (cff_avg + rx_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary
              ! implementation as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -1779,7 +1918,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          I=segment%HI%IsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              do J=segment%HI%JsdB+1,segment%HI%JedB-1
@@ -1852,7 +1991,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              ry_tangential(I,segment%HI%JsdB,k) = segment%ry_normal(I,segment%HI%jsd,k)
@@ -1952,7 +2091,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdx = (u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sasha for I+1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            else
              rx_avg = rx_new
@@ -1962,7 +2101,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! value, u_new(I+1) and past boundary value but with barotropic
            ! accelerations, u_new(I).
            segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -1982,7 +2121,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            rx_new = US%L_T_to_m_s**2*dhdt*dhdx
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            ry_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdy,-cff_new))
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(I,j,k) + gamma_u*cff_new
@@ -1998,7 +2137,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                                         (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
                                          min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
                                        (cff_avg + rx_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -2024,7 +2163,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          I=segment%HI%IsdB
          allocate(rx_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              do J=segment%HI%JsdB+1,segment%HI%JedB-1
@@ -2097,7 +2236,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_tangential(I,segment%HI%JsdB,k) = segment%rx_normal(I,segment%HI%jsd,k)
              rx_tangential(I,segment%HI%JedB,k) = segment%rx_normal(I,segment%HI%jed,k)
              ry_tangential(I,segment%HI%JsdB,k) = segment%ry_normal(I,segment%HI%jsd,k)
@@ -2197,7 +2336,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdy = (v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ry_avg = (1.0-gamma_v)*segment%ry_normal(I,j,k) + gamma_v*ry_new
            else
              ry_avg = ry_new
@@ -2207,7 +2346,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! value, v_new(J-1) and past boundary value but with barotropic
            ! accelerations, v_new(J).
            segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
@@ -2226,7 +2365,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ry_new = US%L_T_to_m_s**2*dhdt*dhdy
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            rx_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdx,-cff_new))
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -2242,7 +2381,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                                         (max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) +&
                                          min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
                                        (cff_avg + ry_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -2268,7 +2407,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          J=segment%HI%JsdB
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ry_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
              ry_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
              do I=segment%HI%IsdB+1,segment%HI%IedB-1
@@ -2341,7 +2480,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
              rx_tangential(segment%HI%IedB,J,k) = segment%rx_normal(segment%HI%ied,J,k)
              ry_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
@@ -2441,7 +2580,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            dhdy = (v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ry_avg = (1.0-gamma_v)*segment%ry_normal(I,j,k) + gamma_v*ry_new
            else
              ry_avg = ry_new
@@ -2451,7 +2590,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ! value, v_new(J+1) and past boundary value but with barotropic
            ! accelerations, v_new(J).
            segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%ry_normal(i,J,k) = segment%ry_normal(i,J,k)
@@ -2471,7 +2610,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
            ry_new = US%L_T_to_m_s**2*dhdt*dhdy
            cff_new = US%L_T_to_m_s**2*max(dhdx*dhdx + dhdy*dhdy, eps)
            rx_new = min(cff_new,max(US%L_T_to_m_s**2*dhdt*dhdx,-cff_new))
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
              ry_avg = (1.0-gamma_u)*segment%ry_normal(i,J,k) + gamma_u*ry_new
              cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
@@ -2487,7 +2626,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
                                         (max(rx_avg,0.0)*segment%grad_normal(I-1,2,k) + &
                                          min(rx_avg,0.0)*segment%grad_normal(I,2,k))) / &
                                        (cff_avg + ry_avg)
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
              ! implemented as a work-around to limitations in restart capability
              OBC%rx_normal(I,j,k) = segment%rx_normal(I,j,k)
@@ -2513,7 +2652,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          J=segment%HI%JsdB
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              ry_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
              ry_tangential(segment%HI%IedB,J,k) = segment%ry_normal(segment%HI%ied,J,k)
              do I=segment%HI%IsdB+1,segment%HI%IedB-1
@@ -2586,7 +2725,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, US, dt)
          allocate(ry_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          allocate(cff_tangential(segment%HI%IsdB:segment%HI%IedB,segment%HI%JsdB:segment%HI%JedB,nz))
          do k=1,nz
-           if (gamma_u > 0.0) then
+           if (gamma_u < 1.0) then
              rx_tangential(segment%HI%IsdB,J,k) = segment%rx_normal(segment%HI%isd,J,k)
              rx_tangential(segment%HI%IedB,J,k) = segment%rx_normal(segment%HI%ied,J,k)
              ry_tangential(segment%HI%IsdB,J,k) = segment%ry_normal(segment%HI%isd,J,k)
@@ -3961,6 +4100,7 @@ subroutine fill_temp_salt_segments(G, OBC, tv)
     segment%tr_Reg%Tr(1)%tres(:,:,:) = segment%tr_Reg%Tr(1)%t(:,:,:)
     segment%tr_Reg%Tr(2)%tres(:,:,:) = segment%tr_Reg%Tr(2)%t(:,:,:)
   enddo
+  call setup_OBC_tracer_reservoirs(G, OBC)
 end subroutine fill_temp_salt_segments
 
 !> Find the region outside of all open boundary segments and
@@ -4195,19 +4335,31 @@ subroutine flood_fill2(G, color, cin, cout, cland)
 end subroutine flood_fill2
 
 !> Register OBC segment data for restarts
-subroutine open_boundary_register_restarts(HI, GV, OBC_CS, restart_CSp)
+subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart_CSp, &
+                                           use_temperature)
   type(hor_index_type),    intent(in) :: HI !< Horizontal indices
   type(verticalGrid_type), pointer    :: GV !< Container for vertical grid information
-  type(ocean_OBC_type),    pointer    :: OBC_CS !< OBC data structure, data intent(inout)
+  type(ocean_OBC_type),    pointer    :: OBC !< OBC data structure, data intent(inout)
+  type(tracer_registry_type), pointer :: Reg !< pointer to tracer registry
+  type(param_file_type),   intent(in) :: param_file !< Parameter file handle
   type(MOM_restart_CS),    pointer    :: restart_CSp !< Restart structure, data intent(inout)
+  logical,                 intent(in) :: use_temperature !< If true, T and S are used
   ! Local variables
   type(vardesc) :: vd
+  integer       :: m, n
+  character(len=100) :: mesg
+  type(OBC_segment_type), pointer :: segment=>NULL()
 
-  if (.not. associated(OBC_CS)) &
+  if (.not. associated(OBC)) &
        call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
                       "uninitialized OBC control structure")
 
-  if (associated(OBC_CS%rx_normal) .or. associated(OBC_CS%ry_normal)) &
+  if (associated(OBC%rx_normal) .or. associated(OBC%ry_normal) .or. &
+      associated(OBC%cff_normal)) &
+       call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
+                      "arrays were previously allocated")
+
+  if (associated(OBC%tres_x) .or. associated(OBC%tres_y)) &
        call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
                       "arrays were previously allocated")
 
@@ -4215,21 +4367,63 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS, restart_CSp)
   ! This implementation uses 3D arrays solely for restarts. We need
   ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
   ! so much memory and disk space. ***
-  if (OBC_CS%radiation_BCs_exist_globally .or. OBC_CS%oblique_BCs_exist_globally) then
-    allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
-    OBC_CS%rx_normal(:,:,:) = 0.0
+  if (OBC%radiation_BCs_exist_globally .or. OBC%oblique_BCs_exist_globally) then
+    allocate(OBC%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
+    OBC%rx_normal(:,:,:) = 0.0
     vd = var_desc("rx_normal","m s-1", "Normal Phase Speed for EW OBCs",'u','L')
-    call register_restart_field(OBC_CS%rx_normal, vd, .false., restart_CSp)
-    allocate(OBC_CS%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
-    OBC_CS%ry_normal(:,:,:) = 0.0
+    call register_restart_field(OBC%rx_normal, vd, .false., restart_CSp)
+    allocate(OBC%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
+    OBC%ry_normal(:,:,:) = 0.0
     vd = var_desc("ry_normal","m s-1", "Normal Phase Speed for NS OBCs",'v','L')
-    call register_restart_field(OBC_CS%ry_normal, vd, .false., restart_CSp)
+    call register_restart_field(OBC%ry_normal, vd, .false., restart_CSp)
   endif
-  if (OBC_CS%oblique_BCs_exist_globally) then
-    allocate(OBC_CS%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke))
-    OBC_CS%cff_normal(:,:,:) = 0.0
+  if (OBC%oblique_BCs_exist_globally) then
+    allocate(OBC%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke))
+    OBC%cff_normal(:,:,:) = 0.0
     vd = var_desc("cff_normal","m s-1", "denominator for oblique OBCs",'q','L')
-    call register_restart_field(OBC_CS%cff_normal, vd, .false., restart_CSp)
+    call register_restart_field(OBC%cff_normal, vd, .false., restart_CSp)
+  endif
+
+  if (Reg%ntr == 0) return
+  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+    OBC%ntr = Reg%ntr
+    allocate(OBC%tracer_x_reservoirs_used(Reg%ntr))
+    allocate(OBC%tracer_y_reservoirs_used(Reg%ntr))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    call parse_for_tracer_reservoirs(OBC, param_file, use_temperature)
+  else
+    ! This would be coming from user code such as DOME.
+    if (OBC%ntr /= Reg%ntr) then
+!        call MOM_error(FATAL, "open_boundary_regiser_restarts: Inconsistent value for ntr")
+      write(mesg,'("Inconsisten values for ntr ",'// &
+            'I8," and ",I8,".")') OBC%ntr, Reg%ntr
+      call MOM_error(WARNING, 'open_boundary_register_restarts: '//mesg)
+    endif
+  endif
+
+  ! Still painfully inefficient, now in four dimensions.
+  if (any(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tres_x(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke,OBC%ntr))
+    OBC%tres_x(:,:,:,:) = 0.0
+    do m=1,OBC%ntr
+      if (OBC%tracer_x_reservoirs_used(m)) then
+        write(mesg,'("tres_x_",I3.3)') m
+        vd = var_desc(mesg,"Conc", "Tracer concentration for EW OBCs",'u','L')
+        call register_restart_field(OBC%tres_x(:,:,:,m), vd, .false., restart_CSp)
+      endif
+    enddo
+  endif
+  if (any(OBC%tracer_y_reservoirs_used)) then
+    allocate(OBC%tres_y(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke,OBC%ntr))
+    OBC%tres_y(:,:,:,:) = 0.0
+    do m=1,OBC%ntr
+      if (OBC%tracer_y_reservoirs_used(m)) then
+        write(mesg,'("tres_y_",I3.3)') m
+        vd = var_desc(mesg,"Conc", "Tracer concentration for NS OBCs",'v','L')
+        call register_restart_field(OBC%tres_y(:,:,:,m), vd, .false., restart_CSp)
+      endif
+    enddo
   endif
 
 end subroutine open_boundary_register_restarts
@@ -4281,6 +4475,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
                   segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                        dt*(u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
                        u_L_in*segment%tr_Reg%Tr(m)%t(I,j,k)))
+                  if (associated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = segment%tr_Reg%Tr(m)%tres(I,j,k)
                 enddo
               endif
             enddo
@@ -4305,6 +4500,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
                        dt*(v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
                        v_L_in*segment%tr_Reg%Tr(m)%t(i,J,k)))
+                  if (associated(OBC%tres_y)) OBC%tres_y(i,J,k,m) = segment%tr_Reg%Tr(m)%tres(i,J,k)
                 enddo
               endif
             enddo

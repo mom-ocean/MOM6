@@ -479,7 +479,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_m)
-      call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, u, v, tracer_Reg, &
+      call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, u, v, OBC, tracer_Reg, &
                                   dt=dt, initial=.true.)
     endif
   endif

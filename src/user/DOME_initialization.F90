@@ -298,10 +298,22 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
     return   !!! Need a better error message here
   endif
+
+  NTR = tr_Reg%NTR
+
+  ! Stash this information away for the messy tracer restarts.
+  OBC%ntr = NTR
+  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tracer_x_reservoirs_used(NTR))
+    allocate(OBC%tracer_y_reservoirs_used(NTR))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(1) = .true.
+  endif
+
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  NTR = tr_Reg%NTR
   allocate(segment%field(NTR))
 
   do k=1,nz

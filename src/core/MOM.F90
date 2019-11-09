@@ -1222,10 +1222,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       endif
       call cpu_clock_begin(id_clock_ALE)
       if (use_ice_shelf) then
-        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
-                      fluxes%frac_shelf_h)
+        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
+                      dtdia, fluxes%frac_shelf_h)
       else
-        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
+        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, dtdia)
       endif
 
       if (showCallTree) call callTree_waypoint("finished ALE_main (step_MOM_thermo)")
@@ -1448,7 +1448,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_offline_tracer_final( G, GV, CS%h, CS%tv, h_end, CS%tracer_Reg, CS%ALE_CSp)
+      call ALE_offline_tracer_final( G, GV, CS%h, CS%tv, h_end, CS%tracer_Reg, CS%ALE_CSp, CS%OBC)
       call cpu_clock_end(id_clock_ALE)
       call pass_var(CS%h, G%Domain)
     endif
@@ -2125,7 +2125,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (associated(CS%OBC)) &
-    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, restart_CSp)
+    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
+                          param_file, restart_CSp, use_temperature)
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
@@ -2163,6 +2164,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                             CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
+
+! ! Need this after MOM_initialize_state for DOME OBC stuff.
+! if (associated(CS%OBC)) &
+!   call open_boundary_register_restarts(G%HI, GV, CS%OBC, CS%tracer_Reg, &
+!                         param_file, restart_CSp, use_temperature)
+
+! call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   ! From this point, there may be pointers being set, so the final grid type
   ! that will persist throughout the run has to be used.
@@ -2222,9 +2230,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       ! pass to the pointer
       shelf_area => frac_shelf_h
       call ALE_main(G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                    frac_shelf_h = shelf_area)
+                    CS%OBC, frac_shelf_h = shelf_area)
     else
-      call ALE_main( G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
+      call ALE_main( G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC)
     endif
 
     call cpu_clock_begin(id_clock_pass_init)
