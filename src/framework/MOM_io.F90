@@ -115,6 +115,7 @@ public :: get_variable_unlimited_dimension_index
 public :: global_att_exists
 public :: is_dimension_unlimited
 public :: MOM_get_diagnostic_axis_data
+public :: MOM_get_nc_corner_edgelengths
 public :: MOM_open_file
 public :: MOM_register_diagnostic_axis
 public :: read_data
@@ -167,6 +168,12 @@ type, public :: axis_data_type
   type(p1d), pointer       :: data(:) => NULL()  !< pointer to the axis data
 end type axis_data_type
 
+!> interface for setting start and nread arrays to read in data from a netCDF file
+interface MOM_get_nc_corner_edgelengths
+  module procedure MOM_get_nc_corner_edgelengths_DD
+  module procedure MOM_get_nc_corner_edgelengths_noDD
+
+end interface 
 !> Open a netCDF file 
 interface MOM_open_file
   module procedure MOM_open_file_DD_ocean_grid
@@ -601,6 +608,106 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPo
   deallocate(dimSizes)
   deallocate(dimNames)
 subroutine MOM_register_variable_axes
+
+!> set the "start" (corner) and "nread" (edge_lengths) arrays for domain-decomposed netCDF input data buffers 
+subroutine MOM_get_nc_corner_edgelengths_DD(fileObj, variableName, corner, edgeLengths, myCorner, myCornerIndices, &
+                                            myEdgeLengths, myEdgeLengthIndices)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  character(len=*), intent(in), optional :: variableName !< name of the Varibl
+  integer, allocatable, dimension(:), intent(out) :: corner !< array of corner indices to pass to read_data
+  integer, allocatable, dimension(:), intent(out) :: edgeLengths !< array of edge_lengths indices to pass to read_data
+  integer, dimension(:), intent(in), optional :: myCorner !< array of user-specified corner indices
+  integer, dimension(:), intent(in), optional :: myCornerIndices !< positional indices for userCorner values
+  integer, dimension(:), intent(in), optional :: myEdgeLengths !< array of user-specified edge_lengths indices
+  integer, dimension(:), intent(in), optional :: myEdgeLengthIndices !< positional indices for myEdgelengths
+  ! local
+  integer :: i, ndims ! counter, number of dimensions
+   
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
+                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"//&
+                                                  "before passing the fileObj argument to this function."
+
+ if (allocated(corner)) deallocate(corner)
+ if (allocated(edgeLengths)) deallocate(edgeLengths)
+ ! get variable dimension sizes and lengths
+  ndims = get_variable_num_dimensions(fileObj, trim(variableName))
+  allocate(corner(ndims))
+  corner(:)=1
+  allocate(edgeLengths(ndims))
+  call get_variable_size(fileObj, trim(variableName), edgeLengths, broadcast=.true.)
+  ! set user-specified corner values
+  if (present(myCorner)) then
+     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
+                                                  "You passed the myCorner argument, but did not pass"//&
+                                                  "myCornerIndices that defines the indices corresponding to the"//&
+                                                  "myCorner values."
+     do i=1,myCornerIndices
+       corner(i)=myCorner(i)
+     enddo
+  endif
+  
+  ! set user-specified EdgeLengths values
+  if (present(myEdgeLengths)) then
+     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
+                                                  "You passed the myEdgeLengths argument, but did not pass"//&
+                                                  "myEdgeLengthIndices that defines the indices corresponding to the"//&
+                                                  "myEdgeLengths values."
+     do i=1,myEdgeLengthsIndices
+       edgeLengths(i)=myEdgeLengths(i)
+     enddo
+  endif     
+
+subroutine MOM_get_nc_corner_edgelengths_DD
+
+!> set the corner (start) and edgeLengths (count) arrays for non-domain-decomposed netCDF input data buffers
+subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edgeLengths, myCorner, myCornerIndices, &
+                                            myEdgeLengths, myEdgeLengthIndices)
+  type(FmsNetcdfFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  character(len=*), intent(in), optional :: variableName !< name of the Varibl
+  integer, allocatable, dimension(:), intent(out) :: corner !< array of corner indices to pass to read_data
+  integer, allocatable, dimension(:), intent(out) :: edgeLengths !< array of edge_lengths indices to pass to read_data
+  integer, dimension(:), intent(in), optional :: myCorner !< array of user-specified corner indices
+  integer, dimension(:), intent(in), optional :: myCornerIndices !< positional indices for userCorner values
+  integer, dimension(:), intent(in), optional :: myEdgeLengths !< array of user-specified edge_lengths indices
+  integer, dimension(:), intent(in), optional :: myEdgeLengthIndices !< positional indices for myEdgelengths
+  ! local
+  integer :: i, ndims ! counter, number of dimensions
+   
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
+                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"//&
+                                                  "before passing the fileObj argument to this function."
+
+ if (allocated(corner)) deallocate(corner)
+ if (allocated(edgeLengths)) deallocate(edgeLengths)
+ ! get variable dimension sizes and lengths
+  ndims = get_variable_num_dimensions(fileObj, trim(variableName))
+  allocate(corner(ndims))
+  corner(:)=1
+  allocate(edgeLengths(ndims))
+  call get_variable_size(fileObj, trim(variableName), edgeLengths, broadcast=.true.)
+  ! set user-specified corner values
+  if (present(myCorner)) then
+     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: "//&
+                                                  "You passed the myCorner argument, but did not pass"//&
+                                                  "myCornerIndices that defines the indices corresponding to the"//&
+                                                  "myCorner values."
+     do i=1,myCornerIndices
+       corner(i)=myCorner(i)
+     enddo
+  endif
+  
+  ! set user-specified EdgeLengths values
+  if (present(myEdgeLengths)) then
+     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: "//&
+                                                  "You passed the myEdgeLengths argument, but did not pass"//&
+                                                  "myEdgeLengthIndices that defines the indices corresponding to the"//&
+                                                  "myEdgeLengths values."
+     do i=1,myEdgeLengthIndices
+       edgLengths(i)=myEdgeLengths(i)
+     enddo
+  endif     
+  
+subroutine MOM_get_nc_corner_edgelengths_noDD
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
