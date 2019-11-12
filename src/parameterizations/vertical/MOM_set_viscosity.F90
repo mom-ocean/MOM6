@@ -260,6 +260,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
   real :: tmp_val_m1_to_p1
+  real :: curv_tol         ! Numerator of curvature cubed, used to estimate
+                           ! accuracy of a single L(:) Newton iteration
+  logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
   integer :: itt, maxitt=20
@@ -773,19 +776,29 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
            !  dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = max(vol-Vol_0, 0.0)
 
-             ! The following code is more robust when GV%Angstrom_H=0, but it changes answers.
-             if (.not.CS%answers_2018) then
-               Vol_tol = max(0.5*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
-               Vol_quit = max(0.9*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
-             endif
+              use_L0 = .false.
+              do_one_L_iter = .false.
+              if (CS%answers_2018) then
+                curv_tol = GV%Angstrom_H*dV_dL2**2 &
+                           * (0.25 * dV_dL2 * GV%Angstrom_H - a * L0 * dVol)
+                do_one_L_iter = (a * a * dVol**3) < curv_tol
+              else
+                ! The following code is more robust when GV%Angstrom_H=0, but
+                ! it changes answers.
+                use_L0 = (dVol <= 0.)
 
-              if ((.not.CS%answers_2018) .and. (dVol <= 0.0)) then
+                Vol_tol = max(0.5 * GV%Angstrom_H + GV%H_subroundoff, 1e-14 * vol)
+                Vol_quit = max(0.9 * GV%Angstrom_H + GV%H_subroundoff, 1e-14 * vol)
+
+                curv_tol = Vol_tol * dV_dL2**2 &
+                           * (dV_dL2 * Vol_tol - 2.0 * a * L0 * dVol)
+                do_one_L_iter = (a * a * dVol**3) < curv_tol
+              endif
+
+              if (use_L0) then
                 L(K) = L0
                 Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
-              elseif ( ((.not.CS%answers_2018) .and. &
-                  (a*a*dVol**3 < Vol_tol*dV_dL2**2 *(dV_dL2*Vol_tol - 2.0*a*L0*dVol))) .or. &
-                  (CS%answers_2018 .and. (a*a*dVol**3 < GV%Angstrom_H*dV_dL2**2 * &
-                                          (0.25*dV_dL2*GV%Angstrom_H - a*L0*dVol) )) ) then
+              elseif (do_one_L_iter) then
                 ! One iteration of Newton's method should give an estimate
                 ! that is accurate to within Vol_tol.
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
@@ -1737,11 +1750,10 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
   endif
 
-  ! MOM_bkgnd_mixing is always used, so always allocate visc%Kv_slow. GMM
-  call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
-  call register_restart_field(visc%Kv_slow, "Kv_slow", .false., restart_CS, &
-                "Vertical turbulent viscosity at interfaces due to slow processes", &
-                "m2 s-1", z_grid='i')
+  if (useKPP) then
+    ! MOM_bkgnd_mixing uses Kv_slow when KPP is defined.
+    call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
+  endif
 
   ! visc%MLD is used to communicate the state of the (e)PBL or KPP to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
@@ -1954,23 +1966,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
-  call get_param(param_file, mdl, "ADD_KV_SLOW", visc%add_Kv_slow, &
-                 "If true, the background vertical viscosity in the interior "//&
-                 "(i.e., tidal + background + shear + convection) is added "//&
-                 "when computing the coupling coefficient. The purpose of this "//&
-                 "flag is to be able to recover previous answers and it will likely "//&
-                 "be removed in the future since this option should always be true.", &
-                  default=.false.)
-
   call get_param(param_file, mdl, "USE_KPP", use_KPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  do_not_log=.true., default=.false.)
-
-  if (use_KPP .and. visc%add_Kv_slow) call MOM_error(FATAL,"set_visc_init: "//&
-         "When USE_KPP=True, ADD_KV_SLOW must be false. Otherwise vertical "//&
-         "viscosity due to slow processes will be double counted. Please set "//&
-         "ADD_KV_SLOW=False.")
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
@@ -2072,11 +2071,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       enddo ; enddo ; enddo
     endif ; endif
 
-    if (associated(visc%Kv_slow)) then ; if (query_initialized(visc%Kv_slow, "Kv_slow", restart_CS)) then
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        visc%Kv_slow(i,j,k) = Z2_T_rescale * visc%Kv_slow(i,j,k)
-      enddo ; enddo ; enddo
-    endif ; endif
   endif
 
 end subroutine set_visc_init

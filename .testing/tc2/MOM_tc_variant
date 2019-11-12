@@ -1,0 +1,12 @@
+TIDES = True
+TIDE_M2 = True
+TIDE_S2 = True
+TIDE_N2 = True
+TIDE_K2 = True
+TIDE_K1 = True
+TIDE_O1 = True
+TIDE_P1 = True
+TIDE_Q1 = True
+TIDE_MF = True
+TIDE_MM = True
+TIDE_SAL_SCALAR_VALUE = 1.
