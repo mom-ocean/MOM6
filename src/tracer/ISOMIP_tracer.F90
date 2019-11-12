@@ -16,7 +16,8 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, check_if_open, slasher, vardesc, var_desc, query_vardesc, MOM_get_nc_corner_edgelengths
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, MOM_register_variable_axes, close_file, read_data
 use MOM_restart, only : MOM_restart_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
 use MOM_time_manager, only : time_type
@@ -184,6 +185,8 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  integer, allocatable, dimension(:) :: corner, edgeLengths
+  type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -200,10 +203,22 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "ISOMIP_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
+      if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
+      ! register the variable axes
+      call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
+      call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths, myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/4/))
+      
       do m=1,NTR
+        corner(4) = m
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_ISOMIP_tracer")
-        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+        !call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+        call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m), corner=corner, edge_lengths=edgeLengths)
       enddo
+
+      if(check_if_open(fileObjRead)) call close_file(fileObjRead)
+      deallocate(corner)
+      deallocate(edgeLengths)
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie

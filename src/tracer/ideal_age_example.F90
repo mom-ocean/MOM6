@@ -9,7 +9,8 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, check_if_open, slasher, vardesc, var_desc, query_vardesc, MOM_get_nc_corner_edgelengths
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, MOM_register_variable_axes, close_file, read_data
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -225,6 +226,8 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  integer, allocatable, dimension(:) :: corner, edgeLengths
+  type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -235,6 +238,14 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
   CS%Time => day
   CS%diag => diag
   CS%nkml = max(GV%nkml,1)
+  
+  ! open the netcdf file
+  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%IC_file, "read", G, .false.)
+  ! register the variable axes
+  call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
+  ! populate the corner and edgeLengths arrays
+  call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths, myEdgeLengths=(/1/), &
+                                     myEdgeLengthIndices=(/4/))
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, &
@@ -259,7 +270,9 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
                     trim(CS%IC_file)//".")
           endif
         else
-          call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+          corner(4) = m
+          !call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+           call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m), corner=corner, edge_lengths=edgeLengths)
         endif
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
@@ -273,6 +286,10 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
 
     endif ! restart
   enddo ! Tracer loop
+
+  if(check_if_open(fileObjRead)) call close_file(fileObjRead)
+  deallocate(corner)
+  deallocate(edgeLengths)
 
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.

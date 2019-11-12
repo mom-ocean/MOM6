@@ -20,9 +20,9 @@ use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,           only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
-use MOM_io,                   only : MOM_read_vector, get_variable_size
+use MOM_io,                   only : MOM_read_vector, get_variable_num_dimensions, get_variable_dimension_names
 use MOM_io,                   only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
-use MOM_io,                   only : check_if_open, file_exists, FmsNetcdfDomainFile_t
+use MOM_io,                   only : check_if_open, file_exists, FmsNetcdfDomainFile_t, MOM_get_nc_corner_edgelengths
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
@@ -1454,7 +1454,9 @@ subroutine read_all_input(CS)
 
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz, t, ntime
   integer :: IsdB, IedB, JsdB, JedB
-  integer, dimension(4) :: dimSizesh_end, dimSizesTemp, dimSizeSalt, start
+  integer :: ndims, dimUnlimIndexMean, dimUnlimIndexSnap
+  integer, allocatable, dimension(:) :: cornerMean, edgeLengthMean, cornerSnap, edgeLenghthSnap
+  character(len=40),allocatable, dimension(:): dimNames, dimNamesSnap
 
   nz = CS%GV%ke ; ntime = CS%numtime
   isd  = CS%G%isd   ; ied  = CS%G%ied  ; jsd  = CS%G%jsd  ; jed  = CS%G%jed
@@ -1484,29 +1486,60 @@ subroutine read_all_input(CS)
     call MOM_register_variable_axes(fileObjReadSnap,"h_end", xUnits="degrees_east", yUnits="degrees_north")
     ! note: temp and salt have same axes, so only registering temp axes
     call MOM_register_variable_axes(fileObjReadMean,"temp", xUnits="degrees_east", yUnits="degrees_north")
-    ! get the dimension sizes
-    call get_variable_size(fileObjReadSnap, "h_end", dimSizesh_end)
-    call get_variable_size(fileObjReadMean, "temp", dimSizesTemp)
-    call get_variable_size(fileObjReadMean, "salt", dimSizesSalt)
-    
-    dimSizesh_end(4)=1
-    dimSizesTemp(4)=1
-    dimSizesSalt(4)=1
-     
-    start(:)=1
+   
+    ! get the number of dimensions for each variable
+    call get_variable_num_dimensions(fileObjReadSnap, "h_end", ndims)
+    ! get the variable dimesion names 
+    allocate(dimNamesSnap(ndims))
+    call get_variable_dimension_names(fileObjReadMean, "h_end", dimNamesSnap)
+
+    call get_variable_num_dimensions(fileObjReadMean, "temp", ndims)
+    ! get the variable dimesion names
+    allocate(dimNames(ndims))
+    call get_variable_dimension_names(fileObjReadMean, "temp", dimNames)
+
+    ! get the unlimited dimension index and populate the corner and edgeLengths arrays for h_end
+    do i=1,size(dimNamesSnap)
+      if (is_dimension_unlimited(fileObjSnap, dimNamesSnap(i)) dimUnlimIndexSnap=i
+    enddo
+ 
+    call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "h_end", cornerSnap, edgeLengthSnap, myEdgeLengths=(/1/), &
+                                       myEdgeLengthIndices=(/dimUnlimIndexSnap/))
+ 
+    ! get the unlimited dimension index and populate the corner and edgeLengths arrays for temp and salt
+    do i=1,size(dimNames)
+      if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndexMean=i
+    enddo
+ 
+    call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "temp", cornerMean, edgeLengthMean, myEdgeLengths=(/1/), &
+                                       myEdgeLengthIndices=(/dimUnlimIndexMean/))
+    ! read the data at every time step
     do t = 1,ntime
-      start(4) = t
+      cornerSnap(dimUnlimIndexSnap) = t
+      cornerMean(dimUnlimIndexMean) = t
+
       call MOM_read_vector(fileObjReadSnap, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, timelevel=t)
-      call read_data(fileObjReadSnap,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), corner=start, &
-        edge_lengths=dimSizesh_end)
-      call read_data(fileObjReadMean,'temp', CS%temp_all(:,:,1:CS%nk_input,t), corner=start, &
-        edge_lengths=dimSizesTemp)
-      call read_data(fileObjReadMean,'salt', CS%salt_all(:,:,1:CS%nk_input,t), corner=start, &
-                     edge_lengths=dimSizesSalt)
+
+      call read_data(fileObjReadSnap,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), corner=cornerSnap, &
+        edge_lengths=edgeLengthSnap)
+
+      call read_data(fileObjReadMean,'temp', CS%temp_all(:,:,1:CS%nk_input,t), corner=cornerMean, & 
+        edge_lengths=edgeLengthMean)
+
+      call read_data(fileObjReadMean,'salt', CS%salt_all(:,:,1:CS%nk_input,t), corner=cornerMean, & 
+        edge_lengths=edgeLengthMean)
     enddo
+    ! close files
     if (check_if_open(fileObjReadSnap)) call close_file(fileObjReadSnap)
     if (check_if_open(fileObjReadMean)) call close_file(fileObjReadMean)
+
+    deallocate(dimNames)
+    deallocate(dimNamesSnap)
+    deallocate(cornerMean)
+    deallocate(edgeLengthMean)
+    deallocate(cornerSnap)
+    deallocate(edgeLengthSnap)
   endif
 
 end subroutine read_all_input

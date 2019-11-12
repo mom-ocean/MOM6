@@ -9,7 +9,9 @@ use MOM_file_parser,     only : get_param, log_param, log_version, param_file_ty
 use MOM_forcing_type,    only : forcing
 use MOM_hor_index,       only : hor_index_type
 use MOM_grid,            only : ocean_grid_type
-use MOM_io,              only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io,              only : file_exists, check_if_open, slasher, vardesc, var_desc, query_vardesc
+use MOM_io,              only : MOM_get_nc_corner_edgelengths, MOM_register_variable_axes
+use MOM_io,              only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, read_data
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_segment_tracer_type
 use MOM_open_boundary,   only : OBC_segment_type
 use MOM_restart,         only : MOM_restart_CS
@@ -178,6 +180,8 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   real :: d_tr   ! A change in tracer concentraions, in tracer units.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  integer, allocatable, dimension(:) :: corner, edgeLengths
+  type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -192,11 +196,20 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
     if (len_trim(CS%tracer_IC_file) >= 1) then
       !  Read the tracer concentrations from a netcdf file.
       if (.not.file_exists(CS%tracer_IC_file)) &
-        call MOM_error(FATAL, "DOME_initialize_tracer: Unable to open "// &
+        call MOM_error(FATAL, "DOME_initialize_tracer: Unable to find "// &
                         CS%tracer_IC_file)
+      ! open the netcdf file
+      if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
+      ! register the variable axes
+      call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
+      ! populate the corner and edgeLengths arrays
+      call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths, myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/4/))
       do m=1,NTR
+        corner(m)=4
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+        !call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
+        call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m), corner=corner, edge_lengths=edgeLengths)
       enddo
     else
       do m=1,NTR
@@ -246,6 +259,11 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
     endif
   endif ! restart
+   
+  if (check_if_open(fileObjReadMean)) call close_file(fileObjReadMean)
+
+  if (allocated(corner)) deallocate(corner)
+  if (allocated(edgeLengths)) deallocate(edgeLengths)
 
   if ( CS%use_sponge ) then
 !   If sponges are used, this example damps tracers in sponges in the
