@@ -56,7 +56,6 @@ use coupler_types_mod,       only : coupler_type_initialized, coupler_type_copy_
 use coupler_types_mod,       only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
-use atmos_ocean_fluxes_mod,  only : aof_set_coupler_flux
 use fms_mod,                 only : stdout
 use mpp_mod,                 only : mpp_chksum
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
@@ -525,7 +524,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       if (do_thermo) &
         call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+        call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
@@ -560,7 +559,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       if (do_thermo) &
         call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
-        call add_shelf_forces(OS%grid, OS%Ice_shelf_CSp, OS%forces)
+        call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &

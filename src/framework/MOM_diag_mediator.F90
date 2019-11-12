@@ -3881,14 +3881,11 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
-        total_weight = 0.0
         do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
-!        do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
            weight = mask(ii,jj,k)
-           total_weight = total_weight + weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo; enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave !Masked Sum (total_weight=1)
      enddo; enddo; enddo
   elseif(method .eq. MMP .or. method .eq. MMS) then    !e.g., T_advection_xy
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
@@ -3918,47 +3915,29 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
         enddo
         field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
      enddo; enddo; enddo
-  elseif(method .eq. PSM) then
-     do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
-        i0 = isv_o+dl*(i-isv_d)
-        j0 = jsv_o+dl*(j-jsv_d)
-        ave = 0.0
-        total_weight = 0.0
-        ii=i0
-        do jj=j0,j0+dl-1
-           weight =mask(ii,jj,k)*diag_cs%h(ii,jj,k)
-           total_weight = total_weight +weight
-           ave=ave+field_in(ii,jj,k)*weight
-        enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
-     enddo; enddo; enddo
   elseif(method .eq. PSS) then    !e.g. umo
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
-        total_weight = 0.0
         ii=i0
         do jj=j0,j0+dl-1
            weight =mask(ii,jj,k)
-           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
      enddo; enddo; enddo
   elseif(method .eq. SPS) then    !e.g. vmo
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d
         i0 = isv_o+dl*(i-isv_d)
         j0 = jsv_o+dl*(j-jsv_d)
         ave = 0.0
-        total_weight = 0.0
         jj=j0
         do ii=i0,i0+dl-1
            weight =mask(ii,jj,k)
-           total_weight = total_weight +weight
            ave=ave+field_in(ii,jj,k)*weight
         enddo
-        field_out(i,j,k)  = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+        field_out(i,j,k)  = ave  !Masked Sum (total_weight=1)
      enddo; enddo; enddo
   elseif(method .eq. MPM) then
      do k= ks,ke ; do j=jsv_d,jev_d ; do i=isv_d,iev_d

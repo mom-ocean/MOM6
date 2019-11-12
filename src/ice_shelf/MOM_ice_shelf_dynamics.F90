@@ -288,6 +288,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf domain-decomposed file object returned by call to MOM_open_file
 
+  Isdq = G%isdB ; Iedq = G%iedB ; Jsdq = G%jsdB ; Jedq = G%jedB
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
   if (.not.associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf_dyn.F90, initialize_ice_shelf_dyn: "// &
                           "called with an associated control structure.")

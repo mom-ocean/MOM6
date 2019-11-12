@@ -28,6 +28,8 @@ use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
 use MOM_io, only : file_exists, dimension_exists, variable_exists, check_if_open
 use MOM_interface_heights,only : find_eta
+use MOM_open_boundary,    only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
+use MOM_open_boundary,    only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution
 use MOM_regridding,       only : inflate_vanished_layers_old
@@ -309,7 +311,7 @@ end subroutine ALE_end
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
+subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
@@ -320,6 +322,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
   real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
@@ -372,7 +375,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
     call diag_update_remap_grids(CS%diag)
   endif
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, -dzRegrid, &
                              u, v, CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
@@ -395,7 +398,7 @@ end subroutine ALE_main
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
+subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, OBC, dt)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
@@ -403,6 +406,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
@@ -428,7 +432,8 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree, dt=dt )
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, &
+                            debug=CS%show_call_tree, dt=dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -447,7 +452,7 @@ end subroutine ALE_main_offline
 !> Regrid/remap stored fields used for offline tracer integrations. These input fields are assumed to have
 !! the same layer thicknesses at the end of the last offline interval (which should be a Zstar grid). This
 !! routine builds a grid on the runtime specified vertical coordinate
-subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
+subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   type(ALE_CS),                                 pointer       :: CS    !< Regridding parameters and options
   type(ocean_grid_type),                        intent(in   ) :: G     !< Ocean grid informations
   type(verticalGrid_type),                      intent(in   ) :: GV    !< Ocean vertical grid structure
@@ -458,6 +463,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites
   logical,                                      intent(in   ) :: debug !< If true, then turn checksums
+  type(ocean_OBC_type),                         pointer       :: OBC   !< Open boundary structure
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding
@@ -480,7 +486,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_offline_inputs)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree )
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_inputs)")
 
   ! Reintegrate mass transports from Zstar to the offline vertical coordinate
@@ -527,7 +533,7 @@ end subroutine ALE_offline_inputs
 !> Remaps all tracers from h onto h_target. This is intended to be called when tracers
 !! are done offline. In the case where transports don't quite conserve, we still want to
 !! make sure that layer thicknesses offline do not drift too far away from the online model
-subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
+subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS, OBC)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
@@ -537,6 +543,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
                                                                         !! last time step  [H ~> m or kg-2]
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
   ! Local variables
 
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid !< The change in grid interface positions
@@ -555,7 +562,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer_final)")
 
@@ -642,7 +649,7 @@ end subroutine ALE_build_grid
 
 !> For a state-based coordinate, accelerate the process of regridding by
 !! repeatedly applying the grid calculation algorithm
-subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, initial)
+subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzRegrid, initial)
   type(ALE_CS),            pointer       :: CS     !< ALE control structure
   type(ocean_grid_type),   intent(inout) :: G      !< Ocean grid
   type(verticalGrid_type), intent(in)    :: GV     !< Vertical grid
@@ -654,6 +661,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, 
                            intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
+  type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary structure
   type(tracer_registry_type), &
                  optional, pointer       :: Reg    !< Tracer registry to remap onto new grid
   real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding [s]
@@ -714,7 +722,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, 
   enddo
 
   ! remap all state variables (including those that weren't needed for regridding)
-  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h, Reg, dzIntTotal, u, v, dt=dt)
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h, Reg, OBC, dzIntTotal, u, v, dt=dt)
 
   ! save total dzregrid for diags if needed?
   if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
@@ -726,7 +734,8 @@ end subroutine ALE_regrid_accelerated
 !! This routine is called during initialization of the model at time=0, to
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, dxInterface, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, OBC, &
+                                dxInterface, u, v, debug, dt)
   type(remapping_CS),                        intent(in)    :: CS_remapping !< Remapping control structure
   type(ALE_CS),                              intent(in)    :: CS_ALE       !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
@@ -736,6 +745,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new        !< Thickness of destination grid
                                                                            !! [H ~> m or kg-2]
   type(tracer_registry_type),                pointer       :: Reg          !< Tracer registry structure
+  type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(in)    :: dxInterface  !< Change in interface position
                                                                            !! [H ~> m or kg-2]
@@ -856,6 +866,17 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
       else
         h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
       endif
+      if (associated(OBC)) then
+        if (OBC%segnum_u(I,j) .ne. 0) then
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            h1(:) = h_old(i,j,:)
+            h2(:) = h_new(i,j,:)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            h1(:) = h_old(i+1,j,:)
+            h2(:) = h_new(i+1,j,:)
+          endif
+        endif
+      endif
       call remapping_core_h(CS_remapping, nz, h1, u(I,j,:), nz, h2, &
                             u_column, h_neglect, h_neglect_edge)
       u(I,j,:) = u_column(:)
@@ -877,6 +898,17 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
         enddo
       else
         h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+      endif
+      if (associated(OBC)) then
+        if (OBC%segnum_v(i,J) .ne. 0) then
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            h1(:) = h_old(i,j,:)
+            h2(:) = h_new(i,j,:)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            h1(:) = h_old(i,j+1,:)
+            h2(:) = h_new(i,j+1,:)
+          endif
+        endif
       endif
       call remapping_core_h(CS_remapping, nz, h1, v(i,J,:), nz, h2, &
                             u_column, h_neglect, h_neglect_edge)
