@@ -478,19 +478,19 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
     if (Tr%diag_form == 1) then
       Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
           diag%axesTL, Time, "Lateral or neutral diffusion tracer content tendency for "//trim(shortnm), &
-          conv_units, conversion=Tr%conv_scale, x_cell_method='sum', y_cell_method='sum', v_extensive=.true.)
+          conv_units, conversion=Tr%conv_scale*US%s_to_T, x_cell_method='sum', y_cell_method='sum', v_extensive=.true.)
 
       Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
           diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration "//&
-          "tendency for "//trim(shortnm), conv_units, conversion = Tr%conv_scale, &
-          x_cell_method = 'sum', y_cell_method = 'sum')
+          "tendency for "//trim(shortnm), conv_units, conversion=Tr%conv_scale*US%s_to_T, &
+          x_cell_method='sum', y_cell_method= 'sum')
     else
       cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//&
            ' expressed as '//trim(lowercase(flux_longname))//&
            ' content due to parameterized mesoscale diffusion'
       Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
           diag%axesTL, Time, "Lateral or neutral diffusion tracer concentration tendency for "//trim(shortnm), &
-          conv_units, conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendprefix)//'pmdiff', &
+          conv_units, conversion=Tr%conv_scale*US%s_to_T, cmor_field_name = trim(Tr%cmor_tendprefix)//'pmdiff', &
           cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method = 'sum', y_cell_method = 'sum', v_extensive = .true.)
 
@@ -499,13 +499,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
       Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
           diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer "//&
           "concentration tendency for "//trim(shortnm), conv_units, &
-          conversion=Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendprefix)//'pmdiff_2d', &
+          conversion=Tr%conv_scale*US%s_to_T, cmor_field_name=trim(Tr%cmor_tendprefix)//'pmdiff_2d', &
           cmor_long_name=trim(cmor_var_lname), cmor_standard_name=trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method='sum', y_cell_method='sum')
     endif
     Tr%id_dfxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_conc_tendency', &
         diag%axesTL, Time, "Lateral (neutral) tracer concentration tendency for "//trim(shortnm), &
-        trim(units)//' s-1')
+        trim(units)//' s-1', conversion=US%s_to_T)
 
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendprefix) == 0) then

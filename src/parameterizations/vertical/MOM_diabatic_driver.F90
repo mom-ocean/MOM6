@@ -3525,7 +3525,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
     CS%id_diabatic_diff_saln_tend = register_diag_field('ocean_model',&
         'diabatic_diff_saln_tendency', diag%axesTL, Time,             &
-        'Diabatic diffusion salinity tendency', 'psu s-1')
+        'Diabatic diffusion salinity tendency', 'psu s-1', conversion=US%s_to_T)
     if (CS%id_diabatic_diff_saln_tend > 0) then
       CS%diabatic_diff_tendency_diag = .true.
     endif
@@ -3637,7 +3637,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     ! This diagnostic should equal to surface salt flux if all is working well.
     CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
         'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
-        'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
+        'Depth integrated boundary forcing of ocean salt','kg m-2 s-1', conversion=US%s_to_T)
     if (CS%id_boundary_forcing_salt_tend_2d > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif

@@ -407,7 +407,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
           call neutral_diffusion_calc_coeffs(G, GV, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
         endif
       endif
-      call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, I_numitts*US%T_to_s*dt, Reg, US, CS%neutral_diffusion_CSp)
+      call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, I_numitts*dt, Reg, US, CS%neutral_diffusion_CSp)
     enddo ! itt
 
   else    ! following if not using neutral diffusion, but instead along-surface diffusion
