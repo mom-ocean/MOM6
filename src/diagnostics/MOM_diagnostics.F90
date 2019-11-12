@@ -829,15 +829,18 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
 
+  ! NOTE: int_density_z expects z_top and z_btm values from [ij]sq to [ij]eq+1
   if (CS%id_col_mass > 0 .or. CS%id_pbo > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
         IG_Earth = 1.0 / GV%mks_g_Earth
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
-        do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
+        do j=G%jscB,G%jecB+1 ; do i=G%iscB,G%iecB+1
+          z_bot(i,j) = 0.0
+        enddo ; enddo
         do k=1,nz
-          do j=js,je ; do i=is,ie
+          do j=G%jscB,G%jecB+1 ; do i=G%iscB,G%iecB+1
             z_top(i,j) = z_bot(i,j)
             z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
           enddo ; enddo

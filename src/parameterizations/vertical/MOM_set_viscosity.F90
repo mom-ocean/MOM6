@@ -260,6 +260,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
   real :: tmp_val_m1_to_p1
+  real :: curv_tol         ! Numerator of curvature cubed, used to estimate
+                           ! accuracy of a single L(:) Newton iteration
+  logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
   integer :: itt, maxitt=20
@@ -773,19 +776,29 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
            !  dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = max(vol-Vol_0, 0.0)
 
-             ! The following code is more robust when GV%Angstrom_H=0, but it changes answers.
-             if (.not.CS%answers_2018) then
-               Vol_tol = max(0.5*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
-               Vol_quit = max(0.9*GV%Angstrom_H + GV%H_subroundoff, 1e-14*vol)
-             endif
+              use_L0 = .false.
+              do_one_L_iter = .false.
+              if (CS%answers_2018) then
+                curv_tol = GV%Angstrom_H*dV_dL2**2 &
+                           * (0.25 * dV_dL2 * GV%Angstrom_H - a * L0 * dVol)
+                do_one_L_iter = (a * a * dVol**3) < curv_tol
+              else
+                ! The following code is more robust when GV%Angstrom_H=0, but
+                ! it changes answers.
+                use_L0 = (dVol <= 0.)
 
-              if ((.not.CS%answers_2018) .and. (dVol <= 0.0)) then
+                Vol_tol = max(0.5 * GV%Angstrom_H + GV%H_subroundoff, 1e-14 * vol)
+                Vol_quit = max(0.9 * GV%Angstrom_H + GV%H_subroundoff, 1e-14 * vol)
+
+                curv_tol = Vol_tol * dV_dL2**2 &
+                           * (dV_dL2 * Vol_tol - 2.0 * a * L0 * dVol)
+                do_one_L_iter = (a * a * dVol**3) < curv_tol
+              endif
+
+              if (use_L0) then
                 L(K) = L0
                 Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
-              elseif ( ((.not.CS%answers_2018) .and. &
-                  (a*a*dVol**3 < Vol_tol*dV_dL2**2 *(dV_dL2*Vol_tol - 2.0*a*L0*dVol))) .or. &
-                  (CS%answers_2018 .and. (a*a*dVol**3 < GV%Angstrom_H*dV_dL2**2 * &
-                                          (0.25*dV_dL2*GV%Angstrom_H - a*L0*dVol) )) ) then
+              elseif (do_one_L_iter) then
                 ! One iteration of Newton's method should give an estimate
                 ! that is accurate to within Vol_tol.
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
