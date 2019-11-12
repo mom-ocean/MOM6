@@ -151,12 +151,12 @@ type, public :: forcing
                                  !! or freezing (negative) [m year-1]
 
   ! Scalars set by surface forcing modules
-  real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net [kg m-2 s-1]
-  real :: saltFluxGlobalAdj  !< adjustment to restoring salt flux to zero out global net [kgSalt m-2 s-1]
-  real :: netFWGlobalAdj     !< adjustment to net fresh water to zero out global net [kg m-2 s-1]
-  real :: vPrecGlobalScl     !< scaling of restoring vprec to zero out global net ( -1..1 ) [nondim]
-  real :: saltFluxGlobalScl  !< scaling of restoring salt flux to zero out global net ( -1..1 ) [nondim]
-  real :: netFWGlobalScl     !< scaling of net fresh water to zero out global net ( -1..1 ) [nondim]
+  real :: vPrecGlobalAdj = 0.     !< adjustment to restoring vprec to zero out global net [kg m-2 s-1]
+  real :: saltFluxGlobalAdj = 0.  !< adjustment to restoring salt flux to zero out global net [kgSalt m-2 s-1]
+  real :: netFWGlobalAdj = 0.     !< adjustment to net fresh water to zero out global net [kg m-2 s-1]
+  real :: vPrecGlobalScl = 0.     !< scaling of restoring vprec to zero out global net ( -1..1 ) [nondim]
+  real :: saltFluxGlobalScl = 0.  !< scaling of restoring salt flux to zero out global net ( -1..1 ) [nondim]
+  real :: netFWGlobalScl = 0.     !< scaling of net fresh water to zero out global net ( -1..1 ) [nondim]
 
   logical :: fluxes_used = .true. !< If true, all of the heat, salt, and mass
                                   !! fluxes have been applied to the ocean.

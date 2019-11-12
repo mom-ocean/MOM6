@@ -217,7 +217,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
         deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, &
                                tv%eqn_of_state, scale=US%kg_m3_to_R)
-        deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
+        do i = is-1,ie+1
+          deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
+        enddo
         do i = is-1, ie+1
           ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
           if ((MLD_fast(i,j)==0.) .and. (ddRho>0.) .and. &
