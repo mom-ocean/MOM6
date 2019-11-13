@@ -84,8 +84,9 @@ SOURCE = $(wildcard $(BASE)/src/*/*.F90 $(BASE)/src/*/*/*.F90 $(BASE)/config_src
 #---
 # Rules
 
-.PHONY: all
+.PHONY: all regressions
 all: $(foreach b,$(BUILDS),$(BUILD)/$(b)/MOM6)
+regressions: $(foreach b,symmetric target,$(BUILD)/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
