@@ -784,7 +784,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
                           CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, US, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, US%T_to_s*CS%t_dyn_rel_diag)
+      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -1252,7 +1252,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call diag_update_remap_grids(CS%diag)
 
     !### Consider moving this up into the if ALE block.
-    call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, US%T_to_s*dtdia)
+    call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, dtdia)
 
     if (CS%debug) then
       call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2, scale=US%L_T_to_m_s)
@@ -1276,7 +1276,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   else   ! complement of "if (.not.CS%adiabatic)"
 
     call cpu_clock_begin(id_clock_diabatic)
-    call adiabatic(h, tv, fluxes, US%T_to_s*dtdia, G, GV, CS%diabatic_CSp)
+    call adiabatic(h, tv, fluxes, dtdia, G, GV, US, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 

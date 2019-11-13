@@ -258,7 +258,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                     G, GV, US, CS, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
@@ -274,6 +273,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(cont_diag_ptrs),                      intent(inout) :: CDp       !< points to terms in continuity equations
   real,                                      intent(in)    :: dt        !< time increment [T ~> s]
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
+  type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
 
@@ -2885,21 +2885,22 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
 end subroutine extract_diabatic_member
 
 !> Routine called for adiabatic physics
-subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
+subroutine adiabatic(h, tv, fluxes, dt, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G      !< ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: h      !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv     !< points to thermodynamic fields
   type(forcing),           intent(inout) :: fluxes !< boundary fluxes
-  real,                    intent(in)    :: dt     !< time step [s]
+  real,                    intent(in)    :: dt     !< time step [T ~> s]
   type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(diabatic_CS),       pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: zeros  ! An array of zeros.
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), dt, G, GV, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), US%T_to_s*dt, G, GV, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic

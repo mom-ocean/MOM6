@@ -465,7 +465,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
 
     Tr%id_tendency = register_diag_field('ocean_model', trim(shortnm)//'_tendency', &
         diag%axesTL, Time, &
-        'Net time tendency for '//trim(lowercase(longname)), trim(units)//' s-1')
+        'Net time tendency for '//trim(lowercase(longname)), trim(units)//' s-1', conversion=US%s_to_T)
 
     if (Tr%id_tendency > 0) then
       call safe_alloc_ptr(Tr%t_prev,isd,ied,jsd,jed,nz)
@@ -511,10 +511,10 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
     if (len_trim(Tr%cmor_tendprefix) == 0) then
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
           diag%axesTL, Time, var_lname, conv_units, v_extensive=.true., &
-          conversion=Tr%conv_scale)
+          conversion=Tr%conv_scale*US%s_to_T)
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
-          conversion=Tr%conv_scale)
+          conversion=Tr%conv_scale*US%s_to_T)
     else
       cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//&
                         trim(flux_longname)//" Content"
@@ -522,13 +522,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
           diag%axesTL, Time, var_lname, conv_units, &
           cmor_field_name=trim(Tr%cmor_tendprefix)//"tend", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
-          v_extensive=.true., conversion=Tr%conv_scale)
+          v_extensive=.true., conversion=Tr%conv_scale*US%s_to_T)
       cmor_var_lname = trim(cmor_var_lname)//" Vertical Sum"
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
           cmor_field_name=trim(Tr%cmor_tendprefix)//"tend_2d", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
-          conversion=Tr%conv_scale)
+          conversion=Tr%conv_scale*US%s_to_T)
     endif
     if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
       call safe_alloc_ptr(Tr%Trxh_prev,isd,ied,jsd,jed,nz)
@@ -561,7 +561,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
       unit2 = trim(units)//"2"
       if (index(units(1:len_trim(units))," ") > 0) unit2 = "("//trim(units)//")2"
       Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, &
-        Time, "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1")
+        Time, "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1", conversion=US%s_to_T)
       if (Tr%id_tr_vardec > 0) then
         ! Set up a new tracer for this tracer squared
         m2 = Reg%ntr+1
@@ -604,10 +604,10 @@ subroutine postALE_tracer_diagnostics(Reg, G, GV, diag, dt)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< ocean vertical grid structure
   type(diag_ctrl),            intent(in) :: diag !< regulates diagnostic output
-  real,                       intent(in) :: dt   !< total time interval for these diagnostics
+  real,                       intent(in) :: dt   !< total time interval for these diagnostics [T ~> s]
 
-  real :: work(SZI_(G),SZJ_(G),SZK_(G))
-  real :: Idt
+  real    :: work(SZI_(G),SZJ_(G),SZK_(G))
+  real    :: Idt ! The inverse of the time step [T-1 ~> s-1]
   integer :: i, j, k, is, ie, js, je, nz, m, m2
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -636,11 +636,11 @@ subroutine post_tracer_diagnostics(Reg, h, diag_prev, diag, G, GV, dt)
                               intent(in) :: h    !< Layer thicknesses
   type(diag_grid_storage),    intent(in) :: diag_prev !< Contains diagnostic grids from previous timestep
   type(diag_ctrl),            intent(inout) :: diag !< structure to regulate diagnostic output
-  real,                       intent(in) :: dt   !< total time step for tracer updates
+  real,                       intent(in) :: dt   !< total time step for tracer updates [T ~> s]
 
   real    :: work3d(SZI_(G),SZJ_(G),SZK_(GV))
   real    :: work2d(SZI_(G),SZJ_(G))
-  real    :: Idt
+  real    :: Idt ! The inverse of the time step [T-1 ~> s-1]
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
