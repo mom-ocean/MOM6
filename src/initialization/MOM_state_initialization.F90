@@ -158,7 +158,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                       ! a restart file to the internal representation in this run.
   real :: vel_rescale ! A rescaling factor for velocities from the representation in
                       ! a restart file to the internal representation in this run.
-  real :: dt          ! The baroclinic dynamics timestep for this run [s].
+  real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
@@ -475,7 +475,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
            "an initial grid that is consistent with the initial conditions.", &
            default=1, do_not_log=just_read)
 
-      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true.)
+      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true., scale=US%s_to_T)
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_m)

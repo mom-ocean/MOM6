@@ -354,7 +354,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
         call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%dt_offline)
+      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%US%s_to_T*CS%dt_offline)
       call cpu_clock_end(id_clock_ALE)
 
       if (CS%debug) then
