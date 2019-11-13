@@ -66,9 +66,9 @@ type, public :: diagnostics_CS ; private
 
   ! following fields have nz layers.
   real, pointer, dimension(:,:,:) :: &
-    du_dt => NULL(), & !< net i-acceleration [L T-1 s-1 ~> m s-2]
-    dv_dt => NULL(), & !< net j-acceleration [L T-1 s-1 ~> m s-2]
-    dh_dt => NULL(), & !< thickness rate of change [H s-1 ~> m s-1 or kg m-2 s-1]
+    du_dt => NULL(), & !< net i-acceleration [L T-2 ~> m s-2]
+    dv_dt => NULL(), & !< net j-acceleration [L T-2 ~> m s-2]
+    dh_dt => NULL(), & !< thickness rate of change [H T-1 ~> m s-1 or kg m-2 s-1]
     p_ebt => NULL()    !< Equivalent barotropic modal structure [nondim]
 
   real, pointer, dimension(:,:,:) :: h_Rlay => NULL() !< Layer thicknesses in potential density
@@ -210,7 +210,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                                                  !! If p_surf is not associated, it is the same
                                                  !! as setting the surface pressure to 0.
   real,                    intent(in)    :: dt   !< The time difference since the last
-                                                 !! call to this subroutine [s].
+                                                 !! call to this subroutine [T ~> s].
   type(diag_grid_storage), intent(in)    :: diag_pre_sync !< Target grids from previous timestep
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
                                                  !! previous call to diagnostics_init.
@@ -255,7 +255,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   if (loc(CS)==0) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
 
-  call calculate_derivs(US%s_to_T*dt, G, CS)
+  call calculate_derivs(dt, G, CS)
 
   if (dt > 0.0) then
     call diag_save_grids(CS%diag)
@@ -642,19 +642,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     endif
     if (CS%id_cfl_cg1>0) then
       do j=js,je ; do i=is,ie
-        CS%cfl_cg1(i,j) = (dt*US%m_to_L*CS%cg1(i,j)) * (G%IdxT(i,j) + G%IdyT(i,j))
+        CS%cfl_cg1(i,j) = (dt*US%m_s_to_L_T*CS%cg1(i,j)) * (G%IdxT(i,j) + G%IdyT(i,j))
       enddo ; enddo
       call post_data(CS%id_cfl_cg1, CS%cfl_cg1, CS%diag)
     endif
     if (CS%id_cfl_cg1_x>0) then
       do j=js,je ; do i=is,ie
-        CS%cfl_cg1_x(i,j) = (dt*US%m_to_L*CS%cg1(i,j)) * G%IdxT(i,j)
+        CS%cfl_cg1_x(i,j) = (dt*US%m_s_to_L_T*CS%cg1(i,j)) * G%IdxT(i,j)
       enddo ; enddo
       call post_data(CS%id_cfl_cg1_x, CS%cfl_cg1_x, CS%diag)
     endif
     if (CS%id_cfl_cg1_y>0) then
       do j=js,je ; do i=is,ie
-        CS%cfl_cg1_y(i,j) = (dt*US%m_to_L*CS%cg1(i,j)) * G%IdyT(i,j)
+        CS%cfl_cg1_y(i,j) = (dt*US%m_s_to_L_T*CS%cg1(i,j)) * G%IdyT(i,j)
       enddo ; enddo
       call post_data(CS%id_cfl_cg1_y, CS%cfl_cg1_y, CS%diag)
     endif
@@ -1203,7 +1203,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
   type(unit_scale_type),    intent(in) :: US  !< A dimensional unit scaling type
   type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
-  real,                     intent(in) :: dt_int !< total time step associated with these diagnostics [s].
+  real,                     intent(in) :: dt_int !< total time step associated with these diagnostics [T ~> s].
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -1214,7 +1214,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
     zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh [m]
-  real :: I_time_int    ! The inverse of the time interval [s-1].
+  real :: I_time_int    ! The inverse of the time interval [T-1 ~> s-1].
   real :: zos_area_mean, volo, ssh_ga
   integer :: i, j, is, ie, js, je
 
@@ -1353,7 +1353,7 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
-  real,                     intent(in)    :: dt_trans !< total time step associated with the transports [s].
+  real,                     intent(in)    :: dt_trans !< total time step associated with the transports [T ~> s].
   type(tracer_registry_type), pointer     :: Reg !< Pointer to the tracer registry
 
   ! Local variables
@@ -1363,14 +1363,14 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport [kg s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics
                           ! [H s-1 ~> m s-1 or kg m-2 s-1].
-  real :: Idt             ! The inverse of the time interval [s-1]
+  real :: Idt             ! The inverse of the time interval [T-1 ~> s-1]
   real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes
                           ! [kg L-2 H-1 s-1 ~> kg m-3 s-1 or s-1].
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   Idt = 1. / dt_trans
-  H_to_kg_m2_dt = GV%H_to_kg_m2 * US%L_to_m**2 * Idt
+  H_to_kg_m2_dt = GV%H_to_kg_m2 * US%L_to_m**2 * US%s_to_T * Idt
 
   call diag_save_grids(diag)
   call diag_copy_storage_to_diag(diag, diag_pre_dyn)
@@ -1734,9 +1734,10 @@ end subroutine MOM_diagnostics_init
 
 
 !> Register diagnostics of the surface state and integrated quantities
-subroutine register_surface_diags(Time, G, IDs, diag, tv)
+subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_diag_IDs),  intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
   type(thermo_var_ptrs),   intent(in)    :: tv    !< A structure pointing to various thermodynamic variables
@@ -1790,18 +1791,20 @@ subroutine register_surface_diags(Time, G, IDs, diag, tv)
     endif
     if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-            'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil', &
+            'Heat from frazil formation', 'W m-2', conversion=US%s_to_T, cmor_field_name='hfsifrazil', &
             cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
             cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
     endif
   endif
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', 'psu m-2 s-1', conversion=G%US%R_to_kg_m3*G%US%Z_to_m)
+         'Salt sink in ocean due to ice flux', &
+         'psu m-2 s-1', conversion=G%US%R_to_kg_m3*G%US%Z_to_m*US%s_to_T)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
-         'Heat flux into ocean from mass flux into ocean', 'W m-2', conversion=G%US%R_to_kg_m3*G%US%Z_to_m)
+         'Heat flux into ocean from mass flux into ocean', &
+         'W m-2', conversion=G%US%R_to_kg_m3*G%US%Z_to_m*US%s_to_T)
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
+         'Heat flux into ocean from geothermal or other internal sources', 'W m-2', conversion=US%s_to_T)
 
 end subroutine register_surface_diags
 
@@ -1848,7 +1851,7 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       'm s-1', v_extensive=.true., conversion=GV%H_to_m)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive=.true., conversion=GV%H_to_m)
+      'm s-1', v_extensive=.true., conversion=GV%H_to_m*US%s_to_T)
 
 end subroutine register_transport_diags
 

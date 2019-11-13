@@ -782,7 +782,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
 
       call enable_averages(CS%t_dyn_rel_diag, Time_local, CS%diag)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
-                          CS%CDp, p_surf, US%T_to_s*CS%t_dyn_rel_diag, CS%diag_pre_sync,&
+                          CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, US, CS%diagnostics_CSp)
       call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, US%T_to_s*CS%t_dyn_rel_diag)
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
@@ -842,7 +842,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
     endif
     if (CS%time_in_thermo_cycle > 0.0) then
       call enable_averages(CS%time_in_thermo_cycle, Time_local, CS%diag)
-      call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, US%T_to_s*CS%time_in_thermo_cycle, &
+      call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, CS%time_in_thermo_cycle, &
                                     sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
     endif
     call disable_averaging(CS%diag)
@@ -1096,7 +1096,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
   call post_transport_diagnostics(G, GV, US, CS%uhtr, CS%vhtr, h, CS%transport_IDs, &
-           CS%diag_pre_dyn, CS%diag, US%T_to_s*CS%t_dyn_rel_adv, CS%tracer_reg)
+           CS%diag_pre_dyn, CS%diag, CS%t_dyn_rel_adv, CS%tracer_reg)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -2380,7 +2380,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since the tracer registry is now locked
-  call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%tv)
+  call register_surface_diags(Time, G, US, CS%sfc_IDs, CS%diag, CS%tv)
   call register_diags(Time, G, GV, US, CS%IDs, CS%diag)
   call register_transport_diags(Time, G, GV, US, CS%transport_IDs, CS%diag)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, US, &
