@@ -841,7 +841,12 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
-  netPen(:,1) = sum( pen_SW_bnd(:,:), dim=1 ) ! Surface interface
+  do i=is,ie
+    netPen(i,1) = 0.
+    do n=1,max(nsw,1)
+      netPen(i,1) = netPen(i,1) + pen_SW_bnd(n,i)   ! Surface interface
+    enddo
+  enddo
 
   ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.

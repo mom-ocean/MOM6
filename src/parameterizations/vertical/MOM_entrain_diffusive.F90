@@ -196,6 +196,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real :: Idt        ! The inverse of the time step [T-1 ~> s-1].
 
   logical :: do_any
+  logical :: do_entrain_eakb    ! True if buffer layer is entrained
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
   integer :: it, i, j, k, is, ie, js, je, nz, K2, kmb
   integer :: kb(SZI_(G))  ! The value of kb in row j.
@@ -254,7 +255,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
   !$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
   !$OMP                                  zeros,maxF_kb,maxF,ea_kbp1,eakb,Sref,       &
-  !$OMP                                  maxF_correct,do_any,                        &
+  !$OMP                                  maxF_correct,do_any,do_entrain_eakb,        &
   !$OMP                                  err_min_eakb0,err_max_eakb0,eakb_maxF,      &
   !$OMP                                  min_eakb,err_eakb0,F,minF,hm,fk,F_kb_maxent,&
   !$OMP                                  F_kb,is1,ie1,kb_min_act,dFdfm_kb,b1,dFdfm,  &
@@ -355,10 +356,16 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
                         kmb, is, ie, G, GV, CS, F_kb_maxEnt, do_i_in = do_i)
 
       do i=is,ie
-        if ((.not.do_i(i)) .or. (err_max_eakb0(i) >= 0.0)) then
-          eakb(i) = 0.0 ; min_eakb(i) = 0.0
-        else ! If error_max_eakb0 < 0 the buffer layers are always all entrained.
+        do_entrain_eakb = .false.
+        ! If error_max_eakb0 < 0, then buffer layers are always all entrained
+        if (do_i(i)) then ; if (err_max_eakb0(i) < 0.0) then
+          do_entrain_eakb = .true.
+        endif ; endif
+
+        if (do_entrain_eakb) then
           eakb(i) = max_eakb(i) ; min_eakb(i) = max_eakb(i)
+        else
+          eakb(i) = 0.0 ; min_eakb(i) = 0.0
         endif
       enddo
 
@@ -413,11 +420,13 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       endif
     endif
     do k=nz-1,kb_min,-1 ; do i=is,ie ; if (do_i(i)) then
-      if (k>=kb(i)) then
+      if (k >= kb(i)) then
         maxF(i,k) = MIN(maxF(i,k),dsp1_ds(i,k+1)*maxF(i,k+1) + htot(i))
         htot(i) = htot(i) + (h(i,j,k) - Angstrom)
-        if ( (k == kb(i)) .and. ((maxF(i,k) < F_kb(i)) .or. &
-            (maxF(i,k) < maxF_kb(i)) .and. (eakb_maxF(i) <= max_eakb(i))) ) then
+      endif
+      if (k == kb(i)) then
+        if ((maxF(i,k) < F_kb(i)) .or. (maxF(i,k) < maxF_kb(i)) &
+            .and. (eakb_maxF(i) <= max_eakb(i))) then
           !   In this case, too much was being entrained by the topmost interior
           ! layer, even with the minimum initial estimate.  The buffer layer
           ! will always entrain the maximum amount.

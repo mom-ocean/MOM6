@@ -1,7 +1,11 @@
 SHELL = bash
-MPIRUN ?= mpirun
 
+# User-defined configuration
 -include config.mk
+
+# Default configurations
+MPIRUN ?= mpirun
+DO_REPRO_TESTS ?= true
 
 #---
 # Dependencies
@@ -38,35 +42,44 @@ MKMF_TEMPLATE ?= $(DEPS)/mkmf/templates/ncrc-gnu.mk
 # Executables
 BUILDS = symmetric asymmetric repro openmp
 CONFIGS := $(wildcard tc*)
-TESTS = grids layouts restarts repros nans dims
+TESTS = grids layouts restarts nans dims openmps
+
+# REPRO tests enable reproducibility with optimization, and often do not match
+# the DEBUG results in older GCCs and vendor compilers, so we can optionally
+# disable them.
+ifeq ($(DO_REPRO_TESTS), true)
+  BUILDS += repro
+  TESTS += repros
+endif
 
 # The following variables are configured by Travis:
 #   DO_REGRESSION_TESTS: true if $(TRAVIS_PULL_REQUEST) is a PR number
 #   MOM_TARGET_SLUG: TRAVIS_REPO_SLUG
 #   MOM_TARGET_LOCAL_BRANCH: TRAVIS_BRANCH
-#
-# These are set to true by Travis if testing a pull request
+
+# These are set to true by our Travis configuration if testing a pull request
 DO_REGRESSION_TESTS ?=
 REPORT_COVERAGE ?=
 
 ifeq ($(DO_REGRESSION_TESTS), true)
-	BUILDS += target
-	TEST += regressions
+  BUILDS += target
+  TESTS += regressions
 
-	MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
-	MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
+  MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
+  MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
 
-	MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
-	MOM_TARGET_BRANCH := origin/$(MOM_TARGET_LOCAL_BRANCH)
+  MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
+  MOM_TARGET_BRANCH := origin/$(MOM_TARGET_LOCAL_BRANCH)
 
-	TARGET_CODEBASE = $(BUILD)/target_codebase
+  TARGET_CODEBASE = $(BUILD)/target_codebase
 else
-	MOM_TARGET_URL =
-	MOM_TARGET_BRANCH =
-	TARGET_CODEBASE =
+  MOM_TARGET_URL =
+  MOM_TARGET_BRANCH =
+  TARGET_CODEBASE =
 endif
 
 SOURCE = $(wildcard $(BASE)/src/*/*.F90 $(BASE)/src/*/*/*.F90 $(BASE)/config_src/solo_driver/*.F90)
+
 
 #---
 # Rules
@@ -85,7 +98,7 @@ $(BUILD)/target/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/symmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 $(COVFLAG)
 $(BUILD)/asymmetric/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1
 $(BUILD)/repro/MOM6: MOMFLAGS=NETCDF=3 REPRO=1
-$(BUILD)/openmp/MOM6: MOMFLAGS=NETCDF=3 OPENMP=1
+$(BUILD)/openmp/MOM6: MOMFLAGS=NETCDF=3 DEBUG=1 OPENMP=1
 
 $(BUILD)/asymmetric/path_names: GRID_SRC=config_src/dynamic
 $(BUILD)/%/path_names: GRID_SRC=config_src/dynamic_symmetric
@@ -175,15 +188,14 @@ test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
 test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
 test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d).diag))
 
-# NOTE: chksum_diag return code of cmp is currently ignored since many fail!
 define CMP_RULE
 .PRECIOUS: $(foreach b,$(2),results/%/ocean.stats.$(b))
 %.$(1): $(foreach b,$(2),results/%/ocean.stats.$(b))
-	cmp $$^
+	cmp $$^ || diff $$^
 
 .PRECIOUS: $(foreach b,$(2),results/%/chksum_diag.$(b))
 %.$(1).diag: $(foreach b,$(2),results/%/chksum_diag.$(b))
-	cmp $$^
+	cmp $$^ || diff $$^
 endef
 
 $(eval $(call CMP_RULE,regression,symmetric target))
@@ -197,7 +209,8 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 # Restart tests only compare the final stat record
 .PRECIOUS: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
 %.restart: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
-	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1))
+	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
+		|| diff $^
 
 # TODO: chksum_diag parsing of restart files
 
@@ -205,12 +218,14 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 #---
 # Test run output files
 
-# Simple function for generalized Slurm (srun) and OpenMPI (mpirun) support
+# Generalized MPI environment variable support
 # $(1): Environment variables
-ifeq ($(MPIRUN), srun)
-MPIRUN_CMD=$(1) $(MPIRUN)
+ifeq ($(shell $(MPIRUN) -x tmp=1 true 2> /dev/null ; echo $$?), 0)
+  MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
+else ifeq ($(shell $(MPIRUN) -env tmp=1 true 2> /dev/null ; echo $$?), 0)
+  MPIRUN_CMD=$(MPIRUN) $(if $(1),-env $(1),)
 else
-MPIRUN_CMD=$(MPIRUN) $(if $(1),-x $(1),)
+  MPIRUN_CMD=$(1) $(MPIRUN)
 endif
 
 # Rule to build results/<tc>/{ocean.stats,chksum_diag}.<tag>

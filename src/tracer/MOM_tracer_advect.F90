@@ -652,10 +652,14 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     do m=1,ntr
 
       ! update tracer
-      do i=is,ie ; if ((do_i(i)) .and. (Ihnew(i) > 0.0)) then
-        Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
-                          (flux_x(I,m) - flux_x(I-1,m))) * Ihnew(i)
-      endif ; enddo
+      do i=is,ie
+        if (do_i(i)) then
+          if (Ihnew(i) > 0.0) then
+            Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
+                              (flux_x(I,m) - flux_x(I-1,m))) * Ihnew(i)
+          endif
+        endif
+      enddo
 
       ! diagnostics
       if (associated(Tr(m)%ad_x)) then ; do i=is,ie ; if (do_i(i)) then

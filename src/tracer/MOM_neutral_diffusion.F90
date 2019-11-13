@@ -2401,6 +2401,9 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ! Tests for linearized version of searching the layer for neutral surface position
   ! EOS linear in T, uniform alpha
   CS%max_iter = 10
+  ! Unit tests require explicit initialization of tolerance
+  CS%Drho_tol = 0.
+  CS%x_tol = 0.
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,        &
              find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0.,                      &
                                      0., -0.2, 0., 10., -0.2, 0.,                     &
