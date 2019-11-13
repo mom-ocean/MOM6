@@ -66,7 +66,7 @@ contains
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of zonal velocities over the
 !! previous timestep.  This subroutine is called from vertvisc.
-subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, str, a, hv)
+subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: I   !< The zonal index of the column to be documented.
   integer,                     intent(in) :: j   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
@@ -80,7 +80,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !<  A structure with pointers to various terms
                                                  !! in the continuity equations.
-  real,                        intent(in) :: dt  !< The ocean dynamics time step [s].
+  real,                        intent(in) :: dt_in_T  !< The ocean dynamics time step [T ~> s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1].
@@ -95,6 +95,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, du
+  real    :: dt  ! The time step [s]
   real    :: Inorm(SZK_(G))
   real    :: e(SZK_(G)+1)
   real    :: h_scale, uh_scale
@@ -106,6 +107,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   integer :: file
 
   Angstrom = GV%Angstrom_H + GV%H_subroundoff
+  dt = US%T_to_s*dt_in_T
   h_scale = GV%H_to_m ; uh_scale = GV%H_to_m
 
 !  if (.not.associated(CS)) return
@@ -397,7 +399,7 @@ end subroutine write_u_accel
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of meridional velocities over
 !! the previous timestep.  This subroutine is called from vertvisc.
-subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, str, a, hv)
+subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: i   !< The zonal index of the column to be documented.
   integer,                     intent(in) :: J   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
@@ -411,7 +413,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !< A structure with pointers to various terms in
                                                  !! the continuity equations.
-  real,                        intent(in) :: dt  !< The ocean dynamics time step [s].
+  real,                        intent(in) :: dt_in_T  !< The ocean dynamics time step [T ~> s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1].
@@ -426,6 +428,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real    :: f_eff, CFL
   real    :: Angstrom
   real    :: truncvel, dv
+  real    :: dt  ! The time step [s]
   real    :: Inorm(SZK_(G))
   real    :: e(SZK_(G)+1)
   real    :: h_scale, uh_scale
@@ -437,6 +440,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   integer :: file
 
   Angstrom = GV%Angstrom_H + GV%H_subroundoff
+  dt = US%T_to_s*dt_in_T
   h_scale = GV%H_to_m ; uh_scale = GV%H_to_m
 
 !  if (.not.associated(CS)) return

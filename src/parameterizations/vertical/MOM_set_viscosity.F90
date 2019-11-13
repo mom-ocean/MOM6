@@ -135,15 +135,15 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     S_EOS, &    !   The salinity used to calculate the partial derivatives
                 ! of density with T and S [ppt].
     dR_dT, &    !   Partial derivative of the density in the bottom boundary
-                ! layer with temperature [kg m-3 degC-1].
+                ! layer with temperature [R degC-1 ~> kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density in the bottom boundary
-                ! layer with salinity [kg m-3 ppt-1].
+                ! layer with salinity [R ppt-1 ~> kg m-3 ppt-1].
     press       !   The pressure at which dR_dT and dR_dS are evaluated [Pa].
   real :: htot      ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
 
   real :: Rhtot ! Running sum of thicknesses times the layer potential
-                ! densities [H kg m-3 ~> kg m-2 or kg2 m-5].
+                ! densities [H R ~> kg m-2 or kg2 m-5].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     D_u, &      ! Bottom depth interpolated to u points [Z ~> m].
     mask_u      ! A mask that disables any contributions from u points that
@@ -163,21 +163,21 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
                 ! velocity point [ppt].
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
-                ! to a velocity point [kg m-3].
+                ! to a velocity point [R ~> kg m-3].
 
   real :: h_vel_pos        ! The arithmetic mean thickness at a velocity point
                            ! plus H_neglect to avoid 0 values [H ~> m or kg m-2].
   real :: ustarsq          ! 400 times the square of ustar, times
                            ! Rho0 divided by G_Earth and the conversion
-                           ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
+                           ! from m to thickness units [H R ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
                            ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
   real :: cdrag_sqrt       ! Square root of the drag coefficient [nondim].
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
-                           ! divided by G_Earth [H kg m-3 ~> kg m-2 or kg2 m-5].
+                           ! divided by G_Earth [H R ~> kg m-2 or kg2 m-5].
   real :: Dfn              ! The increment in oldfn for entraining
-                           ! the layer [H kg m-3 ~> kg m-2 or kg2 m-5].
+                           ! the layer [H R ~> kg m-2 or kg2 m-5].
   real :: Dh               ! The increment in layer thickness from
                            ! the present layer [H ~> m or kg m-2].
   real :: bbl_thick        ! The thickness of the bottom boundary layer [H ~> m or kg m-2].
@@ -187,7 +187,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: U_bg_sq          ! The square of an assumed background
                            ! velocity, for calculating the mean
                            ! magnitude near the bottom for use in the
-                           ! quadratic bottom drag [m2 s-2].
+                           ! quadratic bottom drag [L2 T-2 ~> m2 s-2].
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: hutot            ! Running sum of thicknesses times the
@@ -198,10 +198,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                            ! of the bottom [H ~> m or kg m-2].
   real :: v_at_u, u_at_v   ! v at a u point or vice versa [L T-1 ~> m s-1].
   real :: Rho0x400_G       ! 400*Rho0/G_Earth, times unit conversion factors
-                           ! [kg T2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
+                           ! [R T2 H Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                            ! The 400 is a constant proposed by Killworth and Edwards, 1999.
   real, dimension(SZI_(G),SZJ_(G),max(GV%nk_rho_varies,1)) :: &
-    Rml                    ! The mixed layer coordinate density [kg m-3].
+    Rml                    ! The mixed layer coordinate density [R ~> kg m-3].
   real :: p_ref(SZI_(G))   !   The pressure used to calculate the coordinate
                            ! density [Pa] (usually set to 2e7 Pa = 2000 dbar).
 
@@ -276,7 +276,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(BBL): "//&
+  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
   if (.not.CS%bottomdraglaw) return
 
@@ -307,7 +307,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do k=1,nkmb
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
-                      Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state)
+                      Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state, scale=US%kg_m3_to_R)
     enddo ; enddo
   endif
 
@@ -548,7 +548,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         press(i) = press(i) + GV%H_to_Pa * h_vel(i,k)
       enddo ; enddo
       call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
+                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
     endif
 
     do i=is,ie ; if (do_i(i)) then
@@ -577,7 +577,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           if ((oldfn + Dfn) <= ustarsq) then
             Dh = h_at_vel(i,k)
           else
-            Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+            Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
           endif
 
           htot = htot + Dh
@@ -600,7 +600,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
           elseif ((oldfn + Dfn) <= ustarsq) then
             Dh = h_at_vel(i,k)
           else
-            Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+            Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
           endif
 
           htot = htot + Dh
@@ -616,7 +616,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
             elseif ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
-              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
             endif
 
             htot = htot + Dh
@@ -1031,7 +1031,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
-  real,                    intent(in)    :: dt   !< Time increment [s].
+  real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to vertvisc_init.
   logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
@@ -1047,15 +1047,15 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
     Shtot, &    !   The integrated salt of layers that are within the
                 ! surface mixed layer [H ppt ~> m ppt or kg ppt m-2].
     Rhtot, &    !   The integrated density of layers that are within the surface mixed layer
-                ! [H kg m-3 ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
+                ! [H R ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
                 ! equation of state is used.
     uhtot, &    !   The depth integrated zonal and meridional velocities within
     vhtot, &    ! the surface mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
     Idecay_len_TKE, & ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     dR_dT, &    !   Partial derivative of the density at the base of layer nkml
-                ! (roughly the base of the mixed layer) with temperature [kg m-3 degC-1].
+                ! (roughly the base of the mixed layer) with temperature [R degC-1 ~> kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density at the base of layer nkml
-                ! (roughly the base of the mixed layer) with salinity [kg m-3 ppt-1].
+                ! (roughly the base of the mixed layer) with salinity [R ppt-1 ~> kg m-3 ppt-1].
     ustar, &    !   The surface friction velocity under ice shelves [Z T-1 ~> m s-1].
     press, &    ! The pressure at which dR_dT and dR_dS are evaluated [Pa].
     T_EOS, &    ! The potential temperature at which dR_dT and dR_dS are evaluated [degC]
@@ -1089,8 +1089,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: I_2hlay   ! 1 / 2*hlay [H-1 ~> m-1 or m2 kg-1].
   real :: T_lay     ! The layer temperature at velocity points [degC].
   real :: S_lay     ! The layer salinity at velocity points [ppt].
-  real :: Rlay      ! The layer potential density at velocity points [kg m-3].
-  real :: Rlb       ! The potential density of the layer below [kg m-3].
+  real :: Rlay      ! The layer potential density at velocity points [R ~> kg m-3].
+  real :: Rlb       ! The potential density of the layer below [R ~> kg m-3].
   real :: v_at_u    ! The meridonal velocity at a zonal velocity point [L T-1 ~> m s-1].
   real :: u_at_v    ! The zonal velocity at a meridonal velocity point [L T-1 ~> m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
@@ -1100,20 +1100,20 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
                     ! viscous mixed layer, including reduction for turbulent
                     ! decay. Nondimensional.
   real :: dt_Rho0   ! The time step divided by the conversion from the layer
-                    ! thickness to layer mass [s H m2 kg-1 ~> s m3 kg-1 or s].
+                    ! thickness to layer mass [T H Z-1 R-1 ~> s m3 kg-1 or s].
   real :: g_H_Rho0  !   The gravitational acceleration times the conversion from H to m divided
-                    ! by the mean density [L2 m3 T-2 H-1 kg-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
+                    ! by the mean density [L2 T-2 H-1 R-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: ustarsq     ! 400 times the square of ustar, times
                       ! Rho0 divided by G_Earth and the conversion
-                      ! from m to thickness units [H kg m-3 ~> kg m-2 or kg2 m-5].
+                      ! from m to thickness units [H R ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z  ! Square root of the drag coefficient, times a unit conversion
                       ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
   real :: cdrag_sqrt  ! Square root of the drag coefficient [nondim].
   real :: oldfn       ! The integrated energy required to
                       ! entrain up to the bottom of the layer,
-                      ! divided by G_Earth [H kg m-3 ~> kg m-2 or kg2 m-5].
+                      ! divided by G_Earth [H R ~> kg m-2 or kg2 m-5].
   real :: Dfn         ! The increment in oldfn for entraining
-                      ! the layer [H kg m-3 ~> kg m-2 or kg2 m-5].
+                      ! the layer [H R ~> kg m-2 or kg2 m-5].
   real :: Dh          ! The increment in layer thickness from
                       ! the present layer [H ~> m or kg m-2].
   real :: U_bg_sq   ! The square of an assumed background velocity, for
@@ -1126,7 +1126,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: Rho0x400_G ! 400*Rho0/G_Earth, times unit conversion factors
-                     ! [kg T2 H m-3 Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
+                     ! [R T2 H Z-2 ~> kg s2 m-4 or kg2 s2 m-7].
                      ! The 400 is a constant proposed by Killworth and Edwards, 1999.
   real :: ustar1    ! ustar [H T-1 ~> m s-1 or kg m-2 s-1]
   real :: h2f2      ! (h*2*f)^2 [H2 T-2 ~> m2 s-2 or kg2 m-4 s-2]
@@ -1138,7 +1138,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc_ML): "//&
+  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
@@ -1154,25 +1154,27 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
   OBC => CS%OBC
   use_EOS = associated(tv%eqn_of_state)
-  dt_Rho0 = dt/GV%H_to_kg_m2
+  dt_Rho0 = dt / GV%H_to_RZ
   h_neglect = GV%H_subroundoff
   h_tiny = 2.0*GV%Angstrom_H + h_neglect
-  g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / GV%Rho0
+  g_H_Rho0 = (GV%g_Earth*GV%H_to_Z) / (GV%Rho0)
 
   if (associated(forces%frac_shelf_u) .neqv. associated(forces%frac_shelf_v)) &
     call MOM_error(FATAL, "set_viscous_ML: one of forces%frac_shelf_u and "//&
                    "forces%frac_shelf_v is associated, but the other is not.")
 
   if (associated(forces%frac_shelf_u)) then
-    ! This configuration has ice shelves, and the appropriate variables need to
-    ! be allocated.
+    ! This configuration has ice shelves, and the appropriate variables need to be
+    ! allocated.  If the arrays have already been allocated, these calls do nothing.
     call safe_alloc_ptr(visc%tauy_shelf, G%isd, G%ied, G%JsdB, G%JedB)
     call safe_alloc_ptr(visc%tbl_thick_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
     call safe_alloc_ptr(visc%tbl_thick_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
     call safe_alloc_ptr(visc%kv_tbl_shelf_u, G%IsdB, G%IedB, G%jsd, G%jed)
     call safe_alloc_ptr(visc%kv_tbl_shelf_v, G%isd, G%ied, G%JsdB, G%JedB)
+    call safe_alloc_ptr(visc%taux_shelf, G%IsdB, G%IedB, G%jsd, G%jed)
+    call safe_alloc_ptr(visc%tauy_shelf, G%isd, G%ied, G%JsdB, G%JedB)
 
-    !  With a linear drag law, the friction velocity is already known.
+    !  With a linear drag law under shelves, the friction velocity is already known.
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt_Z*CS%drag_bg_vel
   endif
 
@@ -1218,8 +1220,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           do_i(I) = .true. ; do_any = .true.
           k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
-          uhtot(I) = US%m_s_to_L_T*dt_Rho0 * forces%taux(I,j)
-          vhtot(I) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
+          uhtot(I) = dt_Rho0 * forces%taux(I,j)
+          vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
                                        (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1245,7 +1247,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
+                                          Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
           endif
 
           do I=Isq,Ieq ; if (do_i(I)) then
@@ -1366,7 +1368,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
-                     dR_dT, dR_dS, Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
+                     dR_dT, dR_dS, Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
       endif
 
       do I=Isq,Ieq ; if (do_i(I)) then
@@ -1389,7 +1391,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
             if ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
-              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
             endif
 
             htot(i) = htot(i) + Dh
@@ -1414,7 +1416,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
             if ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
-              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
             endif
 
             htot(i) = htot(i) + Dh
@@ -1453,8 +1455,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
           do_i(i) = .true. ; do_any = .true.
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
-          vhtot(i) = US%m_s_to_L_T*dt_Rho0 * forces%tauy(i,J)
-          uhtot(i) = 0.25 * US%m_s_to_L_T*dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
+          vhtot(i) = dt_Rho0 * forces%tauy(i,J)
+          uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
                                        (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
@@ -1482,7 +1484,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay
             enddo
             call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                          is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
+                                          is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
           endif
 
           do i=is,ie ; if (do_i(i)) then
@@ -1603,7 +1605,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
-                     dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
+                     dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
       endif
 
       do i=is,ie ; if (do_i(i)) then
@@ -1626,7 +1628,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
             if ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
-              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
             endif
 
             htot(i) = htot(i) + Dh
@@ -1651,7 +1653,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
             if ((oldfn + Dfn) <= ustarsq) then
               Dh = h_at_vel(i,k)
             else
-              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn)/Dfn)
+              Dh = h_at_vel(i,k) * sqrt((ustarsq-oldfn) / (Dfn))
             endif
 
             htot(i) = htot(i) + Dh

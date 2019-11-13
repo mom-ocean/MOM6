@@ -22,8 +22,7 @@ module RGC_initialization
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_ALE_sponge, only : set_up_ALE_sponge_vel_field
-use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
-use MOM_sponge, only : set_up_sponge_ML_density
+use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -31,10 +30,12 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data
 use MOM_io, only : slasher
+use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_sponge, only : set_up_sponge_ML_density
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_domains, only: pass_var
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -46,9 +47,10 @@ contains
 
 !> Sets up the the inverse restoration time, and the values towards which the interface heights,
 !! velocities and tracers should be restored within the sponges for the RGC test case.
-subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
+subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
                                             !! to any available thermodynamic
                                             !! fields, potential temperature and
@@ -222,7 +224,7 @@ subroutine RGC_initialize_sponges(G, GV, tv, u, v, PF, use_ALE, CSp, ACSp)
 
       do j=js,je
         call calculate_density(T(:,j,1), S(:,j,1), pres, tmp(:,j), &
-                          is, ie-is+1, tv%eqn_of_state)
+                          is, ie-is+1, tv%eqn_of_state, scale=US%kg_m3_to_R)
       enddo
 
       call set_up_sponge_ML_density(tmp, G, CSp)
