@@ -237,7 +237,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
                               !! is present, or false (no restoring) otherwise.
   logical :: restore_sst      !< local copy of the argument restore_temp, if it
                               !! is present, or false (no restoring) otherwise.
-  real :: delta_sss           !< temporary storage for sss diff from restoring value2
+  real :: delta_sss           !< temporary storage for sss diff from restoring value
   real :: delta_sst           !< temporary storage for sst diff from restoring value
 
   real :: kg_m2_s_conversion  !< A combination of unit conversion factors for rescaling
