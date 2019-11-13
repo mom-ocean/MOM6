@@ -17,10 +17,10 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : file_exist, field_size, old_fms_read_data => read_data
-use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
-use fms_io_mod,           only : get_filename_appendix => get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
-use MOM_string_functions  only : extract_word
+use fms_io_mod,           only : old_fms_read_data => read_data
+use fms_io_mod,           only : io_infra_end=>fms_io_exit
+use fms_io_mod,           only : get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
+use MOM_string_functions,  only : extract_word
 use mpp_mod,              only : mpp_max 
 use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
@@ -75,17 +75,17 @@ use netcdf
 
 implicit none ; private
 
-public :: mpp_close_file, mpp_open_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
+public :: mpp_close_file, mpp_open_file, fieldtype, get_filename_appendix
 public :: flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, read_axis_data
-public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
-public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
+public :: num_timelevels, MOM_read_vector, ensembler
+public :: slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc, cmor_long_std
-public :; scale_data
+public :: scale_data
 ! new FMS-IO routines and wrappers
 public :: attribute_exists
 public :: check_if_open
@@ -551,7 +551,7 @@ subroutine MOM_register_diagnostic_axis(fileObj, axisName, axisLength)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
   character(len=*), intent(in) :: axisName !< name of the axis to register to file
   integer, intent(in), optional :: axisLength !< length of axis/dimension ;only needed for Layer, Interface, Time,
-                                               !! Period
+                                              !! Period
   select case (trim(axisName))      
     case ('latq'); call register_axis(fileObj,'latq','y', domain_position=NORTH_FACE)
     case ('lath'); call register_axis(fileObj,'lath','y', domain_position=CENTER) 
@@ -569,20 +569,22 @@ end subroutine MOM_register_diagnostic_axis
 !! the correct domain decomposition for the data buffer. 
 subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosition, yPosition)
   type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  character(len=*), intent(in) :: variableName !< name of the variable
   character(len=*), intent(in), optional :: xUnits !< x-axis (longitude) units to search for
   character(len=*), intent(in), optional :: yUnits !< y-axis (latitude) units to search for
   integer, intent(in), optional :: xPosition !< domain position of the x-axis
   integer, intent(in), optional :: yPosition !< domain position of the y-axis
   ! local
-  character(len=40 :: units ! units corresponding to a specific variable dimension
+  character(len=40) :: units ! units corresponding to a specific variable dimension
   character(len=40), allocatable, dimension(:) :: dimNames ! variable dimension names
+  integer :: i
   integer :: ndims ! number of dimensions
   integer :: xPos, yPos ! domain positions for x and y axes. Default is CENTER
   integer, allocatable, dimension(:) :: dimSizes ! variable dimension sizes
    
-  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: "//&
-                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"//&
-                                                  "before passing the fileObj argument to this function."
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: "// &
+                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"// &
+                                                  "before passing the fileObj argument to this function.")
   xPos=CENTER
   yPos=CENTER
   if (present(xPosition)) xPos=xPosition
@@ -596,18 +598,24 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPo
   ! register the axes
   do i=1,ndims
     units=""
-    call get_variable_units(fileObjRead, dim_names(i), units)
-    select case (trim(lowercase(units)))
-      case (trim(lowercase(xUnits))); call register_axis(fileObjRead, dim_names(i),"x", domain_position=xPos)
-      case (trim(lowercase(yUnits))); call register_axis(fileObjRead, dim_names(i),"y", domain_position=yPos)
-      case default
-        call register_axis(fileObjRead, dimNames(i), dimSizes(i))     
-    end select
+    if (present(xUnits)) then
+      call get_variable_units(fileObj, dimNames(i), units)
+      if (trim(lowercase(units)) .eq. trim(lowercase(xUnits))) then
+        call register_axis(fileObj, dimNames(i),"x", domain_position=xPos)
+      endif
+    elseif (present(yUnits)) then
+      call get_variable_units(fileObj, dimNames(i), units)
+      if (trim(lowercase(units)) .eq. trim(lowercase(yUnits))) then
+        call register_axis(fileObj, dimNames(i),"y", domain_position=yPos)
+      endif
+    else
+      call register_axis(fileObj, dimNames(i), dimSizes(i))     
+    endif
   enddo
   
   deallocate(dimSizes)
   deallocate(dimNames)
-subroutine MOM_register_variable_axes
+end subroutine MOM_register_variable_axes
 
 !> set the "start" (corner) and "nread" (edge_lengths) arrays for domain-decomposed netCDF input data buffers 
 subroutine MOM_get_nc_corner_edgelengths_DD(fileObj, variableName, corner, edgeLengths, myCorner, myCornerIndices, &
@@ -621,11 +629,11 @@ subroutine MOM_get_nc_corner_edgelengths_DD(fileObj, variableName, corner, edgeL
   integer, dimension(:), intent(in), optional :: myEdgeLengths !< array of user-specified edge_lengths indices
   integer, dimension(:), intent(in), optional :: myEdgeLengthIndices !< positional indices for myEdgelengths
   ! local
-  integer :: i, ndims ! counter, number of dimensions
+  integer :: i, idx, ndims ! counter, index, number of dimensions
    
-  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
-                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"//&
-                                                  "before passing the fileObj argument to this function."
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "// &
+                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"// &
+                                                  "before passing the fileObj argument to this function.")
 
  if (allocated(corner)) deallocate(corner)
  if (allocated(edgeLengths)) deallocate(edgeLengths)
@@ -637,27 +645,30 @@ subroutine MOM_get_nc_corner_edgelengths_DD(fileObj, variableName, corner, edgeL
   call get_variable_size(fileObj, trim(variableName), edgeLengths, broadcast=.true.)
   ! set user-specified corner values
   if (present(myCorner)) then
-     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
-                                                  "You passed the myCorner argument, but did not pass"//&
-                                                  "myCornerIndices that defines the indices corresponding to the"//&
-                                                  "myCorner values."
-     do i=1,myCornerIndices
-       corner(i)=myCorner(i)
+     if (.not.(present(myCornerIndices))) then 
+       call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: You passed the myCorner argument, but did "// &
+                      "not pass myCornerIndices that defines the indices corresponding to the myCorner values.")
+     endif
+     do i=1,size(myCorner)
+       idx = myCornerIndices(i)
+       corner(idx)=myCorner(i)
      enddo
   endif
   
   ! set user-specified EdgeLengths values
   if (present(myEdgeLengths)) then
-     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
-                                                  "You passed the myEdgeLengths argument, but did not pass"//&
-                                                  "myEdgeLengthIndices that defines the indices corresponding to the"//&
-                                                  "myEdgeLengths values."
-     do i=1,myEdgeLengthsIndices
-       edgeLengths(i)=myEdgeLengths(i)
+     if (.not.(present(myCornerIndices))) then
+       call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD:You passed the myEdgeLengths argument, but "// &
+                      "did not pass the myEdgeLengthIndices that defines the indices corresponding to the "// &
+                      "myEdgeLengths values.")
+     endif
+     do i=1,size(myEdgeLengths)
+       idx = myEdgeLengthIndices(i)
+       edgeLengths(idx)=myEdgeLengths(i)
      enddo
   endif     
 
-subroutine MOM_get_nc_corner_edgelengths_DD
+end subroutine MOM_get_nc_corner_edgelengths_DD
 
 !> set the corner (start) and edgeLengths (count) arrays for non-domain-decomposed netCDF input data buffers
 subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edgeLengths, myCorner, myCornerIndices, &
@@ -671,11 +682,12 @@ subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edg
   integer, dimension(:), intent(in), optional :: myEdgeLengths !< array of user-specified edge_lengths indices
   integer, dimension(:), intent(in), optional :: myEdgeLengthIndices !< positional indices for myEdgelengths
   ! local
-  integer :: i, ndims ! counter, number of dimensions
+  integer :: i, idx, ndims ! counter, index, number of dimensions
    
-  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "//&
-                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"//&
-                                                  "before passing the fileObj argument to this function."
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "// &
+                                                  "The fileObj has not been opened. Call "// &
+                                                  "MOM_open_file(fileObj,...) before passing the fileObj argument "// &
+                                                  "to this function.")
 
  if (allocated(corner)) deallocate(corner)
  if (allocated(edgeLengths)) deallocate(edgeLengths)
@@ -687,27 +699,30 @@ subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edg
   call get_variable_size(fileObj, trim(variableName), edgeLengths, broadcast=.true.)
   ! set user-specified corner values
   if (present(myCorner)) then
-     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: "//&
-                                                  "You passed the myCorner argument, but did not pass"//&
-                                                  "myCornerIndices that defines the indices corresponding to the"//&
-                                                  "myCorner values."
-     do i=1,myCornerIndices
-       corner(i)=myCorner(i)
+     if (.not.(present(myCornerIndices))) then 
+       call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: You passed the myCorner argument, but did "// &
+                            "not pass myCornerIndices that defines the indices corresponding to the myCorner values")
+     endif
+     do i=1,size(myCorner)
+       idx = myCornerIndices(i)
+       corner(idx)=myCorner(i)
      enddo
   endif
   
   ! set user-specified EdgeLengths values
   if (present(myEdgeLengths)) then
-     if (.not.(present(myCornerIndices)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: "//&
-                                                  "You passed the myEdgeLengths argument, but did not pass"//&
-                                                  "myEdgeLengthIndices that defines the indices corresponding to the"//&
-                                                  "myEdgeLengths values."
-     do i=1,myEdgeLengthIndices
-       edgLengths(i)=myEdgeLengths(i)
+     if (.not.(present(myCornerIndices))) then 
+       call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_noDD: You passed the myEdgeLengths argument, "// &
+                            "but did not pass myEdgeLengthIndices that defines the indices corresponding to the "// &
+                            "myEdgeLengths values.")
+     endif
+     do i=1,size(myEdgeLengths)
+       idx = myEdgeLengthIndices(i)
+       edgeLengths(idx)=myEdgeLengths(i)
      enddo
   endif     
   
-subroutine MOM_get_nc_corner_edgelengths_noDD
+end subroutine MOM_get_nc_corner_edgelengths_noDD
 
 !> Get the horizontal grid, vertical grid, and/or time dimension names and lengths
 !! for a single variable from the grid ids returned by a prior call to query_vardesc
@@ -931,7 +946,6 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
         else
            axis_data_CS%axis(axis_number)%units = 'days'
         endif
-        axis_data_CS%axis(axis_number)%axis = 'T'
      case('Period')
         if (.not.(present(time_val))) then
            call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//&
@@ -941,7 +955,6 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
         axis_data_CS%data(axis_number)%p=>time_val
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Periods for cyclical variables'
-        axis_data_CS%axis(axis_number)%axis = 'T'
      case default
         call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
                        " is an unrecognized axis")
@@ -1467,7 +1480,7 @@ function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case("overwrite")
-        ! check if file(s) already exists and can be overwritten
+        ! overwrite existing file
         file_open_success = open_file(MOMfileObj, filename, "overwrite", &
                                   G%Domain%mpp_domain, is_restart = is_restart) 
      case default
@@ -1502,7 +1515,7 @@ function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) r
                                    G%mpp_domain, is_restart = is_restart)
         endif
      case("overwrite")
-        ! check if file(s) already exists and can be overwritten
+        ! overwrite existing file
         file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
                                    G%mpp_domain, is_restart = is_restart)
      case default
@@ -1538,7 +1551,7 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case("overwrite")
-        ! check if file(s) already exists and can be overwritten
+        ! overwrite existing file
         file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
      case default
@@ -1572,7 +1585,7 @@ function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_
                                    is_restart = is_restart)
         endif
      case("overwrite")
-        ! check if file(s) already exists and can be overwritten
+        ! overwirte existing file
         file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
                                    is_restart = is_restart)
      case default
@@ -1593,7 +1606,6 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
                                                      !! by before they are returned.
 
   call old_fms_read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
-!  call read_data(fileObj, fieldname, data)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     data(:) = scale*data(:)
@@ -1727,29 +1739,31 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
   call get_variable_dimension_names(fileObj, v_fieldname, dim_names_v, broadcast=.true.)
  
   do i=1,2
-    call get_variable_units(u_fieldname, dim_names_u(i), units_u(i))
-    select case (trim(lowercase(units_u(i)))
-      case ("degrees_east"); call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
-      case ("degrees_north"); call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
-      case default
-        if (is_dimension_unlimited(fileObj, dim_names_u(i)) then
-          if (present(timelevel)) then
-            start(i) = timelevel
-            dim_sizes_u(i) = 1
-            dim_sizes_v(i) = 1
-          endif
+    ! register the u axes
+    call get_variable_units(fileObj, dim_names_u(i), units_u(i))
+    if (trim(lowercase(units_u(i))) .eq. "degrees_east") then
+      call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
+    elseif (trim(lowercase(units_u(i))) .eq. "degrees_north") then 
+      call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
+    else
+      if (is_dimension_unlimited(fileObj, dim_names_u(i))) then
+        if (present(timelevel)) then
+          start(i)=timelevel
+          dim_sizes_u(i) = 1
+          dim_sizes_v(i) = 1
         endif
         call register_axis(fileObj, dim_names_u(i),dim_sizes_u(i))
-    end select
-  enddo 
-  do i=1,2
-     if (trim(lowercase(dim_names_v(i))) .ne. trim(lowercase(dim_names_u(i)))) then 
-       call get_variable_units(v_fieldname, dim_names_v(i), units_v(i))
-       select case (trim(lowercase(units_v(i)))
-         case ("degrees_east"); call register_axis(fileObj, dim_names_v(i), "x", domain_position=v_pos)
-         case ("degrees_north"); call register_axis(fileObj, dim_names_v(i), "y", domain_position=v_pos)  
-       end select
-     endif
+      endif
+    endif
+    ! Register the v axes if they differ from the u axes
+    if (trim(lowercase(dim_names_v(i))) .ne. trim(lowercase(dim_names_u(i)))) then 
+      call get_variable_units(fileObj, dim_names_v(i), units_v(i))
+      if (trim(lowercase(units_v(i))) .eq. "degrees_east") then
+        call register_axis(fileObj, dim_names_v(i), "x", domain_position=v_pos)
+      elseif (trim(lowercase(units_v(i))) .eq. "degrees_north") then
+        call register_axis(fileObj, dim_names_v(i), "y", domain_position=v_pos)  
+      endif 
+    endif
   enddo 
 
   call read_data(fileObj,u_fieldname, u_data, corner=start, edge_lengths=dim_sizes_u)
@@ -1785,7 +1799,6 @@ subroutine MOM_read_vector_3d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
                                                      !! by before they are returned.
   integer :: is, ie, js, je, i
   integer :: u_pos, v_pos
-  integer :: u_pos, v_pos
   integer, dimension(3) :: start, dim_sizes_u, dim_sizes_v
   character(len=32), dimension(3) :: dim_names_u, dim_names_v, units_u, units_v
 
@@ -1809,42 +1822,35 @@ subroutine MOM_read_vector_3d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
   call get_variable_dimension_names(fileObj, v_fieldname, dim_names_v, broadcast=.true.)
  
   do i=1,3
-    call get_variable_units(u_fieldname, dim_names_u(i), units_u(i))
-    select case (trim(lowercase(units_u(i)))
-      case ("degrees_east"); call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
-      case ("degrees_north"); call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
-      case default
-        if (is_dimension_unlimited(fileObj, dim_names_u(i)) then
-          if (present(timelevel)) then
-            start(i)=timelevel
-            dim_sizes_u(i) = 1
-            dim_sizes_v(i) = 1
-          endif
+    ! register the u axes
+    call get_variable_units(fileObj, dim_names_u(i), units_u(i))
+    if (trim(lowercase(units_u(i))) .eq. "degrees_east") then
+      call register_axis(fileObj, dim_names_u(i), "x", domain_position=u_pos)
+    elseif (trim(lowercase(units_u(i))) .eq. "degrees_north") then 
+      call register_axis(fileObj, dim_names_u(i), "y", domain_position=u_pos)  
+    else
+      if (is_dimension_unlimited(fileObj, dim_names_u(i))) then
+        if (present(timelevel)) then
+          start(i)=timelevel
+          dim_sizes_u(i) = 1
+          dim_sizes_v(i) = 1
         endif
-        call register_axis(fileObj, dim_names_u(i),dim_sizes_u(i))
-    end select
-  enddo 
-  do i=1,3
-     if (trim(lowercase(dim_names_v(i))) .ne. trim(lowercase(dim_names_u(i)))) then 
-       call get_variable_units(v_fieldname, dim_names_v(i), units_v(i))
-       select case (trim(lowercase(units_v(i)))
-         case ("degrees_east"); call register_axis(fileObj, dim_names_v(i), "x", domain_position=v_pos)
-         case ("degrees_north"); call register_axis(fileObj, dim_names_v(i), "y", domain_position=v_pos)  
-       end select
-     endif
+        call register_axis(fileObj, dim_names_u(i), dim_sizes_u(i))
+      endif
+    endif
+  ! register the v axes if the differ from the u axes
+    if (trim(lowercase(dim_names_v(i))) .ne. trim(lowercase(dim_names_u(i)))) then 
+      call get_variable_units(fileObj, dim_names_v(i), units_v(i))
+      if (trim(lowercase(units_v(i))) .eq. "degrees_east") then
+        call register_axis(fileObj, dim_names_v(i), "x", domain_position=v_pos)
+      elseif (trim(lowercase(units_v(i))) .eq. "degrees_north") then
+        call register_axis(fileObj, dim_names_v(i), "y", domain_position=v_pos)  
+      endif 
+    endif
   enddo 
 
   call read_data(fileObj,u_fieldname, u_data, corner=start, edge_lengths=dim_sizes_u)
   call read_data(fileObj,v_fieldname, v_data, corner=start, edge_lengths=dim_sizes_v)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(u_data,2), js, je)
-    u_data(is:ie,js:je) = scale*u_data(is:ie,js:je)
-    call get_simple_array_i_ind(MOM_Domain, size(v_data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(v_data,2), js, je)
-    v_data(is:ie,js:je) = scale*v_data(is:ie,js:je)
-  endif ; endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call get_simple_array_i_ind(MOM_Domain, size(u_data,1), is, ie)

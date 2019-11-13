@@ -10,7 +10,7 @@ use MOM_io, only : slasher
 use MOM_io, only : MOM_open_file, close_file, MOM_register_axis_variable_axis, read_data
 use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_variable_dimension_names
 use MOM_io, only : get_num_dimensions, get_dimension_names, get_dimesion_size 
-use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, file_exists, check_if_open
+use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, file_exists, variable_exists, check_if_open
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -198,6 +198,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=12) :: expected_units ! Temporary strings
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
+  logical :: fileOpenSuccess
   real :: filt_len, strat_tol, index_scale, tmpReal
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
@@ -342,7 +343,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
             "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-    if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, fileName, "read", .false.)
+    if (.not. check_if_open(fileObjRead)) fileOpenSuccess = MOM_open_file(fileObjRead, fileName, "read", .false.)
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
       if (variable_exists(fileObjRead,'dz')) then; varName = 'dz'
@@ -418,7 +419,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     ! open the file
-    if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, fileName, "read", .false.)
+    if (.not. check_if_open(fileObjRead)) fileOpenSuccess = MOM_open_file(fileObjRead, fileName, "read", .false.)
     varName = trim( extractWord(trim(string(8:)), 2) )
     if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
@@ -635,7 +636,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
       ! open the file
-      if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, fileName, "read", .false.)
+      if (.not. check_if_open(fileObjRead)) fileOpenSuccess = MOM_open_file(fileObjRead, fileName, "read", .false.)
 
       do_sum = .false.
       varName = trim( extractWord(trim(string(6:)), 2) )
@@ -710,7 +711,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
       ! open the file
-      if (.not. check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, fileName, "read", .false.)
+      if (.not. check_if_open(fileObjRead)) fileOpenSuccess = MOM_open_file(fileObjRead, fileName, "read", .false.)
 
       varName = trim( extractWord(trim(string(6:)), 2) )
       if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &

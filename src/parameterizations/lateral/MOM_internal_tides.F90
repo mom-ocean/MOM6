@@ -15,7 +15,10 @@ use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only          : ocean_grid_type
-use MOM_io, only            : slasher, vardesc, MOM_read_data
+use MOM_io, only            : slasher, vardesc, MOM_get_nc_corner_edgelengths 
+use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io, only : check_if_open, file_exists, FmsNetcdfDomainFile_t, is_dimension_unlimited
+use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
 use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
@@ -2116,7 +2119,10 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   real    :: period_1  ! The period of the gravest modeled mode [T ~> s]
   integer :: num_angle, num_freq, num_mode, m, fr
   integer :: isd, ied, jsd, jed, a, id_ang, i, j
+  integer :: ndims, dimUnlimIndex
+  integer, allocatable, dimension(:), corner, edgeLengths
   type(axes_grp) :: axes_ang
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_internal_tides" ! This module's name.
@@ -2128,7 +2134,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=200) :: refl_pref_file, refl_dbl_file
   character(len=200) :: dy_Cu_file, dx_Cv_file
   character(len=200) :: h2_file
-
+  character(len=40),allocatable, dimension(:): dimNames
+  
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
@@ -2301,7 +2308,43 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1, scale=US%m_to_Z)
+
+  ! open the file
+  if (.not. check_if_open(fileObjRead)) &
+    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
+  ! get the number of dimensions for Kh
+  call get_variable_num_dimensions(fileObjReadMean, "h2", ndims)
+  ! get the variable dimesion names
+  allocate(dimNames(ndims))
+  call get_variable_dimension_names(fileObjReadMean, "h2", dimNames)
+
+  dimUnlimIndex=0
+  do i=1,size(dimNames)
+    if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+  enddo
+  if (dimUnlimIndex .gt. 0) then
+    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "h2", corner, edgeLengths, myCorner=(/1/), &
+                                     myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                     myEdgeLengthIndices=(/dimUnlimIndex/))
+  endif
+  ! register the axes
+  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+  !! x/longitude and/or y/latitude axes units
+  call MOM_register_variable_axes(fileObjRead, "h2", xUnits="degrees_east", yUnits="degrees_north")
+  ! read the data
+  !call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1, scale=US%m_to_Z)
+  call read_data(fileObjRead, "h2", h2, corner=corner, edge_lengths=edgeLengths)
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+  ! scale the data
+  call scale_data(h2, US%m_to_Z)
+
+  call pass_var(CS%Kh_bg_2d, G%domain)
+
+  deallocate(dimNames)
+  deallocate(corner)
+  deallocate(edgeLengths)
+
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*(G%bathyT(i,j))**2, h2(i,j))
@@ -2320,8 +2363,41 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
-  call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
-                     G%domain, timelevel=1)
+
+  ! open the file
+  if (.not. check_if_open(fileObjRead)) &
+    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
+  ! get the number of dimensions for refl_angle
+  call get_variable_num_dimensions(fileObjReadMean, "refl_angle", ndims)
+  ! get the variable dimesion names
+  allocate(dimNames(ndims))
+  call get_variable_dimension_names(fileObjReadMean, "refl_angle", dimNames)
+
+  dimUnlimIndex=0
+  do i=1,size(dimNames)
+    if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+  enddo
+  if (dimUnlimIndex .gt. 0) then 
+    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "refl_angle", corner, edgeLengths, myCorner=(/1/), &
+                                     myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                     myEdgeLengthIndices=(/dimUnlimIndex/))
+  endif
+  ! register the axes
+  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+  !! x/longitude and/or y/latitude axes units
+  call MOM_register_variable_axes(fileObjRead, "refl_angle", xUnits="degrees_east", yUnits="degrees_north")
+  ! read the data
+  !call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
+  !                  G%domain, timelevel=1)
+  call read_data(fileObjRead, "refl_angle", CS%refl_angle, corner=corner, edge_lengths=edgeLengths)
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+ 
+  call pass_var(CS%Kh_bg_2d, G%domain)
+
+  deallocate(dimNames)
+  deallocate(corner)
+  deallocate(edgeLengths)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if (is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
@@ -2335,7 +2411,42 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_pref_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
-  call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
+
+   ! open the file
+  if (.not. check_if_open(fileObjRead)) &
+    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
+  ! get the number of dimensions for refl_pref
+  call get_variable_num_dimensions(fileObjReadMean, "refl_pref", ndims)
+  ! get the variable dimesion names
+  allocate(dimNames(ndims))
+  call get_variable_dimension_names(fileObjReadMean, "refl_pref", dimNames)
+
+  dimUnlimIndex = 0
+  do i=1,size(dimNames)
+    if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+  enddo
+ 
+  if (dimUnlimIndex .gt. 0) then
+    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "refl_pref", corner, edgeLengths, myCorner=(/1/), &
+                                     myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                     myEdgeLengthIndices=(/dimUnlimIndex/))
+  endif
+  ! register the axes
+  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+  !! x/longitude and/or y/latitude axes units
+  call MOM_register_variable_axes(fileObjRead, "refl_pref", xUnits="degrees_east", yUnits="degrees_north")
+  !call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
+  !                  G%domain, timelevel=1)
+  call read_data(fileObjRead, "refl_pref", CS%refl_pref, corner=corner, edge_lengths=edgeLengths)
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+ 
+  call pass_var(CS%Kh_bg_2d, G%domain)
+
+  deallocate(dimNames)
+  deallocate(corner)
+  deallocate(edgeLengths)
+
   !CS%refl_pref = CS%refl_pref*1 ! adjust partial reflection if desired
   call pass_var(CS%refl_pref,G%domain)
 
@@ -2355,10 +2466,45 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "REFL_DBL_FILE", refl_dbl_file, &
                "The path to the file containing the double-reflective ridge tags.", &
                fail_if_missing=.false.)
+
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
-  call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
+  ! open the file
+  if (.not. check_if_open(fileObjRead)) &
+    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
+  ! get the number of dimensions for refl_dbl
+  call get_variable_num_dimensions(fileObjReadMean, "refl_dbl", ndims)
+  ! get the variable dimesion names
+  allocate(dimNames(ndims))
+  call get_variable_dimension_names(fileObjReadMean, "refl_dbl", dimNames)
+
+  dimUnlimIndex = 0
+  do i=1,size(dimNames)
+    if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+  enddo
+  
+  if (dimUnlimIndex .gt. 0) then
+    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "refl_dbl", corner, edgeLengths, myCorner=(/1/), &
+                                     myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                     myEdgeLengthIndices=(/dimUnlimIndex/))
+  endif
+  ! register the axes
+  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+  !! x/longitude and/or y/latitude axes units
+  call MOM_register_variable_axes(fileObjRead, "refl_dbl", xUnits="degrees_east", yUnits="degrees_north")
+
+  !call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
+  call read_data(fileObjRead, "refl_dbl", ridge_temp, corner=corner, edge_lengths=edgeLengths)
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+ 
+  call pass_var(CS%Kh_bg_2d, G%domain)
+
+  deallocate(dimNames)
+  deallocate(corner)
+  deallocate(edgeLengths)
+
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
   do i=isd,ied; do j=jsd,jed

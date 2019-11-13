@@ -9,7 +9,9 @@ use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_io,            only : field_exists, file_exists, MOM_read_data
+use MOM_io,            only : file_exists, variable_exists
+use MOM_io,            only : FmsNetcdfDomainFile_t, MOM_open_file, register_axis, read_data, close_file
+use MOM_io,            only : get_dimension_names, get_dimension_size, get_num_dimensions, get_variable_units
 use MOM_time_manager,  only : time_type, time_type_to_real
 
 implicit none ; private
@@ -349,14 +351,44 @@ subroutine find_in_files(filenames, varname, array, G)
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: array     !< The array to fill with the data
   ! Local variables
-  integer :: nf
+  integer ::i, nf, ndims
+  integer, allocatable, dimension(:) :: dimLengths
+  logical :: fileOpenSuccess
+  character(len=40), allocatable, dimension(:) :: dimNames
+  character(len=40) :: units
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   do nf=1,size(filenames)
     if (LEN_TRIM(filenames(nf)) == 0) cycle
-    if (field_exists(filenames(nf), varname, G%Domain%mpp_domain)) then
-      call MOM_read_data(filenames(nf), varname, array, G%Domain)
+    if (.not. check_if_open(fileObjRead)) &
+      fileOpenSuccess = MOM_open_file(fileObjRead, filenames(nf), "read", G, .false.)
+    ! register the file axes
+    !> @note : the user should modify the logic to check for different x/longitude and y/latitudes axis units if they 
+    !! expect names that are not "degrees_east" or "degrees_north" 
+    ndims = get_num_dimesions(fileObjRead)
+    allocate(dimNames(ndims))
+    allocate(dimLengths(ndims))
+    call get_dimension_names(fileObjRead, dimNames)
+    do i=1,ndims
+      call get_dimension_size(fileObjRead, dimNames(i), dimLengths(i))
+      call get_variable_units(fileObjRead, dimNames(i), units)
+      if (trim(lowercase(units)) .eq. "degrees_east")) then
+        call register_axis(fileObjRead, dimNames(i), "x")
+      elseif (trim(lowercase(units)) .eq. "degrees_north")) then
+        call register_axis(fileObjRead, dimNames(i), "y")
+      else
+        call register_axis(fileObjRead, dimNames(i), dimLengths(i))
+      endif
+    enddo
+    
+    if (variable_exists(fileObjRead, varname)) then
+      !call MOM_read_data(filenames(nf), varname, array, G%Domain)
+      call read_data(fileObjRead, varname, array)
       return
     endif
+    if check_if_open(fileObjRead) call close_file(fileObjRead)
+    deallocate(dimNames)
+    deallocate(dimLengths)
   enddo
 
   do nf=size(filenames),1,-1

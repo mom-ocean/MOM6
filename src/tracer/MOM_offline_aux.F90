@@ -16,7 +16,7 @@ use MOM_io,               only : MOM_open_file, MOM_register_variable_axes, clos
 use MOM_io,               only : check_if_open, file_exists, FmsNetcdfDomainFile_t, is_dimension_unlimited
 use MOM_io,               only : get_variable_dimension_names, get_variable_num_dimensions, MOM_get_nc_corner_edgelengths 
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_file_parser,       only : get_param, log_version, param_file_type
+use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
 use MOM_variables,        only : vertvisc_type
 use MOM_forcing_type,     only : forcing
@@ -784,12 +784,17 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call get_variable_num_dimensions(fileObjReadMean, "massout_flux_sum", ndims)
     allocate(dimNames(ndims)
     call get_variable_dimension_names(fileObjReadMean, "massout_flux_sum", dimNames)
+    
+    dimUnlimIndex = 0
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
     enddo
-    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "massout_flux_sum", corner, edgeLengths, myCorner=(/ridx_sum/), &
-                                       myCornerIndices=(/dimUnlimIndex/), myEdgeLengths=(/1/), &
+ 
+    if (dimUnlimIndex .gt. 0) then
+      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "massout_flux_sum", corner, edgeLengths, &
+                                       myCorner=(/ridx_sum/), myCornerIndices=(/dimUnlimIndex/), myEdgeLengths=(/1/), &
                                        myEdgeLengthIndices=(/dimUnlimIndex/))
+    endif
     !call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
     !    timelevel=ridx_sum)
     !call MOM_read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  G%Domain, &
@@ -819,6 +824,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call get_variable_num_dimensions(fileObjReadMean, "ePBL_h_ML", ndims)
     allocate(dimNames(ndims)
     call get_variable_dimension_names(fileObjReadMean, "ePBL_h_ML", dimNames)
+
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
     enddo

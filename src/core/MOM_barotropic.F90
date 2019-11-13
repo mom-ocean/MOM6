@@ -16,7 +16,8 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : vardesc, var_desc, MOM_read_data, slasher
+use MOM_io, only : vardesc, var_desc, slasher
+use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, MOM_register_variable_axes, read_data, close_file, scale_data
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, open_boundary_query
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
@@ -3759,7 +3760,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(memory_size_type) :: MS
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
   type(group_pass_type) :: pass_bt_hbt_btav, pass_a_polarity
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
   logical :: apply_bt_drag, use_BT_cont_type
+  logical :: fileOpenSuccess
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -4143,8 +4146,19 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       call log_param(param_file, mdl, "INPUTDIR/BT_WAVE_DRAG_FILE", wave_drag_file)
 
       allocate(lin_drag_h(isd:ied,jsd:jed)) ; lin_drag_h(:,:) = 0.0
+      ! open the wave_drag_file
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = MOM_open_file(fileObjRead, wave_drag_file, "read", G, .false.)
+      ! register the axes for wave_drag_var
+      call MOM_register_variable_axes(fileObjRead, wave_drag_var, xUnits="degrees_east", yUnits="degrees_north")
+      !call MOM_read_data(wave_drag_file, wave_drag_var, lin_drag_h, G%Domain, scale=US%m_to_Z*US%T_to_s)
+      ! read the data
+      call read_data(fileObjRead, wave_drag_var, lin_drag_h)
+      ! scale the data
+      call scale_data(lin_drag_h,US%m_to_Z*US%T_to_s)
+      ! close the file
+      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
 
-      call MOM_read_data(wave_drag_file, wave_drag_var, lin_drag_h, G%Domain, scale=US%m_to_Z*US%T_to_s)
       call pass_var(lin_drag_h, G%Domain)
       do j=js,je ; do I=is-1,ie
         CS%lin_drag_u(I,j) = (GV%Z_to_H * wave_drag_scale) * &
