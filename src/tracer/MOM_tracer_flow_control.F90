@@ -143,9 +143,11 @@ subroutine call_tracer_flux_init(verbosity)
 
 end subroutine call_tracer_flux_init
 
-!> The following 5 subroutines and associated definitions provide the
-!! machinery to register and call the subroutines that initialize
-!! tracers and apply vertical column processes to tracers.
+! The following 5 subroutines and associated definitions provide the machinery to register and call
+! the subroutines that initialize tracers and apply vertical column processes to tracers.
+
+!> This subroutine determines which tracer packages are to be used and does the calls to
+!! register their tracers to be advected, diffused, and read from restarts.
 subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),         intent(in) :: HI         !< A horizontal index type structure.
   type(verticalGrid_type),      intent(in) :: GV         !< The ocean's vertical grid structure.
@@ -159,18 +161,10 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                                                          !! advection and diffusion module.
   type(MOM_restart_CS),         pointer    :: restart_CS !< A pointer to the restart control
                                                          !! structure.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in/out)  tr_Reg - A pointer that is set to point to the control structure
-!                  for the tracer advection and diffusion module.
-!  (in)      restart_CS - A pointer to the restart control structure.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tracer_flow_control" ! This module's name.
 
   if (associated(CS)) then
@@ -251,7 +245,7 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
     register_dye_tracer(HI, GV, US, param_file,  CS%dye_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_oil) CS%use_oil = &
-    register_oil_tracer(HI, GV, param_file,  CS%oil_tracer_CSp, &
+    register_oil_tracer(HI, GV, US, param_file,  CS%oil_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_advection_test_tracer) CS%use_advection_test_tracer = &
     register_advection_test_tracer(HI, GV, param_file, CS%advection_test_tracer_CSp, &

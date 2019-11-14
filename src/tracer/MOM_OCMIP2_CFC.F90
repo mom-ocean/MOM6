@@ -459,11 +459,11 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
   ! These two calls unpack the fluxes from the input arrays.
   !   The -GV%Rho0 changes the sign convention of the flux and changes the units
-  ! of the flux from [Conc. m s-1] to [Conc. kg m-2 s-1].
-  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, &
-                                 CFC11_flux, -G%US%R_to_kg_m3*GV%Rho0, idim=idim, jdim=jdim)
-  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, &
-                                 CFC12_flux, -G%US%R_to_kg_m3*GV%Rho0, idim=idim, jdim=jdim)
+  ! of the flux from [Conc. m s-1] to [Conc. kg m-2 T-1].
+  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, CFC11_flux, &
+                                 scale_factor=-G%US%R_to_kg_m3*GV%Rho0*US%T_to_s, idim=idim, jdim=jdim)
+  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, CFC12_flux, &
+                                 scale_factor=-G%US%R_to_kg_m3*GV%Rho0*US%T_to_s, idim=idim, jdim=jdim)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
@@ -471,19 +471,19 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, US%T_to_s*dt, fluxes, h_work, &
-        evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, US%T_to_s*dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
+                                        evap_CFL_limit, minimum_forcing_depth)
+    call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
 
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, US%T_to_s*dt, fluxes, h_work, &
-        evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, US%T_to_s*dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
+                                        evap_CFL_limit, minimum_forcing_depth)
+    call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
   else
-    call tracer_vertdiff(h_old, ea, eb, US%T_to_s*dt, CFC11, G, GV, sfc_flux=CFC11_flux)
-    call tracer_vertdiff(h_old, ea, eb, US%T_to_s*dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+    call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
   endif
 
   ! Write out any desired diagnostics from tracer sources & sinks here.

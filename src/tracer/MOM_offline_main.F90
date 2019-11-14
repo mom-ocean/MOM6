@@ -116,8 +116,8 @@ type, public :: offline_transport_CS ; private
   integer :: num_off_iter   !< Number of advection iterations per offline step
   integer :: num_vert_iter  !< Number of vertical iterations per offline step
   integer :: off_ale_mod    !< Sets how frequently the ALE step is done during the advection
-  real :: dt_offline        !< Timestep used for offline tracers [s]
-  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics [s]
+  real :: dt_offline        !< Timestep used for offline tracers [T ~> s]
+  real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics [T ~> s]
   real :: evap_CFL_limit    !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
   real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
@@ -242,7 +242,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
   logical :: z_first, x_before_y
-  real :: evap_CFL_limit, minimum_forcing_depth, dt_iter, dt_offline
+  real :: evap_CFL_limit, minimum_forcing_depth
+  real :: dt_iter    ! The timestep to use for each iteration [T ~> s]
 
   integer :: nstocks
   real :: stock_values(MAX_FIELDS_)
@@ -260,13 +261,12 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  dt_offline = CS%dt_offline
   evap_CFL_limit = CS%evap_CFL_limit
   minimum_forcing_depth = CS%minimum_forcing_depth
 
   niter = CS%num_off_iter
   Inum_iter = 1./real(niter)
-  dt_iter = dt_offline*Inum_iter
+  dt_iter = CS%dt_offline*Inum_iter
 
   ! Initialize working arrays
   h_new(:,:,:) = 0.0
@@ -354,7 +354,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
         call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%US%s_to_T*CS%dt_offline)
+      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%dt_offline)
       call cpu_clock_end(id_clock_ALE)
 
       if (CS%debug) then
@@ -706,7 +706,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   enddo ; enddo
   do k=2,nz ; do j=js,je ; do i=is,ie
     hval=1.0/(CS%GV%H_subroundoff + 0.5*(h_pre(i,j,k-1) + h_pre(i,j,k)))
-    eatr(i,j,k) = (CS%GV%m_to_H**2) * CS%dt_offline_vertical * hval * CS%Kd(i,j,k)
+    eatr(i,j,k) = (CS%GV%m_to_H**2*CS%US%T_to_s) * CS%dt_offline_vertical * hval * CS%Kd(i,j,k)
     ebtr(i,j,k-1) = eatr(i,j,k)
   enddo ; enddo ; enddo
   do j=js,je ; do i=is,ie
@@ -726,7 +726,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
-  call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, fluxes, CS%MLD, CS%US%s_to_T*CS%dt_offline_vertical, &
+  call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, fluxes, CS%MLD, CS%dt_offline_vertical, &
                               CS%G, CS%GV, CS%US, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   if (CS%diurnal_SW .and. CS%read_sw) then
@@ -1207,9 +1207,9 @@ subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_t
   !### Why are the following variables integers?
   integer,                optional, pointer       :: accumulated_time !< Length of time accumulated in the
                                                           !! current offline interval [s]
-  integer,                optional, intent(  out) :: dt_offline !< Timestep used for offline tracers [s]
-  integer,                optional, intent(  out) :: dt_offline_vertical !< Timestep used for calls to tracer
-                                                          !! vertical physics [s]
+  real,                   optional, intent(  out) :: dt_offline !< Timestep used for offline tracers [T ~> s]
+  real,                   optional, intent(  out) :: dt_offline_vertical !< Timestep used for calls to tracer
+                                                          !! vertical physics [T ~> s]
   logical,                optional, intent(  out) :: skip_diffusion !< Skips horizontal diffusion of tracers
 
   ! Pointers to 3d members
@@ -1324,11 +1324,11 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   call get_param(param_file, mdl, "NK_INPUT", CS%nk_input, &
     "Number of vertical levels in offline input files", default = nz)
   call get_param(param_file, mdl, "DT_OFFLINE", CS%dt_offline, &
-    "Length of time between reading in of input fields",      fail_if_missing = .true.)
+    "Length of time between reading in of input fields", units='s', scale=US%s_to_T, fail_if_missing = .true.)
   call get_param(param_file, mdl, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
     "Length of the offline timestep for tracer column sources/sinks " //&
     "This should be set to the length of the coupling timestep for " //&
-    "tracers which need shortwave fluxes",                    fail_if_missing = .true.)
+    "tracers which need shortwave fluxes", units="s", scale=US%s_to_T, fail_if_missing = .true.)
   call get_param(param_file, mdl, "START_INDEX", CS%start_index, &
     "Which time index to start from", default=1)
   call get_param(param_file, mdl, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &

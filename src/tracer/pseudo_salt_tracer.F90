@@ -227,8 +227,8 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     do k=1,nz ; do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CS%ps, US%T_to_s*dt, fluxes, h_work, &
-      evap_CFL_limit, minimum_forcing_depth, out_flux_optional=fluxes%netSalt)
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%ps, dt, fluxes, h_work, &
+                                        evap_CFL_limit, minimum_forcing_depth, out_flux_optional=fluxes%netSalt)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%ps, G, GV)
   else
     call tracer_vertdiff(h_old, ea, eb, dt, CS%ps, G, GV)

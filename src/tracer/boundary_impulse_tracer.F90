@@ -51,7 +51,7 @@ type, public :: boundary_impulse_tracer_CS ; private
   real, dimension(NTR_MAX)  :: land_val = -1.0 !< A value to use to fill in tracers over land
   real :: kw_eff !< An effective piston velocity used to flux tracer out at the surface
   real :: remaining_source_time !< How much longer (same units as the timestep) to
-                                !! inject the tracer at the surface
+                                !! inject the tracer at the surface [s]
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
@@ -258,8 +258,8 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,1), US%T_to_s*dt, fluxes, h_work, &
-      evap_CFL_limit, minimum_forcing_depth)
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,1), dt, fluxes, h_work, &
+                                        evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
   else
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV)

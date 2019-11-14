@@ -45,7 +45,7 @@ type, public :: oil_tracer_CS ; private
   real :: oil_source_latitude  !< Longitude of source location (geographic)
   integer :: oil_source_i=-999 !< Local i of source location (computational)
   integer :: oil_source_j=-999 !< Local j of source location (computational)
-  real :: oil_source_rate     !< Rate of oil injection [kg s-1]
+  real :: oil_source_rate     !< Rate of oil injection [kg T-1 ~> kg s-1]
   real :: oil_start_year      !< The year in which tracers start aging, or at which the
                               !! surface value equals young_val, in years.
   real :: oil_end_year        !< The year in which tracers start aging, or at which the
@@ -58,7 +58,7 @@ type, public :: oil_tracer_CS ; private
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
   real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
   real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
-  real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [s-1] calculated from oil_decay_days
+  real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [T-1 ~> s-1] calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
   logical :: oil_may_reinit  !< If true, oil tracers may be reset by the initialization code
                              !! if they are not found in the restart files.
@@ -74,16 +74,17 @@ end type oil_tracer_CS
 contains
 
 !> Register oil tracer fields and subroutines to be used with MOM.
-function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(oil_tracer_CS),        pointer    :: CS !< A pointer that is set to point to the control
-                                               !! structure for this module
-  type(tracer_registry_type), pointer   :: tr_Reg !< A pointer that is set to point to the control
-                                                  !! structure for the tracer advection and
-                                                  !! diffusion module
-  type(MOM_restart_CS),       pointer   :: restart_CS !< A pointer to the restart control structure
+  type(oil_tracer_CS),        pointer    :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module
+  type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
+                                                 !! structure for the tracer advection and
+                                                 !! diffusion module
+  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure
 
   ! Local variables
   character(len=40)  :: mdl = "oil_tracer" ! This module's name.
@@ -139,7 +140,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "negative number for a vertically uniform source, "//&
                  "or 0 not to use this tracer.", units="Layer", default=0)
   call get_param(param_file, mdl, "OIL_SOURCE_RATE", CS%oil_source_rate, &
-                 "The rate of oil injection.", units="kg s-1", default=1.0)
+                 "The rate of oil injection.", units="kg s-1", scale=US%T_to_s, default=1.0)
   call get_param(param_file, mdl, "OIL_DECAY_DAYS", CS%oil_decay_days, &
                  "The decay timescale in days (if positive), or no decay "//&
                  "if 0, or use the temperature dependent decay rate of "//&
@@ -161,13 +162,13 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
       CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg m-3", "Oil Tracer", caller=mdl)
       CS%IC_val(m) = 0.0
       if (CS%oil_decay_days(m)>0.) then
-        CS%oil_decay_rate(m)=1./(86400.0*CS%oil_decay_days(m))
+        CS%oil_decay_rate(m) = 1. / (86400.0*US%s_to_T * CS%oil_decay_days(m))
       elseif (CS%oil_decay_days(m)<0.) then
-        CS%oil_decay_rate(m)=-1.
+        CS%oil_decay_rate(m) = -1.
       endif
     endif
   enddo
-  call log_param(param_file, mdl, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr))
+  call log_param(param_file, mdl, "OIL_DECAY_RATE", US%s_to_T*CS%oil_decay_rate(1:CS%ntr))
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg s-1"
@@ -344,8 +345,8 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
-      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , US%T_to_s*dt, fluxes, h_work, &
-          evap_CFL_limit, minimum_forcing_depth)
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m), dt, fluxes, h_work, &
+                                          evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   else
@@ -359,14 +360,14 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   ! Decay tracer (limit decay rate to 1/dt - just in case)
   do m=2,CS%ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
-      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - US%T_to_s*dt*CS%oil_decay_rate(m)*CS%tr(i,j,k,m) ! Simple
-      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - min(US%T_to_s*dt*CS%oil_decay_rate(m),1.)*CS%tr(i,j,k,m) ! Safer
+      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - dt*CS%oil_decay_rate(m)*CS%tr(i,j,k,m) ! Simple
+      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - min(dt*CS%oil_decay_rate(m),1.)*CS%tr(i,j,k,m) ! Safer
       if (CS%oil_decay_rate(m)>0.) then
-        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - US%T_to_s*dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
+        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
         ldecay = 12.*(3.0**(-(tv%T(i,j,k)-20.)/10.)) ! Timescale [days]
-        ldecay = 1./(86400.*ldecay) ! Rate [s-1]
-        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - US%T_to_s*dt*ldecay,0.)*CS%tr(i,j,k,m)
+        ldecay = 1. / (86400.*US%s_to_T * ldecay) ! Rate [T-1 ~> s-1]
+        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif
     enddo ; enddo ; enddo
   enddo
@@ -384,7 +385,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       k=CS%oil_source_k(m)
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
-        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*US%T_to_s*dt / &
+        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
                 ((h_new(i,j,k)+GV%H_subroundoff) * G%US%L_to_m**2*G%areaT(i,j) )
       elseif (k<0) then
         h_total=GV%H_subroundoff
@@ -392,7 +393,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
           h_total = h_total + h_new(i,j,k)
         enddo
         do k=1, nz
-          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*US%T_to_s*dt/(h_total &
+          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/(h_total &
                                            * G%US%L_to_m**2*G%areaT(i,j) )
         enddo
       endif

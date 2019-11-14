@@ -507,8 +507,8 @@ contains
           do k=1,nk ;do j=jsc,jec ; do i=isc,iec
             h_work(i,j,k) = h_old(i,j,k)
           enddo ; enddo ; enddo
-          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
-              evap_CFL_limit, minimum_forcing_depth)
+          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), G%US%s_to_T*dt, &
+                            fluxes, h_work, evap_CFL_limit, minimum_forcing_depth)
         endif
 
          !traverse the linked list till hit NULL
@@ -541,7 +541,6 @@ contains
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
 #endif
-
 
   end subroutine MOM_generic_tracer_column_physics
 
