@@ -1755,12 +1755,17 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     ! open the file
     if (.not. check_if_open(fileObjRead)) &
       fileOpenSuccess = MOM_open_file(fileObjRead, trim(inputdir)//trim(filename), "read", G, .false.)
+    ! register the axes
+    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+    !! x/longitude and/or y/latitude axes units
+    call MOM_register_variable_axes(fileObjRead, "Kh", xUnits="degrees_east", yUnits="degrees_north")
     ! get the number of dimensions for Kh
     call get_variable_num_dimensions(fileObjReadMean, "Kh", ndims)
     ! get the variable dimesion names
     allocate(dimNames(ndims))
     call get_variable_dimension_names(fileObjReadMean, "Kh", dimNames)
-
+    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+    ! desired time level
     dimUnlimIndex = 0
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
@@ -1770,15 +1775,13 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
       call MOM_get_nc_corner_edgelengths(fileObjReadMean, "Kh", corner, edgeLengths, myCorner=(/1/), &
                                        myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
                                        myEdgeLengthIndices=(/dimUnlimIndex/))
+      call read_data(fileObjRead, "Kh", CS%Kh_bg_2d, corner=corner, edge_lengths=edgeLengths)
+    else
+      call read_data(fileObjRead, "Kh", CS%Kh_bg_2d)
     endif
-    ! register the axes
-    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-    !! x/longitude and/or y/latitude axes units
-    call MOM_register_variable_axes(fileObjRead, "Kh", xUnits="degrees_east", yUnits="degrees_north")
+    
     !call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
     !                   G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
-    ! read the data
-    call read_data(fileObjRead, "Kh", CS%Kh_bg_2d, corner=corner, edge_lengths=edgeLengths)
     ! close the file
     if (check_if_open(fileObjRead)) call close_file(fileObjRead)
     ! scale the data
@@ -1787,8 +1790,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     call pass_var(CS%Kh_bg_2d, G%domain)
 
     deallocate(dimNames)
-    deallocate(corner)
-    deallocate(edgeLengths)
+    if (allocated(corner)) deallocate(corner)
+    if (allocated(edgeLengths)) deallocate(edgeLengths)
   endif
 
   if (CS%biharmonic) then

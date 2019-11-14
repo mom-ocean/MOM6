@@ -8,7 +8,8 @@ use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
 use MOM_domains,             only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : MOM_read_data, slasher
+use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io, only : check_if_open, FmsNetcdfDomainFile_t, slasher
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
@@ -390,6 +391,8 @@ subroutine geothermal_init(Time, G, GV, param_file, diag, CS)
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
   real :: scale
   integer :: i, j, isd, ied, jsd, jed, id
+  logical :: fileOpenSuccess
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
@@ -435,7 +438,19 @@ subroutine geothermal_init(Time, G, GV, param_file, diag, CS)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
                  "The name of the geothermal heating variable in "//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
-    call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
+  ! open the file
+  if (.not. check_if_open(fileObjRead)) &
+    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
+  ! register the axes
+  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+  !! x/longitude and/or y/latitude axes units
+  call MOM_register_variable_axes(fileObjRead, trim(geotherm_var), xUnits="degrees_east", yUnits="degrees_north")
+    !call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
+    ! read the data
+    call read_data(fileObjRead, trim(geotherm_var), CS%geo_heat)
+    ! close the file
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+ 
     do j=jsd,jed ; do i=isd,ied
       CS%geo_heat(i,j) = (G%mask2dT(i,j) * scale) * CS%geo_heat(i,j)
     enddo ; enddo
