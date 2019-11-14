@@ -23,25 +23,40 @@ jobs:
     - env: JOB="Code style compliance"
       script:
         - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
+
     - env: JOB="Doxygen"
       script:
         - cd docs && doxygen Doxyfile_nortd
         - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
         - test ! -s  doxy_errors
-    - env: JOB="Compile and run"
+
+    - env:
+        - JOB="Configuration testing"
+        - DO_REGRESSION_TESTS=false
+        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
       script:
-        - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
-        - TRAVIS_IS_PR=$( [ ${TRAVIS_PULL_REQUEST} = "false" ] || echo "true" )
         - cd .testing
-        - make \
-            MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk \
-            MOM_TARGET_SLUG=${TRAVIS_REPO_SLUG} \
-            MOM_TARGET_LOCAL_BRANCH=${TRAVIS_BRANCH} \
-            DO_REGRESSION_TESTS=${TRAVIS_IS_PR} \
-            REPORT_COVERAGE=true
+        - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
+        - make all
         - echo -en 'travis_fold:end:script.1\\r'
         - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
-        - make test \
-            DO_REGRESSION_TESTS=${TRAVIS_IS_PR} \
-            REPORT_COVERAGE=true
+        - make test
+        - echo -en 'travis_fold:end:script.2\\r'
+
+    # NOTE: Code coverage upload is here to reduce load imbalance
+    - if: type = pull_request
+      env:
+        - JOB="Regression testing"
+        - DO_REGRESSION_TESTS=true
+        - REPORT_COVERAGE=true
+        - MKMF_TEMPLATE=linux-ubuntu-xenial-gnu.mk
+        - MOM_TARGET_SLUG=${TRAVIS_REPO_SLUG}
+        - MOM_TARGET_LOCAL_BRANCH=${TRAVIS_BRANCH}
+      script:
+        - cd .testing
+        - echo 'Build executables...' && echo -en 'travis_fold:start:script.1\\r'
+        - make build.regressions
+        - echo -en 'travis_fold:end:script.1\\r'
+        - echo 'Running tests...' && echo -en 'travis_fold:start:script.2\\r'
+        - make test.regressions
         - echo -en 'travis_fold:end:script.2\\r'
