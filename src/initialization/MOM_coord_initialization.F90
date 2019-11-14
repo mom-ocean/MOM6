@@ -291,6 +291,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
       " set_coord_from_TS_profile: Unable to find " //trim(filename))
 
   if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
+  ! read in data
   call read_data(fileObjRead,"PTEMP",T0(:))
   call read_data(fileObjRead,"SALT",S0(:))
   ! close the file

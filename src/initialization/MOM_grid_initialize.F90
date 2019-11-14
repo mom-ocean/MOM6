@@ -510,8 +510,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     endif 
   enddo
 
-  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx is < 1")
-  if (ymax2 .GT. 90.0) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is > 90.0")
+  if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx is less than 1")
+  if (ymax2 .GT. 90.0) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: ymax2 value is greater than 90.0")
 
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(xidx,2*(j-G%jsg)+3)

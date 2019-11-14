@@ -1291,13 +1291,6 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
                  "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
-  !file_threading = SINGLE_FILE
-  !if (multiple_files) file_threading = MULTIPLE
-
-  !call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
-  !                 file_threading, dG=G)
-  ! old write API: mpp_write(unit, field, domain, data, tstamp)
-
   ! open the file
   if (.not. check_if_open(fileObjWrite)) &
     file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", G, is_restart=.false.)
@@ -1312,7 +1305,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
      call register_axis(fileObjWrite, "lonq", "x", domain_position=EAST_FACE)
 
   ! write the axis data and attributes
-  !>@note: the latitude and longitude data and metadata are defined according to MOM_io::create_file subroutine
+  !>@note: the latitude and longitude data and metadata are defined according to the old MOM_io::create_file subroutine
   coord_data=>NULL()
 
   if (.not. variable_exists(fileObjWrite, 'lath')) then

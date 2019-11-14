@@ -102,8 +102,6 @@ use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 
-use fms_io_mod, only : field_size
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -676,6 +674,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
     ! register the variable axes
     call MOM_register_variable_axes(fileObjRead, "h", xUnits="degrees_east", yUnits="degrees_north")
+    ! read in h
     call read_data(fileObjRead, "h", h)
     ! close the file
     if (check_if_open(fileObjRead)) call close_file(fileObjRead)
@@ -694,6 +693,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
     ! register the variable axes
     call MOM_register_variable_axes(fileObjRead, "eta", xUnits="degrees_east", yUnits="degrees_north")
+    ! read in eta
     call read_data(fileObjRead, "eta", eta)
     ! close the file
     if (check_if_open(fileObjRead)) call close_file(fileObjRead)
@@ -912,6 +912,7 @@ subroutine initialize_thickness_list(h, G, GV, US, param_file, just_read_params)
   !call MOM_read_data(filename, eta_var, e0(:), scale=US%m_to_Z)
   ! open file for non-domain-decomposed read 
   if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
+  ! read in eta_var
   call read_data(fileObjRead, eta_var, e0(:))
   ! close the file
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
@@ -1861,7 +1862,6 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   ! register the variable axes
   call MOM_register_variable_axes(fileObjRead, "Idamp", xUnits="degrees_east", yUnits="degrees_north")
   call read_data(fileObjRead, "Idamp", Idamp)
-  !call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
   ! close the damping file
   if (check_if_open(fileObjRead) call close_file(fileObjRead)
 
@@ -1882,7 +1882,6 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
     ! register the variable axes
     call MOM_register_variable_axes(fileObjRead, eta_var, xUnits="degrees_east", yUnits="degrees_north")
-    !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
     ! read the data
     call read_data(fileObjRead, eta_var, eta)
     ! close the state file
@@ -1902,7 +1901,6 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     deallocate(eta)
   elseif (.not. new_sponges) then ! ALE mode
 
-    !call field_size(filename,eta_var,siz,no_domain=.true.)
     if (.not. (check_if_open(fileObjRead))) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
     ! get the number of dimensions and the dimension sizes for eta_var 
     ndims = get_variable_num_dimensions(fileObjRead, eta_var, broadcast=.true.)
@@ -1920,7 +1918,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     
     ! register the variable axes
     call MOM_register_variable_axes(fileObjRead, eta_var, xUnits="degrees_east", yUnits="degrees_north")
-    !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    ! read in eta_var
     call read_data(fileObjRead, eta_var, eta)
     ! close the file
     if (check_if_open(fileObjRead) call close_file(fileObjRead)
@@ -1961,8 +1959,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
     ! register the variable axes
     call MOM_register_variable_axes(fileObjRead, potemp_var, xUnits="degrees_east", yUnits="degrees_north")
-    !call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
-    !call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
+    ! read the data
     call read_data(fileObjRead, potemp_var, tmp)
     call read_data(fileObjRead, salin_var, tmp2)
 
@@ -1976,10 +1973,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
   ! The remaining calls to set_up_sponge_field can be in any order.
   if ( use_temperature .and. .not. new_sponges) then
-    !call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+    ! read potemp
     call read_data(fileObjRead, potemp_var, tmp)
     call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
-    !call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
+    ! read salinity
     call read_data(fileObjRead, salin_var, tmp)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   elseif (use_temperature) then

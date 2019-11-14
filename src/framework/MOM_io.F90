@@ -100,7 +100,6 @@ public :: get_dimension_names
 public :: get_dimension_size
 public :: get_global_io_domain_indices
 public :: get_global_attribute
-public :: get_horizontal_grid_position
 public :: get_horizontal_grid_logic
 public :: get_num_dimensions
 public :: get_num_variables
@@ -199,352 +198,143 @@ end interface
 
 contains
 
-!> Routine creates a new NetCDF file.  It also sets up
-!! structures that describe this file and variables that will
-!! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
-  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-                                                     !! nonwriting PE with single file output
-  character(len=*),      intent(in)    :: filename   !< full path to the file to create
-  type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
-  integer,               intent(in)    :: novars     !< number of fields written to filename
-  type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
-  integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
-  real, optional,        intent(in)    :: timeunit   !< length of the units for time [s]. The
-                                                     !! default value is 86400.0, for 1 day.
-  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
-                                                     !! is required if the new file uses any
-                                                     !! horizontal grid axes.
-  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
-                                                     !! is required if the new file uses any
-                                                     !! horizontal grid axes.
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
-                                                     !! required if the new file uses any
-                                                     !! vertical grid axes.
-  integer(kind=8), optional,      intent(in)    :: checksums(:,:)  !< checksums of vars
+!> Open domain-decomposed file(s) with the base file name 'filename' to read, write/append, or overwrite data.  
+!! The domain comes from the ocean_grid_type structure G.
+function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  type(ocean_grid_type),      intent(in) :: G !< The ocean's grid structure
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+  ! local
+  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg ! A message for warnings.
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                          G%Domain%mpp_domain, is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+        endif
+     case("overwrite")
+        ! overwrite existing file
+        file_open_success = open_file(MOMfileObj, filename, "overwrite", &
+                                  G%Domain%mpp_domain, is_restart = is_restart) 
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
+  end select     
+end function MOM_open_file_DD_ocean_grid
 
-  logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
-  logical        :: use_layer, use_int, use_periodic
-  logical        :: one_file, domain_set
-  type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
-  type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
-  type(axistype) :: axes(4)
-  type(MOM_domain_type), pointer :: Domain => NULL()
-  type(domain1d) :: x_domain, y_domain
-  integer        :: numaxes, pack, thread, k
-  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
-  integer        :: var_periods, num_periods=0
-  real, dimension(:), allocatable :: period_val
-  real, pointer, dimension(:) :: &
-    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
-    gridLatB => NULL(), & ! the purpose of labeling the output axes.
-    gridLonT => NULL(), gridLonB => NULL()
-  character(len=40) :: time_units, x_axis_units, y_axis_units
-  character(len=8)  :: t_grid, t_grid_read
+!> Open domain-decomposed file with the base file name 'filename' to read from, overwrite, or write/append to. 
+!! The domain comes from the MOM_domain_type structure G.
+function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  type(MOM_domain_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+  ! local
+  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg ! A message for warnings.
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                          G%mpp_domain, is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                   G%mpp_domain, is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                   G%mpp_domain, is_restart = is_restart)
+        endif
+     case("overwrite")
+        ! overwrite existing file
+        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
+                                   G%mpp_domain, is_restart = is_restart)
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
+  end select     
+end function MOM_open_file_DD_supergrid
 
-  use_lath  = .false. ; use_lonh     = .false.
-  use_latq  = .false. ; use_lonq     = .false.
-  use_time  = .false. ; use_periodic = .false.
-  use_layer = .false. ; use_int      = .false.
-
-  thread = SINGLE_FILE
-  if (PRESENT(threading)) thread = threading
-
-  domain_set = .false.
-  if (present(G)) then
-    domain_set = .true. ; Domain => G%Domain
-    gridLatT => G%gridLatT ; gridLatB => G%gridLatB
-    gridLonT => G%gridLonT ; gridLonB => G%gridLonB
-    x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
-    isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
-    IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
-  elseif (present(dG)) then
-    domain_set = .true. ; Domain => dG%Domain
-    gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
-    gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
-    x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
-    isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
-    IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
-  endif
-
-  one_file = .true.
-  if (domain_set) one_file = (thread == SINGLE_FILE)
-
-  if (one_file) then
-    call mpp_open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
-  else
-    call mpp_open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=Domain%mpp_domain)
-  endif
-
-! Define the coordinates.
-  do k=1,novars
-    select case (vars(k)%hor_grid)
-      case ('h') ; use_lath = .true. ; use_lonh = .true.
-      case ('q') ; use_latq = .true. ; use_lonq = .true.
-      case ('u') ; use_lath = .true. ; use_lonq = .true.
-      case ('v') ; use_latq = .true. ; use_lonh = .true.
-      case ('T')  ; use_lath = .true. ; use_lonh = .true.
-      case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-      case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-      case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized hor_grid "//trim(vars(k)%hor_grid))
-    end select
-    select case (vars(k)%z_grid)
-      case ('L') ; use_layer = .true.
-      case ('i') ; use_int = .true.
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(FATAL, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized z_grid "//trim(vars(k)%z_grid))
-    end select
-    t_grid = adjustl(vars(k)%t_grid)
-    select case (t_grid(1:1))
-      case ('s', 'a', 'm') ; use_time = .true.
-      case ('p') ; use_periodic = .true.
-        if (len_trim(t_grid(2:8)) <= 0) call MOM_error(FATAL, &
-          "MOM_io create_file: No periodic axis length was specified in "//&
-          trim(vars(k)%t_grid) // " in the periodic axes of variable "//&
-          trim(vars(k)%name)//" in file "//trim(filename))
-        var_periods = -9999999
-        t_grid_read = adjustl(t_grid(2:8))
-        read(t_grid_read,*) var_periods
-        if (var_periods == -9999999) call MOM_error(FATAL, &
-          "MOM_io create_file: Failed to read the number of periods from "//&
-          trim(vars(k)%t_grid) // " in the periodic axes of variable "//&
-          trim(vars(k)%name)//" in file "//trim(filename))
-        if (var_periods < 1) call MOM_error(FATAL, "MOM_io create_file: "//&
-           "variable "//trim(vars(k)%name)//" in file "//trim(filename)//&
-           " uses a periodic time axis, and must have a positive "//&
-           "value for the number of periods in "//vars(k)%t_grid )
-        if ((num_periods > 0) .and. (var_periods /= num_periods)) &
-          call MOM_error(FATAL, "MOM_io create_file: "//&
-            "Only one value of the number of periods can be used in the "//&
-            "create_file call for file "//trim(filename)//".  The second is "//&
-            "variable "//trim(vars(k)%name)//" with t_grid "//vars(k)%t_grid )
-
-        num_periods = var_periods
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized t_grid "//trim(vars(k)%t_grid))
-    end select
-  enddo
-
-  if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
-    if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
-      "An ocean_grid_type or dyn_horgrid_type is required to create a file with a horizontal coordinate.")
-
-    call mpp_get_domain_components(Domain%mpp_domain, x_domain, y_domain)
-  endif
-  if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
-    "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
-
-! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense,
-! domain, data, min). Otherwise if optional arguments are added to mpp_write_meta the compiler may
-! (and in case of GNU does) get confused and crash.
-  if (use_lath) &
-    call mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
-
-  if (use_lonh) &
-    call mpp_write_meta(unit, axis_lonh, name="lonh", units=x_axis_units, longname="Longitude", &
-                   cartesian='X', domain = x_domain, data=gridLonT(isg:ieg))
-
-  if (use_latq) &
-    call mpp_write_meta(unit, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=gridLatB(JsgB:JegB))
-
-  if (use_lonq) &
-    call mpp_write_meta(unit, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
-                   cartesian='X', domain = x_domain, data=gridLonB(IsgB:IegB))
-
-  if (use_layer) &
-    call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
-          longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', &
-          sense=1, data=GV%sLayer(1:GV%ke))
-
-  if (use_int) &
-    call mpp_write_meta(unit, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
-          longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', &
-          sense=1, data=GV%sInterface(1:GV%ke+1))
-
-  if (use_time) then ; if (present(timeunit)) then
-    ! Set appropriate units, depending on the value.
-    if (timeunit < 0.0) then
-      time_units = "days" ! The default value.
-    elseif ((timeunit >= 0.99) .and. (timeunit < 1.01)) then
-      time_units = "seconds"
-    elseif ((timeunit >= 3599.0) .and. (timeunit < 3601.0)) then
-      time_units = "hours"
-    elseif ((timeunit >= 86399.0) .and. (timeunit < 86401.0)) then
-      time_units = "days"
-    elseif ((timeunit >= 3.0e7) .and. (timeunit < 3.2e7)) then
-      time_units = "years"
-    else
-      write(time_units,'(es8.2," s")') timeunit
-    endif
-
-    call mpp_write_meta(unit, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
-  else
-    call mpp_write_meta(unit, axis_time, name="Time", units="days", longname="Time",cartesian= 'T')
-  endif ; endif
-
-  if (use_periodic) then
-    if (num_periods <= 1) call MOM_error(FATAL, "MOM_io create_file: "//&
-      "num_periods for file "//trim(filename)//" must be at least 1.")
-    ! Define a periodic axis with unit labels.
-    allocate(period_val(num_periods))
-    do k=1,num_periods ; period_val(k) = real(k) ; enddo
-    call mpp_write_meta(unit, axis_periodic, name="Period", units="nondimensional", &
-          longname="Periods for cyclical varaiables", cartesian= 't', data=period_val)
-    deallocate(period_val)
-  endif
-
-  do k=1,novars
-    numaxes = 0
-    select case (vars(k)%hor_grid)
-      case ('h')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-      case ('q')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-      case ('u')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-      case ('v')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-      case ('T')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-      case ('Bu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-      case ('Cu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-      case ('Cv') ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized hor_grid "//trim(vars(k)%hor_grid))
-    end select
-    select case (vars(k)%z_grid)
-      case ('L') ; numaxes = numaxes+1 ; axes(numaxes) = axis_layer
-      case ('i') ; numaxes = numaxes+1 ; axes(numaxes) = axis_int
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(FATAL, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized z_grid "//trim(vars(k)%z_grid))
-    end select
-    t_grid = adjustl(vars(k)%t_grid)
-    select case (t_grid(1:1))
-      case ('s', 'a', 'm') ; numaxes = numaxes+1 ; axes(numaxes) = axis_time
-      case ('p')           ; numaxes = numaxes+1 ; axes(numaxes) = axis_periodic
-      case ('1') ! Do nothing.
-      case default
-        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized t_grid "//trim(vars(k)%t_grid))
-    end select
-    pack = 1
-
-    if (present(checksums)) then
-       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-           vars(k)%longname, pack = pack, checksum=checksums(k,:))
-    else
-       call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
-           vars(k)%longname, pack = pack)
-    endif
-  enddo
-
-  if (use_lath) call write_field(unit, axis_lath)
-  if (use_latq) call write_field(unit, axis_latq)
-  if (use_lonh) call write_field(unit, axis_lonh)
-  if (use_lonq) call write_field(unit, axis_lonq)
-  if (use_layer) call write_field(unit, axis_layer)
-  if (use_int) call write_field(unit, axis_int)
-  if (use_periodic) call write_field(unit, axis_periodic)
-
-end subroutine create_file
-
-
-!> This routine opens an existing NetCDF file for output.  If it
-!! does not find the file, a new file is created.  It also sets up
-!! structures that describe this file and the variables that will
-!! later be written to this file.
-subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
-  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-                                                     !! nonwriting PE with single file output
-  character(len=*),      intent(in)    :: filename   !< full path to the file to create
-  type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
-  integer,               intent(in)    :: novars     !< number of fields written to filename
-  type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
-  integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
-  real, optional,        intent(in)    :: timeunit   !< length of the units for time [s]. The
-                                                     !! default value is 86400.0, for 1 day.
-  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
-                                                     !! is required if a new file uses any
-                                                     !! horizontal grid axes.
-  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
-                                                     !! is required if a new file uses any
-                                                     !! horizontal grid axes.
-  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
-                                                     !! required if a new file uses any
-                                                     !! vertical grid axes.
-
-  type(MOM_domain_type), pointer :: Domain => NULL()
-  character(len=200) :: check_name, mesg
-  integer :: length, ndim, nvar, natt, ntime, thread
-  logical :: exists, one_file, domain_set
-
-  thread = SINGLE_FILE
-  if (PRESENT(threading)) thread = threading
-
-  check_name = filename
-  length = len(trim(check_name))
-  if (check_name(length-2:length) /= ".nc") check_name = trim(check_name)//".nc"
-  if (thread /= SINGLE_FILE) check_name = trim(check_name)//".0000"
-
-  inquire(file=check_name,EXIST=exists)
-
-  if (.not.exists) then
-    call create_file(unit, filename, vars, novars, fields, threading, timeunit, &
-                     G=G, dG=dG, GV=GV)
-  else
-
-    domain_set = .false.
-    if (present(G)) then
-      domain_set = .true. ; Domain => G%Domain
-    elseif (present(dG)) then
-      domain_set = .true. ; Domain => dG%Domain
-    endif
-
-    one_file = .true.
-    if (domain_set) one_file = (thread == SINGLE_FILE)
-
-    if (one_file) then
-      call mpp_open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
-    else
-      call mpp_open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=Domain%mpp_domain)
-    endif
-    if (unit < 0) return
-
-    call mpp_get_info(unit, ndim, nvar, natt, ntime)
-
-    if (nvar == -1) then
-      write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
-                     " variables. Clobbering and creating file with ",novars," instead."
-      call MOM_error(WARNING,"MOM_io: "//mesg)
-      call create_file(unit, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
-    elseif (nvar /= novars) then
-      write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
-                     " variables instead of ",nvar,"."
-      call MOM_error(FATAL,"MOM_io: "//mesg)
-    endif
-
-    if (nvar>0) call mpp_get_fields(unit,fields(1:nvar))
-
-    ! Check the field names...
-!    do i=1,nvar
-!      call mpp_get_field_atts(fields(i),name)
-!      !if (trim(name) /= trim(vars%name) then
-!      !write (mesg,'("Reopening file ",a," variable ",a," is called ",a,".")',&
-!      !    filename,vars%name,name)
-!      !call MOM_error(NOTE,"MOM_io: "//mesg)
-!    enddo
-  endif
-
-end subroutine reopen_file
+!> Open domain-decomposed file with the base file name 'filename' to read, overwrite, or write/append data. 
+!! The domain comes from the dyn_horgrid_type structure G.
+function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  type(dyn_horgrid_type),  intent(in)  :: G !< Supergrid domain defined in MOM_grid_initialize.F90
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+  ! local
+  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg ! A message for warnings.
+   
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                          G%Domain%mpp_domain, is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+        endif
+     case("overwrite")
+        ! overwrite existing file
+        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
+                                   G%Domain%mpp_domain, is_restart = is_restart)
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
+  end select     
+end function MOM_open_file_DD_dyn_horgrid
+!> Open non-domain-decomposed file(s) with the base file name 'filename' to read, overwrite, or write/append data.
+function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
+  type(FmsNetcdfFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
+  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
+  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
+  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
+  ! local
+  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  character(len=512) :: mesg  ! A message for warnings.
+   
+  file_open_success = .false.
+  select case (trim(mode))
+     case("read")
+        file_open_success = open_file(MOMfileObj, filename, "read", & 
+                          is_restart = is_restart)
+     case("write")
+        ! check if file(s) already exists and can be appended
+        file_open_success = open_file(MOMfileObj, filename, "append", & 
+                                   is_restart = is_restart)
+        if (.not.(file_open_success)) then
+           ! create and open new file(s) for non-domain-decomposed write
+           file_open_success = open_file(MOMfileObj, filename, "write", & 
+                                   is_restart = is_restart)
+        endif
+     case("overwrite")
+        ! overwirte existing file
+        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
+                                   is_restart = is_restart)
+     case default
+        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
+        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
+  end select     
+end function MOM_open_file_noDD
 
 !> register a MOM diagnostic axis to a domain-decomposed file 
 subroutine MOM_register_diagnostic_axis(fileObj, axisName, axisLength)
@@ -582,9 +372,9 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPo
   integer :: xPos, yPos ! domain positions for x and y axes. Default is CENTER
   integer, allocatable, dimension(:) :: dimSizes ! variable dimension sizes
    
-  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: "// &
-                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"// &
-                                                  "before passing the fileObj argument to this function.")
+  if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: The fileObj has "// &
+                                                  "not been opened. Call MOM_open_file(fileObj,...) before "// &
+                                                  "passing the fileObj argument to this function.")
   xPos=CENTER
   yPos=CENTER
   if (present(xPosition)) xPos=xPosition
@@ -802,7 +592,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   endif
 
   ! vertical grid
- 
   select case (trim(z_grid))
      case ('L')
         num_dims = num_dims+1
@@ -948,41 +737,16 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
         endif
      case('Period')
         if (.not.(present(time_val))) then
-           call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//&
-                          " for "//trim(axis_name))
+           call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//" for "//trim(axis_name))
         endif
-
         axis_data_CS%data(axis_number)%p=>time_val
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Periods for cyclical variables'
      case default
-        call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//&
-                       " is an unrecognized axis")
+        call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//"is an unrecognized axis")
   end select
 
 end subroutine MOM_get_diagnostic_axis_data
-
-!> get the position parameter value from the horizontal grid (hor_grid) string id
-subroutine get_horizontal_grid_position(grid_string_id, x_pos,y_pos)
-  character(len=*), intent(in) :: grid_string_id !< horizontal grid string
-  integer, intent(out) :: x_pos, y_pos !< integers corresponding to the x and y grid positions
-
-  select case (trim(grid_string_id))
-     case ('h') ; x_pos = CENTER; y_pos = CENTER
-     case ('q') ; x_pos = EAST_FACE; y_pos=NORTH_FACE
-     case ('u') ; x_pos = EAST_FACE; y_pos=CENTER
-     case ('v') ; x_pos = CENTER; y_pos=NORTH_FACE
-     case ('T')  ; x_pos = CENTER; y_pos=CENTER
-     case ('Bu') ; x_pos = EAST_FACE; y_pos=NORTH_FACE
-     case ('Cu') ; x_pos = EAST_FACE; y_pos=CENTER
-     case ('Cv') ; x_pos = CENTER; y_pos=NORTH_FACE
-     case ('1') ; x_pos = 0; y_pos=0 
-     case default
-        call MOM_error(FATAL, "MOM_io:get_horizontal_grid_position "//&
-                        "Unrecognized grid_string_id argument "//trim(grid_string_id))
-  end select
-
-end subroutine get_horizontal_grid_position
 
 !> return the logic 
 subroutine get_horizontal_grid_logic(grid_string_id, use_lath,use_lonh,use_latq,use_lonq)
@@ -994,15 +758,15 @@ subroutine get_horizontal_grid_logic(grid_string_id, use_lath,use_lonh,use_latq,
   use_latq = .false.
   use_lonq = .false.
   select case (trim(grid_string_id))
-     case ('h') ; use_lath = .true. ; use_lonh = .true.
-     case ('q') ; use_latq = .true. ; use_lonq = .true.
-     case ('u') ; use_lath = .true. ; use_lonq = .true.
-     case ('v') ; use_latq = .true. ; use_lonh = .true.
-     case ('T')  ; use_lath = .true. ; use_lonh = .true.
-     case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-     case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-     case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-     case ('1') ; 
+     case ('h') ; use_lath = .true. ; use_lonh = .true. ! x=CENTER, y=CENTER
+     case ('q') ; use_latq = .true. ; use_lonq = .true. ! x=EAST_FACE, y=NORTH_FACE
+     case ('u') ; use_lath = .true. ; use_lonq = .true. ! x=EAST_FACE, y=CENTER
+     case ('v') ; use_latq = .true. ; use_lonh = .true. ! x=CENTER, y=NORTH_FACE
+     case ('T')  ; use_lath = .true. ; use_lonh = .true. ! x=CENTER, y=CENTER
+     case ('Bu') ; use_latq = .true. ; use_lonq = .true. ! x=EAST_FACE, y=NORTH_FACE
+     case ('Cu') ; use_lath = .true. ; use_lonq = .true. ! x=EAST_FACE, y=CENTER
+     case ('Cv') ; use_latq = .true. ; use_lonh = .true. ! x=CENTER, y=NORTH_FACE
+     case ('1') ; ! x=0, y=0
      case default
         call MOM_error(FATAL, "MOM_io:get_var_dimension_features "//&
                         "Unrecognized hor_grid argument "//trim(grid_string_id))
@@ -1049,8 +813,8 @@ function get_time_units(time_value) result(time_units_out)
    real, intent(in) :: time_value !< numerical time value in seconds
                                   !! i.e., before dividing by 86400.
    ! local
-   character(len=10) :: time_units !< time units
-   character(len=10) :: time_units_out !< time units trimmed
+   character(len=10) :: time_units ! time units
+   character(len=10) :: time_units_out ! time units trimmed
    time_units = ''
    time_units_out = ''
    if (time_value < 0.0) then
@@ -1453,252 +1217,7 @@ function ensembler(name, ens_no_in) result(en_nm)
 
 end function ensembler
 
-!> Open domain-decomposed file(s) with the base file name
-!! 'filename' to read or write/append data.  
-!! The domain comes from the ocean_grid_type structure G.
-function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
-  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
-  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
-  type(ocean_grid_type),      intent(in) :: G !< The ocean's grid structure
-  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
-
-  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
-  character(len=512) :: mesg      ! A message for warnings.
-   
-  select case (trim(mode))
-     case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
-                          G%Domain%mpp_domain, is_restart = is_restart)
-     case("write")
-        ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
-                                   G%Domain%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%Domain%mpp_domain, is_restart = is_restart)
-        endif
-     case("overwrite")
-        ! overwrite existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", &
-                                  G%Domain%mpp_domain, is_restart = is_restart) 
-     case default
-        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
-        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
-  end select     
-end function MOM_open_file_DD_ocean_grid
-
-!> Open domain-decomposed file with the base file name
-!! 'filename' to read from or write/append to. The domain comes from the MOM_domain_type structure G.
-function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
-  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
-  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
-  type(MOM_domain_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
-  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
-
-  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
-  character(len=512) :: mesg      ! A message for warnings.
-   
-  select case (trim(mode))
-     case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
-                          G%mpp_domain, is_restart = is_restart)
-     case("write")
-        ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
-                                   G%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%mpp_domain, is_restart = is_restart)
-        endif
-     case("overwrite")
-        ! overwrite existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
-                                   G%mpp_domain, is_restart = is_restart)
-     case default
-        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
-        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
-  end select     
-end function MOM_open_file_DD_supergrid
-
-!> Open domain-decomposed file with the base file name
-!! 'filename' to read, or write/append data. 
-!! The domain comes from the dyn_horgrid_type structure G.
-function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
-  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
-  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
-  type(dyn_horgrid_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
-  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
-
-  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
-  character(len=512) :: mesg      ! A message for warnings.
-   
-  select case (trim(mode))
-     case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
-                          G%Domain%mpp_domain, is_restart = is_restart)
-     case("write")
-        ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
-                                   G%Domain%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   G%Domain%mpp_domain, is_restart = is_restart)
-        endif
-     case("overwrite")
-        ! overwrite existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
-                                   G%Domain%mpp_domain, is_restart = is_restart)
-     case default
-        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
-        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
-  end select     
-end function MOM_open_file_DD_dyn_horgrid
-!> Open non-domain-decomposed file(s) with the base file name
-!! 'filename' to read, write/append data.
-function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
-  type(FmsNetcdfFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
-  character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
-  character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
-  logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
-
-  logical :: file_open_success !< returns .true. if the file(s) is(are) opened
-  character(len=512) :: mesg      ! A message for warnings.
-   
-  file_open_success = .false.
-  select case (trim(mode))
-     case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
-                          is_restart = is_restart)
-     case("write")
-        ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
-                                   is_restart = is_restart)
-        if (.not.(file_open_success)) then
-           ! create and open new file(s) for non-domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
-                                   is_restart = is_restart)
-        endif
-     case("overwrite")
-        ! overwirte existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
-                                   is_restart = is_restart)
-     case default
-        write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
-        call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_ocean_grid: "//mesg)
-  end select     
-end function MOM_open_file_noDD
-
-!> This function uses the fms_io function read_data to read 1-D
-!! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale)
-!  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object 
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  call old_fms_read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    data(:) = scale*data(:)
-  endif ; endif
-
-end subroutine MOM_read_data_1d
-
-!> This function uses the fms_io function read_data to read a distributed
-!! 2-D data field named "fieldname" from file "filename".  Valid values for
-!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
-                                                     !! should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-
-  call old_fms_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je) = scale*data(is:ie,js:je)
-  endif ; endif
-
-end subroutine MOM_read_data_2d
-
-!> This function uses the fms_io function read_data to read a distributed
-!! 3-D data field named "fieldname" from file "filename".  Valid values for
-!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
-                                                     !! should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-
-  call old_fms_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:) = scale*data(is:ie,js:je,:)
-  endif ; endif
-
-end subroutine MOM_read_data_3d
-
-!> This function uses the fms_io function read_data to read a distributed
-!! 4-D data field named "fieldname" from file "filename".  Valid values for
-!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
-  character(len=*),       intent(in)    :: filename  !< The name of the file to read
-  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
-                                                     !! should be read
-  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
-  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
-  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
-  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
-                                                     !! by before they are returned.
-
-  integer :: is, ie, js, je
-
-  call old_fms_read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:,:) = scale*data(is:ie,js:je,:,:)
-  endif ; endif
-
-end subroutine MOM_read_data_4d
-
-
-!> This function uses the fms_io function read_data to read a pair of distributed
+!> This routine uses the fms_io function read_data to read a pair of distributed
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
@@ -1780,7 +1299,7 @@ subroutine MOM_read_vector_2d(fileObj, u_fieldname, v_fieldname, u_data, v_data,
 
 end subroutine MOM_read_vector_2d
 
-!> This function uses the fms_io function read_data to read a pair of distributed
+!> This routine uses the fms_io function read_data to read a pair of distributed
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_3d(fileObj, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &

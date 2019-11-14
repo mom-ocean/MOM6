@@ -21,12 +21,11 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 use MOM_error_handler,    only : callTree_showQuery, is_root_pe
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
-use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
-!use MOM_io,               only : create_file, write_field, mpp_close_file
-use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data, register_field
-use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
-use MOM_io, only : file_exists, dimension_exists, variable_exists, check_if_open
+use MOM_io,               only : vardesc, var_desc, fieldtype
+use MOM_io,               only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data, register_field
+use MOM_io,               only : register_variable_attribute, get_var_dimension_features
+use MOM_io,               only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
+use MOM_io,               only : file_exists, dimension_exists, variable_exists, check_if_open
 use MOM_interface_heights,only : find_eta
 use MOM_open_boundary,    only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,    only : OBC_DIRECTION_N, OBC_DIRECTION_S
