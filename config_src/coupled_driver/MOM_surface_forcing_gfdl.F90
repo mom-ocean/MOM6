@@ -23,7 +23,10 @@ use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, write_version_number, MOM_read_data
+use MOM_io,               only : slasher, write_version_number, MOM_get_nc_corner_edgelengths
+use MOM_io,               only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io,               only : check_if_open, FmsNetcdfDomainFile_t, is_dimension_unlimited
+use MOM_io,               only : get_variable_dimension_names, get_variable_num_dimensions
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -1214,6 +1217,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
   logical            :: default_2018_answers
+  logical            :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
   type(time_type)    :: Time_frc
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
   ! This include declares and sets the variable "version".
@@ -1222,7 +1226,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
   character(len=48)  :: stagger
   character(len=48)  :: flnam
   character(len=240) :: basin_file
+  character(len=40), allocatable, dimension(:): dimNames ! dimension names of netcdf variables
   integer :: i, j, isd, ied, jsd, jed
+  integer :: ndims, dimUnlimIndex
+  integer, allocatable, dimension(:), corner, edgeLengths
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -1366,7 +1374,38 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     basin_file = trim(CS%inputdir) // trim(basin_file)
     call safe_alloc_ptr(CS%basin_mask,isd,ied,jsd,jed) ; CS%basin_mask(:,:) = 1.0
     if (CS%mask_srestore_marginal_seas) then
-      call MOM_read_data(basin_file,'basin',CS%basin_mask,G%domain, timelevel=1)
+      ! open the basin file file
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = MOM_open_file(fileObjRead, basin_file, "read", G, .false.)
+      ! register the axes
+      !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+      !! x/longitude and/or y/latitude axes units
+      call MOM_register_variable_axes(fileObjRead, "basin", xUnits="degrees_east", yUnits="degrees_north")
+      ! get the number of dimensions for tideamp
+      call get_variable_num_dimensions(fileObjReadMean, "basin", ndims)
+      ! get the variable dimesion names
+      allocate(dimNames(ndims))
+      call get_variable_dimension_names(fileObjReadMean, "basin", dimNames)
+      ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+      ! desired time level
+      dimUnlimIndex=0
+      do i=1,size(dimNames)
+        if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+      enddo
+      if (dimUnlimIndex .gt. 0) then
+        call MOM_get_nc_corner_edgelengths(fileObjReadMean, "basin", corner, edgeLengths, myCorner=(/1/), &
+                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex/))
+        call read_data(fileObjRead, "basin", CS%basin_mask, corner=corner, edge_lengths=edgeLengths)
+      else
+        call read_data(fileObjRead, "basin", CS%basin_mask)
+      endif
+      ! close the file
+      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+      deallocate(dimNames)
+      if (allocated(corner)) deallocate(corner)
+      if (allocated(edgeLengths)) deallocate(edgeLengths)
+      !call MOM_read_data(basin_file,'basin',CS%basin_mask,G%domain, timelevel=1)
       do j=jsd,jed ; do i=isd,ied
         if (CS%basin_mask(i,j) >= 6.0) then ; CS%basin_mask(i,j) = 0.0
         else ; CS%basin_mask(i,j) = 1.0 ; endif
@@ -1429,7 +1468,38 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
-    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1)
+    ! open the tideamp file
+    if (.not. check_if_open(fileObjRead)) &
+      fileOpenSuccess = MOM_open_file(fileObjRead, TideAmp_file, "read", G, .false.)
+    ! register the axes
+    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+    !! x/longitude and/or y/latitude axes units
+    call MOM_register_variable_axes(fileObjRead, "tideamp", xUnits="degrees_east", yUnits="degrees_north")
+    ! get the number of dimensions for tideamp
+    call get_variable_num_dimensions(fileObjReadMean, "tideamp", ndims)
+    ! get the variable dimesion names
+    allocate(dimNames(ndims))
+    call get_variable_dimension_names(fileObjReadMean, "tideamp", dimNames)
+    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+    ! desired time level
+    dimUnlimIndex=0
+    do i=1,size(dimNames)
+      if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+    enddo
+    if (dimUnlimIndex .gt. 0) then
+      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "tideamp", corner, edgeLengths, myCorner=(/1/), &
+                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex/))
+      call read_data(fileObjRead, "tideamp", CS%TKE_tidal, corner=corner, edge_lengths=edgeLengths)
+    else
+      call read_data(fileObjRead, "tideamp", CS%TKE_tidal)
+    endif
+    ! close the file
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+    deallocate(dimNames)
+    if (allocated(corner)) deallocate(corner)
+    if (allocated(edgeLengths)) deallocate(edgeLengths)
+    !call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
@@ -1459,7 +1529,38 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1) ! units should be Pa
+     ! open the gust file
+    if (.not. check_if_open(fileObjRead)) &
+      fileOpenSuccess = MOM_open_file(fileObjRead, gust_file, "read", G, .false.)
+    ! register the axes
+    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+    !! x/longitude and/or y/latitude axes units
+    call MOM_register_variable_axes(fileObjRead, "gustiness", xUnits="degrees_east", yUnits="degrees_north")
+    ! get the number of dimensions for tideamp
+    call get_variable_num_dimensions(fileObjReadMean, "gustiness", ndims)
+    ! get the variable dimesion names
+    allocate(dimNames(ndims))
+    call get_variable_dimension_names(fileObjReadMean, "gustiness", dimNames)
+    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+    ! desired time level
+    dimUnlimIndex=0
+    do i=1,size(dimNames)
+      if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+    enddo
+    if (dimUnlimIndex .gt. 0) then
+      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "gustiness", corner, edgeLengths, myCorner=(/1/), &
+                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex/))
+      call read_data(fileObjRead, "gustiness", CS%gust, corner=corner, edge_lengths=edgeLengths)
+    else
+      call read_data(fileObjRead, "gustiness", CS%gust)
+    endif
+    ! close the file
+    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+    deallocate(dimNames)
+    if (allocated(corner)) deallocate(corner)
+    if (allocated(edgeLengths)) deallocate(edgeLengths)
+    !call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1) ! units should be Pa
   endif
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
@@ -1514,7 +1615,38 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
-      call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
+      ! open the salt restore mask file
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = MOM_open_file(fileObjRead, flnam, "read", G, .false.)
+      ! register the axes
+      !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+      !! x/longitude and/or y/latitude axes units
+      call MOM_register_variable_axes(fileObjRead, "mask", xUnits="degrees_east", yUnits="degrees_north")
+      ! get the number of dimensions for tideamp
+      call get_variable_num_dimensions(fileObjReadMean, "mask", ndims)
+      ! get the variable dimesion names
+      allocate(dimNames(ndims))
+      call get_variable_dimension_names(fileObjReadMean, "mask", dimNames)
+      ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+      ! desired time level
+      dimUnlimIndex=0
+      do i=1,size(dimNames)
+        if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+      enddo
+      if (dimUnlimIndex .gt. 0) then
+        call MOM_get_nc_corner_edgelengths(fileObjReadMean, "mask", corner, edgeLengths, myCorner=(/1/), &
+                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex/))
+        call read_data(fileObjRead, "mask", CS%srestore_mask, corner=corner, edge_lengths=edgeLengths)
+      else
+        call read_data(fileObjRead, "mask", CS%srestore_mask)
+      endif
+      ! close the file
+      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+      deallocate(dimNames)
+      if (allocated(corner)) deallocate(corner)
+      if (allocated(edgeLengths)) deallocate(edgeLengths)
+      !call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
     endif
   endif
 
@@ -1524,7 +1656,38 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS)
     call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
-      call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
+      ! open the temp restore mask file
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = MOM_open_file(fileObjRead, flnam, "read", G, .false.)
+      ! register the axes
+      !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+      !! x/longitude and/or y/latitude axes units
+      call MOM_register_variable_axes(fileObjRead, "mask", xUnits="degrees_east", yUnits="degrees_north")
+      ! get the number of dimensions for tideamp
+      call get_variable_num_dimensions(fileObjReadMean, "mask", ndims)
+      ! get the variable dimesion names
+      allocate(dimNames(ndims))
+      call get_variable_dimension_names(fileObjReadMean, "mask", dimNames)
+      ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+      ! desired time level
+      dimUnlimIndex=0
+      do i=1,size(dimNames)
+        if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
+      enddo
+      if (dimUnlimIndex .gt. 0) then
+        call MOM_get_nc_corner_edgelengths(fileObjReadMean, "mask", corner, edgeLengths, myCorner=(/1/), &
+                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex/))
+        call read_data(fileObjRead, "mask", CS%trestore_mask, corner=corner, edge_lengths=edgeLengths)
+      else
+        call read_data(fileObjRead, "mask", CS%trestore_mask)
+      endif
+      ! close the file
+      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+      deallocate(dimNames)
+      if (allocated(corner)) deallocate(corner)
+      if (allocated(edgeLengths)) deallocate(edgeLengths)
+      !call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
     endif
   endif
 
