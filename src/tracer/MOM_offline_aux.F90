@@ -716,19 +716,28 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call read_data(fileObjReadSnap, 'h_end', h_end(:,:,1:nk_input), corner=corner, edge_lengths=edgeLengths)
 
     ! get the unlimited dimension index and populate the corner and edgeLengths arrays for temp and salt
+    dimUnlimIndex = 0
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
     enddo
-    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "temp", corner, edgeLengths, myCorner=(/ridx_sum/), &
-                                       myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1, nk_input/), &
-                                       myEdgeLengthIndices=(/dimUnlimIndex, 3/))
+
+    if (dimUnlimIndex .gt. 0) then
+      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "temp", corner, edgeLengths, myCorner=(/ridx_sum/), &
+                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1, nk_input/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex, 3/))
+    else
+      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "temp", corner, edgeLengths, myEdgeLengths=(/nk_input/), &
+                                         myEdgeLengthIndices=(/3/))
+    endif
     ! read temp and salt
     call read_data(fileObjReadMean, 'temp', temp_mean(:,:,1:nk_input), corner=corner, edge_lengths=edgeLengths)
     call read_data(fileObjReadMean, 'salt', salt_mean(:,:,1:nk_input), corner=corner, edge_lengths=edgeLengths)
 
-   ! deallocate dimNames arrays
+   ! deallocate dimNames, corner, and edgeLengths arrays
    deallocate(dimNames)
    deallocate(dimNamesSnap)
+   if (allocated(corner)) deallocate(corner)
+   if (allocated(edgeLengths)) deallocate(edgeLengths)
   endif
 
   do j=js,je ; do i=is,ie
@@ -759,6 +768,8 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   ! read kd_interface
   call read_data(fileObjReadMean, "Kd_interface", Kd(:,:,1:nk_input+1), corner=corner, edge_lengths=edgeLengths)
   deallocate(dimNames)
+  if (allocated(corner)) deallocate(corner)
+  if (allocated(edgeLengths)) deallocate(edgeLengths)
 
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
@@ -784,7 +795,8 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call get_variable_num_dimensions(fileObjReadMean, "massout_flux_sum", ndims)
     allocate(dimNames(ndims)
     call get_variable_dimension_names(fileObjReadMean, "massout_flux_sum", dimNames)
-    
+    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+    ! desired time level
     dimUnlimIndex = 0
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
@@ -794,6 +806,11 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
       call MOM_get_nc_corner_edgelengths(fileObjReadMean, "massout_flux_sum", corner, edgeLengths, &
                                        myCorner=(/ridx_sum/), myCornerIndices=(/dimUnlimIndex/), myEdgeLengths=(/1/), &
                                        myEdgeLengthIndices=(/dimUnlimIndex/))
+      call read_data(fileObjReadSurf, "massout_flux_sum", fluxes%netMassOut, corner=corner, edge_lengths=edgeLengths)
+      call read_data(fileObjReadSurf, "massin_flux_sum", fluxes%netMassIn, corner=corner, edge_lengths=edgeLengths)
+    else
+      call read_data(fileObjReadSurf, "massout_flux_sum", fluxes%netMassOut)
+      call read_data(fileObjReadSurf, "massin_flux_sum", fluxes%netMassIn)
     endif
     !call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
     !    timelevel=ridx_sum)
@@ -804,6 +821,8 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call read_data(fileObjReadSurf, "massin_flux_sum", fluxes%netMassIn, corner=corner, edge_lengths=edgeLengths)
 
     deallocate(dimNames)
+    if (allocated(corner)) deallocate(corner)
+    if (allocated(edgeLengths)) deallocate(edgeLengths)
 
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)<1.0) then
@@ -824,7 +843,8 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call get_variable_num_dimensions(fileObjReadMean, "ePBL_h_ML", ndims)
     allocate(dimNames(ndims)
     call get_variable_dimension_names(fileObjReadMean, "ePBL_h_ML", dimNames)
-
+    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+    ! desired time level
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
     enddo
@@ -835,6 +855,8 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call read_data(fileObjReadSurf, "ePBL_h_ML", mld, corner=corner, edge_lengths=edgeLengths)
     !call MOM_read_data(surf_file, 'ePBL_h_ML', mld, G%Domain, timelevel=ridx_sum)
     deallocate(dimNames)
+    if (allocated(corner)) deallocate(corner)
+    if (allocated(edgeLengths)) deallocate(edgeLengths)
   endif
 
   if (read_sw) then
@@ -850,21 +872,31 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     call get_variable_num_dimensions(fileObjReadMean, "sw_vis", ndims)
     allocate(dimNames(ndims)
     call get_variable_dimension_names(fileObjReadMean, "sw_vis", dimNames)
+    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
+    ! desired time level
+    dimUnlimIndex = 0
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
     enddo
-    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "sw_vis", corner, edgeLengths, myCorner=(/ridx_sum/), &
-                                       myCornerIndices=(/dimUnlimIndex/), myEdgeLengths=(/1/), &
-                                       myEdgeLengthIndices=(/dimUnlimIndex/))
+    ! read sw_vis and sw_nir
+    if (dimUnlimIndex .gt. 0) then 
+      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "sw_vis", corner, edgeLengths, myCorner=(/ridx_sum/), &
+                                         myCornerIndices=(/dimUnlimIndex/), myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndex/))
+      call read_data(fileObjReadMean, "sw_vis", fluxes%sw_vis_dir, corner=corner, edge_lengths=edgeLengths)
+      call read_data(fileObjReadMean, "sw_nir", fluxes%sw_nir_dir, corner=corner, edge_lengths=edgeLengths)
+    else
+      call read_data(fileObjReadMean, "sw_vis", fluxes%sw_vis_dir)
+      call read_data(fileObjReadMean, "sw_nir", fluxes%sw_nir_dir)
+    endif
+       
     !call MOM_read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, G%Domain, &
     !    timelevel=ridx_sum)
     !call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &
-     !   timelevel=ridx_sum)
-    ! read sw_vis and sw_nir
-    call read_data(fileObjReadMean, "sw_vis", fluxes%sw_vis_dir, corner=corner, edge_lengths=edgeLengths)
-    call read_data(fileObjReadMean, "sw_nir", fluxes%sw_nir_dir, corner=corner, edge_lengths=edgeLengths)
-
+    !   timelevel=ridx_sum)
     deallocate(dimNames)
+    if (allocated(corner)) deallocate(corner)
+    if (allocated(edgeLengths)) deallocate(edgeLengths)
 
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
     fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir

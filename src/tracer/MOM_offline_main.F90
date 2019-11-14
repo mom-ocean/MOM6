@@ -1499,20 +1499,31 @@ subroutine read_all_input(CS)
     call get_variable_dimension_names(fileObjReadMean, "temp", dimNames)
 
     ! get the unlimited dimension index and populate the corner and edgeLengths arrays for h_end
+    dimUnlimIndexSnap = 0
     do i=1,size(dimNamesSnap)
       if (is_dimension_unlimited(fileObjSnap, dimNamesSnap(i)) dimUnlimIndexSnap=i
     enddo
+    
+    if (dimUnlimIndexSnap .gt. 0) then
  
-    call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "h_end", cornerSnap, edgeLengthSnap, myEdgeLengths=(/1/), &
-                                       myEdgeLengthIndices=(/dimUnlimIndexSnap/))
+      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "h_end", cornerSnap, edgeLengthSnap, myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndexSnap/))
+    else
+      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "h_end", cornerSnap, edgeLengthSnap)
+    endif
  
     ! get the unlimited dimension index and populate the corner and edgeLengths arrays for temp and salt
+    dimUnlimIndexMean = 0
     do i=1,size(dimNames)
       if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndexMean=i
     enddo
  
-    call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "temp", cornerMean, edgeLengthMean, myEdgeLengths=(/1/), &
-                                       myEdgeLengthIndices=(/dimUnlimIndexMean/))
+    if (dimUnlimIndexMean .gt. 0) then
+      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "temp", cornerMean, edgeLengthMean, myEdgeLengths=(/1/), &
+                                         myEdgeLengthIndices=(/dimUnlimIndexMean/))
+    else
+      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "temp", cornerMean, edgeLengthMean)
+    endif
     ! read the data at every time step
     do t = 1,ntime
       cornerSnap(dimUnlimIndexSnap) = t

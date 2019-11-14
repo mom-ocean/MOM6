@@ -227,6 +227,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer, allocatable, dimension(:) :: corner, edgeLengths
+  logical :: fileOpenSuccess
   type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
@@ -240,7 +241,8 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
   CS%nkml = max(GV%nkml,1)
   
   ! open the netcdf file
-  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%IC_file, "read", G, .false.)
+  if (.not.check_if_open(fileObjRead)) &
+    fileOpenSuccess = MOM_open_file(fileObjRead, CS%IC_file, "read", G, .false.)
   ! register the variable axes
   call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
   ! populate the corner and edgeLengths arrays

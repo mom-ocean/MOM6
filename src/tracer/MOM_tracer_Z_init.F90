@@ -7,7 +7,8 @@ module MOM_tracer_Z_init
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data, check_if_open, FmsNetcdfDomainFile_t
+use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io, only : check_if_open, FmsNetcdfDomainFile_t
 use MOM_unit_scaling, only : unit_scale_type
 
 use netcdf
@@ -101,7 +102,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   allocate(tr_1d(nz_in)) ; tr_1d(:) = 0.0
 
   ! open file for domain-decomposed read
-  if (.not.check_if_open(fileObjRead)) call open_file(fileObjRead, filename, "read", G, .false.)
+  if (.not.check_if_open(fileObjRead)) 
+    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
   ! register the variable axes
   call MOM_register_variable_axes(fileObjRead, tr_name, xUnits="degrees_east", yUnits="degrees_north")
   ! read the data

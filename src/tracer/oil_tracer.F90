@@ -230,6 +230,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  logical :: fileOpenSuccess
   type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
@@ -265,7 +266,8 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
           call MOM_error(FATAL, "initialize_oil_tracer: "// &
                                  "Unable to find "//CS%IC_file)
         ! open file for domain-decomposed read
-        if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%IC_file, "read", G,.false.)
+        if (.not.check_if_open(fileObjRead)) &
+          fileOpenSuccess = MOM_open_file(fileObjRead, CS%IC_file, "read", G,.false.)
 
         if (CS%Z_IC_file) then
           OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name, &

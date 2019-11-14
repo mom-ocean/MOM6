@@ -169,6 +169,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: dist2  ! The distance squared from a line [m2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB, lntr
+  logical :: fileOpenSuccess
   type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
@@ -187,7 +188,8 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         call MOM_error(FATAL, "USER_initialize_tracer: Unable to find "// &
                         CS%tracer_IC_file)
       ! open file for domain-decomposed read
-      if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G,.false.)
+      if (.not.check_if_open(fileObjRead)) &
+      fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G,.false.)
       
 
       do m=1,NTR

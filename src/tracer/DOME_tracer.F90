@@ -181,6 +181,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer, allocatable, dimension(:) :: corner, edgeLengths
+  logical :: fileOpenSuccess
   type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
@@ -199,7 +200,8 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
         call MOM_error(FATAL, "DOME_initialize_tracer: Unable to find "// &
                         CS%tracer_IC_file)
       ! open the netcdf file
-      if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
+      if (.not.check_if_open(fileObjRead)) &
+       fileOpenSuccess = MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
       ! register the variable axes
       call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
       ! populate the corner and edgeLengths arrays

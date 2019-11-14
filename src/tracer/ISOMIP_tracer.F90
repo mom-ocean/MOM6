@@ -186,6 +186,7 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer, allocatable, dimension(:) :: corner, edgeLengths
+  logical :: fileOpenSuccess
   type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
@@ -203,7 +204,8 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "ISOMIP_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
-      if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
+      if (.not.check_if_open(fileObjRead)) &
+       fileOpenSuccess = MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
       ! register the variable axes
       call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
       call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths, myEdgeLengths=(/1/), &

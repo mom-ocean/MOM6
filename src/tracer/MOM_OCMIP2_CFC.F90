@@ -374,6 +374,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
   ! This subroutine initializes a tracer array.
 
   logical :: OK
+  logical :: fileOpenSuccess
   integer :: i, j, k, is, ie, js, je, nz
   type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
@@ -392,7 +393,8 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
                 trim(CS%IC_file)//".")
       endif
     else
-      if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, CS%IC_file, "read", G, .false.)
+      if (.not.check_if_open(fileObjRead)) &
+        fileOpenSuccess = MOM_open_file(fileObjRead, CS%IC_file, "read", G, .false.)
       ! register the variable axes
       call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
       !call MOM_read_data(CS%IC_file, trim(name), tr, G%Domain)
