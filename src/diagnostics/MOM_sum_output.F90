@@ -14,7 +14,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 !use MOM_io, only : flush_file, create_file, reopen_file
 use MOM_io, only : fieldtype, mpp_open_file, flush_file
-use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
+use MOM_io, only : file_exists, slasher, vardesc, var_desc, get_filename_appendix
 use MOM_io, only : APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features

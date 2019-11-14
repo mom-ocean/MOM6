@@ -16,8 +16,7 @@ use MOM_time_manager,     only : time_type, time_type_to_real
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
-use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : old_fms_read_data => read_data
+use fms_mod,              only : open_namelist_file, check_nml_error
 use fms_io_mod,           only : io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
 use MOM_string_functions,  only : extract_word
@@ -25,8 +24,8 @@ use mpp_mod,              only : mpp_max
 use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : mpp_open_file => mpp_open, mpp_close_file => mpp_close
-use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
-use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, get_axis_data=>mpp_get_axis_data, axistype
+use mpp_io_mod,           only : mpp_write_meta, mpp_get_info
+use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, axistype
 use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
@@ -79,7 +78,7 @@ public :: mpp_close_file, mpp_open_file, fieldtype, get_filename_appendix
 public :: flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, read_axis_data
 public :: num_timelevels, MOM_read_vector, ensembler
-public :: slasher, write_field, write_version_number, MOM_io_init
+public :: slasher, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
@@ -302,6 +301,7 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
         call MOM_error(FATAL,"MOM_io::MOM_open_file_DD_supergrid: "//mesg)
   end select     
 end function MOM_open_file_DD_dyn_horgrid
+
 !> Open non-domain-decomposed file(s) with the base file name 'filename' to read, overwrite, or write/append data.
 function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
   type(FmsNetcdfFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
@@ -564,7 +564,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
   use_lonq = .false.
   
   call get_horizontal_grid_logic(hor_grid, use_lath, use_lonh, use_latq, use_lonq)
-  
   ! add longitude name to dimension name array
   if (use_lonh) then
      num_dims = num_dims+1 
@@ -577,7 +576,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
      dim_names(num_dims)(1:len_trim('lonq')) ='lonq'
      dim_lengths(num_dims) = size(gridLonB(IsgB:IegB)) 
   endif
- 
   ! add latitude name to dimension name array
   if (use_lath) then
      num_dims = num_dims+1 
@@ -590,7 +588,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
      dim_names(num_dims)(1:len_trim('latq')) = 'latq'
      dim_lengths(num_dims) = size(gridLatB(JsgB:JegB))
   endif
-
   ! vertical grid
   select case (trim(z_grid))
      case ('L')
@@ -608,7 +605,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
         call MOM_error(FATAL, "MOM_io: get_var_dimension_features: "//&
                       " has an unrecognized z_grid argument"//trim(z_grid))
   end select
-  
   ! time
   t_grid = adjustl(t_grid_in)
   select case (t_grid(1:1))
@@ -631,7 +627,6 @@ subroutine get_var_dimension_features(hor_grid, z_grid, t_grid_in, &
            call MOM_error(WARNING, "MOM_io: get_var_dimension_features: "//&
                        "Unrecognized t_grid "//trim(t_grid))
   end select
-
 end subroutine get_var_dimension_features
 
 !> Populate the axis_data structure with axis data and attributes for diagnostic and restart files
@@ -722,7 +717,7 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
         axis_data_CS%axis(axis_number)%positive = 'up'
      case('Time')
         if (.not.(present(time_val))) then
-           call MOM_error(FATAL, "MOM_io::get_axis_data: requires time_val"//&
+           call MOM_error(FATAL, "MOM_io::get_diagnostic_axis_data: requires time_val"//&
                           " and time_units arguments for "//trim(axis_name))
         endif
 
@@ -737,13 +732,14 @@ subroutine MOM_get_diagnostic_axis_data(axis_data_CS, axis_name, axis_number, G,
         endif
      case('Period')
         if (.not.(present(time_val))) then
-           call MOM_error(FATAL, "MOM_io::get_axis_data: requires a time_val argument"//" for "//trim(axis_name))
+           call MOM_error(FATAL, "MOM_io::get_diagnostic_axis_data: requires a time_val argument "// &
+                          "for "//trim(axis_name))
         endif
         axis_data_CS%data(axis_number)%p=>time_val
         axis_data_CS%axis(axis_number)%name = trim(axis_name)
         axis_data_CS%axis(axis_number)%longname = 'Periods for cyclical variables'
      case default
-        call MOM_error(WARNING, "MOM_io::get_axis_data:"//trim(axis_name)//"is an unrecognized axis")
+        call MOM_error(WARNING, "MOM_io::get_diagnostic_axis_data:"//trim(axis_name)//"is an unrecognized axis")
   end select
 
 end subroutine MOM_get_diagnostic_axis_data
@@ -834,164 +830,6 @@ function get_time_units(time_value) result(time_units_out)
    endif
    time_units_out = trim(time_units)
 end function get_time_units
-
-!> Read the data associated with a named axis in a file
-subroutine read_axis_data(filename, axis_name, var)
-  character(len=*),   intent(in)  :: filename  !< Name of the file to read
-  character(len=*),   intent(in)  :: axis_name !< Name of the axis to read
-  real, dimension(:), intent(out) :: var       !< The axis location data
-
-  integer :: i,len,unit, ndim, nvar, natt, ntime
-  logical :: axis_found
-  type(axistype), allocatable :: axes(:)
-  type(axistype) :: time_axis
-  character(len=32) :: name, units
-
-  call mpp_open_file(unit, trim(filename), action=MPP_RDONLY, form=MPP_NETCDF, &
-                 threading=MPP_MULTI, fileset=SINGLE_FILE)
-
-!Find the number of variables (nvar) in this file
-  call mpp_get_info(unit, ndim, nvar, natt, ntime)
-! -------------------------------------------------------------------
-! Allocate space for the number of axes in the data file.
-! -------------------------------------------------------------------
-  allocate(axes(ndim))
-  call mpp_get_axes(unit, axes, time_axis)
-
-  axis_found = .false.
-  do i = 1, ndim
-    call mpp_get_atts(axes(i), name=name,len=len,units=units)
-    if (name == axis_name) then
-      axis_found = .true.
-      call get_axis_data(axes(i),var)
-      exit
-    endif
-  enddo
-
-  if (.not.axis_found) call MOM_error(FATAL, "MOM_io read_axis_data: "//&
-    "Unable to find axis "//trim(axis_name)//" in file "//trim(filename))
-
-  deallocate(axes)
-
-end subroutine read_axis_data
-
-!> This function determines how many time levels a variable has.
-function num_timelevels(filename, varname, min_dims) result(n_time)
-  character(len=*),  intent(in) :: filename   !< name of the file to read
-  character(len=*),  intent(in) :: varname    !< variable whose number of time levels
-                                              !! are to be returned
-  integer, optional, intent(in) :: min_dims   !< The minimum number of dimensions a variable must have
-                                              !! if it has a time dimension.  If the variable has 1 less
-                                              !! dimension than this, then 0 is returned.
-  integer :: n_time                           !< number of time levels varname has in filename
-
-  logical :: found
-  character(len=200) :: msg
-  character(len=nf90_max_name) :: name
-  integer :: ncid, nvars, status, varid, ndims, n
-  integer, allocatable :: varids(:)
-  integer, dimension(nf90_max_var_dims) :: dimids
-
-  n_time = -1
-  found = .false.
-
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties opening "//trim(filename)//" - "//&
-        trim(NF90_STRERROR(status)))
-    return
-  endif
-
-  status = NF90_INQUIRE(ncid, nVariables=nvars)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties getting the number of variables in file "//&
-        trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    return
-  endif
-
-  if (nvars < 1) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " There appear not to be any variables in "//trim(filename))
-    return
-  endif
-
-
-  allocate(varids(nvars))
-
-  status = nf90_inq_varids(ncid, nvars, varids)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " Difficulties getting the variable IDs in file "//&
-        trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    deallocate(varids) ; return
-  endif
-
-  do n = 1,nvars
-    status = nf90_inquire_variable(ncid, varids(n), name=name)
-    if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,"num_timelevels: "//&
-          " Difficulties getting a variable name in file "//&
-          trim(filename)//" - "//trim(NF90_STRERROR(status)))
-    endif
-
-    if (trim(lowercase(name)) == trim(lowercase(varname))) then
-      if (found) then
-        call MOM_error(WARNING,"num_timelevels: "//&
-          " Two variables match the case-insensitive name "//trim(varname)//&
-          " in file "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
-      else
-        varid = varids(n) ; found = .true.
-      endif
-    endif
-  enddo
-
-  deallocate(varids)
-
-  if (.not.found) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-        " variable "//trim(varname)//" was not found in file "//&
-        trim(filename))
-    return
-  endif
-
-  status = nf90_inquire_variable(ncid, varid, ndims = ndims)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting number of dimensions of "//&
-      trim(varname)//" in "//trim(filename))
-    return
-  endif
-
-  if (present(min_dims)) then
-    if (ndims < min_dims-1) then
-      write(msg, '(I3)') min_dims
-      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//&
-        " in file "//trim(filename)//" has fewer than min_dims = "//trim(msg)//&
-        " dimensions.")
-    elseif (ndims == min_dims - 1) then
-      n_time = 0 ; return
-    endif
-  endif
-
-  status = nf90_inquire_variable(ncid, varid, dimids = dimids(1:ndims))
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting last dimension ID for "//&
-      trim(varname)//" in "//trim(filename))
-    return
-  endif
-
-  status = nf90_Inquire_Dimension(ncid, dimids(ndims), len=n_time)
-  if (status /= NF90_NOERR) call MOM_error(WARNING,"num_timelevels: "//&
-      trim(NF90_STRERROR(status))//" Getting number of time levels of "//&
-      trim(varname)//" in "//trim(filename))
-
-  return
-
-end function num_timelevels
-
 
 !> Returns a vardesc type whose elements have been filled with the provided
 !! fields.  The argument name is required, while the others are optional and
@@ -1453,26 +1291,12 @@ end subroutine MOM_io_init
 !!  NetCDF files and handle input and output of fields.  These
 !!  subroutines, along with their purpose, are:
 !!
-!!   * create_file: create a new file and set up structures that are
-!!       needed for subsequent output and write out the coordinates.
-!!   * reopen_file: reopen an existing file for writing and set up
-!!       structures that are needed for subsequent output.
-!!   * open_input_file: open the indicated file for reading only.
-!!   * mpp_close_file: close an open file.
-!!   * synch_file: flush the buffers, completing all pending output.
-!!
-!!   * write_field: write a field to an open file.
-!!   * write_time: write a value of the time axis to an open file.
-!!   * read_data: read a variable from an open file.
-!!   * read_time: read a time from an open file.
-!!
-!!   * name_output_file: provide a name for an output file based on a
-!!       name root and the time of the output.
-!!   * find_input_file: find a file that has been previously written by
-!!       MOM and named by name_output_file and open it for reading.
-!!
-!!   * handle_error: write an error code and quit.
-
-
+!!   * MOM_open_file: open a netcdf file in read, write, overwrite, or append mode
+!!   * close_file: close an open netcdf file.
+!!   * write_data: write a field to an open file.
+!!   * read_data: read a field from an open file.
+!!   * MOM_read_vector : read in the components (u,v) of a vector field and apply a scaling factor to the data
+!!    if necessary
+!!   * scale_data: apply a scaling factor to a data field
 
 end module MOM_io

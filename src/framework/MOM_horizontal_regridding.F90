@@ -16,8 +16,7 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_io, only : fieldtype, file_exists
-use MOM_io, only : read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field
+use MOM_io, only : slasher, vardesc
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, get_external_field_size
 use MOM_time_manager, only : init_external_field, time_interp_external
@@ -31,7 +30,6 @@ use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
 use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
 
 use mpp_io_mod, only : mpp_get_axis_data
-use mpp_io_mod, only : MPP_SINGLE
 use netcdf
 
 implicit none ; private
