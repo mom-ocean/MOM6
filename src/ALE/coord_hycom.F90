@@ -18,8 +18,11 @@ type, public :: hycom_CS ; private
   !> Nominal near-surface resolution
   real, allocatable, dimension(:) :: coordinateResolution
 
-  !> Nominal density of interfaces
+  !> Nominal density of interfaces [R ~> kg m-3]
   real, allocatable, dimension(:) :: target_density
+
+  !> Density scaling factor [R m3 kg-1 ~> 1]
+  real :: kg_m3_to_R
 
   !> Maximum depths of interfaces
   real, allocatable, dimension(:) :: max_interface_depths
@@ -36,12 +39,13 @@ public init_coord_hycom, set_hycom_params, build_hycom1_column, end_coord_hycom
 contains
 
 !> Initialise a hycom_CS with pointers to parameters
-subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
+subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS, rho_scale)
   type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in generated grid
   real, dimension(nk),  intent(in) :: coordinateResolution !< Nominal near-surface resolution [m]
-  real, dimension(nk+1),intent(in) :: target_density !< Interface target densities [kg m-3]
+  real, dimension(nk+1),intent(in) :: target_density !< Interface target densities [R ~> kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
+  real,       optional, intent(in) :: rho_scale !< A dimensional scaling factor for target_density
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_hycom: CS already associated!")
   allocate(CS)
@@ -52,6 +56,8 @@ subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp
   CS%coordinateResolution(:) = coordinateResolution(:)
   CS%target_density(:)       = target_density(:)
   CS%interp_CS               = interp_CS
+  CS%kg_m3_to_R = 1.0 ; if (present(rho_scale)) CS%kg_m3_to_R = rho_scale
+
 end subroutine init_coord_hycom
 
 !> This subroutine deallocates memory in the control structure for the coord_hycom module
@@ -117,7 +123,7 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
 
   ! Local variables
   integer   :: k
-  real, dimension(nz) :: rho_col ! Layer quantities
+  real, dimension(nz) :: rho_col ! Layer densities in a column [R ~> kg m-3]
   real, dimension(CS%nk) :: h_col_new ! New layer thicknesses
   real :: z_scale
   real :: stretching ! z* stretching, converts z* to z.
@@ -132,7 +138,7 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
   z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   ! Work bottom recording potential density
-  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
+  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state, scale=CS%kg_m3_to_R)
   ! This ensures the potential density profile is monotonic
   ! although not necessarily single valued.
   do k = nz-1, 1, -1

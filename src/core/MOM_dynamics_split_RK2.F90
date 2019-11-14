@@ -12,7 +12,7 @@ use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,         only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator,     only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,     only : diag_mediator_init, enable_averages
 use MOM_diag_mediator,     only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,     only : register_diag_field, register_static_field
 use MOM_diag_mediator,     only : set_diag_mediator_grid, diag_ctrl, diag_update_remap_grids
@@ -56,7 +56,7 @@ use MOM_thickness_diffuse,     only : thickness_diffuse_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
-use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
+use MOM_vert_friction,         only : vertvisc_init, vertvisc_CS
 use MOM_vert_friction,         only : updateCFLtruncationValue
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
@@ -124,9 +124,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                                                   !! anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean
-                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+                                                      !! to the seafloor [R L Z T-2 ~> Pa]
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
-                                                      !! to the seafloor [kg L Z T-2 m-3 ~> Pa]
+                                                      !! to the seafloor [R L Z T-2 ~> Pa]
   type(BT_cont_type), pointer   :: BT_cont  => NULL() !<  A structure with elements that describe the
                                                       !! effective summed open face areas as a function
                                                       !! of barotropic flow.
@@ -248,7 +248,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
   type(vertvisc_type),               intent(inout) :: visc         !< vertical visc, bottom drag, and related
   type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
-  real,                              intent(in)    :: dt           !< time step [s]
+  real,                              intent(in)    :: dt           !< time step [T ~> s]
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at start of this dynamic
                                                                    !! time step [Pa]
@@ -317,10 +317,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     u_av, & ! The zonal velocity time-averaged over a time step [L T-1 ~> m s-1].
     v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
-  real :: dt_in_T   ! The dynamics time step [T ~> s]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
 
-  real :: Idt       ! The inverse of the timestep [s-1]
   logical :: dyn_p_surf
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
@@ -333,9 +331,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
-
-  dt_in_T = US%s_to_T*dt
-  Idt = 1.0 / dt
 
   sym=.false.;if (G%Domain%symmetric) sym=.true.  ! switch to include symmetric domain in checksums
 
@@ -410,7 +405,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! PFu = d/dx M(h,T,S)
 ! pbce = dM/deta
-  if (CS%begw == 0.0) call enable_averaging(dt, Time_local, CS%diag)
+  if (CS%begw == 0.0) call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
@@ -472,14 +467,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_in_T * u_bc_accel(I,j,k))
+      up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * u_bc_accel(I,j,k))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_in_T * v_bc_accel(i,J,k))
+      vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * v_bc_accel(i,J,k))
     enddo ; enddo
   enddo
 
-  call enable_averaging(dt, Time_local, CS%diag)
+  call enable_averages(dt, Time_local, CS%diag)
   call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
@@ -516,7 +511,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_accel_bt = layer accelerations due to barotropic solver
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
     call cpu_clock_begin(id_clock_continuity)
-    call continuity(u, v, h, hp, uh_in, vh_in, dt_in_T, G, GV, US, CS%continuity_CSp, &
+    call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, &
                     OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
@@ -544,7 +539,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_btstep)
 
 ! up = u + dt_pred*( u_bc_accel + u_accel_bt )
-  dt_pred = dt_in_T * CS%be
+  dt_pred = dt * CS%be
   call cpu_clock_begin(id_clock_mom_update)
 
   !$OMP parallel do default(shared)
@@ -580,9 +575,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
   endif
-  call vertvisc_coef(up, vp, h, forces, visc, US%T_to_s*dt_pred, G, GV, US, CS%vertvisc_CSp, &
+  call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, &
                      CS%OBC)
-  call vertvisc(up, vp, h, forces, visc, US%T_to_s*dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
+  call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
   if (G%nonblocking_updates) then
@@ -590,7 +585,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call start_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
     call cpu_clock_begin(id_clock_vertvisc)
   endif
-  call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, US%T_to_s*dt_pred, G, GV, US, CS%vertvisc_CSp)
+  call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt_pred, G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
 
   call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
@@ -603,7 +598,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! uh = u_av * h
   ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h, hp, uh, vh, dt_in_T, G, GV, US, CS%continuity_CSp, &
+  call continuity(up, vp, h, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, &
                   u_av, v_av, BT_cont=CS%BT_cont)
   call cpu_clock_end(id_clock_continuity)
@@ -636,7 +631,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   enddo ; enddo ; enddo
 
   ! The correction phase of the time step starts here.
-  call enable_averaging(dt, Time_local, CS%diag)
+  call enable_averages(dt, Time_local, CS%diag)
 
   ! Calculate a revised estimate of the free-surface height correction to be
   ! used in the next call to btstep.  This call is at this point so that
@@ -755,11 +750,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
-      u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_in_T * &
+      u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
                       (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_in_T * &
+      v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
                       (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
     enddo ; enddo
   enddo
@@ -808,7 +803,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! h  = h + dt * div . uh
   ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, h, uh, vh, dt_in_T, G, GV, US, CS%continuity_CSp, &
+  call continuity(u, v, h, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
   call cpu_clock_end(id_clock_continuity)
   call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
@@ -824,7 +819,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then
-    call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, v_old_rad_OBC, G, US, dt)
+    call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, v_old_rad_OBC, G, US, US%T_to_s*dt)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
@@ -839,10 +834,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(I,j,k) = uhtr(I,j,k) + uh(I,j,k)*dt_in_T
+      uhtr(I,j,k) = uhtr(I,j,k) + uh(I,j,k)*dt
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*dt_in_T
+      vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*dt
     enddo ; enddo
   enddo
 
@@ -978,7 +973,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
   type(MOM_restart_CS),             pointer       :: restart_CS !< restart control structure
-  real,                             intent(in)    :: dt         !< time step [s]
+  real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis
   type(cont_diag_ptrs),     target, intent(inout) :: Cont_diag  !< points to terms in continuity equation
@@ -1105,6 +1100,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 !  Accel_diag%u_accel_bt => CS%u_accel_bt ; Accel_diag%v_accel_bt => CS%v_accel_bt
 !  Accel_diag%u_av => CS%u_av ; Accel_diag%v_av => CS%v_av
 
+  id_clock_pass_init = cpu_clock_id('(Ocean init message passing)', &
+                                     grain=CLOCK_ROUTINE)
+
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
@@ -1180,7 +1178,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied ; h_tmp(i,j,k) = h(i,j,k) ; enddo ; enddo ; enddo
-    call continuity(u, v, h, h_tmp, uh, vh, US%s_to_T*dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       CS%h_av(i,j,k) = 0.5*(h(i,j,k) + h_tmp(i,j,k))
@@ -1244,7 +1242,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   id_clock_horvisc    = cpu_clock_id('(Ocean horizontal viscosity)',     grain=CLOCK_MODULE)
   id_clock_mom_update = cpu_clock_id('(Ocean momentum increments)',      grain=CLOCK_MODULE)
   id_clock_pass       = cpu_clock_id('(Ocean message passing)',          grain=CLOCK_MODULE)
-  id_clock_pass_init  = cpu_clock_id('(Ocean init message passing)',     grain=CLOCK_ROUTINE)
   id_clock_btcalc     = cpu_clock_id('(Ocean barotropic mode calc)',     grain=CLOCK_MODULE)
   id_clock_btstep     = cpu_clock_id('(Ocean barotropic mode stepping)', grain=CLOCK_MODULE)
   id_clock_btforce    = cpu_clock_id('(Ocean barotropic forcing calc)',  grain=CLOCK_MODULE)

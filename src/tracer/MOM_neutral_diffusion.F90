@@ -435,7 +435,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
-  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts
+  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts [T ~> s]
                                                                      !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),                pointer       :: Reg    !< Tracer registry
   type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
@@ -454,7 +454,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   type(tracer_type), pointer                   :: Tracer => NULL() ! Pointer to the current tracer
 
   integer :: i, j, k, m, ks, nk
-  real :: Idt
+  real :: Idt  ! The inverse of the time step [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge
 
   !### Try replacing both of these with GV%H_subroundoff
@@ -468,10 +468,10 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     tracer => Reg%Tr(m)
 
     ! for diagnostics
-    if (tracer%id_dfxy_conc    > 0 .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 .or. &
-       tracer%id_dfx_2d       > 0 .or. tracer%id_dfy_2d > 0) then
-       Idt              = 1.0/dt
-       tendency(:,:,:)  = 0.0
+    if (tracer%id_dfxy_conc > 0 .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 .or. &
+        tracer%id_dfx_2d > 0 .or. tracer%id_dfy_2d > 0) then
+      Idt = 1.0 / dt
+      tendency(:,:,:)  = 0.0
     endif
 
     uFlx(:,:,:) = 0.
@@ -2401,6 +2401,9 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ! Tests for linearized version of searching the layer for neutral surface position
   ! EOS linear in T, uniform alpha
   CS%max_iter = 10
+  ! Unit tests require explicit initialization of tolerance
+  CS%Drho_tol = 0.
+  CS%x_tol = 0.
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,        &
              find_neutral_pos_linear(CS, 0., 10., 35., 0., -0.2, 0.,                      &
                                      0., -0.2, 0., 10., -0.2, 0.,                     &
