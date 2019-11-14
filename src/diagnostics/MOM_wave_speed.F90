@@ -54,7 +54,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                     intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [m s-1]
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [L T-1 ~> m s-1]
   type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
   logical, optional,                intent(in)  :: full_halos !< If true, do the calculation
                                           !! over the entire computational domain.
@@ -65,7 +65,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                                           !! for the purposes of calculating vertical modal structure.
   real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
-                                          !! modal structure [m].
+                                          !! modal structure [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
         optional,                   intent(out) :: modal_structure !< Normalized model structure [nondim]
 
@@ -136,8 +136,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
   l_mono_N2_column_fraction = CS%mono_N2_column_fraction
   if (present(mono_N2_column_fraction)) l_mono_N2_column_fraction = mono_N2_column_fraction
-  l_mono_N2_depth = US%m_to_Z*CS%mono_N2_depth
-  if (present(mono_N2_depth)) l_mono_N2_depth = US%m_to_Z*mono_N2_depth
+  l_mono_N2_depth = CS%mono_N2_depth
+  if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
@@ -464,7 +464,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
           enddo
 
           cg1(i,j) = 0.0
-          if (lam > 0.0) cg1(i,j) = 1.0 / sqrt(lam)
+          if (lam > 0.0) cg1(i,j) = US%m_s_to_L_T / sqrt(lam)
 
           if (present(modal_structure)) then
             if (mode_struct(1)/=0.) then ! Normalize
@@ -1037,7 +1037,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                      !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
-                                     !! vertical modal structure.
+                                     !! vertical modal structure [Z ~> m].
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
@@ -1067,7 +1067,7 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                       !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
-                                      !! vertical modal structure.
+                                      !! vertical modal structure [Z ~> m].
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")

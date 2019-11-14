@@ -188,10 +188,6 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
       call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
     endif
 
-    do j=js,je ; do i=is,ie
-      CS%cg1(i,j) = US%m_s_to_L_T*CS%cg1(i,j)
-    enddo ; enddo
-
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
     call do_group_pass(CS%pass_cg1, G%Domain)
   endif
@@ -881,7 +877,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
   ! Local variables
-  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
+  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
+  real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
+                           ! calculating the first-mode wave speed [Z ~> m]
   real :: KhTr_passivity_coeff
   real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
              ! default value is roughly (pi / (the age of the universe)).
@@ -983,7 +981,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
-                 units="m", default=2000.)
+                 units="m", default=2000., scale=US%m_to_Z)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
 
