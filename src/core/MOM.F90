@@ -1590,7 +1590,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
-
   character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
 
   if (associated(CS)) then
@@ -2223,7 +2222,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
-      !call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain)
       ! open the file
       if (.not.(check_if_open(fileObjRead))) &
         file_open_success = MOM_open_file(fileObjRead, filename, "read", G, is_restart=.false.)
@@ -2510,7 +2508,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
 
   ! Pointers for convenience
   G => CS%G ; GV => CS%GV ; US => CS%US
-  
 
   !### Move to initialize_MOM?
   call fix_restart_scaling(GV)

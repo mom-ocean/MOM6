@@ -4151,7 +4151,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
         fileOpenSuccess = MOM_open_file(fileObjRead, wave_drag_file, "read", G, .false.)
       ! register the axes for wave_drag_var
       call MOM_register_variable_axes(fileObjRead, wave_drag_var, xUnits="degrees_east", yUnits="degrees_north")
-      !call MOM_read_data(wave_drag_file, wave_drag_var, lin_drag_h, G%Domain, scale=US%m_to_Z*US%T_to_s)
       ! read the data
       call read_data(fileObjRead, wave_drag_var, lin_drag_h)
       ! scale the data
@@ -4482,52 +4481,39 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
                 hor_grid='u', z_grid='1')
   vd(3) = var_desc("vbtav","m s-1","Time mean barotropic meridional velocity",&
                 hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubtav, vd(2)%name, .false., restart_CS, &
-                              longname = vd(2)%longname, units=vd(2)%units, &
-                              hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
+  call register_restart_field(CS%ubtav, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, &
+                              units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vbtav, vd(3)%name, .false., restart_CS, &
-                              longname=vd(3)%longname, units=vd(3)%units, &
-                              hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
-  vd(2) = var_desc("ubt_IC", "m s-1", &
-              longname="Next initial condition for the barotropic zonal velocity", &
-              hor_grid='u', z_grid='1')
-  vd(3) = var_desc("vbt_IC", "m s-1", &
-              longname="Next initial condition for the barotropic meridional velocity",&
-              hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, &
-                              longname = vd(2)%longname, units=vd(2)%units, &
-                              hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
+  call register_restart_field(CS%vbtav, vd(3)%name, .false., restart_CS, longname=vd(3)%longname, & 
+                              units=vd(3)%units, hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
+  vd(2) = var_desc("ubt_IC", "m s-1", longname="Next initial condition for the barotropic zonal velocity", &
+                   hor_grid='u', z_grid='1')
+  vd(3) = var_desc("vbt_IC", "m s-1", longname="Next initial condition for the barotropic meridional velocity", &
+                   hor_grid='v', z_grid='1')
+  call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, 
+                              units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, &
-                              longname = vd(3)%longname, units=vd(3)%units, &
-                              hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
+  call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, & 
+                              units=vd(3)%units, hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
 
   if (GV%Boussinesq) then
-    vd(2) = var_desc("uhbt_IC", "m3 s-1", &
-                longname="Next initial condition for the barotropic zonal transport", &
+    vd(2) = var_desc("uhbt_IC", "m3 s-1", longname="Next initial condition for the barotropic zonal transport", &
                 hor_grid='u', z_grid='1')
-    vd(3) = var_desc("vhbt_IC", "m3 s-1", &
-                longname="Next initial condition for the barotropic meridional transport",&
+    vd(3) = var_desc("vhbt_IC", "m3 s-1", longname="Next initial condition for the barotropic meridional transport", &
                 hor_grid='v', z_grid='1')
   else
-    vd(2) = var_desc("uhbt_IC", "kg s-1", &
-                longname="Next initial condition for the barotropic zonal transport", &
+    vd(2) = var_desc("uhbt_IC", "kg s-1", longname="Next initial condition for the barotropic zonal transport", &
                 hor_grid='u', z_grid='1')
-    vd(3) = var_desc("vhbt_IC", "kg s-1", &
-                longname="Next initial condition for the barotropic meridional transport",&
+    vd(3) = var_desc("vhbt_IC", "kg s-1", longname="Next initial condition for the barotropic meridional transport",&
                 hor_grid='v', z_grid='1')
   endif
-  call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, &
-                              longname = vd(2)%longname, units=vd(2)%units, &
-                              hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
+  call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, & 
+                              units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vhbt_IC, vd(3)%name, .false., restart_CS, &
-                              longname = vd(3)%longname, units=vd(3)%units, &
-                              hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
+  call register_restart_field(CS%vhbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, & 
+                              units=vd(3)%units, hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
 
-  call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
-                              longname="Barotropic timestep", units="seconds")
+  call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, longname="Barotropic timestep", units="seconds")
 
 end subroutine register_barotropic_restarts
 

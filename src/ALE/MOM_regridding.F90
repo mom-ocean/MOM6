@@ -5,7 +5,6 @@ module MOM_regridding
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
-! use MOM_io_only :: field_exists, field_size, MOM_read_data
 use MOM_io, only : slasher
 use MOM_io, only : MOM_open_file, close_file, MOM_register_axis_variable_axis, read_data
 use MOM_io, only : get_variable_size, get_variable_num_dimensions, get_variable_dimension_names
@@ -368,19 +367,18 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call check_grid_def(filename, varName, expected_units, message, ierr)
       if (ierr) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
-      !call field_size(trim(fileName), trim(varName), nzf)
       ! get variable dimension sizes
       call get_variable_size(fileObjRead, trim(varName), nzf, broadcast=.true.)
       
       ke = nzf(1)-1
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
-        !!call MOM_read_data(trim(fileName), trim(varName), rho_target)
+        ! read the data
         call read_data(fileObjRead, trim(varName), rho_target)
       else
         allocate(dz(ke))
         allocate(z_max(ke+1))
-        !call MOM_read_data(trim(fileName), trim(varName), z_max)
+        ! read the data
         call read_data(fileObjRead, trim(varName), z_max)
         dz(:) = abs(z_max(1:ke) - z_max(2:ke+1))
         deallocate(z_max)
@@ -390,7 +388,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call get_variable_size(fileObjRead, trim(varName), nzf, broadcast=.true.)
       ke = nzf(1)
       allocate(dz(ke))
-      !call MOM_read_data(trim(fileName), trim(varName), dz)
+      ! read the data
       call read_data(fileObjRead, trim(varName), dz)
     endif
     ! close the file
@@ -423,15 +421,15 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     varName = trim( extractWord(trim(string(8:)), 2) )
     if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-    !call MOM_read_data(trim(fileName), trim(varName), rho_target)
+    ! read the data
     call read_data(fileObjRead, trim(varName), rho_target)
+
     varName = trim( extractWord(trim(string(8:)), 3) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
       call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
     else ! Read dz from file
-      if (.not. varialbe_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
+      if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-      !call MOM_read_data(trim(fileName), trim(varName), dz)
       call read_data(fileObjRead, trim(varName), dz)
     endif
     if (main_parameters) then
@@ -651,11 +649,11 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
         endif
       endif
       if (do_sum) then
-        !call MOM_read_data(trim(fileName), trim(varName), dz_max)
+        ! read the data
         call read_data(fileObjRead, trim(varName), dz_max)
         z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(k) ; enddo
       else
-        !call MOM_read_data(trim(fileName), trim(varName), z_max)
+        ! read the data
         call read_data(fileObjRead, trim(varName), z_max)
       endif
       call log_param(param_file, mdl, "!MAXIMUM_INT_DEPTHS", z_max, &
@@ -723,7 +721,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
           "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
-      !call MOM_read_data(trim(fileName), trim(varName), h_max)
+      ! read the data
       call read_data(fileObjRead, trim(varName), h_max)
       ! close the file
       if (check_if_open(fileObjRead)) call close_file(fileObjRead)
