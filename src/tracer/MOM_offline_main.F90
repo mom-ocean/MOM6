@@ -726,8 +726,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
 
   ! Note that tracerBoundaryFluxesInOut within this subroutine should NOT be called
   ! as the freshwater fluxes have already been accounted for
-  call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, fluxes, CS%MLD, CS%dt_offline_vertical, CS%G, CS%GV, &
-                              CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+  call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, fluxes, CS%MLD, CS%US%s_to_T*CS%dt_offline_vertical, &
+                              CS%G, CS%GV, CS%US, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   if (CS%diurnal_SW .and. CS%read_sw) then
     fluxes%sw(:,:) = sw
@@ -871,18 +871,22 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       temp_old, salt_old, &
       temp_mean, salt_mean, &
       zero_3dh     !
-  integer                                        :: niter, iter
-  real                                           :: Inum_iter, dt_iter
-  logical                                        :: converged
+  integer :: niter, iter
+  real    :: Inum_iter
+  real    :: dt_iter  ! The timestep of each iteration [T ~> s]
+  logical :: converged
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
   logical :: z_first, x_before_y
 
+  G => CS%G ; GV => CS%GV
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  dt_iter = CS%US%s_to_T * time_interval / real(max(1, CS%num_off_iter))
 
   do iter=1,CS%num_off_iter
 
@@ -907,7 +911,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First do vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%US, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -947,7 +951,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%US, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
         h_pre(i,j,k) = h_new(i,j,k)

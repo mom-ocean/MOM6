@@ -1133,7 +1133,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
                               minimum_forcing_depth = CS%minimum_forcing_depth)
@@ -1162,13 +1162,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     enddo ; enddo ; enddo
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                 evap_CFL_limit = CS%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%minimum_forcing_depth)
   else
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%minimum_forcing_depth)
@@ -1807,7 +1807,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
                               minimum_forcing_depth = CS%minimum_forcing_depth)
@@ -1831,13 +1831,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     enddo ; enddo ; enddo
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                 evap_CFL_limit = CS%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%minimum_forcing_depth)
   else
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%minimum_forcing_depth)
@@ -2642,7 +2642,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
     enddo
 
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
@@ -2663,11 +2663,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
 
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   else
-    call call_tracer_column_fns(hold, h, ea, eb, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(hold, h, ea, eb, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   endif  ! (CS%mix_boundary_tracers)
@@ -2900,7 +2900,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, GV, US, CS)
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), US%T_to_s*dt, G, GV, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic

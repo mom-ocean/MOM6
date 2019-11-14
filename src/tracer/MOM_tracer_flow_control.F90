@@ -408,7 +408,7 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 end subroutine call_tracer_set_forcing
 
 !> This subroutine calls all registered tracer column physics subroutines.
-subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, tv, optics, CS, &
+subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, US, tv, optics, CS, &
                                   debug, evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old  !< Layer thickness before entrainment
                                                               !! [H ~> m or kg m-2].
@@ -425,10 +425,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                                               !! Unused fields have NULL ptrs.
   real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml    !< Mixed layer depth [H ~> m or kg m-2]
   real,                                  intent(in) :: dt     !< The amount of time covered by this
-                                                              !! call [s]
+                                                              !! call [T ~> s]
   type(ocean_grid_type),                 intent(in) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in) :: GV     !< The ocean's vertical grid
                                                               !! structure.
+  type(unit_scale_type),                 intent(in) :: US     !< A dimensional unit scaling type
   type(thermo_var_ptrs),                 intent(in) :: tv     !< A structure pointing to various
                                                               !! thermodynamic variables.
   type(optics_type),                     pointer    :: optics !< The structure containing optical
@@ -451,68 +452,68 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
     ! Add calls to tracer column functions here.
     if (CS%use_USER_tracer_example) &
       call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                 G, GV, CS%USER_tracer_example_CSp)
+                                 G, GV, US, CS%USER_tracer_example_CSp)
     if (CS%use_DOME_tracer) &
       call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%DOME_tracer_CSp, &
+                                      G, GV, US, CS%DOME_tracer_CSp, &
                                       evap_CFL_limit=evap_CFL_limit, &
                                       minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_ISOMIP_tracer) &
       call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                        G, GV, CS%ISOMIP_tracer_CSp, &
+                                        G, GV, US, CS%ISOMIP_tracer_CSp, &
                                         evap_CFL_limit=evap_CFL_limit, &
                                         minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_RGC_tracer) &
       call RGC_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                        G, GV, CS%RGC_tracer_CSp, &
+                                        G, GV, US, CS%RGC_tracer_CSp, &
                                         evap_CFL_limit=evap_CFL_limit, &
                                         minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                           G, GV, CS%ideal_age_tracer_CSp, &
+                                           G, GV, US, CS%ideal_age_tracer_CSp, &
                                            evap_CFL_limit=evap_CFL_limit, &
                                            minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_regional_dyes) &
       call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%dye_tracer_CSp, &
+                                     G, GV, US, CS%dye_tracer_CSp, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_oil) &
       call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%oil_tracer_CSp, tv, &
+                                     G, GV, US, CS%oil_tracer_CSp, tv, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
 
     if (CS%use_advection_test_tracer) &
       call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                                G, GV, CS%advection_test_tracer_CSp, &
+                                                G, GV, US, CS%advection_test_tracer_CSp, &
                                                 evap_CFL_limit=evap_CFL_limit, &
                                                 minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_OCMIP2_CFC) &
       call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%OCMIP2_CFC_CSp, &
+                                     G, GV, US, CS%OCMIP2_CFC_CSp, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
 #ifdef _USE_GENERIC_TRACER
     if (CS%use_MOM_generic_tracer) &
-      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, US%T_to_s*dt, &
                                              G, GV, CS%MOM_generic_tracer_CSp, tv, optics, &
                                              evap_CFL_limit=evap_CFL_limit, &
                                              minimum_forcing_depth=minimum_forcing_depth)
 #endif
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, debug,&
+                                     G, GV, US, CS%pseudo_salt_tracer_CSp, tv, debug, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_boundary_impulse_tracer) &
       call boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%boundary_impulse_tracer_CSp, tv, debug,&
+                                     G, GV, US, CS%boundary_impulse_tracer_CSp, tv, debug, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_dyed_obc_tracer) &
       call dyed_obc_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%dyed_obc_tracer_CSp, &
+                                      G, GV, US, CS%dyed_obc_tracer_CSp, &
                                       evap_CFL_limit=evap_CFL_limit, &
                                       minimum_forcing_depth=minimum_forcing_depth)
 
@@ -520,46 +521,45 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
   else ! Apply tracer surface fluxes using ea on the first layer
     if (CS%use_USER_tracer_example) &
       call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                 G, GV, CS%USER_tracer_example_CSp)
+                                 G, GV, US, CS%USER_tracer_example_CSp)
     if (CS%use_DOME_tracer) &
       call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%DOME_tracer_CSp)
+                                      G, GV, US, CS%DOME_tracer_CSp)
     if (CS%use_ISOMIP_tracer) &
       call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%ISOMIP_tracer_CSp)
+                                      G, GV, US, CS%ISOMIP_tracer_CSp)
     if (CS%use_RGC_tracer) &
       call RGC_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%RGC_tracer_CSp)
+                                      G, GV, US, CS%RGC_tracer_CSp)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                           G, GV, CS%ideal_age_tracer_CSp)
+                                           G, GV, US, CS%ideal_age_tracer_CSp)
     if (CS%use_regional_dyes) &
       call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                           G, GV, CS%dye_tracer_CSp)
+                                           G, GV, US, CS%dye_tracer_CSp)
     if (CS%use_oil) &
       call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%oil_tracer_CSp, tv)
+                                     G, GV, US, CS%oil_tracer_CSp, tv)
     if (CS%use_advection_test_tracer) &
       call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%advection_test_tracer_CSp)
+                                      G, GV, US, CS%advection_test_tracer_CSp)
     if (CS%use_OCMIP2_CFC) &
       call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%OCMIP2_CFC_CSp)
+                                     G, GV, US, CS%OCMIP2_CFC_CSp)
 #ifdef _USE_GENERIC_TRACER
     if (CS%use_MOM_generic_tracer) &
-      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, US%T_to_s*dt, &
                                      G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
 #endif
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, debug)
+                                     G, GV, US, CS%pseudo_salt_tracer_CSp, tv, debug)
     if (CS%use_boundary_impulse_tracer) &
       call boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%boundary_impulse_tracer_CSp, tv, debug)
+                                     G, GV, US, CS%boundary_impulse_tracer_CSp, tv, debug)
     if (CS%use_dyed_obc_tracer) &
       call dyed_obc_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                      G, GV, CS%dyed_obc_tracer_CSp)
-
+                                      G, GV, US, CS%dyed_obc_tracer_CSp)
 
   endif
 

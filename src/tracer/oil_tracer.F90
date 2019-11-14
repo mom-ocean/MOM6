@@ -295,7 +295,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 end subroutine initialize_oil_tracer
 
 !> Apply sources, sinks, diapycnal mixing and rising motions to the oil tracers
-subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, &
+subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, tv, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -313,7 +313,8 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(oil_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
                                               !! call to register_oil_tracer.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
@@ -343,7 +344,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
-      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , US%T_to_s*dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
@@ -358,14 +359,14 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   ! Decay tracer (limit decay rate to 1/dt - just in case)
   do m=2,CS%ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
-      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - dt*CS%oil_decay_rate(m)*CS%tr(i,j,k,m) ! Simple
-      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - min(dt*CS%oil_decay_rate(m),1.)*CS%tr(i,j,k,m) ! Safer
+      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - US%T_to_s*dt*CS%oil_decay_rate(m)*CS%tr(i,j,k,m) ! Simple
+      !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - min(US%T_to_s*dt*CS%oil_decay_rate(m),1.)*CS%tr(i,j,k,m) ! Safer
       if (CS%oil_decay_rate(m)>0.) then
-        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1.-dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
+        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - US%T_to_s*dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
         ldecay = 12.*(3.0**(-(tv%T(i,j,k)-20.)/10.)) ! Timescale [days]
         ldecay = 1./(86400.*ldecay) ! Rate [s-1]
-        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1.-dt*ldecay,0.)*CS%tr(i,j,k,m)
+        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - US%T_to_s*dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif
     enddo ; enddo ; enddo
   enddo
@@ -383,7 +384,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
       k=CS%oil_source_k(m)
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
-        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
+        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*US%T_to_s*dt / &
                 ((h_new(i,j,k)+GV%H_subroundoff) * G%US%L_to_m**2*G%areaT(i,j) )
       elseif (k<0) then
         h_total=GV%H_subroundoff
@@ -391,7 +392,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           h_total = h_total + h_new(i,j,k)
         enddo
         do k=1, nz
-          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/(h_total &
+          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*US%T_to_s*dt/(h_total &
                                            * G%US%L_to_m**2*G%areaT(i,j) )
         enddo
       endif

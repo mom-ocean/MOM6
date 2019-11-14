@@ -406,7 +406,7 @@ end subroutine init_tracer_CFC
 !>  This subroutine applies diapycnal diffusion, souces and sinks and any other column
 !! tracer physics or chemistry to the OCMIP2 CFC tracers.
 !! CFCs are relatively simple, as they are passive tracers with only a surface flux as a source.
-subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
+subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -424,7 +424,8 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(OCMIP2_CFC_CS),     pointer    :: CS   !< The control structure returned by a
                                               !! previous call to register_OCMIP2_CFC.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
@@ -470,19 +471,19 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
+    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, US%T_to_s*dt, fluxes, h_work, &
         evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    call tracer_vertdiff(h_work, ea, eb, US%T_to_s*dt, CFC11, G, GV, sfc_flux=CFC11_flux)
 
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
+    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, US%T_to_s*dt, fluxes, h_work, &
         evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+    call tracer_vertdiff(h_work, ea, eb, US%T_to_s*dt, CFC12, G, GV, sfc_flux=CFC12_flux)
   else
-    call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
-    call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+    call tracer_vertdiff(h_old, ea, eb, US%T_to_s*dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    call tracer_vertdiff(h_old, ea, eb, US%T_to_s*dt, CFC12, G, GV, sfc_flux=CFC12_flux)
   endif
 
   ! Write out any desired diagnostics from tracer sources & sinks here.
