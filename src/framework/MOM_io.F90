@@ -16,7 +16,7 @@ use MOM_time_manager,     only : time_type, time_type_to_real
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
-use fms_mod,              only : open_namelist_file, check_nml_error
+use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : io_infra_end=>fms_io_exit
 use fms_io_mod,           only : get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
 use MOM_string_functions,  only : extract_word
