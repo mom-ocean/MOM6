@@ -20,12 +20,11 @@ addons:
 
 jobs:
   include:
-    - env: JOB="Code style compliance"
+    - env: JOB="Code compliance"
       script:
+        # Whitespace
         - ./.testing/trailer.py -e TEOS10 -l 120 src config_src
-
-    - env: JOB="Doxygen"
-      script:
+        # API Documentation
         - cd docs && doxygen Doxyfile_nortd
         - grep -v "config_src/solo_driver/coupler_types.F90" doxygen.log | tee doxy_errors
         - test ! -s  doxy_errors
