@@ -19,8 +19,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
-use MOM_io, only : MOM_open_file, close_file, FmsNetcdfDomainFile_t
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only :  MOM_restart_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS, get_ALE_sponge_nz_data
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -192,8 +191,6 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer :: nzdata
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object returned by call to MOM_open_file
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -210,16 +207,13 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "RGC_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
-      ! open the file
-      file_open_success = MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", &
-                                        G, .false.)
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_RGC_tracer")
         !call read_data(CS%tracer_IC_file, trim(name), &
         !              CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
-        call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m))
+        call MOM_read_data(fileObjRead, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
-      call close_file(fileObjRead)
+
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie

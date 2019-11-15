@@ -29,9 +29,7 @@ use write_ocean_obs_mod, only : open_profile_file
 use write_ocean_obs_mod, only : write_profile,close_profile_file
 use kdtree, only : kd_root !# JEDI
 ! MOM Modules
-use MOM_io,              only : file_exists, check_if_open, slasher, id_dimension_unlimited, get_variable_num_dimensions
-use MOM_io,              only : MOM_get_nc_corner_edgelengths, MOM_register_variable_axes, get_variable_dimension_names
-use MOM_io,              only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, read_data
+use MOM_io, only : slasher, MOM_read_data
 use MOM_diag_mediator, only : diag_ctrl, set_axes_info
 use MOM_error_handler, only : FATAL, WARNING, MOM_error, MOM_mesg, is_root_pe
 use MOM_get_input, only : get_MOM_input, directories
@@ -134,17 +132,13 @@ subroutine init_oda(Time, G, GV, CS)
   integer :: n, m, k, i, j, nk
   integer :: is,ie,js,je,isd,ied,jsd,jed
   integer :: stdout_unit
-  integer :: ndims, dimUnlimIndex
-  integer, allocatable, dimension(:) :: corner, edgeLengths
   integer :: npes_pm, ens_info(6), ni, nj
   character(len=32) :: assim_method
   character(len=128) :: mesg
   character(len=32) :: fldnam
   character(len=30) :: coord_mode
   character(len=200) :: inputdir, basin_file
-  character(len=40), allocatable, dimension(:) :: dimNames
   logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
-  type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (associated(CS)) call mpp_error(FATAL,'Calling oda_init with associated control structure')
   allocate(CS)
@@ -283,34 +277,7 @@ subroutine init_oda(Time, G, GV, CS)
   allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
   CS%oda_grid%basin_mask(:,:) = 0.0
 
-  ! open the netcdf file
-  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, basin_file, "read", CS%Grid, .false.)
-  ! register the variable axes
-  call MOM_register_variable_axes(fileObjRead, "basin", xUnits="degrees_east", yUnits="degrees_north")
-
-  call get_variable_num_dimensions(fileObjReadMean, "basin", ndims)
-  allocate(dimNames(ndims)
-  dimUnlimIndex=0
-  do i=1,size(dimNames)
-    if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndex=i
-  enddo
-  ! populate the corner and edgeLengths arrays
-  if (dimUnlimIndex > 0) then
-    call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths, myCorner=(/1/), &
-                                       myCornerIndices=(/dimUnlimIndex/), myEdgeLengths=(/1/), &
-                                       myEdgeLengthIndices=(/dimUnlimIndex/))
-  else
-    call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths)
-  endif
-  
-  !call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
-  call read_data(fileObjRead, "basin", CS%oda_grid%basin_mask, corner=corner, edge_lengths=edgeLengths)
-
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-
-  deallocate(corner)
-  deallocate(edgeLengths)
-  deallocate(dimNames)
+  call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
 
 !    get global grid information from ocean_model
   allocate(T_grid)
