@@ -89,6 +89,7 @@ FFLAGS := -fcray-pointer -fdefault-double-8 -fdefault-real-8 -Waliasing -ffree-l
 FFLAGS_OPT = -O3
 FFLAGS_REPRO = -O2 -fbounds-check
 FFLAGS_DEBUG = -O0 -g -W -Wno-compare-reals -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
+#FFLAGS_DEBUG += -finit-real=snan -finit-derived -finit-integer=2147483647
 
 # Flags to add additional build options
 FFLAGS_OPENMP = -fopenmp
