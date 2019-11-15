@@ -1129,8 +1129,8 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
   type(MOM_restart_CS),     pointer    :: CS        !< The control structure returned by a previous
                                                     !! call to restart_init.
   type(ocean_grid_type),    intent(in) :: G         !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in) :: GV        !< ocean vertical grid structure
-  type(time_type),          intent(in) :: time      !< model time                        
+  type(time_type),          intent(in) :: time      !< model time
+  type(verticalGrid_type), optional,  intent(in) :: GV !< ocean vertical grid structure                      
   
   ! local
   type(vardesc) :: vd ! structure for variable metadata
@@ -1200,8 +1200,14 @@ subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
     do i=1,num_dims
       if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
         total_axes=total_axes+1
-        call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                                   time_val=(/ic_time/), time_units=time_units)
+   
+        if (present(GV)) then
+          call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+                                            time_val=(/ic_time/), time_units=time_units)
+        else
+          call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, &
+                                             time_val=(/ic_time/), time_units=time_units)
+        endif
         call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(i)), dim_lengths(i))
       endif
     enddo
