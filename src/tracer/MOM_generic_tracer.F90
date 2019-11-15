@@ -410,7 +410,8 @@ contains
     real,          optional, intent(in) :: evap_CFL_limit !< Limits how much water can be fluxed out of
                                                 !! the top layer Stored previously in diabatic CS.
     real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                                !!  can be applied Stored previously in diabatic CS.
+                                                !!  can be applied [H ~> m or kg m-2]
+                                                !   Stored previously in diabatic CS.
     ! The arguments to this subroutine are redundant in that
     !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 

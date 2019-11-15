@@ -300,7 +300,7 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can be
                                                !! fluxed out of the top layer in a timestep [nondim].
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                               !! can be applied [m].
+                                               !! can be applied [H ~> m or kg m-2].
 
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]

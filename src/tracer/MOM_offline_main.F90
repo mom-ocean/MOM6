@@ -118,8 +118,12 @@ type, public :: offline_transport_CS ; private
   integer :: off_ale_mod    !< Sets how frequently the ALE step is done during the advection
   real :: dt_offline        !< Timestep used for offline tracers [T ~> s]
   real :: dt_offline_vertical !< Timestep used for calls to tracer vertical physics [T ~> s]
-  real :: evap_CFL_limit    !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
-  real :: minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers follow freshwater fluxes
+  real :: evap_CFL_limit    !< Limit on the fraction of the water that can be fluxed out of the top
+                            !! layer in a timestep [nondim].  This is Copied from diabatic_CS controlling
+                            !! how tracers follow freshwater fluxes
+  real :: minimum_forcing_depth !< The smallest depth over which fluxes can be applied [H ~> m or kg m-2].
+                            !! This is copied from diabatic_CS controlling how tracers follow freshwater fluxes
+
   real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
   real :: min_residual  !< The minimum amount of total mass flux before exiting the main advection routine
   !>@{ Diagnostic manager IDs for some fields that may be of interest when doing offline transport
@@ -242,7 +246,9 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
   logical :: z_first, x_before_y
-  real :: evap_CFL_limit, minimum_forcing_depth
+  real :: evap_CFL_limit  ! Limit on the fraction of the water that can be fluxed out of the
+                          ! top layer in a timestep [nondim]
+  real :: minimum_forcing_depth ! The smallest depth over which fluxes can be applied [H ~> m or kg m-2]
   real :: dt_iter    ! The timestep to use for each iteration [T ~> s]
 
   integer :: nstocks
