@@ -12,10 +12,7 @@ use MOM_error_handler,    only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, vardesc, MOM_get_nc_corner_edgelengths 
-use MOM_io,               only : MOM_open_file, MOM_register_variable_axes, close_file, read_data, scale_data
-use MOM_io,               only : check_if_open, FmsNetcdfDomainFile_t, is_dimension_unlimited
-use MOM_io,               only : get_variable_dimension_names, get_variable_num_dimensions
+use MOM_io,               only : slasher, vardesc, MOM_read_data
 use MOM_isopycnal_slopes, only : vert_fill_TS
 use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling,     only : unit_scale_type
@@ -279,9 +276,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                                                    !! to the internal tide sources.
   ! Local variables
   type(vardesc) :: vd
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
-  logical :: read_tideamp
-  logical :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
+  logical :: read_tideamp 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.
@@ -300,8 +295,6 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   integer :: tlen_days       !< Time interval from start for adding wave source
                              !! for testing internal tides (BDM)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-  integer :: ndims, dimUnlimIndex
-  integer, allocatable, dimension(:), corner, edgeLengths
 
   if (associated(CS)) then
     call MOM_error(WARNING, "int_tide_input_init called with an associated "// &
@@ -369,38 +362,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
     call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-    ! open Tideamp_file
-    if (.not. check_if_open(fileObjRead)) &
-    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
-    ! register the axes
-    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-    !! x/longitude and/or y/latitude axes units
-    call MOM_register_variable_axes(fileObjRead, "tideamp", xUnits="degrees_east", yUnits="degrees_north")
-    ! get the number of dimensions for tideamp
-    call get_variable_num_dimensions(fileObjReadMean, "tideamp", ndims)
-    ! get the variable dimesion names
-    allocate(dimNames(ndims))
-    call get_variable_dimension_names(fileObjReadMean, "tideamp", dimNames)
-    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
-    ! desired time level
-    dimUnlimIndex=0
-    do i=1,size(dimNames)
-      if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
-    enddo
-    if (dimUnlimIndex .gt. 0) then
-      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "tideamp", corner, edgeLengths, myCorner=(/1/), &
-                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
-                                         myEdgeLengthIndices=(/dimUnlimIndex/))
-      call read_data(fileObjRead, "tideamp", itide%tideamp, corner=corner, edge_lengths=edgeLengths)
-    else
-      call read_data(fileObjRead, "tideamp", itide%tideamp)
-    endif
-    !  call MOM_read_data(filename, 'tideamp', itide%tideamp, G%domain, timelevel=1)
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-    deallocate(dimNames)
-    if (allocated(corner)) deallocate(corner)
-    if (allocated(edgeLengths)) deallocate(edgeLengths)
+    
+    call MOM_read_data(filename, 'tideamp', itide%tideamp, G%domain, timelevel=1)
   endif
 
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -409,40 +372,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  ! open the H2 file
-  if (.not. check_if_open(fileObjRead)) &
-    fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
-  ! register the axes
-  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-  !! x/longitude and/or y/latitude axes units
-  call MOM_register_variable_axes(fileObjRead, "h2", xUnits="degrees_east", yUnits="degrees_north")
-  ! get the number of dimensions for Kh
-  call get_variable_num_dimensions(fileObjReadMean, "h2", ndims)
-  ! get the variable dimesion names
-  allocate(dimNames(ndims))
-  call get_variable_dimension_names(fileObjReadMean, "h2", dimNames)
-  ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
-  ! desired time level
-  dimUnlimIndex=0
-  do i=1,size(dimNames)
-    if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
-  enddo
-  if (dimUnlimIndex .gt. 0) then
-    call MOM_get_nc_corner_edgelengths(fileObjReadMean, "h2", corner, edgeLengths, myCorner=(/1/), &
-                                     myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
-                                     myEdgeLengthIndices=(/dimUnlimIndex/))
-    call read_data(fileObjRead, "h2", itide%h2, corner=corner, edge_lengths=edgeLengths)
-  else 
-    call read_data(fileObjRead, "h2", itide%h2)
-  endif
-  !call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
-  ! close the file
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-  ! scale the data
-  call scale_data(itide%h2, US%m_to_Z**2)
-  deallocate(dimNames)
-  if (allocated(corner)) deallocate(corner)
-  if (allocated(edgeLengths)) deallocate(edgeLengths)
+
+  call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
   call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&

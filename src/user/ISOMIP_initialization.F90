@@ -10,8 +10,9 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only: file_exists, check_if_open, slasher, FmsNetcdfDomainFile_t
-use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io, only : file_exists
+use MOM_io, only : MOM_read_data
+use MOM_io, only : slasher
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -453,7 +454,6 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
 
   character(len=40)  :: mdl = "ISOMIP_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -644,22 +644,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, PF, use_ALE, CSp, ACSp)
     filename = trim(inputdir)//trim(state_file)
     if (.not.file_exists(filename)) call MOM_error(FATAL, &
           "ISOMIP_initialize_sponges: Unable to find "//trim(filename))
-
-    ! open file for domain-decomposed read
-    if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G,.false.)
-    ! register the variable axes
-    call MOM_register_variable_axes(fileObjRead, eta_var, xUnits="degrees_east", yUnits="degrees_north")
-    ! read in eta, T, S
-    call read_data(fileObjRead, eta_var, eta)
-    call read_data(fileObjRead, temp_var, T)
-    call read_data(fileObjRead, salt_var, S)
-    
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-    
-    !call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
-    !call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
-    !call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+    call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 
     ! for debugging
     !i=G%iec; j=G%jec

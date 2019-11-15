@@ -12,9 +12,8 @@ use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_grid,               only : ocean_grid_type
 use MOM_io,                 only : slasher
-use MOM_io,                 only : MOM_open_file, MOM_register_variable_axes, close_file, read_data, scale_data
-use MOM_io,                 only : check_if_open, FmsNetcdfDomainFile_t, is_dimension_unlimited
-use MOM_io,                 only : get_variable_dimension_names, get_variable_num_dimensions, get_variable_size
+use MOM_io,                 only : open_file, close_file, read_data, MOM_read_data, get_variable_size
+use MOM_io,                 only : check_if_open, FmsNetcdfDomainFile_t
 use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_string_functions,   only : uppercase, lowercase
 use MOM_unit_scaling,       only : unit_scale_type
@@ -221,7 +220,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   logical :: read_tideamp
   logical :: default_2018_answers
-  logical :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
+  logical :: fileOpenSuccess ! indicates whether open_file is successful 
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
@@ -456,42 +455,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      ! open Tideamp_file
-      if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
-      ! register the axes
-      !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-      !! x/longitude and/or y/latitude axes units
-      call MOM_register_variable_axes(fileObjRead, "tideamp", xUnits="degrees_east", yUnits="degrees_north")
-      ! get the number of dimensions for tideamp
-      call get_variable_num_dimensions(fileObjReadMean, "tideamp", ndims)
-      ! get the variable dimesion names
-      allocate(dimNames(ndims))
-      call get_variable_dimension_names(fileObjReadMean, "tideamp", dimNames)
-      ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
-      ! desired time level
-      dimUnlimIndex=0
-      do i=1,size(dimNames)
-        if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
-      enddo
-      if (dimUnlimIndex .gt. 0) then
-        call MOM_get_nc_corner_edgelengths(fileObjReadMean, "tideamp", corner, edgeLengths, myCorner=(/1/), &
-                                         myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
-                                         myEdgeLengthIndices=(/dimUnlimIndex/))
-        call read_data(fileObjRead, "tideamp", CS%tideamp, corner=corner, edge_lengths=edgeLengths)
-      else
-        call read_data(fileObjRead, "tideamp", CS%tideamp)
-      endif
-      ! close the file
-      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-  
-      ! scale the data
-      call scale_data(CS%tideamp, US%m_to_Z*US%T_to_s)
-       
-      deallocate(dimNames)
-      if (allocated(corner)) deallocate(corner)
-      if (allocated(edgeLengths)) deallocate(edgeLengths)
-      !call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -500,40 +464,8 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    ! open the H2 file
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
-    ! register the axes
-    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-    !! x/longitude and/or y/latitude axes units
-      call MOM_register_variable_axes(fileObjRead, "h2", xUnits="degrees_east", yUnits="degrees_north")
-    ! get the number of dimensions for Kh
-    call get_variable_num_dimensions(fileObjReadMean, "h2", ndims)
-    ! get the variable dimesion names
-    allocate(dimNames(ndims))
-    call get_variable_dimension_names(fileObjReadMean, "h2", dimNames)
-    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
-    ! desired time level
-    dimUnlimIndex=0
-    do i=1,size(dimNames)
-      if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
-    enddo
-    if (dimUnlimIndex .gt. 0) then
-      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "h2", corner, edgeLengths, myCorner=(/1/), &
-                                           myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
-                                           myEdgeLengthIndices=(/dimUnlimIndex/))
-      call read_data(fileObjRead, "h2", CS%h2, corner=corner, edge_lengths=edgeLengths)
-    else 
-      call read_data(fileObjRead, "h2", CS%h2)
-    endif
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-    ! scale the data
-    call scale_data(CS%h2, US%m_to_Z**2)
-    deallocate(dimNames)
-    if (allocated(corner)) deallocate(corner)
-    if (allocated(edgeLengths)) deallocate(edgeLengths)
-    !call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
+ 
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
 
     call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
@@ -577,41 +509,9 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
     call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je) ; CS%TKE_Niku(:,:) = 0.0
-    ! open the NIKURASHIN_TKE INPUT file
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
-    ! register the variable axes
-    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-    !! x/longitude and/or y/latitude axes units
-    call MOM_register_variable_axes(fileObjRead, "TKE_input", xUnits="degrees_east", yUnits="degrees_north")
-    ! get the number of dimensions for Kh
-    call get_variable_num_dimensions(fileObjReadMean, "TKE_input", ndims)
-    ! get the variable dimesion names
-    allocate(dimNames(ndims))
-    call get_variable_dimension_names(fileObjReadMean, "TKE_input", dimNames)
-    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
-    ! desired time level
-    dimUnlimIndex=0
-    do i=1,size(dimNames)
-      if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
-    enddo
-    if (dimUnlimIndex .gt. 0) then
-      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "TKE_input", corner, edgeLengths, myCorner=(/1/), &
-                                           myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
-                                           myEdgeLengthIndices=(/dimUnlimIndex/))
-      call read_data(fileObjRead, "TKE_input", CS%TKE_Niku, corner=corner, edge_lengths=edgeLengths)
-    else 
-      call read_data(fileObjRead, "TKE_input", CS%TKE_Niku)
-    endif
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-    ! scale the data
-    call scale_data(CS%TKE_Niku, US%m_to_Z**3*US%T_to_s**3))
-    deallocate(dimNames)
-    if (allocated(corner)) deallocate(corner)
-    if (allocated(edgeLengths)) deallocate(edgeLengths)
-    !call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
-    !                   scale=US%m_to_Z**3*US%T_to_s**3)
+  
+    call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
+                       scale=US%m_to_Z**3*US%T_to_s**3)
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
@@ -1644,8 +1544,6 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
   ! local
   integer :: i, j, isd, ied, jsd, jed, nz
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points [W m-2]
-  logical :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
@@ -1653,18 +1551,8 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
   case ('JAYN') ! Jayne 2009
     if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
     allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
-    ! open the file
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, tidal_energy_file, "read", G, .false.)
-    ! register the variable axes
-    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-    !! x/longitude and/or y/latitude axes units
-    call MOM_register_variable_axes(fileObjRead, "wave_dissipation", xUnits="degrees_east", yUnits="degrees_north")
-    ! read the data
-    call read_data(fileObjRead, "wave_dissipation", tidal_energy_flux_2d)
-    !call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+    
+    call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       CS%tidal_qe_2d(i,j) = CS%Gamma_itides * tidal_energy_flux_2d(i,j)
@@ -1707,8 +1595,10 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! open the tidal energy file
+  ! note: data are read in with calls to individual netcdf routines instead of MOM_read_data because
+  ! the file is already opened to get the size of z_t.
   if (.not. check_if_open(fileObjRead)) &
-    fileOpenSuccess = MOM_open_file(fileObjRead, tidal_energy_file, "read", G, .false.)
+    fileOpenSuccess = open_file(fileObjRead, tidal_energy_file, "read", G%domain, .false.)
   ! get number of input levels
   call get_variable_size(fileObjRead, "z_t", nz_in)
   !call field_size(tidal_energy_file, 'z_t', nz_in)

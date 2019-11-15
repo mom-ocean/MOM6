@@ -13,10 +13,7 @@ use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS, calc_QG_Leith_viscosity
 use MOM_barotropic,            only : barotropic_CS, barotropic_get_tav
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS, thickness_diffuse_get_KH
-use MOM_io,                    only : slasher, MOM_get_nc_corner_edgelengths 
-use MOM_io,                    only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
-use MOM_io,                    only : check_if_open, file_exists, FmsNetcdfDomainFile_t, is_dimension_unlimited
-use MOM_io,                    only : get_variable_dimension_names, get_variable_num_dimensions
+use MOM_io,                    only : MOM_read_data, slasher
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
@@ -1386,7 +1383,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   logical :: use_MEKE      ! If true, use the MEKE module for calculating eddy kinetic energy.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: default_2018_answers
-  logical :: fileOpenSuccess
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1395,10 +1391,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
-  integer :: ndims, dimUnlimIndex
-  integer, allocatable, dimension(:), corner, edgeLengths
-  character(len=40),allocatable, dimension(:): dimNames
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1752,40 +1744,8 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
 
-    ! open the file
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, trim(inputdir)//trim(filename), "read", G, .false.)
-    ! register the axes
-    !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-    !! x/longitude and/or y/latitude axes units
-    call MOM_register_variable_axes(fileObjRead, "Kh", xUnits="degrees_east", yUnits="degrees_north")
-    ! get the number of dimensions for Kh
-    call get_variable_num_dimensions(fileObjReadMean, "Kh", ndims)
-    ! get the variable dimesion names
-    allocate(dimNames(ndims))
-    call get_variable_dimension_names(fileObjReadMean, "Kh", dimNames)
-    ! If there is an unlimited dimension (i.e., time), set the corresponding corner and edgeLengths values to the
-    ! desired time level
-    dimUnlimIndex = 0
-    do i=1,size(dimNames)
-      if (is_dimension_unlimited(fileObjRead, dimNames(i)) dimUnlimIndex=i
-    enddo
-
-    if (dimUnlimIndex .gt. 0) then
-      call MOM_get_nc_corner_edgelengths(fileObjReadMean, "Kh", corner, edgeLengths, myCorner=(/1/), &
-                                       myCornerIndices=(/dimUnlimIndex), myEdgeLengths=(/1/), &
-                                       myEdgeLengthIndices=(/dimUnlimIndex/))
-      call read_data(fileObjRead, "Kh", CS%Kh_bg_2d, corner=corner, edge_lengths=edgeLengths)
-    else
-      call read_data(fileObjRead, "Kh", CS%Kh_bg_2d)
-    endif
-    
-    !call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
-    !                   G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-    ! scale the data
-    call scale_data(CS%Kh_bg_2d, US%m_to_L**2*US%T_to_s)
+    call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
+                       G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
 
     call pass_var(CS%Kh_bg_2d, G%domain)
 
