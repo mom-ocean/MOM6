@@ -915,7 +915,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     T2d, &           ! A 2-d copy of the layer temperatures [degC]
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
                      ! a layer [R Z3 T-2 ~> J m-2]
-    dSV_dT_2d        ! The partial derivative of specific volume with temperature [R-1 degC-1]
+    dSV_dT_2d        ! The partial derivative of specific volume with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G)) :: &
     netPen_rate      ! The surface penetrative shortwave heating rate summed over all bands
                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]

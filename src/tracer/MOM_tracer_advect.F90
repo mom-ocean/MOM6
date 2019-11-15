@@ -28,7 +28,7 @@ public tracer_advect_end
 
 !> Control structure for this module
 type, public :: tracer_advect_CS ; private
-  real    :: dt                    !< The baroclinic dynamics time step [s].
+  real    :: dt                    !< The baroclinic dynamics time step [T ~> s].
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !< timing of diagnostic output.
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.

@@ -177,9 +177,6 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  real :: PI     ! 3.1415926... calculated as 4*atan(1)
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line [m2].
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr

@@ -535,7 +535,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
-  real :: Idt     ! The inverse time step [s-1]
+  real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
@@ -1318,7 +1318,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
-  real :: Idt     ! The inverse time step [s-1]
+  real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
@@ -2007,7 +2007,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: dt_mix  ! The amount of time over which to apply mixing [T ~> s]
-  real :: Idt     ! The inverse time step [s-1]
+  real :: Idt     ! The inverse time step [T-1 ~> s-1]
   real :: Idt_accel  ! The inverse time step times rescaling factors [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.

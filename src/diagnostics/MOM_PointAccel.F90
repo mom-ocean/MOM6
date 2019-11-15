@@ -216,7 +216,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     if (associated(ADp%du_other)) then
       write(file,'(/,"du_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (ADp%du_other(I,j,k)); enddo
+                                      (US%L_T_to_m_s*ADp%du_other(I,j,k)); enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
@@ -379,7 +379,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
       if (associated(ADp%du_other)) then
         write(file,'(/,"du_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (ADp%du_other(I,j,k))*Inorm(k); enddo
+            (US%L_T_to_m_s*ADp%du_other(I,j,k))*Inorm(k); enddo
       endif
       if (associated(CS%u_accel_bt)) then
         write(file,'(/,"dubt:  ",$)')
@@ -553,7 +553,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     if (associated(ADp%dv_other)) then
       write(file,'(/,"dv_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (ADp%dv_other(i,J,k)); enddo
+                                      (US%L_T_to_m_s*ADp%dv_other(i,J,k)); enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
@@ -711,7 +711,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
       if (associated(ADp%dv_other)) then
         write(file,'(/,"dv_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (ADp%dv_other(i,J,k)*Inorm(k)); enddo
+            (US%L_T_to_m_s*ADp%dv_other(i,J,k)*Inorm(k)); enddo
       endif
       if (associated(CS%v_accel_bt)) then
         write(file,'(/,"dvbt:  ",$)')
