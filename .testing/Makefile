@@ -84,8 +84,9 @@ SOURCE = $(wildcard $(BASE)/src/*/*.F90 $(BASE)/src/*/*/*.F90 $(BASE)/config_src
 #---
 # Rules
 
-.PHONY: all
+.PHONY: all build.regressions
 all: $(foreach b,$(BUILDS),$(BUILD)/$(b)/MOM6)
+build.regressions: $(foreach b,symmetric target,$(BUILD)/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
@@ -179,7 +180,6 @@ test: $(foreach t,$(TESTS),test.$(t))
 # NOTE: We remove tc3 (OBC) from grid test since it cannot run asymmetric grids
 
 .PHONY: $(foreach t,$(TESTS),test.$(t))
-test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
 test.grids: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
 test.layouts: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
 test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
@@ -187,6 +187,9 @@ test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
 test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
 test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
 test.dims: $(foreach c,$(CONFIGS),$(foreach d,t l h z,$(c).dim.$(d) $(c).dim.$(d).diag))
+
+test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+	! ls -1 results/*/*.reg
 
 define CMP_RULE
 .PRECIOUS: $(foreach b,$(2),results/%/ocean.stats.$(b))
@@ -198,7 +201,6 @@ define CMP_RULE
 	cmp $$^ || diff $$^
 endef
 
-$(eval $(call CMP_RULE,regression,symmetric target))
 $(eval $(call CMP_RULE,grid,symmetric asymmetric))
 $(eval $(call CMP_RULE,layout,symmetric layout))
 $(eval $(call CMP_RULE,repro,symmetric repro))
@@ -206,14 +208,23 @@ $(eval $(call CMP_RULE,openmp,symmetric openmp))
 $(eval $(call CMP_RULE,nan,symmetric nan))
 $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 
+# Custom comparison rules
+
+.PRECIOUS: $(foreach b,symmetric restart target,results/%/ocean.stats.$(b))
+
 # Restart tests only compare the final stat record
-.PRECIOUS: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
 %.restart: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
 	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 		|| diff $^
 
 # TODO: chksum_diag parsing of restart files
 
+# All regression tests must be completed when considering answer changes
+%.regression: $(foreach b,symmetric target,results/%/ocean.stats.$(b))
+	cmp $^ || (diff $^ > $<.reg || true)
+
+%.regression.diag: $(foreach b,symmetric target,results/%/chksum_diag.$(b))
+	cmp $^ || (diff $^ > $<.reg || true)
 
 #---
 # Test run output files
