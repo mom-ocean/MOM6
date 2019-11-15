@@ -220,7 +220,7 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 # TODO: chksum_diag parsing of restart files
 
 # All regression tests must be completed when considering answer changes
-%.regression: $(foreach b,symmetric,results/%/ocean.stats.$(b))
+%.regression: $(foreach b,symmetric target,results/%/ocean.stats.$(b))
 	cmp $^ || (diff $^ > $<.reg || true)
 
 %.regression.diag: $(foreach b,symmetric target,results/%/chksum_diag.$(b))
