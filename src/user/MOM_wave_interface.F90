@@ -1024,7 +1024,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
 
   if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
-    call ust_2_u10_coare3p5(US%Z_to_m*US%s_to_T*ustar*sqrt(GV%Rho0/1.225), u10, GV, US)
+    call ust_2_u10_coare3p5(US%Z_to_m*US%s_to_T*ustar*sqrt(US%R_to_kg_m3*GV%Rho0/1.225), u10, GV, US)
     ! surface Stokes drift
     UStokes = us_to_u10*u10
     !
