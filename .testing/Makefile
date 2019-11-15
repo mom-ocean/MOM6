@@ -213,7 +213,7 @@ $(foreach d,t l h z,$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
 .PRECIOUS: $(foreach b,symmetric restart target,results/%/ocean.stats.$(b))
 
 # Restart tests only compare the final stat record
-%.restart: $(foreach b,symmetric restart target,results/%/ocean.stats.$(b))
+%.restart: $(foreach b,symmetric restart,results/%/ocean.stats.$(b))
 	cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 		|| diff $^
 
