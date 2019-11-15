@@ -29,9 +29,7 @@ module MOM_generic_tracer
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
   use MOM_hor_index, only : hor_index_type
-  use MOM_io, only : MOM_open_file, close_file, read_data, FmsNetcdfDomainFile_t, slasher
-  use MOM_io, only : MOM_register_variable_axes
-  use MOM_io, only : file_exists, check_if_open
+  use MOM_io, only : file_exists, MOM_read_data, slasher
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -241,7 +239,6 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'initialize_MOM_generic_tracer'
     logical :: OK
-    logical :: fileOpenSuccess
     integer :: i, j, k, isc, iec, jsc, jec, nk
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
     character(len=fm_string_len)      :: g_tracer_name
@@ -249,7 +246,6 @@ contains
     real, dimension(:,:,:), pointer     :: tr_ptr
     real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
     integer, dimension(G%isd:G%ied, G%jsd:G%jed)        :: grid_kmt
-    type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
@@ -333,19 +329,7 @@ contains
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                   "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
                   " for tracer "//trim(g_tracer_name))
-            !call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
-            ! open file
-            if (.not. check_if_open(fileObjRead)) &
-              fileOpenSuccess = MOM_open_file(fileObjRead, trim(CS%IC_file), "read", G, .false.)
-            ! register the axes
-            !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-            !! x/longitude and/or y/latitude axes units
-            call MOM_register_variable_axes(fileObjRead, trim(g_tracer_name), & 
-              xUnits="degrees_east", yUnits="degrees_north")
-            !read the data
-            call read_data(fileObjRead, trim(g_tracer_name), tr_ptr)
-            ! close file 
-            if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+            call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
           endif
         else
           call MOM_error(FATAL,"initialize_MOM_generic_tracer: "//&

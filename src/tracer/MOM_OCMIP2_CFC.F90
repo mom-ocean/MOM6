@@ -9,8 +9,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, check_if_open, slasher, vardesc, var_desc, query_vardesc
-use MOM_io, only : FmsNetcdfDomainFile_t, MOM_open_file, MOM_register_variable_axes, close_file, read_data
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -374,9 +373,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
   ! This subroutine initializes a tracer array.
 
   logical :: OK
-  logical :: fileOpenSuccess
   integer :: i, j, k, is, ie, js, je, nz
-  type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -393,15 +390,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, US, CS)
                 trim(CS%IC_file)//".")
       endif
     else
-      if (.not.check_if_open(fileObjRead)) &
-        fileOpenSuccess = MOM_open_file(fileObjRead, CS%IC_file, "read", G, .false.)
-      ! register the variable axes
-      call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
-      !call MOM_read_data(CS%IC_file, trim(name), tr, G%Domain)
-      ! read the data
-      call read_data(fileObjRead, trim(name), tr)
-
-     if(check_if_open(fileObjRead)) call close_file(fileObjRead)
+      call MOM_read_data(CS%IC_file, trim(name), tr, G%Domain)
     endif
   else
     do k=1,nz ; do j=js,je ; do i=is,ie

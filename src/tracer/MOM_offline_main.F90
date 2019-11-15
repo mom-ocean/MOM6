@@ -20,9 +20,7 @@ use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,           only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
-use MOM_io,                   only : MOM_read_vector, get_variable_num_dimensions, get_variable_dimension_names
-use MOM_io,                   only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
-use MOM_io,                   only : check_if_open, file_exists, FmsNetcdfDomainFile_t, MOM_get_nc_corner_edgelengths
+use MOM_io,                   only : MOM_read_data, MOM_read_vector
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
@@ -1454,15 +1452,11 @@ subroutine read_all_input(CS)
 
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz, t, ntime
   integer :: IsdB, IedB, JsdB, JedB
-  integer :: ndims, dimUnlimIndexMean, dimUnlimIndexSnap
-  integer, allocatable, dimension(:) :: cornerMean, edgeLengthMean, cornerSnap, edgeLenghthSnap
-  character(len=40),allocatable, dimension(:): dimNames, dimNamesSnap
 
   nz = CS%GV%ke ; ntime = CS%numtime
   isd  = CS%G%isd   ; ied  = CS%G%ied  ; jsd  = CS%G%jsd  ; jed  = CS%G%jed
   IsdB = CS%G%IsdB  ; IedB = CS%G%IedB ; JsdB = CS%G%JsdB ; JedB = CS%G%JedB
-  type(FmsNetcdfDomainFile_t) :: fileObjReadSnap, fileObjReadMean ! netcdf domain-decomposed file object returned 
-                                                                !by call to MOM_open_file
+
   ! Extra safety check that we're not going to overallocate any arrays
   if (CS%read_all_ts_uvh) then
     if (allocated(CS%uhtr_all)) call MOM_error(FATAL, "uhtr_all is already allocated")
@@ -1478,79 +1472,20 @@ subroutine read_all_input(CS)
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
 
     call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
-    ! open file for domain-decomposed read
-    if (.not.check_if_open(fileObjReadSnap)) call MOM_open_file(fileObjReadSnap, CS%snap_file, "read", G, .false.)
-    if (.not.check_if_open(fileObjReadMean)) call MOM_open_file(fileObjReadMean, CS%mean_file, "read", G, .false.)
-
-    ! register the variable axes
-    call MOM_register_variable_axes(fileObjReadSnap,"h_end", xUnits="degrees_east", yUnits="degrees_north")
-    ! note: temp and salt have same axes, so only registering temp axes
-    call MOM_register_variable_axes(fileObjReadMean,"temp", xUnits="degrees_east", yUnits="degrees_north")
-   
-    ! get the number of dimensions for each variable
-    call get_variable_num_dimensions(fileObjReadSnap, "h_end", ndims)
-    ! get the variable dimesion names 
-    allocate(dimNamesSnap(ndims))
-    call get_variable_dimension_names(fileObjReadMean, "h_end", dimNamesSnap)
-
-    call get_variable_num_dimensions(fileObjReadMean, "temp", ndims)
-    ! get the variable dimesion names
-    allocate(dimNames(ndims))
-    call get_variable_dimension_names(fileObjReadMean, "temp", dimNames)
-
-    ! get the unlimited dimension index and populate the corner and edgeLengths arrays for h_end
-    dimUnlimIndexSnap = 0
-    do i=1,size(dimNamesSnap)
-      if (is_dimension_unlimited(fileObjSnap, dimNamesSnap(i)) dimUnlimIndexSnap=i
-    enddo
-    
-    if (dimUnlimIndexSnap .gt. 0) then
- 
-      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "h_end", cornerSnap, edgeLengthSnap, myEdgeLengths=(/1/), &
-                                         myEdgeLengthIndices=(/dimUnlimIndexSnap/))
-    else
-      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "h_end", cornerSnap, edgeLengthSnap)
-    endif
- 
-    ! get the unlimited dimension index and populate the corner and edgeLengths arrays for temp and salt
-    dimUnlimIndexMean = 0
-    do i=1,size(dimNames)
-      if (is_dimension_unlimited(fileObjMean, dimNames(i)) dimUnlimIndexMean=i
-    enddo
- 
-    if (dimUnlimIndexMean .gt. 0) then
-      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "temp", cornerMean, edgeLengthMean, myEdgeLengths=(/1/), &
-                                         myEdgeLengthIndices=(/dimUnlimIndexMean/))
-    else
-      call MOM_get_nc_corner_edgelengths(fileObjReadSnap, "temp", cornerMean, edgeLengthMean)
-    endif
     ! read the data at every time step
     do t = 1,ntime
-      cornerSnap(dimUnlimIndexSnap) = t
-      cornerMean(dimUnlimIndexMean) = t
 
-      call MOM_read_vector(fileObjReadSnap, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
+      call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, timelevel=t)
 
-      call read_data(fileObjReadSnap,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), corner=cornerSnap, &
-        edge_lengths=edgeLengthSnap)
-
-      call read_data(fileObjReadMean,'temp', CS%temp_all(:,:,1:CS%nk_input,t), corner=cornerMean, & 
-        edge_lengths=edgeLengthMean)
-
-      call read_data(fileObjReadMean,'salt', CS%salt_all(:,:,1:CS%nk_input,t), corner=cornerMean, & 
-        edge_lengths=edgeLengthMean)
+      call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
+        timelevel=t)
+      call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
+        timelevel=t)
+      call MOM_read_data(CS%mean_file,'salt', CS%salt_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
+        timelevel=t)
     enddo
-    ! close files
-    if (check_if_open(fileObjReadSnap)) call close_file(fileObjReadSnap)
-    if (check_if_open(fileObjReadMean)) call close_file(fileObjReadMean)
 
-    deallocate(dimNames)
-    deallocate(dimNamesSnap)
-    deallocate(cornerMean)
-    deallocate(edgeLengthMean)
-    deallocate(cornerSnap)
-    deallocate(edgeLengthSnap)
   endif
 
 end subroutine read_all_input

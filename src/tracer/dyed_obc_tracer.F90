@@ -9,9 +9,7 @@ use MOM_file_parser,        only : get_param, log_param, log_version, param_file
 use MOM_forcing_type,       only : forcing
 use MOM_hor_index,          only : hor_index_type
 use MOM_grid,               only : ocean_grid_type
-use MOM_io,                 only : file_exists, check_if_open, slasher, vardesc, var_desc, query_vardesc
-use MOM_io,                 only : MOM_get_nc_corner_edgelengths, MOM_register_variable_axes
-use MOM_io,                 only : FmsNetcdfDomainFile_t, MOM_open_file, close_file, read_data
+use MOM_io,                 only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : MOM_restart_CS
 use MOM_time_manager,       only : time_type
@@ -163,9 +161,6 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS)
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
-  integer, allocatable, dimension(:) :: corner, edgeLengths
-  logical :: fileOpenSuccess
-  type(FmsNetcdfDomainFile_t) :: fileObjRead! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -183,19 +178,9 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS)
       if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "dyed_obc_initialize_tracer: Unable to find "// &
                         CS%tracer_IC_file)
-      ! open the netcdf file
-      if (.not.check_if_open(fileObjRead)) &
-        fileOpenSuccess = MOM_open_file(fileObjRead, CS%tracer_IC_file, "read", G, .false.)
-      ! register the variable axes
-      call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
-      ! populate the corner and edgeLengths arrays
-      call MOM_get_nc_corner_edgelengths(fileObjRead, trim(name), corner, edgeLengths, myEdgeLengths=(/1/), &
-                                         myEdgeLengthIndices=(/4/))
       do m=1,CS%ntr
-        corner(4) = m
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_dyed_obc_tracer")
-        !call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
-        call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m), corner=corner, edge_lengths=edgeLengths)
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
     else
       do m=1,CS%ntr
@@ -205,10 +190,6 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS)
       enddo
     endif
   endif ! restart
-
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-  if (allocated(corner)) deallocate(corner)
-  if (allocated(edgeLengths)) deallocate(edgeLengths)
 
 end subroutine initialize_dyed_obc_tracer
 
