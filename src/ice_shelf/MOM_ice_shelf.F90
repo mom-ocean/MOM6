@@ -21,11 +21,9 @@ use MOM_grid_initialize, only : set_grid_metrics
 use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
-use MOM_io, only : MOM_open_file, close_file, read_data, MOM_register_variable_axes 
-use MOM_io, only : check_if_open, FmsNetcdfDomainFile_t, file_exists
-use MOM_io, only : slasher
+use MOM_io, only : MOM_read_data, file_exists, slasher
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
-use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
+use MOM_restart, only : restart_init, restore_state, MOM_restart_CS, write_initial_conditions
 use MOM_time_manager, only : time_type, time_type_to_real, time_type_to_real, real_to_time
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init, fix_restart_unit_scaling
@@ -1107,7 +1105,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
   logical :: read_TideAmp, shelf_mass_is_dynamic, debug
   character(len=240) :: Tideamp_file
   real    :: utide
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
@@ -1325,20 +1322,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
-    !call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
-    ! open file for domain-decomposed read
-    if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
-    ! register the variable axes
-    call MOM_register_variable_axes(fileObjRead, "tideamp", xUnits="degrees_east", yUnits="degrees_north")
-    
-    ! read the data
-    call read_data(fileObjRead, "tideamp", CS%utide, corner=start, edge_lengths=dim_sizes)
-    ! close the file
-    if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-    deallocate(dim_sizes)
-    deallocate(dim_names)
-    deallocate(start)
-
+    call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
@@ -1562,8 +1546,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
                           (LEN_TRIM(dirs%input_filename) == 1))) then
-    call save_restart(dirs%output_directory, CS%Time, G, &
-                      CS%restart_CSp, filename=IC_file)
+    call write_initial_conditions(dirs%output_directory, IC_file, restart_CSp_tmp, G, CS%Time)
   endif
 
 

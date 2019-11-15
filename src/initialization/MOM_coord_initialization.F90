@@ -12,7 +12,7 @@ use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : fieldtype, file_exists
 use MOM_io, only : slasher, vardesc, var_desc
-use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, read_data, write_data
+use MOM_io, only : FmsNetcdfFile_t, open_file, close_file, MOM_read_data, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists
@@ -272,7 +272,6 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_TS_profile" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
-  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
   nz = GV%ke
 
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
@@ -290,12 +289,9 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_TS_profile: Unable to find " //trim(filename))
 
-  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
   ! read in data
-  call read_data(fileObjRead,"PTEMP",T0(:))
-  call read_data(fileObjRead,"SALT",S0(:))
-  ! close the file
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead))
+  call MOM_read_data(fileObjRead,"PTEMP",T0(:))
+  call MOM_read_data(fileObjRead,"SALT",S0(:))
 
   ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
@@ -405,7 +401,6 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
-  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   nz = GV%ke
 
@@ -427,13 +422,8 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to find "//trim(filename))
 
-  ! open file for domain-decomposed read
-  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", .false.)
-  !  read in the data  
-  call read_data(fileObjRead, coord_var, Rlay)
-   ! close the file
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
-  
+  call MOM_read_data(fileObjRead, coord_var, Rlay)
+
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
   do k=1,nz ; if (g_prime(k) <= 0.0) then
@@ -535,14 +525,14 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   character(len=200) :: dim_names(4)
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   !integer :: unit
   integer :: i, j
   integer :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
   logical :: axis_found ! If true, the axis is registered to the file
 
   filepath = trim(directory) // trim("Vertical_coordinate.nc")
@@ -558,7 +548,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   ! open the file
   if (.not. check_if_open(fileObjWrite)) &
-    file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
+    file_open_success = open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file
   total_axes=0
 

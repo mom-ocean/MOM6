@@ -106,7 +106,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   !call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
 
   ! open file for domain-decomposed read
-  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G,.false.)
+  if (.not.check_if_open(fileObjRead)) fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G,.false.)
   ! register the variable axes
   call MOM_register_variable_axes(fileObjRead, trim(thickness_varname), xUnits="degrees_east", yUnits="degrees_north")
   !  read in the data

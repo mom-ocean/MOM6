@@ -35,8 +35,7 @@ use MOM_forcing_type,         only : forcing, mech_forcing
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc, slasher
-use MOM_io,                   only : file_exists, FmsNetcdfDomainFile_t, MOM_register_variable_axes, read_data
-use MOM_io,                   only : MOM_open_file, close_file, check_if_open
+use MOM_io,                   only : file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
@@ -1527,7 +1526,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(diag_ctrl),        pointer :: diag => NULL()
   type(unit_scale_type),  pointer :: US => NULL()
   character(len=4), parameter :: vers_num = 'v2.0'
-  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! FMS file object returned by call to MOM_open_file
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1576,7 +1574,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical :: calc_dtbt         ! Indicates whether the dynamically adjusted barotropic
                                ! time step needs to be updated before it is used.
   logical :: debug_truncations ! If true, turn on diagnostics useful for debugging truncations.
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.  This can be altered during the course
@@ -2222,17 +2219,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
-      ! open the file
-      if (.not.(check_if_open(fileObjRead))) &
-        file_open_success = MOM_open_file(fileObjRead, filename, "read", G, is_restart=.false.)
-      ! register the axes
-      !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
-      !! x/longitude and/or y/latitude axes units
-      call MOM_register_variable_axes(fileObjRead, trim(area_varname), xUnits="degrees_east", yUnits="degrees_north")
-      ! read the data
-      call read_data(fileObjRead, trim(area_varname), area_shelf_h)
-      ! close the file
-      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+       
+      ! reat the data
+      call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%domain)
+      
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
       ! compute fractional ice shelf coverage of h

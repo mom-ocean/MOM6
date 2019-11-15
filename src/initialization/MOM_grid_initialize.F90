@@ -16,7 +16,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t
-use MOM_io, only : MOM_open_file, close_file, register_axis
+use MOM_io, only : open_file, close_file, register_axis
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE, CENTER
 use MOM_unit_scaling, only : unit_scale_type
@@ -201,10 +201,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer, dimension(:), allocatable :: dim_sizes
   logical, dimension(:), allocatable :: yuseT, yuseB ! Masks for geoLatT and geoLatB
   type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read returned by call to 
-                                             ! MOM_open_file
+                                             ! open_file
   type(FmsNetcdfFile_t) :: fileObjReadNoDD ! FMS file object for non-domain-decomposed read returned by call to 
-                                           ! MOM_open_file
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+                                           ! open_file
+  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
   
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
@@ -284,7 +284,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate(exnj)
 
   ! open the file for domain-decomposed read
-  file_open_success = MOM_open_file(fileObjRead, filename, "read", SGdom, .false.)
+  file_open_success = open_file(fileObjRead, filename, "read", SGdom%mpp_domain, .false.)
   ! tmpZ is defined on the data domain
   tmpZ(:,:) = 999.0
   ! register the global axes
@@ -412,7 +412,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! broken convention for interpretting netCDF files).
  
   ! open the file for non-domain-decomposed read
-  file_open_success = MOM_open_file(fileObjReadNoDD, filename, "read", .false.)
+  file_open_success = open_file(fileObjReadNoDD, filename, "read", .false.)
 
   ! get the number of dimensions and the dimension sizes for 'x'  
   ndims = get_variable_num_dimensions(fileObjReadNoDD, "x", broadcast=.true.)

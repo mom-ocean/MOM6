@@ -10,8 +10,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : slasher, vardesc, var_desc, query_vardesc
-use MOM_io, only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
-use MOM_io, only : check_if_open, file_exists, FmsNetcdfDomainFile_t
+use MOM_io, only : file_exists, MOM_read_data
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -169,8 +168,6 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: dist2  ! The distance squared from a line [m2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB, lntr
-  logical :: fileOpenSuccess
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf domain-decomposed file object returned by call to MOM_open_file
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -186,22 +183,12 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !  Read the tracer concentrations from a netcdf file.
       if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "USER_initialize_tracer: Unable to find "// &
-                        CS%tracer_IC_file)
-      ! open file for domain-decomposed read
-      if (.not.check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G,.false.)
-      
-
+                        CS%tracer_IC_file)     
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
         if (m == 1) &
-          call MOM_register_variable_axes(fileObjRead, trim(name), xUnits="degrees_east", yUnits="degrees_north")
-        ! read the data
-        !call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
-        call read_data(fileObjRead, trim(name), CS%tr(:,:,:,m))
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
-      ! close the file
-      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie

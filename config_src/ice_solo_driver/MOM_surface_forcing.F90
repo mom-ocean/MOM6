@@ -63,10 +63,7 @@ use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_ty
 use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_grid,                only : ocean_grid_type
-use MOM_io,                  only : file_exists, MOM_read_vector, slasher, MOM_get_nc_corner_edgelengths
-use MOM_io,                  only : MOM_open_file, MOM_register_variable_axes, close_file, read_data
-use MOM_io,                  only : check_if_open, FmsNetcdfDomainFile_t, is_dimension_unlimited
-use MOM_io,                  only : get_variable_dimension_names, get_variable_num_dimensions
+use MOM_io,                  only : MOM_read_vector, slasher, MOM_read_data
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
 use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, set_time
@@ -506,8 +503,6 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   real :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
   real :: temp_y(SZI_(G),SZJ_(G)) ! wind stresses at h-points [Pa].
   integer :: days, seconds
-  logical :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   call callTree_enter("wind_forcing_from_file, MOM_surface_forcing.F90")
 
@@ -521,16 +516,13 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
 
   if (time_lev /= CS%wind_last_lev_read) then
     filename = trim(CS%inputdir) // trim(CS%wind_file)
-    ! open the file
-    if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = MOM_open_file(fileObjRead, filename, "read", G, .false.)
 !    if (is_root_pe()) &
 !      write(*,'("Wind_forcing Reading time level ",I," last was ",I,".")')&
 !           time_lev-1,CS%wind_last_lev_read-1
     select case ( uppercase(CS%wind_stagger(1:1)) )
     case ("A")
       temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
-      call MOM_read_vector(fileObjRead, CS%stress_x_var, CS%stress_y_var, &
+      call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
                            temp_x(:,:), temp_y(:,:), G%Domain, stagger=AGRID, &
                            timelevel=time_lev)
 
@@ -554,7 +546,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         enddo ; enddo
       endif
     case ("C")
-      call MOM_read_vector(fileObjRead,CS%stress_x_var, CS%stress_y_var, &
+      call MOM_read_vector(filename,CS%stress_x_var, CS%stress_y_var, &
                      forces%taux(:,:), forces%tauy(:,:), &
                      G%Domain, timelevel=time_lev)
       if (CS%wind_scale /= 1.0) then
@@ -628,8 +620,6 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
                   ! anomalies when calculating restorative precipitation
                   ! anomalies [ppt].
   character(len=40), allocatable, dimension(:): dimNames ! dimension names of netcdf variables
-  logical :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
 
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
 
@@ -668,33 +658,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 
 !   if (is_root_pe()) &
 !     write(*,'("buoyancy_forcing : Reading time level ",I3,", last was ",I3,".")')&
-!          time_lev,CS%buoy_last_lev_read
-    fileNames(1)(1:len_trim(CS%longwavedown_file)=CS%longwavedown_file
-    fileNames(2)(1:len_trim(CS%longwaveup_file)=CS%longwaveup_file
-    fileNames(3)(1:len_trim(CS%evaporation_file)=CS%evaporation_file
-    fileNames(4)(1:len_trim(CS%shortwavedown_file)=CS%shortwavedown_file
-    fileNames(5)(1:len_trim(CS%shortwaveup_file)=CS%shortwaveup_file
-    fileNames(6)(1:len_trim(CS%snow_file)=CS%snow_file
-    fileNames(7)(1:len_trim(CS%precip_file)=CS%precip_file
-    fileNames(8)(1:len_trim(CS%freshdischarge_file)=CS%freshdischarge_file
-    fileNames(9)(1:len_trim(CS%freshdischarge_file)=CS%freshdischarge_file
-    fileNames(10)(1:len_trim(CS%SSTrestore_file)=CS%SSTrestore_file
-    fileNames(11)(1:len_trim(CS%salinityrestore_file)=CS%salinityrestore_file
-
-    varNames(1) = "lwdn_sfc"
-    varNames(2) = "lwup_sfc"
-    varNames(3) = "evap"
-    varNames(4) = "shflx"
-    varNames(5) = "swdn_sfc"
-    varNames(6) = "swup_sfc"
-    varNames(7) = "snow"
-    varNames(8) = "precip"
-    varNames(9) = "disch_w"
-    varNames(10) = "disch_s"
-    varNames(11) = "TEMP"
-    varNames(12) = "TEMP"
-   
-    
+!          time_lev,CS%buoy_last_lev_read 
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwavedown_file), "lwdn_sfc", &
              fluxes%LW(:,:), G%Domain, timelevel=time_lev)
