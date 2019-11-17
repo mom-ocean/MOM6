@@ -238,22 +238,22 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
        return  ! bail out
 
   ! heat content of lrunoff
-  !ice_ocean_boundary%lrunoff_hflx(:,:) = 0._ESMF_KIND_R8
-  !call state_getimport(importState, 'liquid_runoff_heat_flx',  &
-  !     isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, rc=rc)
-  !if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-  !     line=__LINE__, &
-  !     file=__FILE__)) &
-  !     return  ! bail out
+  ice_ocean_boundary%lrunoff_hflx(:,:) = 0._ESMF_KIND_R8
+  call state_getimport(importState, 'liquid_runoff_heat_flx',  &
+       isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return  ! bail out
 
   ! heat content of frunoff
-  !ice_ocean_boundary%frunoff_hflx(:,:) = 0._ESMF_KIND_R8
-  !call state_getimport(importState, 'frozen_runoff_heat_flx',  &
-  !     isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, rc=rc)
-  !if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-  !     line=__LINE__, &
-  !     file=__FILE__)) &
-  !     return  ! bail out
+  ice_ocean_boundary%frunoff_hflx(:,:) = 0._ESMF_KIND_R8
+  call state_getimport(importState, 'frozen_runoff_heat_flx',  &
+       isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return  ! bail out
 
   !----
   ! salt flux from ice

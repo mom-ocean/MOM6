@@ -708,8 +708,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
-             !Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
-             !Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
              Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),       &
              Ice_ocean_boundary% frunoff (isc:iec,jsc:jec))
 
@@ -729,8 +729,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
   Ice_ocean_boundary%p               = 0.0
-  !Ice_ocean_boundary%lrunoff_hflx    = 0.0
-  !Ice_ocean_boundary%frunoff_hflx    = 0.0
+  Ice_ocean_boundary%lrunoff_hflx    = 0.0
+  Ice_ocean_boundary%frunoff_hflx    = 0.0
   Ice_ocean_boundary%lrunoff         = 0.0
   Ice_ocean_boundary%frunoff         = 0.0
 
@@ -776,9 +776,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
-
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide")
+  !Requires nuopc dictionary change
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "liquid_runoff_heat_flx"      , "will provide")
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "frozen_runoff_heat_flx"      , "will provide")
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
@@ -1714,8 +1714,6 @@ subroutine ModelAdvance(gcomp, rc)
           line=__LINE__, &
           file=__FILE__)) &
           return  ! bail out
-
-  call ice_ocn_bnd_from_data(Ice_ocean_boundary, Time, Time_step_coupled) ! for runoff            
 
      !---------------
      ! Update MOM6

@@ -172,8 +172,8 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: ustar_berg        =>NULL() !< frictional velocity beneath icebergs [m/s]
   real, pointer, dimension(:,:) :: area_berg         =>NULL() !< area covered by icebergs[m2/m2]
   real, pointer, dimension(:,:) :: mass_berg         =>NULL() !< mass of icebergs(kg/m2)
-  !real, pointer, dimension(:,:) :: lrunoff_hflx       =>NULL() !< heat content of liquid runoff [W/m2]
-  !real, pointer, dimension(:,:) :: frunoff_hflx      =>NULL() !< heat content of frozen runoff [W/m2]
+  real, pointer, dimension(:,:) :: lrunoff_hflx      =>NULL() !< heat content of liquid runoff [W/m2]
+  real, pointer, dimension(:,:) :: frunoff_hflx      =>NULL() !< heat content of frozen runoff [W/m2]
   real, pointer, dimension(:,:) :: p                 =>NULL() !< pressure of overlying ice and atmosphere
                                                               !< on ocean surface [Pa]
   real, pointer, dimension(:,:) :: mi                =>NULL() !< mass of ice [kg/m2]
@@ -413,7 +413,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
   ! Check that liquid runoff has a place to go
   if (CS%liquid_runoff_from_data .and. .not. associated(IOB%lrunoff)) then
     call MOM_error(FATAL, "liquid runoff is being added via data_override but "// &
-                          "there is no associated runoff in the IOB%")
+                          "there is no associated runoff in the IOB")
     return
   end if
 
@@ -475,9 +475,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, US, CS, &
        fluxes%latent(i,j)            = fluxes%latent(i,j) + IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
        fluxes%latent_fprec_diag(i,j) = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
     endif
-    if (associated(IOB%calving)) then
-       fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+    if (associated(IOB%frunoff)) then
+       fluxes%latent(i,j)              = fluxes%latent(i,j) + IOB%frunoff(i-i0,j-j0)*CS%latent_heat_fusion
+       fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%frunoff(i-i0,j-j0)*CS%latent_heat_fusion
     endif
     if (associated(IOB%q_flux)) then
        fluxes%latent(i,j)           = fluxes%latent(i,j) + IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
