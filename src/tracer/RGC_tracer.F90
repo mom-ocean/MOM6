@@ -211,7 +211,7 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_RGC_tracer")
         !call read_data(CS%tracer_IC_file, trim(name), &
         !              CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
-        call MOM_read_data(fileObjRead, trim(name), CS%tr(:,:,:,m), G%Domain)
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
 
     else

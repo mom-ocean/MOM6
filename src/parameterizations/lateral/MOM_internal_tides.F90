@@ -2325,9 +2325,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
 
   call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
                     G%domain, timelevel=1)
-
-  call pass_var(CS%Kh_bg_2d, G%domain)
-
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if (is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
@@ -2343,10 +2340,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
   
   call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
-                     G%domain, timelevel=1)
- 
-  call pass_var(CS%Kh_bg_2d, G%domain)
-
   !CS%refl_pref = CS%refl_pref*1 ! adjust partial reflection if desired
   call pass_var(CS%refl_pref,G%domain)
 
@@ -2372,9 +2365,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
   
   call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
-
-  call pass_var(CS%Kh_bg_2d, G%domain)
-
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
   do i=isd,ied; do j=jsd,jed

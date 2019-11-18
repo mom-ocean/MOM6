@@ -17,7 +17,7 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : file_exists
+use MOM_io, only : file_exists, check_if_open
 use MOM_io, only : get_variable_size, get_variable_num_dimensions
 use MOM_io, only : open_file, close_file, FmsNetcdfFile_t
 use MOM_io, only : MOM_read_vector, MOM_read_data
@@ -669,7 +669,6 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     !### Consider adding a parameter to use to rescale h.
     if (just_read) return ! All run-time parameters have been read, so return.
     call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H) 
-    call trim(area_varname), "h" h)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -1137,7 +1136,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   if (just_read) return ! All run-time parameters have been read, so return.
 
   
-  call read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
+  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
  
   if (use_remapping) then
     allocate(remap_CS)
@@ -1470,13 +1469,13 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
-  call MOM_read_data(fileObjRead, temp_var, T(:,:,:), G%Domain)
+  call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
 
   salt_filename = trim(inputdir)//trim(salt_file)
   if (.not.file_exists(salt_filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to find "//trim(salt_filename))
  
-  call MOM_read_data(fileObjRead, salt_var, S(:,:,:), G%Domain)
+  call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_from_file
@@ -1793,9 +1792,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
-
     do j=js,je ; do i=is,ie
-      eta(i,j,nz+1) = -G%bathyT(i,j)   enddo ;enddo                                                                                                                                                           
+      eta(i,j,nz+1) = -G%bathyT(i,j)
+    enddo ; enddo
+                                                                                                                                                   
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
@@ -1807,7 +1807,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
   elseif (.not. new_sponges) then ! ALE mode
 
     if (.not. (check_if_open(fileObjRead))) &
-      fileOpenSuccess = open_file(fileObjRead, filename, "read", .false.)
+      fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
     ! get the number of dimensions and the dimension sizes for eta_var 
     ndims = get_variable_num_dimensions(fileObjRead, eta_var, broadcast=.true.)
     allocate(dim_sizes(ndims))

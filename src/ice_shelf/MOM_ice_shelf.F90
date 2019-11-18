@@ -1546,7 +1546,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS,  diag, forces, f
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
                           (LEN_TRIM(dirs%input_filename) == 1))) then
-    call write_initial_conditions(dirs%output_directory, IC_file, restart_CSp_tmp, G, CS%Time)
+    call write_initial_conditions(dirs%output_directory, IC_file, CS%restart_CSp, G, CS%Time)
   endif
 
 

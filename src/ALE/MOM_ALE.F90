@@ -22,9 +22,9 @@ use MOM_error_handler,    only : callTree_showQuery, is_root_pe
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
 use MOM_io,               only : vardesc, var_desc, fieldtype
-use MOM_io,               only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data, register_field
+use MOM_io,               only : FmsNetcdfFile_t, open_file, close_file, write_data, register_field
 use MOM_io,               only : register_variable_attribute, get_var_dimension_features
-use MOM_io,               only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
+use MOM_io,               only : axis_data_type, MOM_get_diagnostic_axis_data, register_axis
 use MOM_io,               only : file_exists, dimension_exists, variable_exists, check_if_open
 use MOM_interface_heights,only : find_eta
 use MOM_open_boundary,    only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
@@ -1247,14 +1247,14 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   character(len=200) :: dim_names(4)
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
-  type(FmsNetcdfFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite  ! FMS file object returned by call to open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   !integer            :: unit
   integer            :: i,j
   integer :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: fileOpenSuccess ! If true, the filename passed to open_file was opened sucessfully
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate.nc")
@@ -1275,7 +1275,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   allocate(axis_data_CS%data(2))
 
   if (.not.(check_if_open(fileObjWrite))) & 
-    file_open_success = MOM_open_file(fileObjWrite, filepath, "write", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjWrite, filepath, "write", is_restart=.false.)
 
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file         
   total_axes=0 
@@ -1293,7 +1293,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
       if (.not.(dimension_exists(fileObjWrite, dim_names(j)))) then
         total_axes=total_axes+1
         call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
-        call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+        call register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
       endif
     enddo
   enddo

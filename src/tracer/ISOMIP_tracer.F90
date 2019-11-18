@@ -201,7 +201,6 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         call MOM_error(FATAL, "ISOMIP_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
       do m=1,NTR
-        corner(4) = m
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_ISOMIP_tracer")
         call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo

@@ -13,8 +13,10 @@ use MOM_file_parser,          only : get_param, log_version, param_file_type, lo
 use MOM_grid,                 only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid,          only : dyn_horgrid_type
 use MOM_io,                   only : EAST_FACE, NORTH_FACE
-use MOM_io,                   only : slasher, read_data, field_size, SINGLE_FILE
+use MOM_io,                   only : slasher, read_data, SINGLE_FILE
 use MOM_io,                   only : vardesc, query_vardesc, var_desc
+use MOM_io,                   only : open_file, close_file, read_data, get_variable_size, get_variable_num_dimensions
+use MOM_io,                   only : check_if_open, FmsNetcdfFile_t
 use MOM_restart,              only : register_restart_field, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
@@ -545,13 +547,18 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=32)  :: remappingScheme
   character(len=256) :: mesg    ! Message for error messages.
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
-  integer, dimension(4) :: siz,siz2
+  logical :: fileOpenSuccess ! true if open_file is successful
+  integer, dimension(4) :: siz2
+  integer :: ndims 
+  integer, allocatable, dimension(:) :: siz, siz3
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
   integer, dimension(:), allocatable :: saved_pelist
   integer :: current_pe
   integer, dimension(1) :: single_pelist
+  type(FmsNetcdfFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
+
   !will be able to dynamically switch between sub-sampling refined grid data or model grid
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -661,7 +668,15 @@ subroutine initialize_segment_data(G, OBC, PF)
         endif
         filename = trim(inputdir)//trim(filename)
         fieldname = trim(fieldname)//trim(suffix)
-        call field_size(filename,fieldname,siz,no_domain=.true.)
+     
+        ! open the file   
+        if (.not. check_if_open(fileObjRead)) &
+          fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
+        ndims = get_variable_num_dimensions(fileObjRead, fieldname)
+        allocate(siz(ndims))
+        call get_variable_size(fileObjRead, fieldname, siz)
+
+        !call field_size(filename,fieldname,siz,no_domain=.true.)
 !       if (siz(4) == 1) segment%values_needed = .false.
         if (segment%on_pe) then
           if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
@@ -730,24 +745,32 @@ subroutine initialize_segment_data(G, OBC, PF)
                trim(fieldname),ignore_axis_atts=.true.,threading=SINGLE_FILE)
           if (siz(3) > 1) then
             fieldname = 'dz_'//trim(fieldname)
-            call field_size(filename,fieldname,siz,no_domain=.true.)
+            !call field_size(filename,fieldname,siz,no_domain=.true.)
+            ndims = get_variable_num_dimensions(fileObjRead, fieldname)
+
+            if (ndims .LT. 3) call MOM_error(FATAL,"MOM_open_boundary:: intialize_segment_data: field "//&
+                                    trim(fieldname)// " has fewer than 3 dimensions.")
+            allocate(siz3(ndims))
+            call get_variable_size(fileObjRead, fieldname, siz3) 
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
-                allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
+                allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz3(3)))
               else
-                allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz(3)))
+                allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz3(3)))
               endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
-                allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
+                allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz3(3)))
               else
-                allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz(3)))
+                allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz3(3)))
               endif
             endif
             segment%field(m)%dz_src(:,:,:)=0.0
-            segment%field(m)%nk_src=siz(3)
+            segment%field(m)%nk_src=siz3(3)
             segment%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname),&
                        ignore_axis_atts=.true.,threading=SINGLE_FILE)
+
+            deallocate(siz3)
           else
             segment%field(m)%nk_src=1
           endif
@@ -770,6 +793,11 @@ subroutine initialize_segment_data(G, OBC, PF)
           segment%g_values_needed = .false.
         endif
       endif
+
+      ! close the file
+      if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+
+      if (allocated(siz)) deallocate(siz)
     enddo
     if (segment%u_values_needed .or. segment%v_values_needed .or. &
         segment%t_values_needed .or. segment%s_values_needed .or. &
@@ -4376,7 +4404,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
                                 longname=vd%longname,units=vd%units,t_grid=vd%t_grid, &
                                 hor_grid=vd%hor_grid, z_grid=vd%z_grid)
     allocate(OBC%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
-    OBCry_normal(:,:,:) = 0.0
+    OBC%ry_normal(:,:,:) = 0.0
     vd = var_desc("ry_normal","m s-1", "Normal Phase Speed for NS OBCs",'v','L')
     call register_restart_field(OBC%ry_normal, vd%name, .true., restart_CSp, &
                                 longname=vd%longname,units=vd%units,t_grid=vd%t_grid, &

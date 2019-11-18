@@ -9,7 +9,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : slasher, vardesc, var_desc, query_vardesc, MOM_read_data
+use MOM_io, only : slasher, vardesc, var_desc, query_vardesc, MOM_read_data, file_exists
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -258,7 +258,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
       if (len_trim(CS%IC_file) > 0) then
   !  Read the tracer concentrations from a netcdf file.
-        if (.not.file_exists(CS%IC_file)) &
+        if (.not. (file_exists(CS%IC_file))) &
           call MOM_error(FATAL, "initialize_oil_tracer: "// &
                                  "Unable to find "//CS%IC_file)
         if (CS%Z_IC_file) then

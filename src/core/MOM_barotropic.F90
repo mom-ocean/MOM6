@@ -4478,7 +4478,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
                    hor_grid='u', z_grid='1')
   vd(3) = var_desc("vbt_IC", "m s-1", longname="Next initial condition for the barotropic meridional velocity", &
                    hor_grid='v', z_grid='1')
-  call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, 
+  call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, &
                               units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
   call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, & 
@@ -4492,7 +4492,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   else
     vd(2) = var_desc("uhbt_IC", "kg s-1", longname="Next initial condition for the barotropic zonal transport", &
                 hor_grid='u', z_grid='1')
-    vd(3) = var_desc("vhbt_IC", "kg s-1", longname="Next initial condition for the barotropic meridional transport",&
+    vd(3) = var_desc("vhbt_IC", "kg s-1", longname="Next initial condition for the barotropic meridional transport", &
                 hor_grid='v', z_grid='1')
   endif
   call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, & 

@@ -14,7 +14,7 @@ use MOM_io, only : fieldtype, file_exists
 use MOM_io, only : slasher, vardesc, var_desc
 use MOM_io, only : FmsNetcdfFile_t, open_file, close_file, MOM_read_data, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, MOM_register_diagnostic_axis
+use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists
 use MOM_io, only : check_if_open
 use MOM_string_functions, only : uppercase
@@ -290,8 +290,8 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
       " set_coord_from_TS_profile: Unable to find " //trim(filename))
 
   ! read in data
-  call MOM_read_data(fileObjRead,"PTEMP",T0(:))
-  call MOM_read_data(fileObjRead,"SALT",S0(:))
+  call MOM_read_data(filename,"PTEMP",T0(:))
+  call MOM_read_data(filename,"SALT",S0(:))
 
   ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
@@ -422,7 +422,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to find "//trim(filename))
 
-  call MOM_read_data(fileObjRead, coord_var, Rlay)
+  call MOM_read_data(filename, coord_var, Rlay)
 
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
@@ -532,7 +532,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   integer :: num_dims ! counter for variable dimensions
   integer :: total_axes ! counter for all coordinate axes in file
   integer, dimension(4) :: dim_lengths
-  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
+  logical :: fileOpenSuccess ! If true, the filename passed to open_file was opened sucessfully
   logical :: axis_found ! If true, the axis is registered to the file
 
   filepath = trim(directory) // trim("Vertical_coordinate.nc")
@@ -548,7 +548,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   ! open the file
   if (.not. check_if_open(fileObjWrite)) &
-    file_open_success = open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file
   total_axes=0
 
@@ -565,7 +565,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
       if (.not.(dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.))) then
         total_axes=total_axes+1
         call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
-        call MOM_register_diagnostic_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
+        call register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
       endif
     enddo
   enddo

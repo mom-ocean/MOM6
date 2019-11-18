@@ -10,7 +10,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : file_exists, variable_exists, check_if_open
-use MOM_io,            only : FmsNetcdfDomainFile_t, open_file, close_file
+use MOM_io,            only : FmsNetcdfDomainFile_t, open_file, read_data, close_file
 use MOM_time_manager,  only : time_type, time_type_to_real
 
 implicit none ; private
@@ -362,7 +362,7 @@ subroutine find_in_files(filenames, varname, array, G)
       fileOpenSuccess = open_file(fileObjRead, filenames(nf), "read", G%Domain%mpp_domain, is_restart=.false.)
     
     if (variable_exists(fileObjRead, varname)) then
-      call read_data(filenames(nf), varname, array, G%Domain)
+      call read_data(fileObjRead, varname, array)
       call close_file(fileObjRead)
       return
     endif

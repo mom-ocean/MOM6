@@ -1123,7 +1123,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 end subroutine save_restart
 
 !> write initial condition fields to a netCDF file
-subroutine write_initial_conditions(directory, filename, CS, G, GV, time)
+subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   character(len=*),         intent(in) :: directory !< full path of the directory containing the file
   character(len=*),         intent(in) :: filename  !< name of the file
   type(MOM_restart_CS),     pointer    :: CS        !< The control structure returned by a previous

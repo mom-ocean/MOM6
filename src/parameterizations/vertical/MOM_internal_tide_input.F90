@@ -282,7 +282,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file
-  character(len=40), allocatable, dimension(:): dimNames ! dimension names of netcdf variables
+  character(len=40), allocatable, dimension(:) :: dimNames ! dimension names of netcdf variables
 
   real :: mask_itidal
   real :: max_frac_rough     ! The fraction relating the maximum topographic roughness

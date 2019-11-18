@@ -195,7 +195,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
         call MOM_error(FATAL, "DOME_initialize_tracer: Unable to find "// &
                         CS%tracer_IC_file)
       do m=1,NTR
-        corner(m)=4
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
         call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo

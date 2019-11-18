@@ -1748,10 +1748,6 @@ subroutine hor_visc_init(Time, G, US, param_file, diag, CS, MEKE)
                        G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
 
     call pass_var(CS%Kh_bg_2d, G%domain)
-
-    deallocate(dimNames)
-    if (allocated(corner)) deallocate(corner)
-    if (allocated(edgeLengths)) deallocate(edgeLengths)
   endif
 
   if (CS%biharmonic) then

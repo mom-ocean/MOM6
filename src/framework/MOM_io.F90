@@ -110,6 +110,7 @@ public :: MOM_get_nc_corner_edgelengths
 public :: MOM_open_file
 public :: MOM_read_data
 public :: MOM_register_diagnostic_axis
+public :: MOM_register_variable_axes
 public :: open_file
 public :: read_data
 public :: read_restart
@@ -1401,7 +1402,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   ! check for the unlimited dimension and set n_time to the length of the unlimited dimension
   allocate(dimNames(ndims))
 
-  call get_variable_dimensions(fileObjRead, trim(varname), dimNames)
+  call get_variable_dimension_names(fileObjRead, trim(varname), dimNames)
   do i=1,ndims
     if (is_dimension_unlimited(fileObjRead, trim(dimNames(i)))) &
       call get_dimension_size(fileObjRead, trim(dimNames(i)), n_time)

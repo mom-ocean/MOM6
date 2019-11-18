@@ -12,8 +12,8 @@ use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_grid,               only : ocean_grid_type
 use MOM_io,                 only : slasher
-use MOM_io,                 only : open_file, close_file, read_data, MOM_read_data, get_variable_size
-use MOM_io,                 only : check_if_open, FmsNetcdfDomainFile_t
+use MOM_io,                 only : open_file, close_file, read_data, MOM_read_data, get_variable_size, scale_data
+use MOM_io,                 only : check_if_open, FmsNetcdfDomainFile_t, MOM_register_variable_axes
 use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_string_functions,   only : uppercase, lowercase
 use MOM_unit_scaling,       only : unit_scale_type
@@ -225,7 +225,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
-  character(len=40), allocatable, dimension(:): dimNames ! dimension names of netcdf variables
+  character(len=40), allocatable, dimension(:) :: dimNames ! dimension names of netcdf variables
   real :: utide, hamp, prandtl_tidal, max_frac_rough
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
@@ -235,7 +235,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
 
   if (associated(CS)) then
     call MOM_error(WARNING, "tidal_mixing_init called when control structure "// &
@@ -1588,8 +1588,8 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
     tc_o1         ! input lunar diurnal tidal energy flux [W/m^2]
   integer, dimension(4) :: nz_in
   integer               :: k, is, ie, js, je, isd, ied, jsd, jed, i, j
-  logical :: fileOpenSuccess ! indicates whether MOM_open_file is successful 
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to MOM_open_file
+  logical :: fileOpenSuccess ! indicates whether open_file is successful 
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1598,7 +1598,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   ! note: data are read in with calls to individual netcdf routines instead of MOM_read_data because
   ! the file is already opened to get the size of z_t.
   if (.not. check_if_open(fileObjRead)) &
-    fileOpenSuccess = open_file(fileObjRead, tidal_energy_file, "read", G%domain, .false.)
+    fileOpenSuccess = open_file(fileObjRead, tidal_energy_file, "read", G%domain%mpp_domain, is_restart=.false.)
   ! get number of input levels
   call get_variable_size(fileObjRead, "z_t", nz_in)
   !call field_size(tidal_energy_file, 'z_t', nz_in)

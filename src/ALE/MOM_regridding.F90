@@ -6,7 +6,7 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io, only : slasher
-use MOM_io, only : open_file, close_file, read_data, get_variable_size
+use MOM_io, only : open_file, close_file, read_data, MOM_read_data, get_variable_size
 use MOM_io, only : FmsNetcdfFile_t, file_exists, variable_exists, check_if_open
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
