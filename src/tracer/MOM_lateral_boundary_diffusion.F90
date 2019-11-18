@@ -75,9 +75,9 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
 
   ! Log this module and master switch for turning it on/off
   call log_version(param_file, mdl, version, &
-       "This module implements lateral boundary  mixing of tracers")
+       "This module implements lateral diffusion of tracers near boundaries")
   call get_param(param_file, mdl, "USE_LATERAL_BOUNDARY_DIFFUSION", lateral_boundary_diffusion_init, &
-                 "If true, enables the lateral boundary mixing module.", &
+                 "If true, enables the lateral boundary tracer's diffusion module.", &
                  default=.false.)
 
   if (.not. lateral_boundary_diffusion_init) then
@@ -91,12 +91,12 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
 
   CS%surface_boundary_scheme = -1
   if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
-    call MOM_error(FATAL,"Lateral boundary mixing is true, but no valid boundary layer scheme was found")
+    call MOM_error(FATAL,"Lateral boundary diffusion is true, but no valid boundary layer scheme was found")
   endif
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "LATERAL_BOUNDARY_METHOD", CS%method, &
-                 "Determine how to apply near-boundary lateral mixing of tracers"//&
+                 "Determine how to apply near-boundary lateral diffusion of tracers"//&
                  "1. Bulk layer approach"//&
                  "2. Along layer approach"//&
                  "3. Decomposition on to pressure levels", default=1)
@@ -186,8 +186,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         enddo
       enddo
       ! Post tracer bulk diags
-      if (tracer%id_lbm_bulk_dfx>0) call post_data(tracer%id_lbm_bulk_dfx, uFlx_bulk*Idt, CS%diag)
-      if (tracer%id_lbm_bulk_dfy>0) call post_data(tracer%id_lbm_bulk_dfy, vFlx_bulk*Idt, CS%diag)
+      if (tracer%id_lbd_bulk_dfx>0) call post_data(tracer%id_lbd_bulk_dfx, uFlx_bulk*Idt, CS%diag)
+      if (tracer%id_lbd_bulk_dfy>0) call post_data(tracer%id_lbd_bulk_dfy, vFlx_bulk*Idt, CS%diag)
 
       ! TODO: this is where we would filter vFlx and uFlux to get rid of checkerboard noise
 
@@ -221,22 +221,22 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     enddo ; enddo ; enddo
 
     ! Post the tracer diagnostics
-    if (tracer%id_lbm_dfx>0)      call post_data(tracer%id_lbm_dfx, uFlx*Idt, CS%diag)
-    if (tracer%id_lbm_dfy>0)      call post_data(tracer%id_lbm_dfy, vFlx*Idt, CS%diag)
-    if (tracer%id_lbm_dfx_2d>0) then
+    if (tracer%id_lbd_dfx>0)      call post_data(tracer%id_lbd_dfx, uFlx*Idt, CS%diag)
+    if (tracer%id_lbd_dfy>0)      call post_data(tracer%id_lbd_dfy, vFlx*Idt, CS%diag)
+    if (tracer%id_lbd_dfx_2d>0) then
       uwork_2d(:,:) = 0.
       do k=1,GV%ke; do j=G%jsc,G%jec; do I=G%isc-1,G%iec
         uwork_2d(I,j) = uwork_2d(I,j) + (uFlx(I,j,k) * Idt)
       enddo; enddo; enddo
-      call post_data(tracer%id_lbm_dfx_2d, uwork_2d, CS%diag)
+      call post_data(tracer%id_lbd_dfx_2d, uwork_2d, CS%diag)
     endif
 
-    if (tracer%id_lbm_dfy_2d>0) then
+    if (tracer%id_lbd_dfy_2d>0) then
       vwork_2d(:,:) = 0.
       do k=1,GV%ke; do J=G%jsc-1,G%jec; do i=G%isc,G%iec
         vwork_2d(i,J) = vwork_2d(i,J) + (vFlx(i,J,k) * Idt)
       enddo; enddo; enddo
-      call post_data(tracer%id_lbm_dfy_2d, vwork_2d, CS%diag)
+      call post_data(tracer%id_lbd_dfy_2d, vwork_2d, CS%diag)
     endif
   enddo
 
