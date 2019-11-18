@@ -340,7 +340,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
             "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-    if (.not. check_if_open(fileObjRead)) fileOpenSuccess = open_file(fileObjRead, fileName, "read", .false.)
+    if (.not. check_if_open(fileObjRead)) &
+      fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
       if (variable_exists(fileObjRead,'dz')) then; varName = 'dz'
@@ -366,7 +367,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call check_grid_def(filename, varName, expected_units, message, ierr)
       if (ierr) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
-      if (.not. check_if_open(fileObjRead)) fileOpenSuccess = open_file(fileObjRead, fileName, "read", .false.)
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
       ! get variable dimension sizes
       call get_variable_size(fileObjRead, trim(varName), nzf, broadcast=.true.)
       
@@ -413,7 +415,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     ! open the file
     ! note: using individual fms-io calls since file has to be opened to check for the variable. This avoids 
     ! opening/closing the same file multiple times in row
-    if (.not. check_if_open(fileObjRead)) fileOpenSuccess = open_file(fileObjRead, fileName, "read", .false.)
+    if (.not. check_if_open(fileObjRead)) &
+      fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
     varName = trim( extractWord(trim(string(8:)), 2) )
     if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
@@ -630,7 +633,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
       ! open the file
-      if (.not. check_if_open(fileObjRead)) fileOpenSuccess = open_file(fileObjRead, fileName, "read", .false.)
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
 
       do_sum = .false.
       varName = trim( extractWord(trim(string(6:)), 2) )
@@ -705,7 +709,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
       ! open the file
-      if (.not. check_if_open(fileObjRead)) fileOpenSuccess = open_file(fileObjRead, fileName, "read", .false.)
+      if (.not. check_if_open(fileObjRead)) &
+        fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
 
       varName = trim( extractWord(trim(string(6:)), 2) )
       if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &

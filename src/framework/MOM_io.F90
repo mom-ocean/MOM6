@@ -110,6 +110,7 @@ public :: MOM_get_nc_corner_edgelengths
 public :: MOM_open_file
 public :: MOM_read_data
 public :: MOM_register_diagnostic_axis
+public :: open_file
 public :: read_data
 public :: read_restart
 public :: register_axis
@@ -206,32 +207,32 @@ contains
 
 !> Open domain-decomposed file(s) with the base file name 'filename' to read, write/append, or overwrite data.  
 !! The domain comes from the ocean_grid_type structure G.
-function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+function MOM_open_file_DD_ocean_grid(MOMfileObj, filename, mode, G, is_restart) result(fileOpenSuccess)
   type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   type(ocean_grid_type),      intent(in) :: G !< The ocean's grid structure
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
   ! local
-  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  logical :: fileOpenSuccess ! returns .true. if the file(s) is(are) opened
   character(len=512) :: mesg ! A message for warnings.
    
   select case (trim(mode))
      case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "read", & 
                           G%Domain%mpp_domain, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "append", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
+        if (.not.(fileOpenSuccess)) then
            ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
+           fileOpenSuccess = open_file(MOMfileObj, filename, "write", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case("overwrite")
         ! overwrite existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", &
+        fileOpenSuccess = open_file(MOMfileObj, filename, "overwrite", &
                                   G%Domain%mpp_domain, is_restart = is_restart) 
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
@@ -241,32 +242,32 @@ end function MOM_open_file_DD_ocean_grid
 
 !> Open domain-decomposed file with the base file name 'filename' to read from, overwrite, or write/append to. 
 !! The domain comes from the MOM_domain_type structure G.
-function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+function MOM_open_file_DD_supergrid(MOMfileObj, filename, mode, G, is_restart) result(fileOpenSuccess)
   type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   type(MOM_domain_type),  intent(in)  :: G ! Supergrid domain defined in MOM_grid_initialize.F90
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
   ! local
-  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  logical :: fileOpenSuccess ! returns .true. if the file(s) is(are) opened
   character(len=512) :: mesg ! A message for warnings.
    
   select case (trim(mode))
      case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "read", & 
                           G%mpp_domain, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "append", & 
                                    G%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
+        if (.not.(fileOpenSuccess)) then
            ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
+           fileOpenSuccess = open_file(MOMfileObj, filename, "write", & 
                                    G%mpp_domain, is_restart = is_restart)
         endif
      case("overwrite")
         ! overwrite existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "overwrite", & 
                                    G%mpp_domain, is_restart = is_restart)
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
@@ -276,32 +277,32 @@ end function MOM_open_file_DD_supergrid
 
 !> Open domain-decomposed file with the base file name 'filename' to read, overwrite, or write/append data. 
 !! The domain comes from the dyn_horgrid_type structure G.
-function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart) result(file_open_success)
+function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart) result(fileOpenSuccess)
   type(FmsNetcdfDomainFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   type(dyn_horgrid_type),  intent(in)  :: G !< Supergrid domain defined in MOM_grid_initialize.F90
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
   ! local
-  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  logical :: fileOpenSuccess ! returns .true. if the file(s) is(are) opened
   character(len=512) :: mesg ! A message for warnings.
    
   select case (trim(mode))
      case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "read", & 
                           G%Domain%mpp_domain, is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "append", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
-        if (.not.(file_open_success)) then
+        if (.not.(fileOpenSuccess)) then
            ! create and open new file(s) for domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
+           fileOpenSuccess = open_file(MOMfileObj, filename, "write", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
         endif
      case("overwrite")
         ! overwrite existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "overwrite", & 
                                    G%Domain%mpp_domain, is_restart = is_restart)
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
@@ -310,32 +311,32 @@ function MOM_open_file_DD_dyn_horgrid(MOMfileObj, filename, mode, G, is_restart)
 end function MOM_open_file_DD_dyn_horgrid
 
 !> Open non-domain-decomposed file(s) with the base file name 'filename' to read, overwrite, or write/append data.
-function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(file_open_success)
+function MOM_open_file_noDD(MOMfileObj, filename, mode, is_restart) result(fileOpenSuccess)
   type(FmsNetcdfFile_t), intent(inout) :: MOMfileObj !< netCDF file object 
   character(len=*),       intent(in) :: filename !< The base filename of the file(s) to search for
   character(len=*),       intent(in) :: mode !< read or write(checks if file exists to append)
   logical, intent(in) :: is_restart !< indicates whether to check for restart file(s)
   ! local
-  logical :: file_open_success ! returns .true. if the file(s) is(are) opened
+  logical :: fileOpenSuccess ! returns .true. if the file(s) is(are) opened
   character(len=512) :: mesg  ! A message for warnings.
    
-  file_open_success = .false.
+  fileOpenSuccess = .false.
   select case (trim(mode))
      case("read")
-        file_open_success = open_file(MOMfileObj, filename, "read", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "read", & 
                           is_restart = is_restart)
      case("write")
         ! check if file(s) already exists and can be appended
-        file_open_success = open_file(MOMfileObj, filename, "append", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "append", & 
                                    is_restart = is_restart)
-        if (.not.(file_open_success)) then
+        if (.not.(fileOpenSuccess)) then
            ! create and open new file(s) for non-domain-decomposed write
-           file_open_success = open_file(MOMfileObj, filename, "write", & 
+           fileOpenSuccess = open_file(MOMfileObj, filename, "write", & 
                                    is_restart = is_restart)
         endif
      case("overwrite")
         ! overwirte existing file
-        file_open_success = open_file(MOMfileObj, filename, "overwrite", & 
+        fileOpenSuccess = open_file(MOMfileObj, filename, "overwrite", & 
                                    is_restart = is_restart)
      case default
         write(mesg,'( "ERROR, file mode must be read or write to open ",A)') trim(filename)
@@ -346,7 +347,7 @@ end function MOM_open_file_noDD
 
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
-subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLengths, scale)
+subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
@@ -360,11 +361,11 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLe
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i
   integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
-  character(len=40) :: dimNames ! variable dimension names
+  character(len=40), dimension(1) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variableaxes
   !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
   !! x/longitude and/or y/latitude axes units
@@ -379,7 +380,7 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLe
   if (present(edgeLengths)) then
     nread(1) = edgeLengths
   else
-    call get_dimension_size(fileObjRead, trim(dimNames), nread(1))
+    call get_dimension_size(fileObjRead, trim(dimNames(1)), nread(1))
   endif
     
    ! read the data
@@ -414,7 +415,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
   !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
   !! x/longitude and/or y/latitude axes units
@@ -457,7 +458,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
 
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
+    call scale_data(data, scale, domain)
   endif ; endif
 
 end subroutine MOM_read_data_2d_DD
@@ -483,7 +484,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
   !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
   !! x/longitude and/or y/latitude axes units
@@ -526,7 +527,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
 
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
+    call scale_data(data, scale, domain)
   endif ; endif
 
 end subroutine MOM_read_data_3d_DD
@@ -536,7 +537,7 @@ end subroutine MOM_read_data_3d_DD
 subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:,:),   intent(inout) :: data !< The 4-dimensional data array to pass to read_data
+  real, dimension(:,:,:,:),   intent(inout) :: data !< The 4-dimensional data array to pass to read_data
   type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
   integer, dimension(4),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edgeLengths !< number of data values to read in.
@@ -552,7 +553,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", domain%mpp_domain, is_restart=.false.)
   ! register the variable axes
   !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
   !! x/longitude and/or y/latitude axes units
@@ -595,7 +596,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
 
   ! scale the data
   if (present(scale)) then ; if (scale /= 1.0) then
-    call scale_data(data, scale)
+    call scale_data(data, scale, domain)
   endif ; endif
 
 end subroutine MOM_read_data_4d_DD
@@ -612,7 +613,7 @@ subroutine MOM_read_data_scalar(filename, fieldname, data)
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
   ! read the data
   call read_data(fileObjRead, trim(fieldname), data)
   ! close the file
@@ -622,7 +623,7 @@ end subroutine MOM_read_data_scalar
 
 !> This function uses the fms_io function read_data to read 1-D data field named "fieldname" 
 !! from file "filename".
-subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edgeLengths, scale)
+subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edgeLengths, timeLevel, scale)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
@@ -633,27 +634,28 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edgeLengths,
   ! local
   type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
-  integer :: i
-  integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
-  character(len=40) :: dimNames ! variable dimension names
+  integer :: i, ndims
+  integer, allocatable, dimension(:) :: start, nread ! indices for first data value and number of values to read
+  character(len=40), allocatable, dimension(:) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
 
-  if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
-    call get_variable_dimension_names(fileObjRead, trim(fieldname), dimNames)
-  endif
+  ndims = get_variable_num_dimensions(fileObjRead,trim(fieldname))
+  allocate(start(ndims))
+  allocate(nread(ndims))
+  allocate(dimNames(ndims))
   
-  start(1) = 1
   if (present(corner)) start(1) = corner
   if (present(edgeLengths)) then
     nread(1) = edgeLengths
   else
-    call get_dimension_size(fileObjRead, trim(dimNames), nread(1))
+    call get_variable_dimension_names(fileObjRead, trim(fieldname), dimNames)
+    call get_dimension_size(fileObjRead, dimNames(1), nread(1))
   endif
     
-   ! read the data
+  ! read the data
   call read_data(fileObjRead, trim(fieldname), data, corner=start, edge_Lengths=nread)
   ! close the file
   if (check_if_open(fileObjRead)) call close_file(fileObjRead)
@@ -662,6 +664,9 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edgeLengths,
     call scale_data(data, scale)
   endif ; endif
 
+  deallocate(start)
+  deallocate(nread)
+  deallocate(dimNames)
 end subroutine MOM_read_data_1d_noDD
 
 !> This function uses the fms_io function read_data to read 2-D data field named "fieldname" 
@@ -684,7 +689,7 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edgeLengths,
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
 
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
@@ -733,7 +738,7 @@ end subroutine MOM_read_data_2d_noDD
 subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edgeLengths, timeLevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:),   intent(inout) :: data !< The 3-dimensional data array to pass to read_data
+  real, dimension(:,:,:),   intent(inout) :: data !< The 3-dimensional data array to pass to read_data
   integer, dimension(3),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(3),  optional, intent(in) :: edgeLengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -748,7 +753,7 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edgeLengths,
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
 
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
@@ -797,7 +802,7 @@ end subroutine MOM_read_data_3d_noDD
 subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edgeLengths, timeLevel, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
-  real, dimension(:,:),   intent(inout) :: data !< The 4-dimensional array to pass to read_data
+  real, dimension(:,:,:,:),   intent(inout) :: data !< The 4-dimensional array to pass to read_data
   integer, dimension(4),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edgeLengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -812,7 +817,7 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edgeLengths,
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
-    file_open_success = open_file(fileObjRead, filename, "read", is_restart=.false.)
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
 
   ! set the start and nread values that will be passed as the read_data corner and edge_lengths arguments
   if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
@@ -1365,7 +1370,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   logical :: fileOpenSuccess ! .true. if call to open_file is successful
   logical :: variableExists ! .true. if variable is found in file
   character(len=200) :: msg
-  character(len=40), allocatable(:) :: dimNames ! variable dimension names
+  character(len=40), allocatable, dimension(:) :: dimNames ! variable dimension names
   integer :: i, ndims
   type(fmsNetcdfFile_t) :: fileObjread !netcdf file object returned by open_file
 
@@ -1376,8 +1381,8 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
     fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
 
   ! check that variable is in the file
-  if (.not.(variable_exists(fileObjRead, trim(varname))) call MOM_error(FATAL, "num_timelevels: variable"//&
-    trim(varnames)//"not found in "//trim(filename))
+  if (.not.(variable_exists(fileObjRead, trim(varname)))) call MOM_error(FATAL, "num_timelevels: variable"//&
+    trim(varname)//" not found in "//trim(filename))
   
   ! get the number of variable dimensions
   ndims = get_variable_num_dimensions(fileObjRead, trim(varname))
@@ -1398,7 +1403,8 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
   call get_variable_dimensions(fileObjRead, trim(varname), dimNames)
   do i=1,ndims
-    if (is_dimension_unlimited(dimNames(i))) call get_dimension_size(fileObjRead, dimNames(i), n_time)
+    if (is_dimension_unlimited(fileObjRead, trim(dimNames(i)))) &
+      call get_dimension_size(fileObjRead, trim(dimNames(i)), n_time)
   enddo
 
   deallocate(dimNames)
@@ -1824,42 +1830,54 @@ end subroutine scale_data_1d
 subroutine scale_data_2d(data, scale_factor, MOM_domain)
   real, dimension(:,:), intent(inout) :: data !< The 2-dimensional data array
   real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The domain that describes the decomposition
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
   ! local
   integer :: is, ie, js, je
 
   if (scale_factor /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je) = scale_factor*data(is:ie,js:je)
+    if (present(MOM_domain)) then
+      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+      data(is:ie,js:je) = scale_factor*data(is:ie,js:je)
+    else
+      data(:,:) = scale_factor*data(:,:)
+    endif
   endif
 end subroutine scale_data_2d
 
 subroutine scale_data_3d(data, scale_factor, MOM_domain)
   real, dimension(:,:,:), intent(inout) :: data !< The 3-dimensional data array
   real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The domain that describes the decomposition
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
   ! local
   integer :: is, ie, js, je
 
   if (scale_factor /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:) = scale_factor*data(is:ie,js:je,:)
+    if (present(MOM_domain)) then
+      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+      data(is:ie,js:je,:) = scale_factor*data(is:ie,js:je,:)
+    else
+      data(:,:,:) = scale_factor*data(:,:,:)
+    endif
   endif
 end subroutine scale_data_3d
 
 subroutine scale_data_4d(data, scale_factor, MOM_domain)
   real, dimension(:,:,:,:), intent(inout) :: data !< The 4-dimensional data array
   real, intent(in) :: scale_factor !< Scale factor
-  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The domain that describes the decomposition
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< The domain that describes the decomposition
   ! local
   integer :: is, ie, js, je
 
   if (scale_factor /= 1.0) then
-    call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
-    call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
-    data(is:ie,js:je,:,:) = scale_factor*data(is:ie,js:je,:,:)
+    if (present(MOM_domain)) then
+      call get_simple_array_i_ind(MOM_Domain, size(data,1), is, ie)
+      call get_simple_array_j_ind(MOM_Domain, size(data,2), js, je)
+      data(is:ie,js:je,:,:) = scale_factor*data(is:ie,js:je,:,:)
+    else
+      data(:,:,:,:) = scale_factor*data(:,:,:,:)
+    endif
   endif
 end subroutine scale_data_4d
 
