@@ -231,7 +231,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
   integer :: ndims, dimUnlimIndex
-  integer, allocatable, dimension(:), corner, edgeLengths
+  integer, allocatable, dimension(:) :: corner, edgeLengths
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.

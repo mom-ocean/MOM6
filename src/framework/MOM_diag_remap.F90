@@ -61,8 +61,7 @@ use MOM_coms,             only : reproducing_sum
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
-use MOM_io,               only : slasher, mom_read_data
-use MOM_io,               only : file_exists, field_size
+use MOM_io,               only : slasher, MOM_read_data, file_exists
 use MOM_string_functions, only : lowercase, extractWord
 use MOM_grid,             only : ocean_grid_type
 use MOM_unit_scaling,     only : unit_scale_type

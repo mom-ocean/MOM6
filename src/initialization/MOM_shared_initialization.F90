@@ -764,9 +764,9 @@ subroutine reset_face_lengths_file(G, param_file, US)
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf file object returned by call to MOM_open_file
   ! These checks apply regardless of the chosen option.
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
@@ -786,13 +786,8 @@ subroutine reset_face_lengths_file(G, param_file, US)
                            trim(filename))
   endif
 
-  ! open file for domain-decomposed read
-  if (.not.check_if_open(fileObjRead)) call MOM_open_file(fileObjRead, filename, "read", G, .false.)
-
-  call MOM_read_vector(fileObjRead, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=m_to_L)
+  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=m_to_L)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-  ! close the file
-  if (check_if_open(fileObjRead)) call close_file(fileObjRead))
 
   do j=jsd,jed ; do I=IsdB,IedB
     if (L_to_m*G%dy_Cu(I,j) > L_to_m*G%dyCu(I,j)) then

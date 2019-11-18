@@ -284,7 +284,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   deallocate(exnj)
 
   ! open the file for domain-decomposed read
-  file_open_success = open_file(fileObjRead, filename, "read", SGdom%mpp_domain, .false.)
+  file_open_success = open_file(fileObjRead, filename, "read", SGdom%mpp_domain, is_restart=.false.)
   ! tmpZ is defined on the data domain
   tmpZ(:,:) = 999.0
   ! register the global axes
@@ -412,7 +412,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! broken convention for interpretting netCDF files).
  
   ! open the file for non-domain-decomposed read
-  file_open_success = open_file(fileObjReadNoDD, filename, "read", .false.)
+  file_open_success = open_file(fileObjReadNoDD, filename, "read", is_restart=.false.)
 
   ! get the number of dimensions and the dimension sizes for 'x'  
   ndims = get_variable_num_dimensions(fileObjReadNoDD, "x", broadcast=.true.)

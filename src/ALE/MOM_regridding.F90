@@ -6,7 +6,7 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io, only : slasher
-use MOM_io, only : open_file, close_file, read_data
+use MOM_io, only : open_file, close_file, read_data, get_variable_size
 use MOM_io, only : FmsNetcdfFile_t, file_exists, variable_exists, check_if_open
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
@@ -375,11 +375,11 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       ke = nzf(1)-1
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
-        call read_data(trim(fileName), trim(varName), rho_target)
+        call read_data(fileObjRead, trim(varName), rho_target)
       else
         allocate(dz(ke))
         allocate(z_max(ke+1))
-        call read_data(trim(fileName), trim(varName), z_max)
+        call MOM_read_data(trim(fileName), trim(varName), z_max)
         dz(:) = abs(z_max(1:ke) - z_max(2:ke+1))
         deallocate(z_max)
       endif
@@ -413,12 +413,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     ! open the file
-    ! note: using individual fms-io calls since file has to be opened to check for the variable. This avoids 
-    ! opening/closing the same file multiple times in row
+    ! note: using individual fms-io calls instead of MOM_read_data to avoid unnecessary opening/closing after querying 
+    ! the file for the variable.
     if (.not. check_if_open(fileObjRead)) &
       fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
     varName = trim( extractWord(trim(string(8:)), 2) )
-    if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
+    if (.not. variable_exists(fileObjRead,varName)) &
+      call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     ! read the data
     call read_data(fileObjRead, trim(varName), rho_target)
@@ -427,7 +428,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
       call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
     else ! Read dz from file
-      if (.not. variable_exists(fileObjRead,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
+      if (.not. variable_exists(fileObjRead,varName)) &
+        call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       call read_data(fileObjRead, trim(varName), dz)
     endif

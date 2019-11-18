@@ -9,8 +9,8 @@ use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_io,            only : file_exists, variable_exists
-use MOM_io,            only : FmsNetcdfDomainFile_t, open_file, MOM_read_data, close_file
+use MOM_io,            only : file_exists, variable_exists, check_if_open
+use MOM_io,            only : FmsNetcdfDomainFile_t, open_file, close_file
 use MOM_time_manager,  only : time_type, time_type_to_real
 
 implicit none ; private
@@ -354,14 +354,16 @@ subroutine find_in_files(filenames, varname, array, G)
   logical :: fileOpenSuccess
   type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
 
+  ! note:using individual fms-io calls instead of MOM_read_data to avoid unnecessary reopening/closing to read
+  ! after querying
   do nf=1,size(filenames)
     if (LEN_TRIM(filenames(nf)) == 0) cycle
     if (.not. check_if_open(fileObjRead)) &
-      fileOpenSuccess = open_file(fileObjRead, filenames(nf), "read", G%Domain, .false.)
+      fileOpenSuccess = open_file(fileObjRead, filenames(nf), "read", G%Domain%mpp_domain, is_restart=.false.)
     
     if (variable_exists(fileObjRead, varname)) then
-      call close_file(fileObjRead) ! mom_read_data will open the file
-      call MOM_read_data(filenames(nf), varname, array, G%Domain)
+      call read_data(filenames(nf), varname, array, G%Domain)
+      call close_file(fileObjRead)
       return
     endif
   enddo
