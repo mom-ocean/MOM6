@@ -69,11 +69,10 @@ use netcdf
 
 implicit none ; private
 
-public :: mpp_close_file, mpp_open_file, fieldtype, get_filename_appendix
-public :: flush_file
-public :: num_timelevels, MOM_read_vector, ensembler
+public :: mpp_close_file, mpp_open_file, fieldtype, flush_file
+public :: MOM_read_vector, ensembler, num_timelevels
 public :: slasher, MOM_io_init
-public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
+public :: open_namelist_file, check_nml_error, io_infra_init
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -347,7 +346,7 @@ end function MOM_open_file_noDD
 
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
-subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain corner, edgeLengths, scale)
+subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLengths, scale)
   character(len=*),       intent(in) :: filename !< The name of the file to read
   character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
@@ -361,7 +360,7 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain corner, edgeLen
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i
   integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
-  character(len=40) :: dimNames : ! variable dimension names
+  character(len=40) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -400,7 +399,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data !< The 2-dimensional data array to pass to read_data
-  type(MOM_domain), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
   integer, dimension(2),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(2),  optional, intent(in) :: edgeLengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -411,7 +410,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(2) :: dimNames : ! variable dimension names
+  character(len=40), dimension(2) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -440,7 +439,7 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   if (present(timeLevel)) then
     dimUnlimIndex=0
     do i=1,2
-      if (is_dimension_unlimited(fileObjRead,dimNames(i)) then 
+      if (is_dimension_unlimited(fileObjRead,dimNames(i))) then 
         dimUnlimIndex=i
         start(i)=timeLevel
         nread(i)=1
@@ -469,7 +468,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:),   intent(inout) :: data !< The 3-dimensional data array to pass to read_data
-  type(MOM_domain), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
   integer, dimension(3),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(3),  optional, intent(in) :: edgeLengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -480,7 +479,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(3) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(3) :: dimNames : ! variable dimension names
+  character(len=40), dimension(3) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -509,7 +508,7 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   if (present(timeLevel)) then
     dimUnlimIndex=0
     do i=1,3
-      if (is_dimension_unlimited(fileObjRead,dimNames(i)) then 
+      if (is_dimension_unlimited(fileObjRead,dimNames(i))) then 
         dimUnlimIndex=i
         start(i)=timeLevel
         nread(i)=1
@@ -538,7 +537,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:),   intent(inout) :: data !< The 4-dimensional data array to pass to read_data
-  type(MOM_domain), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  type(MOM_domain_type), intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
   integer, dimension(4),  optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
   integer, dimension(4),  optional, intent(in) :: edgeLengths !< number of data values to read in.
                                                               !! Default values are the variable dimension sizes
@@ -549,7 +548,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(4) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(4) :: dimNames : ! variable dimension names
+  character(len=40), dimension(4) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -578,7 +577,7 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   if (present(timeLevel)) then
     dimUnlimIndex=0
     do i=1,4
-      if (is_dimension_unlimited(fileObjRead,dimNames(i)) then 
+      if (is_dimension_unlimited(fileObjRead,dimNames(i))) then 
         dimUnlimIndex=i
         start(i)=timeLevel
         nread(i)=1
@@ -636,7 +635,7 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edgeLengths,
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i
   integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
-  character(len=40) :: dimNames : ! variable dimension names
+  character(len=40) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -681,7 +680,7 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edgeLengths,
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(2) :: dimNames : ! variable dimension names
+  character(len=40), dimension(2) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -706,7 +705,7 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edgeLengths,
   if (present(timeLevel)) then
     dimUnlimIndex=0
     do i=1,2
-      if (is_dimension_unlimited(fileObjRead,dimNames(i)) then 
+      if (is_dimension_unlimited(fileObjRead,dimNames(i))) then 
         dimUnlimIndex=i
         start(i)=timeLevel
         nread(i)=1
@@ -745,7 +744,7 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edgeLengths,
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(3) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(3) :: dimNames : ! variable dimension names
+  character(len=40), dimension(3) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -770,7 +769,7 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edgeLengths,
   if (present(timeLevel)) then
     dimUnlimIndex=0
     do i=1,3
-      if (is_dimension_unlimited(fileObjRead,dimNames(i)) then 
+      if (is_dimension_unlimited(fileObjRead,dimNames(i))) then 
         dimUnlimIndex=i
         start(i)=timeLevel
         nread(i)=1
@@ -809,7 +808,7 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edgeLengths,
   logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(4) :: start, nread ! indices for first data value and number of values to read
-  character(len=40), dimension(4) :: dimNames : ! variable dimension names
+  character(len=40), dimension(4) :: dimNames ! variable dimension names
   
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
@@ -834,7 +833,7 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edgeLengths,
   if (present(timeLevel)) then
     dimUnlimIndex=0
     do i=1,4
-      if (is_dimension_unlimited(fileObjRead,dimNames(i)) then 
+      if (is_dimension_unlimited(fileObjRead,dimNames(i))) then 
         dimUnlimIndex=i
         start(i)=timeLevel
         nread(i)=1
@@ -1352,6 +1351,60 @@ function get_time_units(time_value) result(time_units_out)
    time_units_out = trim(time_units)
 end function get_time_units
 
+!> This function determines how many time levels a variable has.
+function num_timelevels(filename, varname, min_dims) result(n_time)
+  character(len=*),  intent(in) :: filename   !< name of the file to read
+  character(len=*),  intent(in) :: varname    !< variable whose number of time levels
+                                              !! are to be returned
+  integer, optional, intent(in) :: min_dims   !< The minimum number of dimensions a variable must have
+                                              !! if it has a time dimension.  If the variable has 1 less
+                                              !! dimension than this, then 0 is returned.
+  integer :: n_time                           !< number of time levels varname has in filename
+
+  ! local
+  logical :: fileOpenSuccess ! .true. if call to open_file is successful
+  logical :: variableExists ! .true. if variable is found in file
+  character(len=200) :: msg
+  character(len=40), allocatable(:) :: dimNames ! variable dimension names
+  integer :: i, ndims
+  type(fmsNetcdfFile_t) :: fileObjread !netcdf file object returned by open_file
+
+  n_time = -1
+
+  ! open the file
+  if (.not.(check_if_open(fileObjRead))) &
+    fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
+
+  ! check that variable is in the file
+  if (.not.(variable_exists(fileObjRead, trim(varname))) call MOM_error(FATAL, "num_timelevels: variable"//&
+    trim(varnames)//"not found in "//trim(filename))
+  
+  ! get the number of variable dimensions
+  ndims = get_variable_num_dimensions(fileObjRead, trim(varname))
+
+  if (present(min_dims)) then
+    if (ndims .LT. min_dims-1) then
+      write(msg, '(I3)') min_dims
+      call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//&
+        " in file "//trim(filename)//" has fewer than min_dims = "//trim(msg)//&
+        " dimensions.")
+    elseif (ndims .EQ. min_dims - 1) then
+      n_time = 0 ; return
+    endif
+  endif
+
+  ! check for the unlimited dimension and set n_time to the length of the unlimited dimension
+  allocate(dimNames(ndims))
+
+  call get_variable_dimensions(fileObjRead, trim(varname), dimNames)
+  do i=1,ndims
+    if (is_dimension_unlimited(dimNames(i))) call get_dimension_size(fileObjRead, dimNames(i), n_time)
+  enddo
+
+  deallocate(dimNames)
+
+end function num_timelevels
+
 !> Returns a vardesc type whose elements have been filled with the provided
 !! fields.  The argument name is required, while the others are optional and
 !! have default values that are empty strings or are appropriate for a 3-d
@@ -1581,7 +1634,7 @@ end function ensembler
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
                               timelevel, stagger, scale)
-  character(len=*)        intnet(in)    :: filename !< name of the netcdf file to read
+  character(len=*),       intent(in)    :: filename !< name of the netcdf file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
   real, dimension(:,:),   intent(inout) :: u_data    !< The 2 dimensional array into which the
@@ -1673,7 +1726,7 @@ end subroutine MOM_read_vector_2d
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
 subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
                               timelevel, stagger, scale)
-  character(len=*)        intnet(in)    :: filename !< name of the netcdf file to read
+  character(len=*),       intent(in)    :: filename !< name of the netcdf file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
   real, dimension(:,:,:), intent(inout) :: u_data    !< The 3 dimensional array into which the
