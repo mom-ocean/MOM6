@@ -56,9 +56,9 @@ type, public :: tracer_type
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbd_dfx       => NULL() !< diagnostic array for x-diffusive tracer flux
+  real, dimension(:,:,:), pointer :: lbd_dfx       => NULL()  !< diagnostic array for x-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbd_dfy       => NULL() !< diagnostic array for y-diffusive tracer flux
+  real, dimension(:,:,:), pointer :: lbd_dfy       => NULL()  !< diagnostic array for y-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_dfx_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
                                                               !! [conc H m2 s-1 ~> conc m3 s-1 or conc kg s-1]
@@ -122,7 +122,7 @@ type, public :: tracer_type
   integer :: id_tr = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
   integer :: id_lbd_bulk_dfx = -1, id_lbd_bulk_dfy = -1, id_lbd_dfx = -1, id_lbd_dfy = -1
-  integer :: id_lbd_dfx_2d, id_lbd_dfy_2d
+  integer :: id_lbd_dfx_2d = -1  , id_lbd_dfy_2d = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
   integer :: id_adv_xy = -1, id_adv_xy_2d = -1
   integer :: id_dfxy_cont = -1, id_dfxy_cont_2d = -1, id_dfxy_conc = -1
@@ -415,18 +415,18 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
           diag%axesCvL, Time, trim(flux_longname)//" diffusive merdional flux" , &
           trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
       Tr%id_lbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfx", &
-          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the near-boundary diffusion scheme" , &
-          trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
+          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the lateral boundary diffusion "&
+          "scheme", trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
       Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfy", &
-          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the near-boundary diffusion scheme" , &
-          trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
+          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the lateral boundary diffusion"&
+          " scheme", trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
       Tr%id_lbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfx_2d", &
           diag%axesCu1, Time, trim(flux_longname)//&
-          " diffusive zonal flux from the near-boundary diffusion scheme vertically integrated" , &
+          "Vertically-integrated zonal diffusive flux from the lateral boundary diffusion scheme" , &
           trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
       Tr%id_lbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfy_2d", &
           diag%axesCv1, Time, trim(flux_longname)//&
-          " diffusive meridional flux from the near-boundary diffusion scheme vertically integrated" , &
+          "Vertically-integrated meridional diffusive flux from the lateral boundary diffusion scheme" , &
           trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
@@ -448,11 +448,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
           diag%axesCvL, Time, "Lateral Boundary Diffusive Meridional Flux of "//trim(flux_longname), &
           flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
       Tr%id_lbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx_2d", &
-          diag%axesCu1, Time, "Vertically integrated Lateral Boundary Diffusive Zonal Flux of "//trim(flux_longname), &
-          flux_units, v_extensive=.true., conversion=Tr%flux_scale, y_cell_method = 'sum')
+          diag%axesCu1, Time, "Vertically-integrated zonal diffusive flux from the lateral boundary diffusion "//&
+          "scheme for" //trim(flux_longname), flux_units, v_extensive=.true., conversion=Tr%flux_scale, &
+          y_cell_method = 'sum')
       Tr%id_lbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy_2d", &
-          diag%axesCv1, Time, "Vertically integrated Lateral Boundary Diffusive Meridional Flux of "//trim(flux_longname), &
-          flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
+          diag%axesCv1, Time, "Vertically-integrated meridional diffusive flux from the lateral boundary diffusion "//&
+          "scheme for "//trim(flux_longname), flux_units, v_extensive=.true., conversion=Tr%flux_scale, &
+          x_cell_method = 'sum')
     endif
     if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
@@ -485,7 +487,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
         flux_units, conversion=Tr%flux_scale, y_cell_method = 'sum')
     Tr%id_lbd_bulk_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_bulk_diffy", &
         diag%axesCv1, Time, &
-        "Vertically Integrated Diffusive Meridional Flux of "//trim(flux_longname), &
+        "Total Bulk Diffusive Meridional Flux of "//trim(flux_longname), &
         flux_units, conversion=Tr%flux_scale, x_cell_method = 'sum')
 
     if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x,IsdB,IedB,jsd,jed)

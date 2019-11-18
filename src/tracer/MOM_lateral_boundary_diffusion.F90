@@ -1,5 +1,5 @@
 !> Calculate and apply diffusive fluxes as a parameterization of lateral mixing (non-neutral) by
-!! mesoscale eddies near the top and bottom boundary layers of the ocean.
+!! mesoscale eddies near the top and bottom (to be implemented) boundary layers of the ocean.
 module MOM_lateral_boundary_diffusion
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -27,6 +27,7 @@ implicit none ; private
 
 public near_boundary_unit_tests, lateral_boundary_diffusion, lateral_boundary_diffusion_init
 public boundary_k_range
+
 ! Private parameters to avoid doing string comparisons for bottom or top boundary layer
 integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface bopundary
 integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to the bottom boundary
@@ -36,7 +37,7 @@ integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to th
 type, public :: lateral_boundary_diffusion_CS ; private
   integer :: method                                               !< Determine which of the three methods calculate
                                                                   !! and apply near boundary layer fluxes
-                                                                  !! 1. bulk-layer approach
+                                                                  !! 1. Bulk-layer approach
                                                                   !! 2. Along layer
                                                                   !! 3. Decomposition onto pressure levels
   integer :: deg                                                  !< Degree of polynomial reconstruction
@@ -44,27 +45,28 @@ type, public :: lateral_boundary_diffusion_CS ; private
                                                                   !! 1. ePBL; 2. KPP
   type(remapping_CS)              :: remap_CS                     !< Control structure to hold remapping configuration
   type(KPP_CS),           pointer :: KPP_CSp => NULL()            !< KPP control structure needed to get BLD
-  type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure needed to get MLD
+  type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure needed to get BLD
   type(diag_ctrl), pointer :: diag => NULL()                      !< A structure that is used to
                                                                   !! regulate the timing of diagnostic output.
 end type lateral_boundary_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40) :: mdl = "MOM_lateral_boundary_diffusion"          !< Name of this module
+character(len=40) :: mdl = "MOM_lateral_boundary_diffusion"       !< Name of this module
 
 contains
 
 !> Initialization routine that reads runtime parameters and sets up pointers to other control structures that might be
-!! needed for lateral boundary mixing
+!! needed for lateral boundary diffusion.
 logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diabatic_CSp, CS)
-  type(time_type), target,          intent(in)    :: Time       !< Time structure
-  type(ocean_grid_type),            intent(in)    :: G          !< Grid structure
-  type(param_file_type),            intent(in)    :: param_file !< Parameter file structure
-  type(diag_ctrl), target,          intent(inout) :: diag       !< Diagnostics control structure
-  type(diabatic_CS),                pointer       :: diabatic_CSp !< KPP control structure needed to get BLD
+  type(time_type), target,          intent(in)    :: Time          !< Time structure
+  type(ocean_grid_type),            intent(in)    :: G             !< Grid structure
+  type(param_file_type),            intent(in)    :: param_file    !< Parameter file structure
+  type(diag_ctrl), target,          intent(inout) :: diag          !< Diagnostics control structure
+  type(diabatic_CS),                pointer       :: diabatic_CSp  !< KPP control structure needed to get BLD
   type(lateral_boundary_diffusion_CS), pointer       :: CS         !< Lateral boundary mixing control structure
 
+  ! local variables
   character(len=80)  :: string  ! Temporary strings
   logical :: boundary_extrap
 
@@ -116,32 +118,33 @@ end function lateral_boundary_diffusion_init
 !> Driver routine for calculating lateral diffusive fluxes near the top and bottom boundaries. Two different methods
 !! Method 1: Calculate fluxes from bulk layer integrated quantities
 subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
-  type(ocean_grid_type),                intent(inout) :: G       !< Grid type
-  type(verticalGrid_type),              intent(in)    :: GV      !< ocean vertical grid structure
-  type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
+  type(ocean_grid_type),                intent(inout) :: G   !< Grid type
+  type(verticalGrid_type),              intent(in)    :: GV  !< ocean vertical grid structure
+  type(unit_scale_type),                intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                        intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
+                                        intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G)),    intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [m2]
   real, dimension(SZI_(G),SZJB_(G)),    intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [m2]
   real,                                 intent(in)    :: dt     !< Tracer time step * I_numitts
                                                                 !! (I_numitts in tracer_hordiff)
   type(tracer_registry_type),           pointer       :: Reg    !< Tracer registry
-  type(lateral_boundary_diffusion_CS),     intent(in)    :: CS      !< Control structure for this module
+  type(lateral_boundary_diffusion_CS),  intent(in)    :: CS     !< Control structure for this module
+
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: hbl   !< bnd. layer depth [m]
+  real, dimension(SZI_(G),SZJ_(G)) :: hbl                           !< bnd. layer depth [m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),CS%deg+1) :: ppoly0_coefs !< Coefficients of polynomial
   real, dimension(SZI_(G),SZJ_(G),SZK_(G),2)        :: ppoly0_E     !< Edge values from reconstructions
-  real, dimension(SZK_(G),CS%deg+1)                    :: ppoly_S      !< Slopes from reconstruction (placeholder)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        ! Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G))         :: uFLx_bulk   ! Total calculated bulk-layer u-flux for the tracer
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        ! Meridional flux of tracer
-  real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   ! Total calculated bulk-layer v-flux for the tracer
-  real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    ! Layer summed u-flux transport
-  real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    ! Layer summed v-flux transport
-  type(tracer_type), pointer                :: Tracer => NULL() ! Pointer to the current tracer
+  real, dimension(SZK_(G),CS%deg+1)                 :: ppoly_S      !< Slopes from reconstruction (placeholder)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uFlx        !< Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G))         :: uFLx_bulk   !< Total calculated bulk-layer u-flux for the tracer
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vFlx        !< Meridional flux of tracer
+  real, dimension(SZI_(G),SZJB_(G))         :: vFlx_bulk   !< Total calculated bulk-layer v-flux for the tracer
+  real, dimension(SZIB_(G),SZJ_(G))         :: uwork_2d    !< Layer summed u-flux transport
+  real, dimension(SZI_(G),SZJB_(G))         :: vwork_2d    !< Layer summed v-flux transport
+  type(tracer_type), pointer                :: Tracer => NULL() !< Pointer to the current tracer
   integer :: remap_method !< Reconstruction method
-  integer :: i,j,k,m
-  real    :: Idt !< inverse of the time step [s-1]
+  integer :: i,j,k,m      !< indices to loop over
+  real    :: Idt          !< inverse of the time step [s-1]
 
   Idt = 1./dt
   hbl(:,:) = 0.
@@ -164,6 +167,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     vFlx(:,:,:) = 0.
     uFlx_bulk(:,:) = 0.
     vFlx_bulk(:,:) = 0.
+
+    ! Method #1
     if ( CS%method == 1 ) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
@@ -191,6 +196,7 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
       ! TODO: this is where we would filter vFlx and uFlux to get rid of checkerboard noise
 
+    ! Method #2
     elseif (CS%method == 2) then
       do j=G%jsc,G%jec
         do i=G%isc-1,G%iec
@@ -251,9 +257,9 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
   real, dimension(nk) :: h                 !< Layer thicknesses                                         [m]
   real                :: hBLT              !< Depth of the mixing layer                                 [m]
   real, dimension(nk) :: phi               !< Scalar quantity
-  real, dimension(nk,2)    :: ppoly0_E(:,:)     !< Edge value of polynomial
+  real, dimension(nk,2)    :: ppoly0_E(:,:)      !< Edge value of polynomial
   real, dimension(nk,deg+1) :: ppoly0_coefs(:,:) !< Coefficients of polynomial
-  integer                   :: method       !< Remapping scheme to use
+  integer                   :: method            !< Remapping scheme to use
 
   integer             :: k_top             !< Index of the first layer within the boundary
   real                :: zeta_top          !< Fraction of the layer encompassed by the bottom boundary layer
@@ -265,7 +271,7 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
                                            !! because integration starts at the bottom                  [nondim]
   ! Local variables
   real    :: htot ! Running sum of the thicknesses (top to bottom)
-  integer :: k
+  integer :: k    ! k indice
 
 
   htot = 0.
@@ -364,6 +370,7 @@ end subroutine boundary_k_range
 !> Calculate the near-boundary diffusive fluxes calculated using the layer by layer method.
 subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
+
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
   integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
@@ -404,6 +411,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
   if (hbl_L == 0. .or. hbl_R == 0.) then
     return
   endif
+
   ! Calculate vertical indices containing the boundary layer
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
@@ -452,6 +460,7 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
     phi_L_avg = average_value_ppoly( nk, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, 1.0-zeta_top_L, 1.0)
     phi_R_avg = average_value_ppoly( nk, phi_R, ppoly0_E_R, ppoly0_coefs_R, method, k_top_R, 1.0-zeta_top_R, 1.0)
     heff = harmonic_mean(h_work_L, h_work_R)
+
     ! tracer flux where the minimum BLD intersets layer
     F_layer(k_top_max) = (-heff * khtr_u) * (phi_R_avg - phi_L_avg)
     do k = k_top_max+1,nk
@@ -459,11 +468,13 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
       F_layer(k) = -(heff * khtr_u) * (phi_R(k) - phi_L(k))
     enddo
   endif
+
 end subroutine fluxes_layer_method
 
 !> Calculate the near-boundary diffusive fluxes calculated from a 'bulk model'
 subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit)
+
   integer,                   intent(in   )       :: boundary !< Which boundary layer SURFACE or BOTTOM  [nondim]
   integer,                   intent(in   )       :: nk       !< Number of layers                        [nondim]
   integer,                   intent(in   )       :: deg      !< order of the polynomial reconstruction  [nondim]
@@ -503,7 +514,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   real    :: zeta_top_L, zeta_top_R, zeta_top_u
   real    :: zeta_bot_L, zeta_bot_R, zeta_bot_u
   real    :: h_work_L, h_work_R  ! dummy variables
-  real    :: F_max !< The maximum amount of flux that can leave a cell
+  real    :: F_max   !< The maximum amount of flux that can leave a cell
   logical :: limited !< True if the flux limiter was applied
   real    :: hfrac, F_bulk_remain
 
@@ -512,9 +523,11 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
     F_layer(:) = 0.
     return
   endif
+
   ! Calculate vertical indices containing the boundary layer
   call boundary_k_range(boundary, nk, h_L, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
   call boundary_k_range(boundary, nk, h_R, hbl_R, k_top_R, zeta_top_R, k_bot_R, zeta_bot_R)
+
   ! Calculate bulk averages of various quantities
   phi_L_avg  = bulk_average(boundary, nk, deg, h_L, hbl_L, phi_L, ppoly0_E_L, ppoly0_coefs_L, method, k_top_L, &
                             zeta_top_L, k_bot_L, zeta_bot_L)
@@ -531,7 +544,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
   F_bulk = -(khtr_u * heff) * (phi_R_avg - phi_L_avg)
   F_bulk_remain = F_bulk
   ! Calculate the layerwise sum of the vertical effective thickness. This is different than the heff calculated
-  ! above, but is used as a way to decompose decompose the fluxes onto the individual layers
+  ! above, but is used as a way to decompose the fluxes onto the individual layers
   h_means(:) = 0.
 
   if (boundary == SURFACE) then
@@ -579,6 +592,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
       h_means(k) = harmonic_mean(h_L(k),h_R(k))
     enddo
   endif
+
   if ( SUM(h_means) == 0. ) then
     return
   else
@@ -802,7 +816,8 @@ end subroutine fluxes_bulk_method
 !    ! NOTE: This would be better expressed in terms of the layers thicknesses rather
 !    ! than as differences of position - AJA
 !
-!    ! TODO: GMM, we need to import absolute_position from neutral diffusion. This gives us  the depth of the interface on the left and right side.
+!    ! TODO: GMM, we need to import absolute_position from neutral diffusion. This gives us
+!    !! the depth of the interface on the left and right side.
 !
 !    if (k_surface>1) then
 !      hL = absolute_position(nk,ns,Pl,KoL,PoL,k_surface) - absolute_position(nk,ns,Pl,KoL,PoL,k_surface-1)
@@ -1156,4 +1171,5 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
 
 
 end function test_boundary_k_range
+
 end module MOM_lateral_boundary_diffusion

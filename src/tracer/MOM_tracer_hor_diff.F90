@@ -65,8 +65,8 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
                                    !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
-  type(lateral_boundary_diffusion_CS), pointer :: lateral_boundary_diffusion_CSp => NULL() !< Control structure for lateral
-                                                                                     !! boundary mixing.
+  type(lateral_boundary_diffusion_CS), pointer :: lateral_boundary_diffusion_CSp => NULL() !< Control structure for
+                                                                                     !! lateral boundary mixing.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
@@ -406,11 +406,12 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     enddo
 
     do itt=1,num_itts
-      if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary mixing (tracer_hordiff)",itt)
+      if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary diffusion (tracer_hordiff)",itt)
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      call lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%lateral_boundary_diffusion_CSp)
+      call lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, &
+                                     CS%lateral_boundary_diffusion_CSp)
     enddo ! itt
   endif
 
