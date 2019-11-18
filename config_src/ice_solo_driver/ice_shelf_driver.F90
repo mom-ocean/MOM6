@@ -32,7 +32,7 @@ program SHELF_main
 !   use MOM_grid, only : ocean_grid_type
   use MOM_get_input, only : Get_MOM_Input, directories
   use MOM_io, only : file_exists, open_file, close_file
-  use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
+  use MOM_io, only : check_nml_error, io_infra_init
   use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart, only : save_restart
 !  use MOM_sum_output, only : write_energy, accumulate_net_input
@@ -405,7 +405,7 @@ program SHELF_main
   call diag_mediator_end(Time, ice_shelf_CSp%diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
-  call io_infra_end ; call MOM_infra_end
+  call MOM_infra_end
 
   call ice_shelf_end(ice_shelf_CSp)
 

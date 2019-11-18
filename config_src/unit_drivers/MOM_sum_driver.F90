@@ -28,8 +28,8 @@ program MOM_main
   use MOM_grid, only : MOM_grid_init, ocean_grid_type
   use MOM_grid_initialize, only : set_grid_metrics
   use MOM_io, only : MOM_io_init, file_exists, open_file, close_file
-  use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
-  use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
+  use MOM_io, only : check_nml_error, io_infra_init
+  use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE
 
   implicit none
 
@@ -161,7 +161,7 @@ program MOM_main
     endif
   enddo
 
-  call io_infra_end ; call MOM_infra_end
+  call MOM_infra_end
 
 contains
 

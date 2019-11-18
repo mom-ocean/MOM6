@@ -42,7 +42,7 @@ program MOM_main
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, mpp_open_file, mpp_close_file
-  use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
+  use MOM_io,              only : check_nml_error, io_infra_init
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
@@ -664,7 +664,7 @@ program MOM_main
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
-  call io_infra_end ; call MOM_infra_end
+  call MOM_infra_end
 
   call MOM_end(MOM_CSp)
   if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)

@@ -14,26 +14,21 @@ use MOM_string_functions, only : lowercase, slasher
 use MOM_string_functions, only : append_substring
 use MOM_time_manager,     only : time_type, time_type_to_real
 use MOM_verticalGrid,     only : verticalGrid_type
-
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
-use fms_io_mod,           only : io_infra_end=>fms_io_exit
-use fms_io_mod,           only : get_filename_appendix ! FYI: this function only trims strings if used without calling set_filename_appendix
 use MOM_string_functions,  only : extract_word
 use mpp_mod,              only : mpp_max 
 use mpp_domains_mod,      only : domain1d, domain2d, domainug, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : mpp_open_file => mpp_open, mpp_close_file => mpp_close
-use mpp_io_mod,           only : mpp_write_meta, mpp_get_info
-use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, axistype
-use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
+use mpp_io_mod,           only : mpp_write_meta
+use mpp_io_mod,           only : axistype
+use mpp_io_mod,           only : fieldtype, axistype, flush_file => mpp_flush
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
 use mpp_io_mod,           only : SINGLE_FILE=>MPP_SINGLE, WRITEONLY_FILE=>MPP_WRONLY
 use mpp_io_mod,           only : MPP_APPEND, MPP_MULTI, MPP_OVERWR, MPP_NETCDF, MPP_RDONLY
-use mpp_io_mod,           only : get_file_info=>mpp_get_info, get_file_atts=>mpp_get_atts
-use mpp_io_mod,           only : get_file_fields=>mpp_get_fields, get_file_times=>mpp_get_times
 use mpp_io_mod,           only : io_infra_init=>mpp_io_init
 
 use fms2_io_mod,          only: check_if_open, &
@@ -75,8 +70,7 @@ use netcdf
 implicit none ; private
 
 public :: mpp_close_file, mpp_open_file, fieldtype, get_filename_appendix
-public :: flush_file, get_file_info, get_file_atts, get_file_fields
-public :: get_file_times, read_axis_data
+public :: flush_file
 public :: num_timelevels, MOM_read_vector, ensembler
 public :: slasher, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end

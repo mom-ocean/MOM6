@@ -14,7 +14,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 !use MOM_io, only : flush_file, create_file, reopen_file
 use MOM_io, only : fieldtype, mpp_open_file, flush_file
-use MOM_io, only : file_exists, slasher, vardesc, var_desc, get_filename_appendix
+use MOM_io, only : file_exists, slasher, vardesc, var_desc
 use MOM_io, only : APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
 use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
@@ -246,10 +246,14 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                  "summed diagnostics.", default="ocean.stats")
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
-  call get_filename_appendix(filename_appendix)
-  if (len_trim(filename_appendix) > 0) then
-     energyfile = trim(energyfile) //'.'//trim(filename_appendix)
-  endif
+  !>@note: all this function does is trim strings; it was intended to be used with fms_io filename appendix functions 
+  ! get_instance_filename, set_filename_appendix, setup_one_field, and write_data. Thus, it does not return a filename
+  ! appendix when called on its own.
+
+  !call get_filename_appendix(filename_appendix)
+  !if (len_trim(filename_appendix) > 0) then
+  !   energyfile = trim(energyfile) //'.'//trim(filename_appendix)
+  !endif
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mdl, "output_path/ENERGYFILE", CS%energyfile)

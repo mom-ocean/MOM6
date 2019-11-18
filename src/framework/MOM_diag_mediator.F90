@@ -13,7 +13,6 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING, is_root_pe, assert
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
-use MOM_io,               only : get_filename_appendix
 use MOM_io,               only : EAST_FACE, NORTH_FACE
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
@@ -3103,10 +3102,14 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  "diagnostics listed in the diag_table.", &
                  default=doc_file_dflt, do_not_log=(diag_CS%chksum_iounit/=-1))
 
-    call get_filename_appendix(filename_appendix)
-    if (len_trim(filename_appendix) > 0) then
-      doc_file = trim(doc_file) //'.'//trim(filename_appendix)
-    endif
+    !> @note: all this function does is trim strings; it was intended to be used with fms_io filename appendix 
+    ! functions get_instance_filename, set_filename_appendix, setup_one_field, and write_data. Thus, it does not 
+    ! return a filename appendix when called on its own.
+
+    !call get_filename_appendix(filename_appendix)
+    !if (len_trim(filename_appendix) > 0) then
+    !  doc_file = trim(doc_file) //'.'//trim(filename_appendix)
+    !endif
 #ifdef STATSLABEL
     doc_file = trim(doc_file)//"."//trim(adjustl(STATSLABEL))
 #endif
