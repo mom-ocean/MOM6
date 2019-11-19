@@ -108,20 +108,17 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
-  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [s].
+  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [T ~> s].
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    mass, &         ! The total mass of the water column [kg m-2].
-    I_mass, &       ! The inverse of mass [m2 kg-1].
+    mass, &         ! The total mass of the water column [R Z ~> kg m-2].
+    I_mass, &       ! The inverse of mass [R-1 Z-1 ~> m2 kg-1].
     src, &          ! The sum of all MEKE sources [L2 T-3 ~> W kg-1] (= m2 s-3).
     MEKE_decay, &   ! A diagnostic of the MEKE decay timescale [T-1 ~> s-1].
-    ! MEKE_GM_src, &  ! The MEKE source from thickness mixing [m2 s-3].
-    ! MEKE_mom_src, & ! The MEKE source from momentum [m2 s-3].
-    ! MEKE_GME_snk, & ! The MEKE sink from GME backscatter [m2 s-3].
     drag_rate_visc, & ! Near-bottom velocity contribution to bottom dratg [L T-1 ~> m s-1]
     drag_rate, &    ! The MEKE spindown timescale due to bottom drag [T-1 ~> s-1].
     drag_rate_J15, &  ! The MEKE spindown timescale due to bottom drag with the Jansen 2015 scheme.
@@ -154,9 +151,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real :: cdrag2
   real :: advFac    ! The product of the advection scaling factor and some unit conversion
                     ! factors divided by the timestep [m H-1 T-1 ~> s-1 or m3 kg-1 s-1]
-  real :: mass_neglect ! A negligible mass [kg m-2].
+  real :: mass_neglect ! A negligible mass [R Z ~> kg m-2].
   real :: ldamping  ! The MEKE damping rate [T-1 ~> s-1].
-  real :: Rho0      ! A density used to convert mass to distance [kg m-3].
+  real :: Rho0      ! A density used to convert mass to distance [R ~> kg m-3].
   real :: sdt       ! dt to use locally [T ~> s] (could be scaled to accelerate)
   real :: sdt_damp  ! dt for damping [T ~> s] (sdt could be split).
   logical :: use_drag_rate ! Flag to indicate drag_rate is finite
@@ -185,19 +182,19 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
     if (CS%debug) then
       if (associated(MEKE%mom_src)) &
-        call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%L_to_m**2*US%s_to_T**3)
+        call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%GME_snk)) &
-        call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, scale=US%L_to_m**2*US%s_to_T**3)
+        call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%GM_src)) &
-        call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%L_to_m**2*US%s_to_T**3)
+        call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T)
       call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, scale=GV%H_to_m)
     endif
 
-    sdt = US%s_to_T*dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
-    Rho0 = GV%H_to_kg_m2 * GV%m_to_H
-    mass_neglect = GV%H_to_kg_m2 * GV%H_subroundoff
+    sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
+    Rho0 = GV%Rho0
+    mass_neglect = GV%H_to_RZ * GV%H_subroundoff
     cdrag2 = CS%cdrag**2
 
     ! With a depth-dependent (and possibly strong) damping, it seems
@@ -265,7 +262,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     do j=js-1,je+1
       do i=is-1,ie+1 ; mass(i,j) = 0.0 ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        mass(i,j) = mass(i,j) + G%mask2dT(i,j) * (GV%H_to_kg_m2 * h(i,j,k))
+        mass(i,j) = mass(i,j) + G%mask2dT(i,j) * (GV%H_to_RZ * h(i,j,k))
       enddo ; enddo
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
@@ -282,11 +279,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
       call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, scale=US%Z_to_m*US%s_to_T)
-      call hchksum(mass, 'MEKE mass',G%HI,haloshift=1)
-      call hchksum(drag_rate_visc, 'MEKE drag_rate_visc',G%HI, scale=US%L_T_to_m_s)
-      call hchksum(bottomFac2, 'MEKE bottomFac2',G%HI)
-      call hchksum(barotrFac2, 'MEKE barotrFac2',G%HI)
-      call hchksum(LmixScale, 'MEKE LmixScale',G%HI,scale=US%L_to_m)
+      call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, scale=US%R_to_kg_m3*US%Z_to_m)
+      call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, scale=US%L_T_to_m_s)
+      call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
+      call hchksum(barotrFac2, 'MEKE barotrFac2', G%HI)
+      call hchksum(LmixScale, 'MEKE LmixScale', G%HI,scale=US%L_to_m)
     endif
 
     ! Aggregate sources of MEKE (background, frictional and GM)
@@ -314,7 +311,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           src(i,j) = src(i,j) - CS%MEKE_GMcoeff*MEKE%GM_src(i,j) / &
-                     MAX(1.0, G%bathyT(i,j))  !### 1.0 seems to be a hard-coded dimensional constant (1 m?).
+                     (GV%Rho0 * MAX(1.0*US%m_to_Z, G%bathyT(i,j)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
@@ -334,7 +331,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       ! Calculate a viscous drag rate (includes BBL contributions from mean flow and eddies)
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        drag_rate(i,j) = (US%L_to_m*Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 + &
+        drag_rate(i,j) = (US%L_to_Z*Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 + &
                  cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
       enddo ; enddo
     endif
@@ -364,6 +361,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         ! Here the units of MEKE_uflux are [L2 T-2].
         MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * G%mask2dCu(I,j)) * &
             (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
+      ! This would have units of [R Z L2 T-2]
       ! MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
       !     ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
       !     (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
@@ -373,6 +371,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         ! Here the units of MEKE_vflux are [L2 T-2].
         MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * G%mask2dCv(i,J)) * &
             (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
+      ! This would have units of [R Z L2 T-2]
       ! MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
       !     ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
       !     (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
@@ -395,7 +394,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
                      max(G%IareaT(i,j), G%IareaT(i+1,j)))**2
         if (K4_here*Inv_K4_max > 0.3) K4_here = 0.3 / Inv_K4_max
 
-        ! Here the units of MEKE_uflux are [kg m-2 L4 T-3].
+        ! Here the units of MEKE_uflux are [R Z L4 T-3].
         MEKE_uflux(I,j) = ((K4_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (del2MEKE(i+1,j) - del2MEKE(i,j))
@@ -437,7 +436,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
-        ! Here the units of MEKE_uflux and MEKE_vflux are [kg m-2 L4 T-3].
+        ! Here the units of MEKE_uflux and MEKE_vflux are [R Z L4 T-3].
         MEKE_uflux(I,j) = ((Kh_here * (G%dy_Cu(I,j)*G%IdxCu(I,j))) * &
             ((2.0*mass(i,j)*mass(i+1,j)) / ((mass(i,j)+mass(i+1,j)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i+1,j))
@@ -452,15 +451,15 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
-        ! Here the units of MEKE_uflux and MEKE_vflux are [kg m-2 L4 T-3].
+        ! Here the units of MEKE_uflux and MEKE_vflux are [R Z L4 T-3].
         MEKE_vflux(i,J) = ((Kh_here * (G%dx_Cv(i,J)*G%IdyCv(i,J))) * &
             ((2.0*mass(i,j)*mass(i,j+1)) / ((mass(i,j)+mass(i,j+1)) + mass_neglect)) ) * &
             (MEKE%MEKE(i,j) - MEKE%MEKE(i,j+1))
       enddo ; enddo
       if (CS%MEKE_advection_factor>0.) then
         !### I think that for dimensional consistency, this should be:
-        ! advFac = GV%H_to_kg_m2 * CS%MEKE_advection_factor / (US%s_to_T*dt)
-        advFac = GV%H_to_m * CS%MEKE_advection_factor / (US%s_to_T*dt)
+        ! advFac = GV%H_to_RZ * CS%MEKE_advection_factor / sdt
+        advFac = US%kg_m3_to_R*GV%H_to_Z * CS%MEKE_advection_factor / dt
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
           ! Here the units of the quantities added to MEKE_uflux and MEKE_vflux are [m L4 T-3].
@@ -506,7 +505,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         if (use_drag_rate) then
           !$OMP parallel do default(shared)
           do j=js,je ; do i=is,ie
-            drag_rate(i,j) = (US%L_to_m*Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 + &
+            drag_rate(i,j) = (US%L_to_Z*Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 + &
                    cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
           enddo ; enddo
           !$OMP parallel do default(shared)
@@ -640,7 +639,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc !< Mean flow velocity contribution
                                                            !! to the MEKE drag rate [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass [m2 kg-1].
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass [R-1 Z-1 ~> m2 kg-1].
   ! Local variables
   real :: beta ! Combined topograpic and planetary vorticity gradient [T-1 L-1 ~> s-1 m-1]
   real :: SN   ! The local Eady growth rate [T-1 ~> s-1]
@@ -658,7 +657,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: FatH    ! Coriolis parameter at h points; to compute topographic beta [T-1 ~> s-1]
   real :: beta_topo_x, beta_topo_y    ! Topographic PV gradients in x and y [T-1 L-1 ~> s-1 m-1]
   integer :: i, j, is, ie, js, je, n1, n2
-  real, parameter :: tolerance = 1.e-12 ! Width of EKE bracket [m2 s-2].
+  real :: tolerance ! Width of EKE bracket [L2 T-2 ~> m2 s-2].
   logical :: useSecant, debugIteration
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -667,6 +666,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   KhCoeff = CS%MEKE_KhCoeff
   Ubg2 = CS%MEKE_Uscale**2
   cd2 = CS%cdrag**2
+  tolerance = 1.0e-12*US%m_s_to_L_T**2
 
 !$OMP do
   do j=js,je ; do i=is,ie
@@ -697,7 +697,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
                  (G%dF_dy(i,j) + beta_topo_y)**2 )
 
-    I_H = US%L_to_m*GV%Rho0 * I_mass(i,j)
+    I_H = US%L_to_Z*GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
       ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
@@ -732,7 +732,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
           EKEmax = 10. * EKE  ! and guess again for the right bracket
           if (resid<ResMin) useSecant = .true.
           ResMin = resid
-          if (US%L_T_to_m_s**2*EKEmax > 2.e17) then
+          if (EKEmax > 2.e17*US%m_s_to_L_T**2) then
             if (debugIteration) stop 'Something has gone very wrong'
             debugIteration = .true.
             resid = 1. ; n1 = 0
@@ -746,7 +746,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
 
       ! Bisect the bracket
       n2 = 0 ; EKEerr = EKEmax - EKEmin
-      do while (US%L_T_to_m_s**2*EKEerr>tolerance)
+      do while (EKEerr > tolerance)
         n2 = n2 + 1
         if (useSecant) then
           EKE = EKEmin + (EKEmax - EKEmin) * (ResMin / (ResMin - ResMax))
@@ -778,7 +778,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
       EKE = 0.
     endif
     if (CS%MEKE_equilibrium_alt) then
-      MEKE%MEKE(i,j) = (US%Z_to_m*G%bathyT(i,j)*SN / (8*CS%cdrag))**2
+      MEKE%MEKE(i,j) = (US%Z_to_L*G%bathyT(i,j) * SN / (8*CS%cdrag))**2
     else
       MEKE%MEKE(i,j) = EKE
     endif
@@ -1178,13 +1178,16 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
      'MEKE decay rate', 's-1', conversion=US%s_to_T)
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
-     'MEKE energy available from thickness mixing', 'W m-2', conversion=US%L_to_m**2*US%s_to_T**3)
+     'MEKE energy available from thickness mixing', &
+     'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
   if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
   CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
-     'MEKE energy available from momentum', 'W m-2', conversion=US%L_to_m**2*US%s_to_T**3)
+     'MEKE energy available from momentum', &
+     'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
   CS%id_GME_snk = register_diag_field('ocean_model', 'MEKE_GME_snk',diag%axesT1, Time, &
-     'MEKE energy lost to GME backscatter', 'W m-2', conversion=US%L_to_m**2*US%s_to_T**3)
+     'MEKE energy lost to GME backscatter', &
+     'W m-2', conversion=US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**3)
   if (.not. associated(MEKE%GME_snk)) CS%id_GME_snk = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)

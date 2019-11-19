@@ -457,7 +457,8 @@ contains
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
           !nnz: Why is fluxes%river = 0?
-          runoff_tracer_flux_array = trunoff_array * fluxes%lrunoff
+          runoff_tracer_flux_array(:,:) = trunoff_array(:,:) * &
+                   G%US%R_to_kg_m3*G%US%Z_to_m*G%US%s_to_T*fluxes%lrunoff(:,:)
           stf_array = stf_array + runoff_tracer_flux_array
        endif
 
@@ -492,9 +493,10 @@ contains
     !
 
     call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
-         G%US%L_to_m**2*G%areaT, get_diag_time_end(CS%diag), &
+         G%US%L_to_m**2*G%areaT(:,:), get_diag_time_end(CS%diag), &
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
-         internal_heat=tv%internal_heat, frunoff=fluxes%frunoff, sosga=sosga)
+         internal_heat=tv%internal_heat, &
+         frunoff=G%US%R_to_kg_m3*G%US%Z_to_m*G%US%s_to_T*fluxes%frunoff(:,:), sosga=sosga)
 
     ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
     ! usually in ALE mode
