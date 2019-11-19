@@ -370,6 +370,7 @@ integer :: id_clock_dynamics
 integer :: id_clock_thermo
 integer :: id_clock_tracer
 integer :: id_clock_diabatic
+integer :: id_clock_adiabatic
 integer :: id_clock_continuity  ! also in dynamics s/r
 integer :: id_clock_thick_diff
 integer :: id_clock_BBL_visc
@@ -1275,10 +1276,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_end(id_clock_diabatic)
   else   ! complement of "if (.not.CS%adiabatic)"
 
-    call cpu_clock_begin(id_clock_diabatic)
+    call cpu_clock_begin(id_clock_adiabatic)
     call adiabatic(h, tv, fluxes, US%T_to_s*dtdia, G, GV, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
-    call cpu_clock_end(id_clock_diabatic)
+    call cpu_clock_end(id_clock_adiabatic)
 
     if (associated(tv%T)) then
       call create_group_pass(pass_T_S, tv%T, G%Domain, To_All+Omit_Corners, halo=1)
@@ -2566,8 +2567,11 @@ subroutine MOM_timing_init(CS)
  id_clock_thermo   = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
  id_clock_other    = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
  id_clock_tracer   = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
- if (.not.CS%adiabatic) &
+ if (.not.CS%adiabatic) then
    id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
+ else
+   id_clock_adiabatic = cpu_clock_id('(Ocean adiabatic driver)', grain=CLOCK_MODULE_DRIVER)
+ endif
 
  id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
  id_clock_BBL_visc   = cpu_clock_id('(Ocean set BBL viscosity)', grain=CLOCK_MODULE)
