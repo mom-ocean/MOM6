@@ -414,20 +414,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
       Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_dfy", &
           diag%axesCvL, Time, trim(flux_longname)//" diffusive merdional flux" , &
           trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
-      Tr%id_lbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfx", &
+      Tr%id_lbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx", &
           diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the lateral boundary diffusion "&
           "scheme", trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
-      Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfy", &
+      Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy", &
           diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the lateral boundary diffusion"&
           " scheme", trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
-      Tr%id_lbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfx_2d", &
-          diag%axesCu1, Time, trim(flux_longname)//&
-          "Vertically-integrated zonal diffusive flux from the lateral boundary diffusion scheme" , &
-          trim(flux_units), v_extensive = .true., y_cell_method = 'sum')
-      Tr%id_lbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_dfy_2d", &
-          diag%axesCv1, Time, trim(flux_longname)//&
-          "Vertically-integrated meridional diffusive flux from the lateral boundary diffusion scheme" , &
-          trim(flux_units), v_extensive = .true., x_cell_method = 'sum')
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, "Advective (by residual mean) Zonal Flux of "//trim(flux_longname), &
@@ -447,14 +439,6 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
       Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy", &
           diag%axesCvL, Time, "Lateral Boundary Diffusive Meridional Flux of "//trim(flux_longname), &
           flux_units, v_extensive=.true., conversion=Tr%flux_scale, x_cell_method = 'sum')
-      Tr%id_lbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx_2d", &
-          diag%axesCu1, Time, "Vertically-integrated zonal diffusive flux from the lateral boundary diffusion "//&
-          "scheme for" //trim(flux_longname), flux_units, v_extensive=.true., conversion=Tr%flux_scale, &
-          y_cell_method = 'sum')
-      Tr%id_lbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy_2d", &
-          diag%axesCv1, Time, "Vertically-integrated meridional diffusive flux from the lateral boundary diffusion "//&
-          "scheme for "//trim(flux_longname), flux_units, v_extensive=.true., conversion=Tr%flux_scale, &
-          x_cell_method = 'sum')
     endif
     if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
@@ -462,8 +446,6 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
     if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y,isd,ied,JsdB,JedB,nz)
     if (Tr%id_lbd_dfx > 0) call safe_alloc_ptr(Tr%lbd_dfx,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_lbd_dfy > 0) call safe_alloc_ptr(Tr%lbd_dfy,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_lbd_dfx_2d > 0) call safe_alloc_ptr(Tr%lbd_dfx_2d,IsdB,IedB,jsd,jed)
-    if (Tr%id_lbd_dfy_2d > 0) call safe_alloc_ptr(Tr%lbd_dfy_2d,isd,ied,JsdB,JedB)
 
     Tr%id_adx_2d = register_diag_field("ocean_model", trim(shortnm)//"_adx_2d", &
         diag%axesCu1, Time, &
@@ -489,6 +471,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
         diag%axesCv1, Time, &
         "Total Bulk Diffusive Meridional Flux of "//trim(flux_longname), &
         flux_units, conversion=Tr%flux_scale, x_cell_method = 'sum')
+    Tr%id_lbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx_2d", &
+          diag%axesCu1, Time, "Vertically-integrated zonal diffusive flux from the lateral boundary diffusion "//&
+          "scheme for "//trim(flux_longname), flux_units, conversion=Tr%flux_scale, y_cell_method = 'sum')
+    Tr%id_lbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy_2d", &
+          diag%axesCv1, Time, "Vertically-integrated meridional diffusive flux from the lateral boundary diffusion "//&
+          "scheme for "//trim(flux_longname), flux_units, conversion=Tr%flux_scale, x_cell_method = 'sum')
 
     if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x,IsdB,IedB,jsd,jed)
     if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y,isd,ied,JsdB,JedB)
@@ -496,6 +484,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE)
     if (Tr%id_dfy_2d > 0) call safe_alloc_ptr(Tr%df2d_y,isd,ied,JsdB,JedB)
     if (Tr%id_lbd_bulk_dfx > 0) call safe_alloc_ptr(Tr%lbd_bulk_df_x,IsdB,IedB,jsd,jed)
     if (Tr%id_lbd_bulk_dfy > 0) call safe_alloc_ptr(Tr%lbd_bulk_df_y,isd,ied,JsdB,JedB)
+    if (Tr%id_lbd_dfx_2d > 0) call safe_alloc_ptr(Tr%lbd_dfx_2d,IsdB,IedB,jsd,jed)
+    if (Tr%id_lbd_dfy_2d > 0) call safe_alloc_ptr(Tr%lbd_dfy_2d,isd,ied,JsdB,JedB)
 
     Tr%id_adv_xy = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy", &
         diag%axesTL, Time, &
