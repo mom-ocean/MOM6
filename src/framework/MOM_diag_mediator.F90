@@ -51,7 +51,7 @@ public set_axes_info, post_data, register_diag_field, time_type
 public set_masks_for_axes
 public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
-public enable_averaging, disable_averaging, query_averaging_enabled
+public enable_averaging, enable_averages, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_infrastructure_init
 public diag_mediator_close_registration, get_diag_time_end
@@ -1807,14 +1807,33 @@ subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
   type(time_type), intent(in)    :: time_end_in !< The end time of the valid interval
   type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
-! This subroutine enables the accumulation of time averages over the
-! specified time interval.
+! This subroutine enables the accumulation of time averages over the specified time interval.
 
 !  if (num_file==0) return
   diag_cs%time_int = time_int_in
   diag_cs%time_end = time_end_in
   diag_cs%ave_enabled = .true.
 end subroutine enable_averaging
+
+!> Enable the accumulation of time averages over the specified time interval in time units.
+subroutine enable_averages(time_int, time_end, diag_CS, T_to_s)
+  real,            intent(in)    :: time_int !< The time interval over which any values
+                                             !! that are offered are valid [T ~> s].
+  type(time_type), intent(in)    :: time_end !< The end time of the valid interval.
+  type(diag_ctrl), intent(inout) :: diag_CS  !< A structure that is used to regulate diagnostic output
+  real,  optional, intent(in)    :: T_to_s   !< A conversion factor for time_int to [s].
+! This subroutine enables the accumulation of time averages over the specified time interval.
+
+  if (present(T_to_s)) then
+    diag_cs%time_int = time_int*T_to_s
+  elseif (associated(diag_CS%US)) then
+    diag_cs%time_int = time_int*diag_CS%US%T_to_s
+  else
+    diag_cs%time_int = time_int
+  endif
+  diag_cs%time_end = time_end
+  diag_cs%ave_enabled = .true.
+end subroutine enable_averages
 
 !> Call this subroutine to avoid averaging any offered fields.
 subroutine disable_averaging(diag_cs)

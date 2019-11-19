@@ -73,7 +73,7 @@ type, public :: Kappa_shear_CS ; private
                              !! massive layers in this calculation.
                              !  I can think of no good reason why this should be false. - RWH
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
-                             !! are set to 0 [Z T-1 ~> m s-1].
+                             !! are set to 0 [L T-1 ~> m s-1].
 !  logical :: layer_stagger = .false. ! If true, do the calculations centered at
                              !  layers, rather than the interfaces.
   logical :: debug = .false. !< If true, write verbose debugging messages.
@@ -130,7 +130,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
-    T_2d, S_2d, rho_2d  ! 2-D versions of T, S, and rho.
+    T_2d, S_2d, rho_2d  ! 2-D versions of T [degC], S [ppt], and rho [R ~> kg m-3].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, & ! 2-D version of kappa_io [Z2 T-1 ~> m2 s-1].
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
@@ -396,7 +396,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
-    T_2d, S_2d, rho_2d  ! 2-D versions of T, S, and rho.
+    T_2d, S_2d, rho_2d  ! 2-D versions of T [degC], S [ppt], and rho [R ~> kg m-3].
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
     kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
@@ -734,7 +734,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     local_src_avg, & ! The time-integral of the local source [nondim].
     tol_min, & ! Minimum tolerated ksrc for the corrector step [T-1 ~> s-1].
     tol_max, & ! Maximum tolerated ksrc for the corrector step [T-1 ~> s-1].
-    tol_chg, & ! The tolerated change integrated in time [s T-nondim].
+    tol_chg, & ! The tolerated change integrated in time [nondim].
     dist_from_top, &  ! The distance from the top surface [Z ~> m].
     local_src     ! The sum of all sources of kappa, including kappa_src and
                   ! sources from the elliptic term [T-1 ~> s-1].
@@ -744,8 +744,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: bd1           ! A term in the denominator of b1.
   real :: d1            ! 1 - c1 in the tridiagonal equations.
   real :: gR0           ! A conversion factor from Z to Pa equal to Rho_0 times g
-                        ! [kg m-1 Z-1 s-2 ~> kg m-2 s-2].
-  real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z m3 kg-1 T-2 ~> m4 kg-1 s-2].
+                        ! [Pa Z-1 = kg m-1 s-2 Z-1 ~> kg m-2 s-2].
+  real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z R-1 T-2 ~> m4 kg-1 s-2].
   real :: Norm          ! A factor that normalizes two weights to 1 [Z-2 ~> m-2].
   real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
   real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
@@ -761,8 +761,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
   real :: dt_inc        !   An increment to dt_test that is being tested [T ~> s].
 
   real :: k0dt          ! The background diffusivity times the timestep [Z2 ~> m2].
-  logical :: valid_dt   ! If true, all levels so far exhibit acceptably small
-                        ! changes in k_src.
+  logical :: valid_dt   ! If true, all levels so far exhibit acceptably small changes in k_src.
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
   integer :: ks_kappa, ke_kappa  ! The k-range with nonzero kappas.
@@ -793,7 +792,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%z_to_H*GV%H_to_Pa
-  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
+  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / (GV%Rho0)
   k0dt = dt*CS%kappa_0
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
@@ -884,11 +883,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
       Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
     enddo
     call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, &
-                                  dbuoy_dS, 2, nzc-1, tv%eqn_of_state)
-    do K=2,nzc
-      dbuoy_dT(K) = -g_R0*dbuoy_dT(K)
-      dbuoy_dS(K) = -g_R0*dbuoy_dS(K)
-    enddo
+                                  dbuoy_dS, 2, nzc-1, tv%eqn_of_state, scale=-g_R0*US%kg_m3_to_R)
   else
     do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   endif
@@ -1215,8 +1210,8 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! layers?).
   real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
                                               !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [m s-1].
-  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [m s-1].
+  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [L T-1 ~> m s-1].
+  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [L T-1 ~> m s-1].
   real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
   real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [ppt].
   real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers [Z ~> m].
@@ -1227,8 +1222,8 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
                                               !! salinity [Z T-2 ppt-1 ~> m s-2 ppt-1].
   real,                  intent(in)    :: dt  !< The time step [T ~> s].
-  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [m s-1].
-  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [m s-1].
+  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [L T-1 ~> m s-1].
+  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [L T-1 ~> m s-1].
   real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
   real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [ppt].
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1242,13 +1237,13 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                               !! diffusivity.
   real,    optional,     intent(in)    :: vel_underflow !< If present and true, any velocities that
                                               !! are smaller in magnitude than this value are
-                                              !! set to 0 [m s-1].
+                                              !! set to 0 [L T-1 ~> m s-1].
 
   ! Local variables
   real, dimension(nz+1) :: c1
   real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
                          ! units squared [Z2 s2 T-2 m-2 ~> 1].
-  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [m s-1].
+  real :: underflow_vel  ! Velocities smaller in magnitude than underflow_vel are set to 0 [L T-1 ~> m s-1].
   real :: a_a, a_b, b1, d1, bd1, b1nz_0
   integer :: k, ks, ke
 
@@ -1357,7 +1352,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
-                                              !! boundaries [Z-2 !> m-2].
+                                              !! boundaries [Z-2 ~> m-2].
   real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers [Z-1 ~> m-1].
   real,                  intent(in)    :: f2  !< The squared Coriolis parameter [T-2 ~> s-2].
   type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
@@ -1371,7 +1366,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(out)   :: kappa  !< The diapycnal diffusivity at interfaces
                                               !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), optional, &
-                         intent(out)   :: kappa_src !< The source term for kappa [T-1].
+                         intent(out)   :: kappa_src !< The source term for kappa [T-1 ~> s-1].
   real, dimension(nz+1), optional, &
                          intent(out)   :: local_src !< The sum of all local sources for kappa,
                                               !! [T-1 ~> s-1].
@@ -1427,7 +1422,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   ! Temporary variables used in the Newton's method iterations.
   real :: decay_term_k  ! The decay term in the diffusivity equation
   real :: decay_term_Q  ! The decay term in the TKE equation - proportional to [T-1 ~> s-1]
-  real :: I_Q           ! The inverse of TKE [s2 m-2]
+  real :: I_Q           ! The inverse of TKE [T2 Z-2 ~> s2 m-2]
   real :: kap_src
   real :: v1            ! A temporary variable proportional to [T-1 ~> s-1]
   real :: v2

@@ -110,9 +110,9 @@ type, public :: ALE_sponge_CS ; private
   integer, pointer :: col_i_v(:) => NULL() !< Array of the i-indicies of each v-columns being damped.
   integer, pointer :: col_j_v(:) => NULL() !< Array of the j-indicies of each v-columns being damped.
 
-  real, pointer :: Iresttime_col(:)   => NULL() !< The inverse restoring time of each tracer column [s-1].
-  real, pointer :: Iresttime_col_u(:) => NULL() !< The inverse restoring time of each u-column [s-1].
-  real, pointer :: Iresttime_col_v(:) => NULL() !< The inverse restoring time of each v-column [s-1].
+  real, pointer :: Iresttime_col(:)   => NULL() !< The inverse restoring time of each tracer column [T-1 ~> s-1].
+  real, pointer :: Iresttime_col_u(:) => NULL() !< The inverse restoring time of each u-column [T-1 ~> s-1].
+  real, pointer :: Iresttime_col_v(:) => NULL() !< The inverse restoring time of each v-column [T-1 ~> s-1].
 
   type(p3d) :: var(MAX_FIELDS_)      !< Pointers to the fields that are being damped.
   type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
@@ -217,7 +217,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
-        CS%Iresttime_col(col) = Iresttime(i,j)
+        CS%Iresttime_col(col) = G%US%T_to_s*Iresttime(i,j)
         col = col +1
       endif
     enddo ; enddo
@@ -265,7 +265,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
        do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
          if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
            CS%col_i_u(col) = i ; CS%col_j_u(col) = j
-           CS%Iresttime_col_u(col) = Iresttime_u(i,j)
+           CS%Iresttime_col_u(col) = G%US%T_to_s*Iresttime_u(i,j)
            col = col +1
          endif
        enddo ; enddo
@@ -302,7 +302,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
       do J=CS%jscB,CS%jecB ; do i=CS%isc,CS%iec
         if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
-          CS%Iresttime_col_v(col) = Iresttime_v(i,j)
+          CS%Iresttime_col_v(col) = G%US%T_to_s*Iresttime_v(i,j)
           col = col +1
         endif
       enddo ; enddo
@@ -455,7 +455,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
-        CS%Iresttime_col(col) = Iresttime(i,j)
+        CS%Iresttime_col(col) = G%US%T_to_s*Iresttime(i,j)
         col = col +1
       endif
     enddo ; enddo
@@ -494,7 +494,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
       do j=CS%jsc,CS%jec ; do I=CS%iscB,CS%iecB
         if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
           CS%col_i_u(col) = i ; CS%col_j_u(col) = j
-          CS%Iresttime_col_u(col) = Iresttime_u(i,j)
+          CS%Iresttime_col_u(col) = G%US%T_to_s*Iresttime_u(i,j)
           col = col +1
         endif
       enddo ; enddo
@@ -526,7 +526,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
       do J=CS%jscB,CS%jecB ; do i=CS%isc,CS%iec
         if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
-          CS%Iresttime_col_v(col) = Iresttime_v(i,j)
+          CS%Iresttime_col_v(col) = G%US%T_to_s*Iresttime_v(i,j)
           col = col +1
         endif
       enddo ; enddo
@@ -859,14 +859,13 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                              intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2] (in)
-  real,                      intent(in)    :: dt !< The amount of time covered by this call [s].
+  real,                      intent(in)    :: dt !< The amount of time covered by this call [T ~> s].
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_sponge (in).
   type(time_type), optional, intent(in)    :: Time !< The current model date
 
   real :: damp                                  ! The timestep times the local damping coefficient [nondim].
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
-  real :: Idt                                   ! 1.0/dt [s-1].
   real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
   real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid
@@ -934,7 +933,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 ! c is an index for the next 3 lines but a multiplier for the rest of the loop
 ! Therefore we use c as per C code and increment the index where necessary.
       i = CS%col_i(c) ; j = CS%col_j(c)
-      damp = dt*CS%Iresttime_col(c)
+      damp = dt * CS%Iresttime_col(c)
       I1pdamp = 1.0 / (1.0 + damp)
       tmp_val2(1:nz_data) = CS%Ref_val(m)%p(1:nz_data,c)
       if (CS%new_sponges) then
@@ -1012,7 +1011,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
     do c=1,CS%num_col_u
       i = CS%col_i_u(c) ; j = CS%col_j_u(c)
-      damp = dt*CS%Iresttime_col_u(c)
+      damp = dt * CS%Iresttime_col_u(c)
       I1pdamp = 1.0 / (1.0 + damp)
       if (CS%new_sponges) nz_data = CS%Ref_val(m)%nz_data
       tmp_val2(1:nz_data) = CS%Ref_val_u%p(1:nz_data,c)
@@ -1034,7 +1033,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
     do c=1,CS%num_col_v
       i = CS%col_i_v(c) ; j = CS%col_j_v(c)
-      damp = dt*CS%Iresttime_col_v(c)
+      damp = dt * CS%Iresttime_col_v(c)
       I1pdamp = 1.0 / (1.0 + damp)
       tmp_val2(1:nz_data) = CS%Ref_val_v%p(1:nz_data,c)
       if (CS%new_sponges) then
