@@ -21,7 +21,7 @@ MKMF := $(abspath $(DEPS)/mkmf/bin/mkmf)
 
 # FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
-FMS_COMMIT ?= f2e2c86f6c0eb6d389a20509a8a60fa22924e16b
+FMS_COMMIT ?= fms-io-dev
 FMS := $(DEPS)/fms
 
 #---
@@ -110,7 +110,7 @@ $(BUILD)/%/Makefile: $(BUILD)/%/path_names
 	cp $(MKMF_TEMPLATE) $(@D)
 	cd $(@D) && $(MKMF) \
 		-t $(notdir $(MKMF_TEMPLATE)) \
-		-o '-I $(FMS)/build' \
+		-o '-I $(FMS)/build -I $(FMS)/src/include' \
 		-p MOM6 \
 		-l '$(FMS)/lib/libfms.a' \
 		-c $(MKMF_CPP) \
