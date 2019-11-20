@@ -1,5 +1,6 @@
-!> Calculate and apply diffusive fluxes as a parameterization of lateral mixing (non-neutral) by
+!> Calculates and applies diffusive fluxes as a parameterization of lateral mixing (non-neutral) by
 !! mesoscale eddies near the top and bottom (to be implemented) boundary layers of the ocean.
+
 module MOM_lateral_boundary_diffusion
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -98,9 +99,9 @@ logical function lateral_boundary_diffusion_init(Time, G, param_file, diag, diab
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "LATERAL_BOUNDARY_METHOD", CS%method, &
-                 "Determine how to apply near-boundary lateral diffusion of tracers"//&
-                 "1. Bulk layer approach"//&
-                 "2. Along layer approach"//&
+                 "Determine how to apply boundary lateral diffusion of tracers: \n"//&
+                 "1. Bulk layer approach  \n"//&
+                 "2. Along layer approach \n"//&
                  "3. Decomposition on to pressure levels", default=1)
   call get_param(param_file, mdl, "LBD_BOUNDARY_EXTRAP", boundary_extrap, &
                  "Use boundary extrapolation in LBD code", &
@@ -255,7 +256,7 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
   integer             :: nk                !< Number of layers                                          [nondim]
   integer             :: deg               !< Degree of polynomial                                      [nondim]
   real, dimension(nk) :: h                 !< Layer thicknesses                                         [m]
-  real                :: hBLT              !< Depth of the mixing layer                                 [m]
+  real                :: hBLT              !< Depth of the boundary layer                               [m]
   real, dimension(nk) :: phi               !< Scalar quantity
   real, dimension(nk,2)    :: ppoly0_E(:,:)      !< Edge value of polynomial
   real, dimension(nk,deg+1) :: ppoly0_coefs(:,:) !< Coefficients of polynomial
@@ -301,6 +302,7 @@ real function bulk_average(boundary, nk, deg, h, hBLT, phi, ppoly0_E, ppoly0_coe
 end function bulk_average
 
 !> Calculate the harmonic mean of two quantities
+!! See \ref section_harmonic_mean.
 real function harmonic_mean(h1,h2)
   real :: h1 !< Scalar quantity
   real :: h2 !< Scalar quantity
@@ -367,7 +369,8 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
 end subroutine boundary_k_range
 
 
-!> Calculate the near-boundary diffusive fluxes calculated using the layer by layer method.
+!> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
+!! See \ref LBD_method2
 subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_layer)
 
@@ -471,7 +474,8 @@ subroutine fluxes_layer_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, phi_L,
 
 end subroutine fluxes_layer_method
 
-!> Calculate the near-boundary diffusive fluxes calculated from a 'bulk model'
+!> Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'
+!! See \ref LBD_method1
 subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, ppoly0_coefs_L, &
                                    ppoly0_coefs_R, ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer, F_limit)
 
@@ -606,6 +610,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
         hfrac = h_means(k)*inv_heff
         F_layer(k) = F_bulk * hfrac
         if ( SIGN(1.,F_bulk) == SIGN(1., F_layer(k))) then
+          ! limit the flux to 0.25 of the total tracer in the cell
           if (F_bulk < 0. .and. phi_R(k) >= 0.) then
             F_max = 0.25 * (area_R*(phi_R(k)*h_R(k)))
           elseif (F_bulk > 0. .and. phi_L(k) >= 0.) then
@@ -618,6 +623,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
             F_layer(k) = F_bulk_remain
           endif
           F_bulk_remain = F_bulk_remain - F_layer(k)
+
           ! Apply flux limiter calculated above
           if (F_max >= 0.) then
             if (F_layer(k) > 0.) then
@@ -628,6 +634,7 @@ subroutine fluxes_bulk_method(boundary, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L,
               F_layer(k) = MAX(F_layer(k),-F_max) ! Note negative to make the sign of flux consistent
             endif
           endif
+
           if (PRESENT(F_limit)) then
             if (limited) then
               F_limit(k) = F_layer(k) - F_max
@@ -992,23 +999,6 @@ logical function near_boundary_unit_tests( verbose )
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/0.0,0.0/) )
 
-  test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
-  hbl_L = 12; hbl_R = 20
-  h_L = (/6.,6./) ; h_R = (/10.,10./)
-  phi_L = (/0.,0./) ; phi_R = (/1.,1./)
-  phi_pp_L(1,1) = 0.; phi_pp_L(1,2) = 0.
-  phi_pp_L(2,1) = 0.; phi_pp_L(2,2) = 0.
-  phi_pp_R(1,1) = 1.; phi_pp_R(1,2) = 0.
-  phi_pp_R(2,1) = 1.; phi_pp_R(2,2) = 0.
-  ppoly0_E_L(1,1) = 0.; ppoly0_E_L(1,2) = 0.
-  ppoly0_E_L(2,1) = 0.; ppoly0_E_L(2,2) = 0.
-  ppoly0_E_R(1,1) = 1.; ppoly0_E_R(1,2) = 1.
-  ppoly0_E_R(2,1) = 1.; ppoly0_E_R(2,2) = 1.
-  khtr_u = 1.
-  call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
-                                    ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
-  near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-7.5,-7.5/) )
-
   test_name = 'Different hbl and different layer thicknesses (gradient from right to left)'
   hbl_L = 12; hbl_R = 20
   h_L = (/6.,6./) ; h_R = (/10.,10./)
@@ -1074,6 +1064,7 @@ logical function near_boundary_unit_tests( verbose )
   call fluxes_bulk_method(SURFACE, nk, deg, h_L, h_R, hbl_L, hbl_R, area_L, area_R, phi_L, phi_R, phi_pp_L, phi_pp_R,&
                                     ppoly0_E_L, ppoly0_E_R, method, khtr_u, F_bulk, F_layer)
   near_boundary_unit_tests = test_layer_fluxes( verbose, nk, test_name, F_layer, (/-2.,-2./) )
+
   ! unit tests for layer by layer method
   test_name = 'Different hbl and different column thicknesses (gradient from right to left)'
   hbl_L = 12; hbl_R = 20
@@ -1172,4 +1163,56 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
 
 end function test_boundary_k_range
 
+!> \namespace mom_lbd
+!!
+!! \section section_LBD The Lateral Boundary Diffusion (LBD) framework
+!!
+!! The LBD framework accounts for the effects of diabatic mesoscale fluxes
+!! within surface and bottom boundary layers. Unlike the equivalent adiabatic
+!! fluxes, which is applied along neutral density surfaces, LBD is purely
+!! horizontal.
+!!
+!! The bottom boundary layer fluxes remain to be implemented, although most
+!! of the steps needed to do so have already been added and tested.
+!!
+!! Boundary lateral diffusion can be applied using one of the three methods:
+!!
+!! * [Method #1: Bulk layer](@ref section_method1) (default);
+!! * [Method #2: Along layer](ref section_method2);
+!! * [Method #3: Decomposition on to pressure levels](@ref section_method3).
+!!
+!! A brief summary of these methods is provided below.
+!!
+!! \subsection section_method1 Bulk layer approach (Method #1)
+!!
+!! Apply the lateral boundary diffusive fluxes calculated from a 'bulk model'
+!!
+!! Step #1: get vertical indices containing the boundary layer depth. These are
+!! k_top, k_bot, zeta_top, zeta_bot
+!!
+!! Step #2: compute bulk averages (thickness weighted). phi_L and phi_R
+!!
+!! Step #3: compute a diffusive bulk flux
+!! \f[ F_{bulk} = -(KHTR \times heff) \times (\phi_R - \phi_L),  \f]
+!! where heff is the harmonic mean of the boundary layer depth in the left and
+!! right columns (\f[ HBL_L \f] and \f[ HBL_R \f], respectively).
+!!
+!! Step #4: limit the tracer flux so that the donor cell, with positive
+!! concentration, cannot go negative. If a tracer can go negative (e.g.,
+!! temperature at high latitudes) it is unclear what limiter should be used.
+!! (TODO: ask Bob and Alistair).
+!!
+!! Step #5: decompose the bulk flux into individual layers and keep track of
+!! the remaining flux. The limiter described above is also applied during
+!! this step.
+!!
+!! \subsection section_method2 Along layer approach (Method #2)
+!!
+!! \subsection section_method3 Decomposition on to pressure levels (Method #3)
+!!
+!! To be implemented
+!!
+!! \subsection section_harmonic_mean Harmonic Mean
+!!
+!!
 end module MOM_lateral_boundary_diffusion
