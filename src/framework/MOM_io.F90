@@ -107,7 +107,6 @@ public :: global_att_exists
 public :: is_dimension_unlimited
 public :: MOM_get_diagnostic_axis_data
 public :: MOM_get_nc_corner_edgelengths
-public :: MOM_open_file
 public :: MOM_read_data
 public :: MOM_register_diagnostic_axis
 public :: MOM_register_variable_axes
@@ -1602,7 +1601,7 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
     if (trim(lowercase(units_u(i))) .eq. "degrees_east") then
       call register_axis(fileObjRead, dim_names_u(i), "x", domain_position=u_pos)
     elseif (trim(lowercase(units_u(i))) .eq. "degrees_north") then
-      call register_axis(fileObjRead, dim_names_u(i), "y", domain_position=u_pos
+      call register_axis(fileObjRead, dim_names_u(i), "y", domain_position=u_pos)
     else
       if (is_dimension_unlimited(fileObjRead, dim_names_u(i))) then
         if (present(timelevel)) then

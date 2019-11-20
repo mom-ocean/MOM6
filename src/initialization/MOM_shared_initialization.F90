@@ -13,7 +13,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : fieldtype, MOM_read_vector
 use MOM_io, only : slasher, vardesc, var_desc
-use MOM_io, only : MOM_open_file, close_file, MOM_read_data, write_data
+use MOM_io, only : open_file, close_file, MOM_read_data, write_data
 use MOM_io, only : register_variable_attribute, register_axis, register_field
 use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
 use MOM_io, only : file_exists, variable_exists, dimension_exists, check_if_open
@@ -1192,7 +1192,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to open_file
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   real :: L_to_m_scale ! A unit conversion factor from L to m.
@@ -1202,7 +1202,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: num_dims ! counter for variable dimensions
   logical :: multiple_files
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
   logical :: use_lath, use_lonh, use_latq, use_lonq
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
@@ -1276,7 +1276,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
                  default=.false.)
   ! open the file
   if (.not. check_if_open(fileObjWrite)) &
-    file_open_success = MOM_open_file(fileObjWrite, filepath, "overwrite", G, is_restart=.false.)
+    file_open_success = open_file(fileObjWrite, filepath, "overwrite", G%Domain%mpp_domain, is_restart=.false.)
   ! register the axes
   if (.not. dimension_exists(fileObjWrite, "lath")) call register_axis(fileObjWrite, "lath","y")
 

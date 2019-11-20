@@ -1020,7 +1020,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
                                              axis_data_CS%data(i)%p, &
                                              dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-            call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p
+            call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
           endif
           call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                            'long_name',axis_data_CS%axis(i)%longname)

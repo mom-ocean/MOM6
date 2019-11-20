@@ -16,7 +16,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_io, only : fieldtype, mpp_open_file, flush_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc
 use MOM_io, only : APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
-use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : FmsNetcdfFile_t, open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
@@ -449,7 +449,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
   logical :: multiple_files
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
   type(time_type) :: dt_force ! A time_type version of the forcing timestep.
   real :: Tr_stocks(MAX_FIELDS_)
   real :: Tr_min(MAX_FIELDS_), Tr_max(MAX_FIELDS_)
@@ -465,7 +465,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
-  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS netcdf file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS netcdf file object returned by call to open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   type(data_struct) :: output_data ! structure for output_data
 
@@ -926,7 +926,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   ! open the file for writing
   if (.not.(check_if_open(fileObjWrite)) .and. is_root_pe()) then
-     if (.not. (MOM_open_file(fileObjWrite, trim(energypath_nc), "write", is_restart=.false.))) then
+     if (.not. (open_file(fileObjWrite, trim(energypath_nc), "write", is_restart=.false.))) then
         call MOM_error(FATAL,"MOM_sum_output:write_energy: File "//trim(energypath_nc)//"not opened.")
      endif
 
