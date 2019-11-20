@@ -776,9 +776,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
-  !Requires nuopc dictionary change
-  call fld_list_add(fldsToOcn_num, fldsToOcn, "liquid_runoff_heat_flx"      , "will provide")
-  call fld_list_add(fldsToOcn_num, fldsToOcn, "frozen_runoff_heat_flx"      , "will provide")
+  !These are not currently used and changing requires a nuopc dictionary change
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")

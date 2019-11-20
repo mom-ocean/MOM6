@@ -239,7 +239,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
   ! heat content of lrunoff
   ice_ocean_boundary%lrunoff_hflx(:,:) = 0._ESMF_KIND_R8
-  call state_getimport(importState, 'liquid_runoff_heat_flx',  &
+  call state_getimport(importState, 'mean_runoff_heat_flx',  &
        isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
@@ -248,7 +248,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
 
   ! heat content of frunoff
   ice_ocean_boundary%frunoff_hflx(:,:) = 0._ESMF_KIND_R8
-  call state_getimport(importState, 'frozen_runoff_heat_flx',  &
+  call state_getimport(importState, 'mean_calving_heat_flx',  &
        isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
        line=__LINE__, &
