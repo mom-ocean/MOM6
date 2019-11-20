@@ -420,17 +420,17 @@ function append_substring(string_in, substring) result(string_out)
    character(len=1024) :: string_joined
    integer :: string_in_length
    integer :: substring_length
-   
+
    string_out = ''
    string_joined = ''
    string_in_length = 0
    substring_length = 0
-  
+
    string_in_length = len_trim(string_in)
-   
+
    substring_length = len_trim(substring)
 
-   if ((string_in_length > 0) .and. (substring_length > 0)) then     
+   if ((string_in_length > 0) .and. (substring_length > 0)) then 
        string_joined = trim(string_in)//trim(substring)
 
        string_out(1:len_trim(string_joined)) = trim(string_joined)
@@ -447,7 +447,7 @@ function remove_substring(string_in, substring) result(string_out)
    character(len=*), intent(in) :: substring !< string to remove from string_in
    ! local
    character(len=1024) :: string_out
-   character(len=1024) :: string_holder 
+   character(len=1024) :: string_holder
    integer :: string_in_length
    integer :: substring_length
    integer :: string_split_index
@@ -462,13 +462,13 @@ function remove_substring(string_in, substring) result(string_out)
    string_split_index = INDEX(string_in, trim(substring))
    substring_length = len_trim(substring)
 
-   if (string_split_index > 0) then     
-       string_holder = trim(string_in(1:string_split_index-1)//&
+   if (string_split_index > 0) then  
+       string_holder = trim(string_in(1:string_split_index-1)// &
                             string_in(substring_length+1:string_in_length))
 
        string_out(1:len_trim(string_holder)) = trim(string_holder)
    else
-      call MOM_error(WARNING, "MOM_string_functions ::remove_substring "//trim(substring)//&
+      call MOM_error(WARNING, "MOM_string_functions ::remove_substring "//trim(substring)// &
                      " not found in the string "//trim(string_in))
    endif
 end function remove_substring

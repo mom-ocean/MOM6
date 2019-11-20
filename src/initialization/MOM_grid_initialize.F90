@@ -200,12 +200,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   integer :: xidx, yidx1, yidx2
   integer, dimension(:), allocatable :: dim_sizes
   logical, dimension(:), allocatable :: yuseT, yuseB ! Masks for geoLatT and geoLatB
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read returned by call to 
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! FMS file object for domain-decomposed read returned by call to
                                              ! open_file
-  type(FmsNetcdfFile_t) :: fileObjReadNoDD ! FMS file object for non-domain-decomposed read returned by call to 
+  type(FmsNetcdfFile_t) :: fileObjReadNoDD ! FMS file object for non-domain-decomposed read returned by call to
                                            ! open_file
   logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
-  
+
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
@@ -243,11 +243,11 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   !  .  c  .  c  .
   !  |     |     |
   !  *--.--*--.--*
-  !  |     |     |  
+  !  |     |     |
   !  .  c  .  c  .
   !  |     |     |
   !  *--.--*--.--*
-                           
+                   
   npei = G%domain%layout(1) ; npej = G%domain%layout(2)
   allocate(exni(npei)) ; allocate(exnj(npej))
   call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
@@ -290,9 +290,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! register the global axes
   call register_axis(fileObjRead, 'nxp','x', domain_position=EAST_FACE)
   call register_axis(fileObjRead, 'nx','x', domain_position=CENTER)
-  call register_axis(fileObjRead, 'nyp','y', domain_position=NORTH_FACE)         
+  call register_axis(fileObjRead, 'nyp','y', domain_position=NORTH_FACE)    
   call register_axis(fileObjRead, 'ny','y', domain_position=CENTER)
- 
+
   call read_data(fileObjRead, 'x', tmpZ)
 
   if (lon_bug) then
@@ -318,7 +318,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read Y from the supergrid
   tmpZ(:,:) = 999.0
- 
+
   call read_data(fileObjRead, 'y', tmpZ)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
@@ -337,7 +337,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   enddo ; enddo
 
   ! Read DX,DY from the supergrid
- 
+
   tmpU(:,:) = 0.0 ; tmpV(:,:) = 0.0
   call read_data(fileObjRead, 'dx', tmpV)
   call read_data(fileObjRead, 'dy', tmpU)
@@ -368,7 +368,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   ! Read AREA from the supergrid
   tmpT(:,:) = 0.0
   call read_data(fileObjRead, 'area', tmpT)
-  
+
   ! Done with domain-decomposed read; close the file
   call close_file(fileObjRead)
 
@@ -410,11 +410,11 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).
- 
+
   ! open the file for non-domain-decomposed read
   file_open_success = open_file(fileObjReadNoDD, filename, "read", is_restart=.false.)
 
-  ! get the number of dimensions and the dimension sizes for 'x'  
+  ! get the number of dimensions and the dimension sizes for 'x'
   ndims = get_variable_num_dimensions(fileObjReadNoDD, "x", broadcast=.true.)
   allocate(dim_sizes(ndims))
   call get_variable_size(fileObjReadNoDD, "x", dim_sizes, broadcast=.true.)
@@ -431,33 +431,33 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   do I=G%isg-1,G%ieg
     G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
   enddo
- 
+
   deallocate(tmpGlbl)
   deallocate(dim_sizes)
 
-  ! get the number of dimensions and the dimension sizes for 'x'  
+  ! get the number of dimensions and the dimension sizes for 'x'
   ndims = get_variable_num_dimensions(fileObjReadNoDD, "y", broadcast=.true.)
   allocate(dim_sizes(ndims))
   call get_variable_size(fileObjReadNoDD, "y", dim_sizes, broadcast=.true.)
   ! allocate the tmpGlobal array
   allocate(tmpGlbl(dim_sizes(1),dim_sizes(2)))
- 
+
   ! read y into the tmpGlbl buffer
   call read_data(fileObjReadNoDD, "y", tmpGlbl)
-  
+
   ! create a mask for the geoLatT values in the tmpGlbl array
   allocate(yuseT(dim_sizes(2)))
   yuseT(:)=.FALSE.
   do j=G%jsg,G%jeg
     yuseT(2*(j-G%jsg)+2)=.TRUE.
   enddo
- 
+
   ! note: the following indexing procedures search for global x values that correspond to the full ranges of y
-  ! (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq). 
+  ! (geoLatT and geoLatB) values needed for the diagnostic indices (lath and latq).
   ! Defining the gridLatT and gridLatB values using the previous values in tmpGlbl(1,:) did not result in the correct
   ! diagnostic index values due to different indexing conventions for non-domain-decomposed IO in the new and previous
-  ! procedures. 
- 
+  ! procedures.
+
   ! get the index for the x-dimension with the maximum geoLatT value in the tmpGlbl array
   xidx = 0
   yidx1 = 0
@@ -469,12 +469,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     ! find index of the maximum geoLatT value for the ith x-dimension
     yidx1 = MAXLOC(tmpGlbl(i,:),1,MASK=yuseT)
     ymax1 = tmpGLbl(i,yidx1)
-    
+
     if ( MAX(ymax1,ymax2) .EQ. ymax1) then
       yidx2 = yidx1
       ymax2 = ymax1
       xidx = i
-    endif 
+    endif
   enddo
 
   if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx is less than 1")
@@ -502,12 +502,12 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     ! find index of the maximum geoLatB value for the ith x-dimension
     yidx1 = MAXLOC(tmpGlbl(i,:),1,MASK=yuseB)
     ymax1 = tmpGLbl(i,yidx1)
-    
+
     if ( MAX(ymax1,ymax2) .EQ. ymax1) then
       yidx2 = yidx1
       ymax2 = ymax1
       xidx = i
-    endif 
+    endif
   enddo
 
   if (xidx .LT. 1) call MOM_error(FATAL, "set_grid_metrics_from_mosaic: xidx is less than 1")
@@ -516,7 +516,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(xidx,2*(j-G%jsg)+3)
   enddo
- 
+
   call close_file(fileObjReadNoDD)
   deallocate(tmpGlbl)
   deallocate(dim_sizes)

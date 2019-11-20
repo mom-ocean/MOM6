@@ -1338,7 +1338,7 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
     allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
     vd = var_desc("MEKE_Ku", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
-    call register_restart_field(MEKE%Ku, vd%name, .false., restart_CS, & 
+    call register_restart_field(MEKE%Ku, vd%name, .false., restart_CS, &
                                 longname=vd%longname, units=vd%units, &
                                 hor_grid=vd%hor_grid, z_grid=vd%z_grid)
   endif

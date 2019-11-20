@@ -663,7 +663,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
 
 !   if (is_root_pe()) &
 !     write(*,'("buoyancy_forcing : Reading time level ",I3,", last was ",I3,".")')&
-!          time_lev,CS%buoy_last_lev_read 
+!          time_lev,CS%buoy_last_lev_read
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%longwavedown_file), "lwdn_sfc", &
              fluxes%LW(:,:), G%Domain, timelevel=time_lev)

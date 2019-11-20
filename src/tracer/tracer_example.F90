@@ -183,7 +183,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !  Read the tracer concentrations from a netcdf file.
       if (.not.file_exists(CS%tracer_IC_file)) &
         call MOM_error(FATAL, "USER_initialize_tracer: Unable to find "// &
-                        CS%tracer_IC_file)     
+                        CS%tracer_IC_file)
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
         if (m == 1) &

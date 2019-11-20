@@ -179,7 +179,6 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
                          ! exist. We need to ensure the depth in masked-out PEs appears to be that
                          ! of land so this line does that in the halo regions. For non-masked PEs
                          ! the halo region is filled properly with a later pass_var().
-  
   call MOM_read_data(filename, trim(topo_varname), D, G%Domain, scale=m_to_Z)
 
   call apply_topography_edits_from_file(D, G, param_file, US)
@@ -1282,9 +1281,10 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (.not. dimension_exists(fileObjWrite, "lath")) call register_axis(fileObjWrite, "lath","y")
 
   if (.not. dimension_exists(fileObjWrite, "lonh")) call register_axis(fileObjWrite, "lonh", "x")
-     
+
   if (.not. dimension_exists(fileObjWrite, "latq")) &
       call register_axis(fileObjWrite, "latq","y", domain_position=NORTH_FACE)
+
   if (.not. dimension_exists(fileObjWrite, "lonq")) &
      call register_axis(fileObjWrite, "lonq", "x", domain_position=EAST_FACE)
 
@@ -1315,7 +1315,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
     call register_variable_attribute(fileObjWrite, 'latq', 'units', G%y_axis_units)
     call register_variable_attribute(fileObjWrite, 'latq', 'long_name', 'Latitude')
   endif
-  
+
   if (.not. variable_exists(fileObjWrite, 'lonq')) then
     coord_data=>G%gridLonB(G%IsgB:G%IegB)
     call register_field(fileObjWrite, 'lonq', 'double', dimensions=(/'lonq'/))
@@ -1330,7 +1330,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
       num_dims = 0
       dim_names(:) = ""
       call get_horizontal_grid_logic(vars(i)%hor_grid, use_lath, use_lonh, use_latq, use_lonq)
-        
+
       if (use_lonh) then
         num_dims = num_dims+1
         dim_names(num_dims)(1:len_trim('lonh')) = 'lonh'
@@ -1341,7 +1341,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
 
       if (use_lath) then
         num_dims = num_dims+1
-        dim_names(num_dims)(1:len_trim('lath')) = 'lath'    
+        dim_names(num_dims)(1:len_trim('lath')) = 'lath'
       elseif (use_latq) then
         num_dims = num_dims+1
         dim_names(num_dims)(1:len_trim('latq')) ='latq'

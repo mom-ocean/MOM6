@@ -4142,7 +4142,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       allocate(lin_drag_h(isd:ied,jsd:jed)) ; lin_drag_h(:,:) = 0.0
 
       call MOM_read_data(wave_drag_file, wave_drag_var, lin_drag_h, G%Domain, scale=US%m_to_Z*US%T_to_s)
-      
+
       call pass_var(lin_drag_h, G%Domain)
       do j=js,je ; do I=is-1,ie
         CS%lin_drag_u(I,j) = (GV%Z_to_H * wave_drag_scale) * &
@@ -4463,7 +4463,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   call register_restart_field(CS%ubtav, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, &
                               units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vbtav, vd(3)%name, .false., restart_CS, longname=vd(3)%longname, & 
+  call register_restart_field(CS%vbtav, vd(3)%name, .false., restart_CS, longname=vd(3)%longname, &
                               units=vd(3)%units, hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
   vd(2) = var_desc("ubt_IC", "m s-1", longname="Next initial condition for the barotropic zonal velocity", &
                    hor_grid='u', z_grid='1')
@@ -4472,7 +4472,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   call register_restart_field(CS%ubt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, &
                               units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, & 
+  call register_restart_field(CS%vbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, &
                               units=vd(3)%units, hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
 
   if (GV%Boussinesq) then
@@ -4486,10 +4486,10 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
     vd(3) = var_desc("vhbt_IC", "kg s-1", longname="Next initial condition for the barotropic meridional transport", &
                 hor_grid='v', z_grid='1')
   endif
-  call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, & 
+  call register_restart_field(CS%uhbt_IC, vd(2)%name, .false., restart_CS, longname = vd(2)%longname, &
                               units=vd(2)%units, hor_grid=vd(2)%hor_grid, z_grid=vd(2)%z_grid)
 
-  call register_restart_field(CS%vhbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, & 
+  call register_restart_field(CS%vhbt_IC, vd(3)%name, .false., restart_CS, longname = vd(3)%longname, &
                               units=vd(3)%units, hor_grid=vd(3)%hor_grid, z_grid=vd(3)%z_grid)
 
   call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, longname="Barotropic timestep", units="seconds")

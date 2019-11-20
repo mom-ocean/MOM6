@@ -668,7 +668,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
   if (file_has_thickness) then
     !### Consider adding a parameter to use to rescale h.
     if (just_read) return ! All run-time parameters have been read, so return.
-    call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H) 
+    call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -677,7 +677,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     if (just_read) return ! All run-time parameters have been read, so return.
 
     call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
-    
+
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, eta, h)
     else
@@ -1133,9 +1133,8 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  
   call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, scale=scale_factor)
- 
+
   if (use_remapping) then
     allocate(remap_CS)
     call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true.)
@@ -1473,7 +1472,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   salt_filename = trim(inputdir)//trim(salt_file)
   if (.not.file_exists(salt_filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to find "//trim(salt_filename))
- 
+
   call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
 
   call callTree_leave(trim(mdl)//'()')
@@ -1775,7 +1774,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
   call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
-  
+
   ! Now register all of the fields which are damped in the sponge.
   ! By default, momentum is advected vertically within the sponge, but
   ! momentum is typically not damped within the sponge.
@@ -1786,7 +1785,6 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
   ! The first call to set_up_sponge_field is for the interface heights if in layered mode.!
-
   if (.not. use_ALE) then
     allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
   
@@ -1795,7 +1793,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
-                                                                                                                                                   
+                                                                                                                                    
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
@@ -1808,18 +1806,18 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, param_file, C
 
     if (.not. (check_if_open(fileObjRead))) &
       fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
-    ! get the number of dimensions and the dimension sizes for eta_var 
+    ! get the number of dimensions and the dimension sizes for eta_var
     ndims = get_variable_num_dimensions(fileObjRead, eta_var, broadcast=.true.)
     allocate(dim_sizes(ndims))
-    call get_variable_size(fileObjRead, eta_var, dim_sizes, broadcast=.true.)  
-   
-    call close_file(fileObjRead)  
+    call get_variable_size(fileObjRead, eta_var, dim_sizes, broadcast=.true.)
+
+    call close_file(fileObjRead)
 
     if (dim_sizes(1) /= G%ieg-G%isg+1 .or. dim_sizes(2) /= G%jeg-G%jsg+1) &
       call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
 
 !   ALE_CSp%time_dependent_target = .false.
-!   if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.                                                                                                                  
+!   if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.                                                                                                               
     nz_data = dim_sizes(3)-1
     allocate(eta(isd:ied,jsd:jed,nz_data+1))
     allocate(h(isd:ied,jsd:jed,nz_data))
@@ -2175,7 +2173,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call pass_var(rho_z,G%Domain)
 
   ! This is needed for building an ALE grid under ice shelves
-  if (use_ice_shelf) then 
+  if (use_ice_shelf) then
 
     call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
     ! Initialize frac_shelf_h with zeros (open water everywhere)

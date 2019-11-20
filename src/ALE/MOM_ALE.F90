@@ -1269,20 +1269,20 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
                     'Layer Center Coordinate Separation','1','i','1')
 
   ! allocate the axis data and attribute types for the vertical grid file
-  !>@NOTE the user should increase the allocated array sizes to accomodate 
+  !>@NOTE the user should increase the allocated array sizes to accommodate
   !! more than 2 axes if more are added to the netcdf file
   allocate(axis_data_CS%axis(2))
   allocate(axis_data_CS%data(2))
 
-  if (.not.(check_if_open(fileObjWrite))) & 
+  if (.not.(check_if_open(fileObjWrite))) &
     fileOpenSuccess = open_file(fileObjWrite, filepath, "write", is_restart=.false.)
 
-  ! loop through the variables, and get the dimension names and lengths for the vertical grid file         
-  total_axes=0 
+  ! loop through the variables, and get the dimension names and lengths for the vertical grid file     
+  total_axes=0
 
-  do i=1,size(vars)  
+  do i=1,size(vars) 
     num_dims=0
-    
+
     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
                                         dim_names, dim_lengths, num_dims,GV=GV)
     if (num_dims <= 0) &
@@ -1297,15 +1297,15 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
       endif
     enddo
   enddo
-  
+
   ! register and write the coordinate variables (axes) to the file
   do i=1,total_axes
-    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then
       if (associated(axis_data_CS%data(i)%p)) then
-        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                            "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-        call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+        call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
 
         call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                          "long_name",axis_data_CS%axis(i)%longname)

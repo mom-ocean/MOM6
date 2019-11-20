@@ -675,7 +675,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
 
-    ! Time-summed fields  
+    ! Time-summed fields
     call MOM_read_vector(sum_file, 'uhtr_sum', 'vhtr_sum', uhtr(:,:,1:nk_input), &
                          vhtr(:,:,1:nk_input), G%Domain, timelevel=ridx_sum)
 
@@ -712,7 +712,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
 
     fluxes%netMassOut(:,:) = 0.0
     fluxes%netMassIn(:,:) = 0.0
-   
+
     call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
         timelevel=ridx_sum)
     call MOM_read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  G%Domain, &
@@ -736,7 +736,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
     ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
     ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
-    
     call MOM_read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, G%Domain, &
         timelevel=ridx_sum)
     call MOM_read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, G%Domain, &

@@ -367,7 +367,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
         fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)
       ! get variable dimension sizes
       call get_variable_size(fileObjRead, trim(varName), nzf, broadcast=.true.)
-      
+
       ke = nzf(1)-1
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
@@ -409,7 +409,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
       "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     ! open the file
-    ! note: using individual fms-io calls instead of MOM_read_data to avoid unnecessary opening/closing after querying 
+    ! note: using individual fms-io calls instead of MOM_read_data to avoid unnecessary opening/closing after querying
     ! the file for the variable.
     if (.not. check_if_open(fileObjRead)) &
       fileOpenSuccess = open_file(fileObjRead, fileName, "read", is_restart=.false.)

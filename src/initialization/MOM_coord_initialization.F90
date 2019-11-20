@@ -541,7 +541,7 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
   ! allocate the axis data and attribute types for the vertical grid file
-  !>@NOTE the user will need to increase the allocatable axis_data_CS array sizes to accomodate 
+  !>@NOTE the user will need to increase the allocatable axis_data_CS array sizes to accommodate 
   !! new axes
   allocate(axis_data_CS%axis(2))
   allocate(axis_data_CS%data(2))
@@ -552,9 +552,9 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   ! loop through the variables, and get the dimension names and lengths for the vertical grid file
   total_axes=0
 
-  do i=1,size(vars) 
+  do i=1,size(vars)
     num_dims=0
-    
+
     call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
                                     dim_names, dim_lengths, num_dims,GV=GV)
     if (num_dims <= 0) &
@@ -572,12 +572,12 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   ! register and write the coordinate variables (axes) to the file
   do i=1,total_axes
-    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then
       if (associated(axis_data_CS%data(i)%p)) then
-        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name),& 
+        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                    "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
 
-        call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
+        call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
 
         call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
                                                'long_name',axis_data_CS%axis(i)%longname)
@@ -586,8 +586,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
                                                'units',trim(axis_data_CS%axis(i)%units))
       endif
     endif
-  enddo 
-  
+  enddo
+
   do i=1,size(vars)
     if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
       ! register the field

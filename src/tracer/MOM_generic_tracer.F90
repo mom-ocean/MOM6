@@ -260,7 +260,7 @@ contains
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
 
-    do 
+    do
       if (INDEX(CS%IC_file, '_NULL_') /= 0) then
          call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&

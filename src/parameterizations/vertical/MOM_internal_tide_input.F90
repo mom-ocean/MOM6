@@ -275,7 +275,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                                                    !! to the internal tide sources.
   ! Local variables
   type(vardesc) :: vd
-  logical :: read_tideamp 
+  logical :: read_tideamp
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.

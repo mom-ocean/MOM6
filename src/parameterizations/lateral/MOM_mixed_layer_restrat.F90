@@ -948,7 +948,7 @@ end function mixedlayer_restrat_init
 !> Allocate and register fields in the mixed layer restratification structure for restarts
 subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
   ! Arguments
-  type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure                             
+  type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure                    
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
   type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure

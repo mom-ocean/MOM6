@@ -2223,10 +2223,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
       allocate(area_shelf_h(isd:ied,jsd:jed))
       allocate(frac_shelf_h(isd:ied,jsd:jed))
-       
-      ! reat the data
+      ! read the data
       call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%domain)
-      
       ! initialize frac_shelf_h with zeros (open water everywhere)
       frac_shelf_h(:,:) = 0.0
       ! compute fractional ice shelf coverage of h
@@ -2511,16 +2509,15 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
-    
     ! register eta to the temporary control structure for the IC data
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
-  
+
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                               z_grid='i', longname="Interface heights", units="meter")
 
     call write_initial_conditions(dirs%output_directory, CS%IC_file, restart_CSp_tmp, G, Time, GV=GV)
-    
+
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
   endif

@@ -271,7 +271,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                     "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
           endif
-        else  
+        else
           call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
         endif
       else
