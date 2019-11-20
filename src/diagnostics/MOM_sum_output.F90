@@ -171,7 +171,7 @@ interface associate_data
   module procedure associate_data_0d
   module procedure associate_data_1d
   module procedure associate_data_2d
-end interface associate_data 
+end interface associate_data
 
 contains
 
@@ -246,9 +246,9 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                  "summed diagnostics.", default="ocean.stats")
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
-  !>@note: all this function does is trim strings; it was intended to be used with fms_io filename appendix functions 
-  ! get_instance_filename, set_filename_appendix, setup_one_field, and write_data. Thus, it does not return a filename
-  ! appendix when called on its own.
+  !> @note: all get_filename_appendix does is trim strings; it was intended to be used with fms_io
+  ! filename appendix functions get_instance_filename, set_filename_appendix, setup_one_field,
+  ! , and write_data. Thus, it does not return a filename appendix when called on its own.
 
   !call get_filename_appendix(filename_appendix)
   !if (len_trim(filename_appendix) > 0) then
@@ -503,7 +503,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
   num_nc_fields = 17
-  
+
   if (.not.CS%use_temperature) num_nc_fields = 11
   vars(1) = var_desc("Ntrunc","Nondim","Number of Velocity Truncations",'1','1')
   vars(2) = var_desc("En","Joules","Total Energy",'1','1')
@@ -837,7 +837,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   else
     reday = REAL(num_days)*(86400.0/CS%timeunit) + &
             REAL(start_of_day)/abs(CS%timeunit)
-  
+
     mesg_intro = "MOM Time "
   endif
   if (reday < 1.0e8) then ;      write(day_str, '(F12.3)') reday
@@ -1100,7 +1100,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   if (allocated(output_data%num_dims)) deallocate(output_data%num_dims)
   if (allocated(output_data%dim_lengths)) deallocate(output_data%dim_lengths)
   if (allocated(output_data%dim_names)) deallocate(output_data%dim_names)
-  
+
   ! The second (impossible-looking) test looks for a NaN in En_mass.
   if ((En_mass>CS%max_Energy) .or. &
      ((En_mass>CS%max_Energy) .and. (En_mass<CS%max_Energy))) then
@@ -1125,7 +1125,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
     CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
-  
 end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, salt and heat, through

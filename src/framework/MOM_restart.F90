@@ -15,7 +15,6 @@ use MOM_io, only : get_time_units
 use MOM_io, only : get_variable_byte_size
 use MOM_io, only : axis_data_type
 use MOM_io, only : MOM_get_diagnostic_axis_data
-
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager, only : days_in_month, get_date, set_date
 use MOM_verticalGrid, only : verticalGrid_type
@@ -30,7 +29,7 @@ use MOM_io, only: fms2_register_restart_field => register_restart_field, &
                   write_restart,&
                   write_data, &
                   close_file, &
-                  MOM_open_file, &
+                  open_file, &
                   MOM_register_diagnostic_axis, &
                   global_att_exists, &
                   get_global_attribute, &
@@ -843,7 +842,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
   type(fieldtype) :: fields(CS%max_fields) !
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! file object returned by a call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netcdf file object returned by a call to open_file
   character(len=1024) :: restartpath     ! The restart file path (dir/file).
   character(len=1024) :: restartname     ! The restart file name (no dir).
   character(len=1024) :: restartpath_temp ! temporary location for the restart file path (dir/file).
@@ -874,7 +873,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   integer :: horgrid_position = 1
   integer :: num_dims, total_axes
   integer :: var_periods
-  logical :: file_open_success = .false.
+  logical :: fileOpenSuccess ! true if netcdf file is opened
   real :: restart_time
   character(len=16) :: restart_time_units
   character(len=64) :: checksum_char
@@ -904,220 +903,206 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   nz = 1 ; if (present(GV)) nz = GV%ke
   
   if (present(filename)) then 
-     base_file_name = trim(filename) 
+    base_file_name = trim(filename) 
   else
-     base_file_name=trim(CS%restartfile)
+    base_file_name=trim(CS%restartfile)
   endif
 
   ! append a time stamp to the file name if time_stamp is specified
   if (PRESENT(time_stamped)) then
-     if (time_stamped) then
-        call get_date(time,year,month,days,hour,minute,seconds)
-        ! Compute the year-day, because I don't like months. - RWH
-        do m=1,month-1
-          days = days + days_in_month(set_date(year,m,2,0,0,0))
-        enddo
-        seconds = seconds + 60*minute + 3600*hour
-        if (year <= 9999) then
-           write(date_appendix,'("_Y",I4.4,"_D",I3.3,"_S",I5.5)') year, days, seconds
-        elseif (year <= 99999) then
-           write(date_appendix,'("_Y",I5.5,"_D",I3.3,"_S",I5.5)') year, days, seconds
-        else
-           write(date_appendix,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
-        endif
-        restartname_temp = trim(base_file_name)//trim(date_appendix)
-     endif 
+    if (time_stamped) then
+      call get_date(time,year,month,days,hour,minute,seconds)
+      ! Compute the year-day, because I don't like months. - RWH
+      do m=1,month-1
+        days = days + days_in_month(set_date(year,m,2,0,0,0))
+      enddo
+      seconds = seconds + 60*minute + 3600*hour
+      if (year <= 9999) then
+        write(date_appendix,'("_Y",I4.4,"_D",I3.3,"_S",I5.5)') year, days, seconds
+      elseif (year <= 99999) then
+        write(date_appendix,'("_Y",I5.5,"_D",I3.3,"_S",I5.5)') year, days, seconds
+      else
+        write(date_appendix,'("_Y",I10.10,"_D",I3.3,"_S",I5.5)') year, days, seconds
+      endif
+      restartname_temp = trim(base_file_name)//trim(date_appendix)
+    endif 
   else
-     restartname_temp = trim(base_file_name)
+    restartname_temp = trim(base_file_name)
   endif
 
   ! append '.nc' to the restart file name if it is missing
   substring_index = index('.nc', trim(restartname_temp))
   if (substring_index <= 0) then
-     restartname = append_substring(restartname_temp,'.nc')
+    restartname = append_substring(restartname_temp,'.nc')
   else 
-     restartname = restartname_temp
+    restartname = restartname_temp
   endif
 
  ! get the restart time units
-
   restart_time = time_type_to_real(time) / 86400.0
   restart_time_units = get_time_units(restart_time*86400.0)
 
   next_var = 1
   do while (next_var <= CS%novars )
-     start_var = next_var
-     restartpath = ''
-     restartpath_temp = ''
-     suffix = ''
+    start_var = next_var
+    restartpath = ''
+    restartpath_temp = ''
+    suffix = ''
+    name_length = len_trim(trim(directory)//trim(restartname))
+    restartpath_temp(1:name_length) = trim(directory)//trim(restartname)
+    if (num_files < 10) then
+      write(suffix,'("_",I1)') num_files
+    else
+      write(suffix,'("_",I2)') num_files
+    endif
+ 
+    if (num_files > 0) then
+      name_length = len_trim(trim(restartpath_temp) // trim(suffix))
+      restartpath(1:name_length) = trim(restartpath_temp) // trim(suffix)
+    else
+      name_length = len_trim(restartpath_temp)
+      restartpath(1:name_length) = trim(restartpath_temp)
+    endif 
+    ! create and open new file for domain-decomposed write
+    fileOpenSuccess = open_file(fileObjWrite, restartpath, "write", & 
+                                G%Domain%mpp_domain, is_restart=.true.)
+    if (.not.(fileOpenSuccess)) &
+    ! append to restart file if it exists
+    fileOpenSuccess = open_file(fileObjWrite, restartpath, "append", & 
+                                G%Domain%mpp_domain, is_restart=.false.)  
+    ! get variable sizes in bytes
+    size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+    ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
+    !>@NOTE the user should increase the allocated array sizes to accommodate 
+    !! more axes. As of 11/2019, only 7 axes are registered to the MOM restart files.
+    allocate(axis_data_CS%axis(7))
+    allocate(axis_data_CS%data(7))
 
-     name_length = len_trim(trim(directory)//trim(restartname))
-     restartpath_temp(1:name_length) = trim(directory)//trim(restartname)
-     if (num_files < 10) then
-        write(suffix,'("_",I1)') num_files
-     else
-        write(suffix,'("_",I2)') num_files
-     endif
-  
-     if (num_files > 0) then
-        name_length = len_trim(trim(restartpath_temp) // trim(suffix))
-        restartpath(1:name_length) = trim(restartpath_temp) // trim(suffix)
-     else
-        name_length = len_trim(restartpath_temp)
-        restartpath(1:name_length) = trim(restartpath_temp)
-     endif 
+    total_axes=0 ! total number of axes registered and written to restart file
+    do m=start_var,CS%novars
+      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                         z_grid=z_grid, t_grid=t_grid, caller="save_restart")
 
-     ! append to restart file if it exists
-     file_open_success = MOM_open_file(fileObjWrite, trim(restartpath),"write", &
-                                       G, is_restart = .true.)
-       
-     ! get variable sizes in bytes
-     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
+      var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
 
-     ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
-     !>@NOTE the user should increase the allocated array sizes to accommodate 
-     !! more axes. As of 11/2019, only 7 axes are registered to the MOM restart files.
-     allocate(axis_data_CS%axis(7))
-     allocate(axis_data_CS%data(7))
+      if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
+        size_in_file = size_in_file + var_sz
+      endif   
+      ! get the axis (dimension) names and lengths for variable 'm'                                
+      ! note: 4d variables are lon x lat x vertical level x time
+      num_dims=0
+      call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                      dim_names, dim_lengths, num_dims,G=G,GV=GV) 
+      ! register all of the restart variable axes to the file if they do not exist
+      if (num_dims <= 0) &
+      call MOM_error(FATAL,"MOM_restart::save_restart: num_dims is an invalid value.") 
+      do i=1,num_dims
+        if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
+          total_axes=total_axes+1
+          call MOM_register_diagnostic_axis(fileObjWrite, dim_names(i), dim_lengths(i))
+          call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
+                                            time_val=(/restart_time/), time_units=restart_time_units)
+        endif
+      enddo
+    enddo
 
-     total_axes=0 ! total number of axes registered and written to restart file
-     do m=start_var,CS%novars
+    ! register the axis variables and their attributes, and write the axes
+    do i=1,total_axes
+      if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
+        if (associated(axis_data_CS%data(i)%p)) then
+          if (axis_data_CS%axis(i)%is_domain_decomposed) then
+            call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
+
+            call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                             axis_data_CS%data(i)%p(is:ie), &
+                                             dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+            call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
+
+          else
+            call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                             axis_data_CS%data(i)%p, &
+                                             dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+            call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p
+          endif
+          call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                           'long_name',axis_data_CS%axis(i)%longname)
+          call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                           'units',axis_data_CS%axis(i)%units)
+
+          if (len_trim(axis_data_CS%axis(i)%positive)>1) then
+            call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
+                                             'positive',trim(axis_data_CS%axis(i)%positive))
+          else
+            call MOM_error(FATAL,"MOM_restart::save_restart: Pointer to the axis variable "// &
+                           trim(axis_data_CS%axis(i)%name)// " is not associated.")    
+          endif
+        endif
+      endif
+    enddo   
+
+    next_var = m
+
+    do m=start_var,next_var-1
+      if (.not.(variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then 
+        units=''
+        longname=''
         call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                           z_grid=z_grid, t_grid=t_grid, caller="save_restart")
-        
-        var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
-     
-        if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
-           size_in_file = size_in_file + var_sz
-        endif
-        
-        ! get the axis (dimension) names and lengths for variable 'm'                                
-        ! note: 4d variables are lon x lat x vertical level x time
-        num_dims=0
-        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                    dim_names, dim_lengths, num_dims,G=G,GV=GV)
-        
-        ! register all of the restart variable axes to the file if they do not exist
-        if (num_dims <= 0) then
-           call MOM_error(FATAL,"MOM_restart::save_restart: num_dims is an invalid value.")
-        endif
-        
-        do i=1,num_dims
-           if (.not.(dimension_exists(fileObjWrite, dim_names(i)))) then
-              total_axes=total_axes+1
-              call MOM_register_diagnostic_axis(fileObjWrite, dim_names(i), dim_lengths(i))
-              call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i), total_axes, G=G, GV=GV, &
-                                     time_val=(/restart_time/), time_units=restart_time_units)
-           endif
-        enddo  
-     enddo
-
-     ! register the axis variables and their attributes, and write the axes
-     do i=1,total_axes
-        if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then 
-           if (associated(axis_data_CS%data(i)%p)) then
-              if (axis_data_CS%axis(i)%is_domain_decomposed) then
-                 call get_global_io_domain_indices(fileObjWrite, trim(axis_data_CS%axis(i)%name), is, ie)
-
-                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                  axis_data_CS%data(i)%p(is:ie), &
-                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p(is:ie))
-
-              else
-                 call fms2_register_restart_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                  axis_data_CS%data(i)%p, &
-                                                  dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-
-                 call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p) 
-              endif
-
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'long_name',axis_data_CS%axis(i)%longname)
-              call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                      'units',axis_data_CS%axis(i)%units)
-
-              if (len_trim(axis_data_CS%axis(i)%positive)>1) then
-                  call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                                       'positive',trim(axis_data_CS%axis(i)%positive))
-              endif
-           else
-              call MOM_error(FATAL,"MOM_restart::save_restart: Pointer to the axis variable "//&
-                          trim(axis_data_CS%axis(i)%name)// " is not associated.")     
-           endif
-        endif
-     enddo   
-
-     next_var = m
-     
-     do m=start_var,next_var-1
-        if (.not.(variable_exists(fileObjWrite, CS%restart_field(m)%var_name))) then 
-           units=''
-           longname=''
-           call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                              z_grid=z_grid, t_grid=t_grid, longname=longname, &
-                              units=units, caller="save_restart")
+                           z_grid=z_grid, t_grid=t_grid, longname=longname, &
+                           units=units, caller="save_restart")
          
-           call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
-        
-           num_dims = 0
+        call get_checksum_loop_ranges(G, horgrid_position, isL, ieL, jsL, jeL)
+        num_dims = 0
 
-           call get_var_dimension_features(hor_grid, z_grid, t_grid, &
-                                           dim_names, dim_lengths, num_dims, G=G, GV=GV)
-        
-           ! register and write the restart variables to the file
-           if (associated(CS%var_ptr3d(m)%p)) then
-              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, & 
-                   dimensions=dim_names(1:num_dims))
-
-           ! prepare the restart field checksum
-           !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
-           elseif (associated(CS%var_ptr2d(m)%p)) then
-
-              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, & 
-                      dimensions=dim_names(1:num_dims))
-
-              ! prepare the restart field checksum
-              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
-           elseif (associated(CS%var_ptr4d(m)%p)) then
-
-              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, & 
-                      dimensions=dim_names(1:num_dims))
-
-              ! prepare the restart field checksum
-              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
-           elseif (associated(CS%var_ptr1d(m)%p)) then
-              ! need to explicitly define dim_names array for 1-D variable
-              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, & 
-                      dimensions=(/dim_names(1:num_dims)/))
-
-              ! prepare the restart field checksum
-              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
-           elseif (associated(CS%var_ptr0d(m)%p)) then
-                 ! need to explicitly define axis_names array for scalar variable
-              call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
-                      dimensions=(/dim_names(1:num_dims)/))
-              ! prepare the restart field checksum
-              !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
-           endif
-           ! convert the checksum to a string
-           !checksum_char = ''
-           !checksum_char = convert_checksum_to_string(check_val(m,1))
-           !! register the variable attributes
-           !call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
-           call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
-           call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname) 
-          
+        call get_var_dimension_features(hor_grid, z_grid, t_grid, &
+                                        dim_names, dim_lengths, num_dims, G=G, GV=GV)
+        ! register and write the restart variables to the file
+        if (associated(CS%var_ptr3d(m)%p)) then
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr3d(m)%p, &
+                                           dimensions=dim_names(1:num_dims))
+          ! prepare the restart field checksum
+          !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+        elseif (associated(CS%var_ptr2d(m)%p)) then
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr2d(m)%p, &
+                                           dimensions=dim_names(1:num_dims))
+          ! prepare the restart field checksum
+          !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+        elseif (associated(CS%var_ptr4d(m)%p)) then
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr4d(m)%p, &
+                                           dimensions=dim_names(1:num_dims))
+          ! prepare the restart field checksum
+          !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+        elseif (associated(CS%var_ptr1d(m)%p)) then
+          ! need to pass dim_names argument as a 1-D array
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr1d(m)%p, &
+                                           dimensions=(/dim_names(1:num_dims)/))
+          ! prepare the restart field checksum
+          !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+        elseif (associated(CS%var_ptr0d(m)%p)) then
+          ! need to pass dim_names argument as a 1-D array
+          call fms2_register_restart_field(fileObjWrite, CS%restart_field(m)%var_name, CS%var_ptr0d(m)%p, & 
+                                           dimensions=(/dim_names(1:num_dims)/))
+          ! prepare the restart field checksum
+          !check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p,pelist=(/mpp_pe()/))
         endif
-     enddo
-    
-     call write_restart(fileObjWrite)
-     call close_file(fileObjWrite)
-    
-     if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
-     if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
+        ! convert the checksum to a string
+        !checksum_char = ''
+        !checksum_char = convert_checksum_to_string(check_val(m,1))
+        !! register the variable attributes
+        !call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'checksum', trim(checksum_char))
+        call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'units', units)
+        call register_variable_attribute(fileObjWrite, CS%restart_field(m)%var_name, 'long_name', longname)
 
-     num_files = num_files+1
+      endif
+    enddo
+   ! write the restart file
+   call write_restart(fileObjWrite)
+   call close_file(fileObjWrite)
+
+   if (associated(axis_data_CS%axis)) deallocate(axis_data_CS%axis)
+   if (associated(axis_data_CS%data)) deallocate(axis_data_CS%data)
+
+   num_files = num_files+1
   enddo
 
 end subroutine save_restart
@@ -1134,7 +1119,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   
   ! local
   type(vardesc) :: vd ! structure for variable metadata
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   integer :: substring_index
   integer :: name_length
@@ -1143,7 +1128,7 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   integer :: i, is, ie, k, m
   integer :: var_periods
   integer, dimension(4) :: dim_lengths
-  logical :: file_open_success = .false.
+  logical :: fileOpenSuccess ! .true. if netcdf file is opened
   character(len=200) :: base_file_name
   character(len=200) :: dim_names(4)
   character(len=20) :: time_units
@@ -1169,9 +1154,12 @@ subroutine write_initial_conditions(directory, filename, CS, G, time, GV)
   time_units = get_time_units(ic_time*86400.0)
 
   ! open the netCDF file, and check if file already exists and can be appended
-  file_open_success = MOM_open_file(fileObjWrite, trim(base_file_name), "write", & 
-                                  G, is_restart = .false.)
-  
+  fileOpenSuccess = open_file(fileOBjWrite, trim(base_file_name), "write", & 
+                                   G%Domain%mpp_domain, is_restart=.false.)
+  if (.not.(fileOpenSuccess)) &
+  ! create and open new file(s) for domain-decomposed write
+    fileOpenSuccess = open_file(fileObjWrite, trim(base_file_name), "append", & 
+                                   G%Domain%mpp_domain, is_restart=.false.)
   ! allocate the axis data and attribute types for the current file, or file set with 'base_file_name'
   !>@NOTE the user may need to increase the allocated array sizes to accommodate 
   !! more  axes. As of 11/2019, only 7 axes are registered to the MOM_IC.nc file.
@@ -1325,11 +1313,11 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=8)   :: hor_grid ! Variable grid info.
   real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
-  logical                          :: check_exist, is_there_a_checksum
+  logical :: check_exist, is_there_a_checksum
   integer(LONG_KIND),dimension(3)  :: checksum_file
   integer(kind=8)                  :: checksum_data
-  logical :: file_open_success = .false. ! returned by call to MOM_open_file 
-  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! fms2 data structure
+  logical :: fileOpenSuccess ! .true. if netcdf file object is opened
+  type(FmsNetcdfDomainFile_t) :: fileObjRead  ! netcdf file object returned by open_file
   integer :: str_index
   character(len=96), dimension(:), allocatable :: variable_names(:) ! File variable names
   character(len=64) :: checksum_char
@@ -1360,11 +1348,10 @@ subroutine restore_state(filename, directory, day, G, CS)
   endif
 
   !Open the restart file.
-  
-  file_open_success = MOM_open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
-                                  G, is_restart=.true.)
-  
-  if (is_root_pe() .and. file_open_success) then
+  fileOpenSuccess=open_file(fileObjRead, trim(directory)//trim(base_file_name), "read", &
+                            G%domain%mpp_domain, is_restart=.true.)
+
+  if (is_root_pe() .and. fileOpenSuccess) then
      call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(directory)//trim(base_file_name))
   endif
 
@@ -1405,12 +1392,10 @@ subroutine restore_state(filename, directory, day, G, CS)
                                trim(CS%restart_obsolete(i)%replacement_name))
       endif
     enddo
-
     !Skip fields that have already been initialized
     if (CS%restart_field(m)%initialized) then
       cycle
     endif
-
     !Check if the variable is mandatory and present in the restart file(s)
     if (.not. variable_exists(fileObjRead, trim(varname))) then
       if (CS%restart_field(m)%mand_var) then
@@ -1596,9 +1581,8 @@ function get_num_restart_files(filename, directory, G, CS) result(num_files)
         endif
         filepath = trim(directory) // trim(restartname)
   
-        ! check if file already exists and can be appendedf
-        fexists = MOM_open_file(fileObjRead, trim(filepath), "read", & 
-                                  G, is_restart = .true.)
+        ! check if file already exists and can be appended
+        fexists = open_file(fileObjRead, trim(filepath), "read", G%Domain%mpp_domain, is_restart = .true.)
         if (fexists) then
            if (global_att_exists(fileObjRead,'NumFilesInSet')) then
               call get_global_attribute(fileObjRead, 'NumFilesInSet', num_restart)
