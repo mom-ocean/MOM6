@@ -16,7 +16,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_io, only : fieldtype, mpp_open_file, flush_file
 use MOM_io, only : file_exists, slasher, vardesc, var_desc
 use MOM_io, only : APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
-use MOM_io, only : FmsNetcdfFile_t, MOM_open_file, close_file, write_data
+use MOM_io, only : FmsNetcdfFile_t, open_file, close_file, write_data
 use MOM_io, only : register_variable_attribute, get_var_dimension_features
 use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, register_axis
 use MOM_io, only : register_field, variable_exists, dimension_exists, check_if_open
@@ -106,7 +106,7 @@ type, public :: sum_output_CS ; private
   type(EFP_type) :: heat_prev_EFP !< An extended fixed point version of heat_prev
   type(EFP_type) :: salt_prev_EFP !< An extended fixed point version of salt_prev
   type(EFP_type) :: mass_prev_EFP !< An extended fixed point version of mass_prev
-  real    :: dt                 !< The baroclinic dynamics time step [s].
+  real    :: dt_in_T            !< The baroclinic dynamics time step [T ~> s].
 
   type(time_type) :: energysavedays            !< The interval between writing the energies
                                                !! and other integral quantities of the run.
@@ -171,7 +171,7 @@ interface associate_data
   module procedure associate_data_0d
   module procedure associate_data_1d
   module procedure associate_data_2d
-end interface associate_data 
+end interface associate_data
 
 contains
 
@@ -218,9 +218,9 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
-  call get_param(param_file, mdl, "DT", CS%dt, &
-                 "The (baroclinic) dynamics time step.", units="s", &
-                 fail_if_missing=.true.)
+  call get_param(param_file, mdl, "DT", CS%dt_in_T, &
+                 "The (baroclinic) dynamics time step.", &
+                 units="s", scale=US%s_to_T, fail_if_missing=.true.)
   call get_param(param_file, mdl, "MAXTRUNC", CS%maxtrunc, &
                  "The run will be stopped, and the day set to a very "//&
                  "large value if the velocity is truncated more than "//&
@@ -246,9 +246,9 @@ subroutine MOM_sum_output_init(G, US, param_file, directory, ntrnc, &
                  "summed diagnostics.", default="ocean.stats")
 
   !query fms_io if there is a filename_appendix (for ensemble runs)
-  !>@note: all this function does is trim strings; it was intended to be used with fms_io filename appendix functions 
-  ! get_instance_filename, set_filename_appendix, setup_one_field, and write_data. Thus, it does not return a filename
-  ! appendix when called on its own.
+  !> @note: all get_filename_appendix does is trim strings; it was intended to be used with fms_io
+  ! filename appendix functions get_instance_filename, set_filename_appendix, setup_one_field,
+  ! , and write_data. Thus, it does not return a filename appendix when called on its own.
 
   !call get_filename_appendix(filename_appendix)
   !if (len_trim(filename_appendix) > 0) then
@@ -449,7 +449,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
   logical :: multiple_files
-  logical :: file_open_success ! If true, the filename passed to MOM_open_file was opened sucessfully
+  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
   type(time_type) :: dt_force ! A time_type version of the forcing timestep.
   real :: Tr_stocks(MAX_FIELDS_)
   real :: Tr_min(MAX_FIELDS_), Tr_max(MAX_FIELDS_)
@@ -465,7 +465,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
-  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS netcdf file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS netcdf file object returned by call to open_file
   type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
   type(data_struct) :: output_data ! structure for output_data
 
@@ -503,7 +503,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
   num_nc_fields = 17
-  
+
   if (.not.CS%use_temperature) num_nc_fields = 11
   vars(1) = var_desc("Ntrunc","Nondim","Number of Velocity Truncations",'1','1')
   vars(2) = var_desc("En","Joules","Total Energy",'1','1')
@@ -595,7 +595,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = US%m_to_Z * (mass_lay(k) / GV%Rho0) ; enddo
+      do k=1,nz ; vol_lay(k) = US%m_to_Z * (mass_lay(k) / (US%R_to_kg_m3*GV%Rho0)) ; enddo
     endif
   endif ! Boussinesq
 
@@ -710,7 +710,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
           hint = Z_0APE(K) + (hbelow - G%bathyT(i,j))
           hbot = Z_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * US%Z_to_m*US%L_T_to_m_s**2*(GV%Rho0*GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * US%Z_to_m*US%L_T_to_m_s**2*(US%R_to_kg_m3*GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -719,7 +719,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         do k=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * US%Z_to_m*US%L_T_to_m_s**2*(GV%Rho0*GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * US%Z_to_m*US%L_T_to_m_s**2*(US%R_to_kg_m3*GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -760,21 +760,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   max_CFL(1:2) = 0.0
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     if (u(I,j,k) < 0.0) then
-      CFL_trans = (-u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
+      CFL_trans = (-u(I,j,k) * CS%dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
     else
-      CFL_trans = (u(I,j,k) * US%s_to_T*CS%dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
+      CFL_trans = (u(I,j,k) * CS%dt_in_T) * (G%dy_Cu(I,j) * G%IareaT(i,j))
     endif
-    CFL_lin = abs(u(I,j,k) * US%s_to_T*CS%dt) * G%IdxCu(I,j)
+    CFL_lin = abs(u(I,j,k) * CS%dt_in_T) * G%IdxCu(I,j)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     if (v(i,J,k) < 0.0) then
-      CFL_trans = (-v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
+      CFL_trans = (-v(i,J,k) * CS%dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
     else
-      CFL_trans = (v(i,J,k) * US%s_to_T*CS%dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
+      CFL_trans = (v(i,J,k) * CS%dt_in_T) * (G%dx_Cv(i,J) * G%IareaT(i,j))
     endif
-    CFL_lin = abs(v(i,J,k) * US%s_to_T*CS%dt) * G%IdyCv(i,J)
+    CFL_lin = abs(v(i,J,k) * CS%dt_in_T) * G%IdyCv(i,J)
     max_CFL(1) = max(max_CFL(1), CFL_trans)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
@@ -794,7 +794,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     CS%salt_prev_EFP = salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
     CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
-  Irho0 = 1.0/GV%Rho0
+  Irho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
 
   if (CS%use_temperature) then
     Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
@@ -837,7 +837,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   else
     reday = REAL(num_days)*(86400.0/CS%timeunit) + &
             REAL(start_of_day)/abs(CS%timeunit)
-  
+
     mesg_intro = "MOM Time "
   endif
   if (reday < 1.0e8) then ;      write(day_str, '(F12.3)') reday
@@ -926,7 +926,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
   ! open the file for writing
   if (.not.(check_if_open(fileObjWrite)) .and. is_root_pe()) then
-     if (.not. (MOM_open_file(fileObjWrite, trim(energypath_nc), "write", is_restart=.false.))) then
+     if (.not. (open_file(fileObjWrite, trim(energypath_nc), "write", is_restart=.false.))) then
         call MOM_error(FATAL,"MOM_sum_output:write_energy: File "//trim(energypath_nc)//"not opened.")
      endif
 
@@ -1100,7 +1100,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   if (allocated(output_data%num_dims)) deallocate(output_data%num_dims)
   if (allocated(output_data%dim_lengths)) deallocate(output_data%dim_lengths)
   if (allocated(output_data%dim_names)) deallocate(output_data%dim_names)
-  
+
   ! The second (impossible-looking) test looks for a NaN in En_mass.
   if ((En_mass>CS%max_Energy) .or. &
      ((En_mass>CS%max_Energy) .and. (En_mass<CS%max_Energy))) then
@@ -1125,18 +1125,20 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
     CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
-  
 end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, salt and heat, through
 !! the ocean surface for use in diagnosing conservation.
-subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
+subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible
                                               !! forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: sfc_state !< A structure containing fields that
                                               !! describe the surface state of the ocean.
+  type(thermo_var_ptrs), intent(in) :: tv     !< A structure pointing to various
+                                              !! thermodynamic variables.
   real,                  intent(in) :: dt     !< The amount of time over which to average [s].
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
+  type(unit_scale_type), intent(in) :: US     !< A dimensional unit scaling type
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call
                                               !! to MOM_sum_output_init.
   ! Local variables
@@ -1153,6 +1155,8 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   real :: heat_input ! The total heat added by boundary fluxes, integrated
                      ! over a time step and summed over space [J].
   real :: C_p        ! The heat capacity of seawater [J degC-1 kg-1].
+  real :: dt_in_T    ! Time increment [T ~> s]
+  real :: RZL2_to_kg ! A combination of scaling factors for mass [kg R-1 Z-1 L-2 ~> 1]
 
   type(EFP_type) :: &
     FW_in_EFP,   & ! Extended fixed point version of FW_input [kg]
@@ -1164,12 +1168,14 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   C_p = fluxes%C_p
+  RZL2_to_kg = US%L_to_m**2*US%R_to_kg_m3*US%Z_to_m
+  dt_in_T = US%s_to_T*dt
 
   FW_in(:,:) = 0.0 ; FW_input = 0.0
   if (associated(fluxes%evap)) then
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
-        FW_in(i,j) = dt*G%US%L_to_m**2*G%areaT(i,j)*(fluxes%evap(i,j) + &
+        FW_in(i,j) = RZL2_to_kg * dt_in_T*G%areaT(i,j)*(fluxes%evap(i,j) + &
             (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
               (fluxes%fprec(i,j) + fluxes%frunoff(i,j))))
       enddo ; enddo
@@ -1180,25 +1186,26 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   endif
 
   if (associated(fluxes%seaice_melt)) then ; do j=js,je ; do i=is,ie
-    FW_in(i,j) = FW_in(i,j) + dt * G%US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt(i,j)
+    FW_in(i,j) = FW_in(i,j) + RZL2_to_kg*dt_in_T * &
+                 G%areaT(i,j) * fluxes%seaice_melt(i,j)
   enddo ; enddo ; endif
 
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) * (fluxes%sw(i,j) + &
+      heat_in(i,j) = heat_in(i,j) + dt*US%L_to_m**2*G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-       heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
+       heat_in(i,j) = heat_in(i,j) + dt*US%L_to_m**2*G%areaT(i,j) * fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j) *                          &
+!      heat_in(i,j) = heat_in(i,j) + dt_in_T*RZL2_to_kg*G%areaT(i,j) * &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
@@ -1206,9 +1213,9 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 !    enddo ; enddo ; endif
 
     ! smg: old code
-    if (associated(sfc_state%TempxPmE)) then
+    if (associated(tv%TempxPmE)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * sfc_state%TempxPmE(i,j)
+        heat_in(i,j) = heat_in(i,j) + (C_p * RZL2_to_kg*G%areaT(i,j)) * tv%TempxPmE(i,j)
       enddo ; enddo
     elseif (associated(fluxes%evap)) then
       do j=js,je ; do i=is,ie
@@ -1218,25 +1225,26 @@ subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
 
 
     ! The following heat sources may or may not be used.
-    if (associated(sfc_state%internal_heat)) then
+    if (associated(tv%internal_heat)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%US%L_to_m**2*G%areaT(i,j)) * &
-                     sfc_state%internal_heat(i,j)
+        heat_in(i,j) = heat_in(i,j) + (C_p * US%L_to_m**2*G%areaT(i,j)) * &
+                       tv%internal_heat(i,j)
       enddo ; enddo
     endif
-    if (associated(sfc_state%frazil)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + G%US%L_to_m**2*G%areaT(i,j) * sfc_state%frazil(i,j)
+    if (associated(tv%frazil)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + US%L_to_m**2*G%areaT(i,j) * tv%frazil(i,j)
     enddo ; enddo ; endif
     if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%US%L_to_m**2*G%areaT(i,j)*fluxes%heat_added(i,j)
+      heat_in(i,j) = heat_in(i,j) + dt*US%L_to_m**2*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (associated(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) - G%US%L_to_m**2*G%areaT(i,j) * sfc_state%sw_lost(i,j)
+!      heat_in(i,j) = heat_in(i,j) - US%L_to_m**2*G%areaT(i,j) * sfc_state%sw_lost(i,j)
 !    enddo ; enddo ; endif
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
       ! convert salt_flux from kg (salt)/(m^2 s) to ppt * [m s-1].
-      salt_in(i,j) = dt*G%US%L_to_m**2*G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
+      salt_in(i,j) = RZL2_to_kg * dt_in_T * &
+                     G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif
 

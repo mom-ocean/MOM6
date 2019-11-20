@@ -117,11 +117,12 @@ end subroutine MOM_state_chksum_3arg
 ! =============================================================================
 
 !> Write out chksums for the model's thermodynamic state variables.
-subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
+subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift)
   character(len=*),         intent(in) :: mesg !< A message that appears on the chksum lines.
   type(thermo_var_ptrs),    intent(in) :: tv   !< A structure pointing to various
                                                !! thermodynamic variables.
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure.
+  type(unit_scale_type),    intent(in) :: US   !< A dimensional unit scaling type
   integer,        optional, intent(in) :: haloshift !< The width of halos to check (default 0).
 
   integer :: is, ie, js, je, nz, hs
@@ -131,7 +132,8 @@ subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
   if (associated(tv%T)) call hchksum(tv%T, mesg//" T",G%HI,haloshift=hs)
   if (associated(tv%S)) call hchksum(tv%S, mesg//" S",G%HI,haloshift=hs)
   if (associated(tv%frazil)) call hchksum(tv%frazil, mesg//" frazil",G%HI,haloshift=hs)
-  if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs)
+  if (associated(tv%salt_deficit)) &
+    call hchksum(tv%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs, scale=US%R_to_kg_m3*US%Z_to_m)
 
 end subroutine MOM_thermo_chksum
 

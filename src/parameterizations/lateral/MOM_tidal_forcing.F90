@@ -355,12 +355,12 @@ subroutine find_in_files(filenames, varname, array, G)
   type(FmsNetcdfDomainFile_t) :: fileObjRead ! netcdf file object returned by call to open_file
 
   ! note:using individual fms-io calls instead of MOM_read_data to avoid unnecessary reopening/closing to read
-  ! after querying
+  ! after querying for each variable
   do nf=1,size(filenames)
     if (LEN_TRIM(filenames(nf)) == 0) cycle
     if (.not. check_if_open(fileObjRead)) &
       fileOpenSuccess = open_file(fileObjRead, filenames(nf), "read", G%Domain%mpp_domain, is_restart=.false.)
-    
+
     if (variable_exists(fileObjRead, varname)) then
       call read_data(fileObjRead, varname, array)
       call close_file(fileObjRead)

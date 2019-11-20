@@ -580,7 +580,7 @@ program MOM_main
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
         call enable_averaging(fluxes%dt_buoy_accum, Time, diag)
-        call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, &
+        call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, US, &
                                  diag, surface_forcing_CSp%handles)
         call disable_averaging(diag)
       else

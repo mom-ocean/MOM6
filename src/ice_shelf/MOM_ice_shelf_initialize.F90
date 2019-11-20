@@ -99,7 +99,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
-  
+
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
   call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
 

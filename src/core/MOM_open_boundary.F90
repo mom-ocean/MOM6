@@ -549,7 +549,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   logical :: fileOpenSuccess ! true if open_file is successful
   integer, dimension(4) :: siz2
-  integer :: ndims 
+  integer :: ndims
   integer, allocatable, dimension(:) :: siz, siz3
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -668,8 +668,7 @@ subroutine initialize_segment_data(G, OBC, PF)
         endif
         filename = trim(inputdir)//trim(filename)
         fieldname = trim(fieldname)//trim(suffix)
-     
-        ! open the file   
+        ! open the file
         if (.not. check_if_open(fileObjRead)) &
           fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
         ndims = get_variable_num_dimensions(fileObjRead, fieldname)
@@ -745,13 +744,13 @@ subroutine initialize_segment_data(G, OBC, PF)
                trim(fieldname),ignore_axis_atts=.true.,threading=SINGLE_FILE)
           if (siz(3) > 1) then
             fieldname = 'dz_'//trim(fieldname)
-            !call field_size(filename,fieldname,siz,no_domain=.true.)
+
             ndims = get_variable_num_dimensions(fileObjRead, fieldname)
 
             if (ndims .LT. 3) call MOM_error(FATAL,"MOM_open_boundary:: intialize_segment_data: field "//&
                                     trim(fieldname)// " has fewer than 3 dimensions.")
             allocate(siz3(ndims))
-            call get_variable_size(fileObjRead, fieldname, siz3) 
+            call get_variable_size(fileObjRead, fieldname, siz3)
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz3(3)))

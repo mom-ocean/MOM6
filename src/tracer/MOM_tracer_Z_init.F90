@@ -100,7 +100,6 @@ function tracer_Z_init(tr, h, filename, tr_name, G, US, missing_val, land_val)
   allocate(tr_1d(nz_in)) ; tr_1d(:) = 0.0
 
   call MOM_read_data(filename, tr_name, tr_in(:,:,:), G%Domain)
-  
   ! Fill missing values from above?  Use a "close" test to avoid problems
   ! from type-conversion rounoff.
   if (present(missing_val)) then

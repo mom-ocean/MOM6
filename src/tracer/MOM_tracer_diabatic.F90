@@ -18,10 +18,10 @@ public applyTracerBoundaryFluxesInOut
 
 contains
 
-!> This subroutine solves a tridiagonal equation for the final tracer
-!! concentrations after the dual-entrainments, and possibly sinking or surface
-!! and bottom sources, are applied.  The sinking is implemented with an
-!! fully implicit upwind advection scheme.
+!> This subroutine solves a tridiagonal equation for the final tracer concentrations after the
+!! dual-entrainments, and possibly sinking or surface and bottom sources, are applied.  The sinking
+!! is implemented with an fully implicit upwind advection scheme.  Alternate time units can be
+!! used for the timestep, surface and bottom fluxes and sink_rate provided they are all consistent.
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
   type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
@@ -33,13 +33,18 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb     !< amount of fluid entrained from the layer
                                                                      !! below [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
-  real,                                      intent(in)    :: dt     !< amount of time covered by this call [s]
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer [CU kg m-2 s-1]
+  real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
+                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU H ~> CU m or CU kg m-2] if
+                                                                     !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
-                                                                     !! tracer [CU kg m-2 s-1]
+                                                                     !! tracer in [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU H ~> CU m or CU kg m-2] if
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
                                                                      !! [CU kg m-2]; formerly [CU m]
-  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks [m s-1]
+  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
+                                                                     !! [m T-1 ~> m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
