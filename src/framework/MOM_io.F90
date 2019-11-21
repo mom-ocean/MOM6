@@ -119,6 +119,7 @@ public :: register_restart_field
 public :: register_variable_attribute
 public :: variable_exists
 public :: write_data
+public :: write_field
 public :: write_restart
 public :: unlimited
 
@@ -186,6 +187,19 @@ interface MOM_read_vector
   module procedure MOM_read_vector_2d
 end interface
 
+! interface to write data to a netcdf file
+interface write_field
+  module procedure write_field_4d_DD
+  module procedure write_field_3d_DD
+  module procedure write_field_2d_DD
+  module procedure write_field_1d_DD
+  module procedure write_field_scalar
+  module procedure write_field_noDD
+  module procedure write_field_noDD
+  module procedure write_field_noDD
+  module procedure write_field_noDD
+end interface
+
 ! interface to scale data after reading in a field
 interface scale_data
   module procedure scale_data_4d
@@ -195,6 +209,235 @@ interface scale_data
 end interface
 
 contains
+
+!> This routine opens a netcdf file in "write" mode, registers the axes and variables, and writes
+! variable attributes included in the "vars" structure
+subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit, G, DG, GV, checksums)
+  character(len=*),      intent(in)               :: filename !< full path to the netcdf file
+  type(vardesc), dimension(:), intent(in)         :: vars !< structures describing the output
+  integer,               intent(in)               :: numVariables !< number of variables to write to the file
+  type(fieldtype), dimension(:), intent(inout)    :: fields !< array of fieldtypes for each variable
+  integer, optional,     intent(in)               :: threading !< SINGLE_FILE or MULTIPLE
+  real, optional,        intent(in)               :: timeUnit !< length of the units for time [s]. The
+                                                             !! default value is 86400.0, for 1 day.
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
+  integer(kind=8), dimension(:,:), optional, intent(in) :: checksums(:,:)  !< checksums of the variables
+
+  ! local
+  type(FmsNetcdfFile_t) :: fileObjNoDD ! non-domain-decomposed netcdf file object returned by open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjDD ! domain-decomposed netcdf file object returned by open_file
+  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
+  type(MOM_domain_type), pointer :: Domain => NULL()
+  logical :: fileOpenSuccessDD, fileOpenSuccessNoDD ! true if netcdf file is opened
+  logical :: one_file, domain_set ! indicates whether the file will be domain-decomposed or not
+  character(len=10) :: timeUnits
+  character(len=64) :: checksum_char ! checksum character array created from checksum argument
+  character(len=48), allocatable, dimension(:,:) :: dim_names !< variable dimension names
+  integer :: i, j, total_axes
+  integer :: num_dims !< number of dimensions
+  integer, dimension(4) :: dim_lengths !< variable dimension lengths
+  real :: time
+
+  ! determine whether the file will be domain-decomposed or not
+  domain_set=.false.
+  if (present(G)) then
+    domain_set = .true. ; Domain => G%Domain
+  elseif (present(dG)) then
+    domain_set = .true. ; Domain => dG%Domain
+  endif
+
+  one_file = .true.
+  if (domain_set) one_file = (thread == SINGLE_FILE)
+
+  if (one_file) then
+    fileOpenSuccessNoDD=open_file(fileObjNoDD, filename, "write", is_restart=.false.)
+  else
+    fileOpenSuccessDD=open_file(fileObjDD, filename, "write", MOM_Domain%mpp_domain, is_restart=.false.)
+  endif
+! set the time units
+  timeUnits=""
+  if (present(timeUnit)) then
+    timeUnits = get_time_units(timeUnit)
+  else
+    timeUnits ="days"
+  endif
+
+  ! allocate the output data variable dimension attributes
+  allocate(num_dims(numVariables))
+  allocate(dim_names(numVariables,4))
+
+  ! allocate the axis data and attribute types for the file
+  !>@NOTE The user should increase the sizes of the axis and data attributes to accommodate more axes if necessary.
+  allocate(axis_data_CS%axis(7))
+  allocate(axis_data_CS%data(7))
+
+  ! procedure for the domain-decomposed case
+  if (fileOpenSuccessDD) then
+    total_axes=0
+    do i=1,numVariables
+      num_dims=0
+
+      if (present(G)) then
+        if (present(GV)) then
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                         dim_lengths, num_dims, G=G, GV=GV)
+        else
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                          dim_lengths, num_dims, G=G)
+        endif
+      elseif(present(dG)) then
+        if (present(GV)) then
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+        else
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                          dim_lengths, num_dims, dG=dG)
+        endif
+      endif
+
+      if (num_dims .le. 0) call MOM_error(FATAL, "MOM_io:create_file: num_dims is an invalid value.")
+      ! register the global axes to the file
+      do j=1,output_data%num_dims
+        if (.not.(dimension_exists(fileObjWrite, output_data%dim_names(i,j)))) then
+          total_axes=total_axes+1
+          if (present(timeUnit)) then
+            call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
+                                              time_val=(/timeUnit/), time_units=timeUnits)
+          else
+            call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
+                                              time_val=(/1/), time_units=timeUnits)
+          endif
+
+          call register_axis(fileObjDD, trim(dim_names(i,j)), dim_lengths(j))
+        endif
+      enddo
+      ! register variable "i" and write the attributes
+      if (.not.(variable_exists(fileObjDD, trim(vars(i)%name)))) then
+        call register_field(fileObjDD, vars(i)%name, "double", dimensions=dim_names(i,1:num_dims))
+        call register_variable_attribute(fileObjDD, vars(i)%name, 'units', vars(i)%units)
+        call register_variable_attribute(fileObjDD, vars(i)%name, 'long_name', vars(i)%longname)
+        ! write the checksum attribute for variable "i"
+        if (present(checksums)) then
+          ! convert the checksum to a string
+          checksum_char = ''
+          checksum_char = convert_checksum_to_string(check_val(i,1))
+          call register_variable_attribute(fileObjDD, vars(i)%name, "checksum", checksum_char)
+        endif
+      endif
+    enddo
+    ! register and write the coordinate variables (axes) to the file
+    do i=1,total_axes
+      if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then
+        if (fileObjDD%is_root) then
+          call register_field(fileObjDD, trim(axis_data_CS%axis(i)%name), &
+                             "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+          call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(i)%name), &
+                                               'long_name',axis_data_CS%axis(i)%longname)
+
+          call register_variable_attribute(fileObjDD, trim(axis_data_CS%axis(i)%name), &
+                                               'units',trim(axis_data_CS%axis(i)%units))
+
+          !>@NOTE: create_file does not write the initial time value
+          if (lowercase(trim(axis_data_CS%axis(i)%name)) .ne. 'time') then
+            call write_data(fileObjDD, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
+          endif
+        endif
+      endif
+    enddo
+
+    if (check_if_open(fileObjDD)) call close_file(fileObjDD)
+  ! procedure for the non-domain-decomposed case
+  elseif (fileOpenSuccessNoDD) then
+  total_axes=0
+    do i=1,numVariables
+      num_dims=0
+
+      if (present(G)) then
+        if (present(GV)) then
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                         dim_lengths, num_dims, G=G, GV=GV)
+        else
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                          dim_lengths, num_dims, G=G)
+        endif
+      elseif(present(dG)) then
+        if (present(GV)) then
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                          dim_lengths, num_dims, dG=dG, GV=GV)
+        else
+          call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, dim_names(i,:), &
+                                          dim_lengths, num_dims, dG=dG)
+        endif
+      endif
+
+      if (num_dims .le. 0) call MOM_error(FATAL, "MOM_io:create_file: num_dims is an invalid value.")
+      ! register the global axes to the file
+      do j=1,output_data%num_dims
+        if (.not.(dimension_exists(fileObjDD, output_data%dim_names(i,j)))) then
+          total_axes=total_axes+1
+          if (present(timeUnit)) then
+            call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
+                                              time_val=(/timeUnit/), time_units=timeUnits)
+          else
+            call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
+                                              time_val=(/1/), time_units=timeUnits)
+          endif
+
+          call register_axis(fileObjNoDD, trim(dim_names(i,j)), dim_lengths(j))
+        endif
+      enddo
+      ! register variable "i" and write the attributes
+      if (.not.(variable_exists(fileObjDD, trim(vars(i)%name)))) then
+        call register_field(fileObjDD, vars(i)%name, "double", dimensions=dim_names(i,1:num_dims))
+        call register_variable_attribute(fileObjDD, vars(i)%name, 'units', vars(i)%units)
+        call register_variable_attribute(fileObjDD, vars(i)%name, 'long_name', vars(i)%longname)
+        ! write the checksum attribute for variable "i"
+        if (present(checksums)) then
+          ! convert the checksum to a string
+          checksum_char = ''
+          checksum_char = convert_checksum_to_string(check_val(i,1))
+          call register_variable_attribute(fileObjDD, vars(i)%name, "checksum", checksum_char)
+        endif
+      endif
+    enddo
+    ! register and write the coordinate variables (axes) to the file
+    do i=1,total_axes
+      if (.not.(variable_exists(fileObjNoDD, trim(axis_data_CS%axis(i)%name)))) then
+        if (fileObjDD%is_root) then
+          call register_field(fileObjNoDD, trim(axis_data_CS%axis(i)%name), &
+                             "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
+
+          call register_variable_attribute(fileObjNoDD, trim(axis_data_CS%axis(i)%name), &
+                                               'long_name',axis_data_CS%axis(i)%longname)
+
+          call register_variable_attribute(fileObjNoDD, trim(axis_data_CS%axis(i)%name), &
+                                               'units',trim(axis_data_CS%axis(i)%units))
+
+          !>@NOTE: create_file does not write the initial time value
+          if (lowercase(trim(axis_data_CS%axis(i)%name)) .ne. 'time') then
+            call write_data(fileObjNoDD, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
+          endif
+        endif
+      endif
+    enddo
+
+    if (check_if_open(fileObjNoDD)) call close_file(fileObjNoDD)
+  endif
+
+  deallocate(dim_names)
+  deallocate(axis_data_CS%axis)
+  deallocate(axis_data_CS%data)
+
+end subroutine create_file
 
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
@@ -696,6 +939,65 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edgeLengths,
   endif ; endif
 
 end subroutine MOM_read_data_4d_noDD
+
+!> This function uses the fms_io function write_data to write a 1-D domain-decomposed data field named "fieldname"
+!! from file "filename".
+subroutine write_field_1d_DD(filename, fieldname, data, time, corner, edgeLengths, is_diagnostic_file)
+  character(len=*),       intent(in) :: filename !< The name of the file to write
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:),     intent(in) :: data !< The 1-dimensional data array to pass to write_data
+  real,                   intent(in) :: time !< Output time
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  real,         optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
+  ! local
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  integer :: i
+  integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
+  character(len=40), dimension(1) :: dimNames ! variable dimension names
+
+  ! open the file in write mode if it does not already exist.
+  ! If the file does exist, open it append mode
+  if (.not.(check_if_open(fileObjRead))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, "write", domain%mpp_domain, is_restart=.false.)
+  if (.not.(fileOpenSuccess)) then
+    fileOpenSuccess = open_file(fileObjWrite, filename, "append", domain%mpp_domain, is_restart=.false.)
+    call write_data(fileObjWrite, 'Time', (/time/), corner=(/ntsteps/),edge_lengths=(/1/))
+  else
+    if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
+      call register_field(fileObjWrite, vars(i)%name, "double", &
+                          dimensions=output_data%dim_names(i,1:output_data%num_dims))
+      call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
+      call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
+    endif
+
+  ! register the variable axes
+  !> @note: the user will need to change the xUnits and yUnits if they expect different values for the
+  !! x/longitude and/or y/latitude axes units
+  call MOM_register_variable_axes(fileObjRead, trim(fieldname), xUnits="degrees_east", yUnits="degrees_north")
+
+  if (present(corner) .or. present(edgeLengths) .or. present(timeLevel)) then
+    call get_variable_dimension_names(fileObjRead, trim(fieldname), dimNames)
+  endif
+
+  start(1) = 1
+  if (present(corner)) start(1) = corner
+  if (present(edgeLengths)) then
+    nread(1) = edgeLengths
+  else
+    call get_dimension_size(fileObjRead, trim(dimNames(1)), nread(1))
+  endif
+  ! write the data
+  call write_data(fileObjRead, trim(fieldname), data, corner=start, edge_Lengths=nread)
+  ! close the file
+  if (check_if_open(fileObjRead)) call close_file(fileObjRead)
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    call scale_data(data, scale)
+  endif ; endif
+
+end subroutine write_field_1d_DD
 
 !> register a MOM diagnostic axis to a domain-decomposed file 
 subroutine MOM_register_diagnostic_axis(fileObj, axisName, axisLength)
@@ -1701,6 +2003,57 @@ subroutine scale_data_4d(data, scale_factor, MOM_domain)
     endif
   endif
 end subroutine scale_data_4d
+
+!> convert the variable checksum integer(s) to a single string
+!! If there is more than 1 checksum, commas are inserted between
+!! each checksum value in the output string
+function convert_checksum_to_string(checksum_int) result (checksum_string)
+  integer(kind=8), intent(in) :: checksum_int !< checksum integer values
+! local
+  character(len=64) :: checksum_string
+  integer :: i
+
+  checksum_string = ''
+
+  write (checksum_string,'(Z16)') checksum_int ! Z16 is the hexadecimal format code
+
+end function convert_checksum_to_string
+
+!> convert the variable checksum string read in from a restart file
+!! to integer value(s)
+function convert_checksum_string_to_int(checksum_char) result(checksum_file)
+  character(len=*), intent(in) :: checksum_char !< checksum character array
+  ! local
+  integer(LONG_KIND),dimension(3) :: checksum_file !< checksum string corresponds to
+                                                   !< values from up to 3 times
+  integer :: last
+  integer :: start
+  integer(LONG_KIND) :: checksumh
+  integer :: num_checksumh
+  integer :: k
+
+  start =0
+  last = 0
+  checksumh = 0
+  num_checksumh = 1
+  last = len_trim(checksum_char)
+  start = index(trim(checksum_char),",") ! A start value of 0 implies only 1 checksum value
+  ! Scan checksum character array for the ',' delimiter, which indicates that the corresponding variable
+  ! has multiple time levels.
+  do while ((start > 0) .and. (start < (last-15)))
+     start = start + scan(checksum_char(start:last), "," ) ! move starting pointer after ","
+     num_checksumh = num_checksumh + 1
+  enddo
+
+  start = 1
+
+  do k = 1, num_checksumh
+     read(checksum_char(start:start+15),'(Z16)') checksumh ! Z=hexadecimal integer: Z16 is for 64-bit data types
+     checksum_file(k) = checksumh
+     start = start+ 17 ! Move start index past the ',' in checksum_char
+  enddo
+
+end function convert_checksum_string_to_int
 
 !> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)

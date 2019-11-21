@@ -11,14 +11,9 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : fieldtype, MOM_read_vector
-use MOM_io, only : slasher, vardesc, var_desc
-use MOM_io, only : open_file, close_file, MOM_read_data, write_data
-use MOM_io, only : register_variable_attribute, register_axis, register_field
-use MOM_io, only : get_variable_dimension_names, get_variable_num_dimensions
-use MOM_io, only : file_exists, variable_exists, dimension_exists, check_if_open
-use MOM_io, only : NORTH_FACE, EAST_FACE
-use MOM_io, only : FmsNetcdfDomainFile_t, get_horizontal_grid_logic
+use MOM_io, only : create_file, fieldtype, file_exists
+use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
+use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -170,7 +165,7 @@ subroutine initialize_topography_from_file(D, G, param_file, US)
   filename = trim(inputdir)//trim(topo_file)
   call log_param(param_file, mdl, "INPUTDIR/TOPO_FILE", filename)
 
-  if (.not.file_exists(filename)) call MOM_error(FATAL, &
+  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
   D(:,:) = -9.e30*m_to_Z ! Initializing to a very large negative depth (tall mountains) everywhere
@@ -215,7 +210,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   if (len_trim(topo_edits_file)==0) return
 
   topo_edits_file = trim(inputdir)//trim(topo_edits_file)
-  if (.not.file_exists(topo_edits_file)) call MOM_error(FATAL, &
+  if (.not.file_exists(topo_edits_file, G%Domain)) call MOM_error(FATAL, &
      'initialize_topography_from_file: Unable to open '//trim(topo_edits_file))
 
   ncstatus = nf90_open(trim(topo_edits_file), NF90_NOWRITE, ncid)
@@ -763,7 +758,6 @@ subroutine reset_face_lengths_file(G, param_file, US)
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
   real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
@@ -781,7 +775,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
   call log_param(param_file, mdl, "INPUTDIR/CHANNEL_WIDTH_FILE", filename)
 
   if (is_root_pe()) then ; if (.not.file_exists(filename)) &
-    call MOM_error(FATAL," reset_face_lengths_file: Unable to find "//&
+    call MOM_error(FATAL," reset_face_lengths_file: Unable to open "//&
                            trim(filename))
   endif
 
@@ -1187,28 +1181,22 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   ! Local variables.
   character(len=240) :: filepath
   character(len=40)  :: mdl = "write_ocean_geometry_file"
-  character(len=200) :: dim_names(4)
-  character(len=8) :: hor_grid
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
-  type(FmsNetcdfDomainFile_t) :: fileObjWrite  ! FMS file object returned by call to open_file
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   real :: L_to_m_scale ! A unit conversion factor from L to m.
+  integer :: unit
   integer :: file_threading
   integer :: nFlds_used
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  integer :: num_dims ! counter for variable dimensions
   logical :: multiple_files
-  logical :: file_open_success ! If true, the filename passed to open_file was opened sucessfully
-  logical :: use_lath, use_lonh, use_latq, use_lonq
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
   real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
-  real, pointer, dimension(:) :: coord_data => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1262,7 +1250,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
   else
-    filepath = trim(directory) // "ocean_geometry.nc"
+    filepath = trim(directory) // "ocean_geometry"
   endif
 
   out_h(:,:) = 0.0
@@ -1274,157 +1262,68 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
                  "If true, each processor writes its own restart file, "//&
                  "otherwise a single restart file is generated", &
                  default=.false.)
-  ! open the file
-  if (.not. check_if_open(fileObjWrite)) &
-    file_open_success = open_file(fileObjWrite, filepath, "overwrite", G%Domain%mpp_domain, is_restart=.false.)
-  ! register the axes
-  if (.not. dimension_exists(fileObjWrite, "lath")) call register_axis(fileObjWrite, "lath","y")
+  file_threading = SINGLE_FILE
+  if (multiple_files) file_threading = MULTIPLE
 
-  if (.not. dimension_exists(fileObjWrite, "lonh")) call register_axis(fileObjWrite, "lonh", "x")
+  call create_file(trim(filepath), vars, nFlds_used, fields, &
+                   file_threading, dG=G)
 
-  if (.not. dimension_exists(fileObjWrite, "latq")) &
-      call register_axis(fileObjWrite, "latq","y", domain_position=NORTH_FACE)
-
-  if (.not. dimension_exists(fileObjWrite, "lonq")) &
-     call register_axis(fileObjWrite, "lonq", "x", domain_position=EAST_FACE)
-
-  ! write the axis data and attributes
-  !>@note: the latitude and longitude data and metadata are defined according to the old MOM_io::create_file subroutine
-  coord_data=>NULL()
-
-  if (.not. variable_exists(fileObjWrite, 'lath')) then
-    coord_data=>G%gridLatT(G%jsg:G%jeg)
-    call register_field(fileObjWrite, 'lath', 'double', dimensions=(/'lath'/))
-    call write_data(fileObjWrite,'lath', coord_data)
-    call register_variable_attribute(fileObjWrite, 'lath', 'units', G%y_axis_units)
-    call register_variable_attribute(fileObjWrite, 'lath', 'long_name', 'Latitude')
-  endif
-
-  if (.not. variable_exists(fileObjWrite, 'lonh')) then
-    coord_data => G%gridLonT(G%isg:G%ieg)
-    call register_field(fileObjWrite, 'lonh', 'double', dimensions=(/'lonh'/))
-    call write_data(fileObjWrite,'lonh', coord_data)
-    call register_variable_attribute(fileObjWrite, 'lonh', 'units', G%x_axis_units)
-    call register_variable_attribute(fileObjWrite, 'lonh', 'long_name', 'Longitude')
-  endif
-
-  if (.not. variable_exists(fileObjWrite, 'latq')) then
-    coord_data => G%gridLatB(G%JsgB:G%JegB)
-    call register_field(fileObjWrite, 'latq', 'double', dimensions=(/'latq'/))
-    call write_data(fileObjWrite,'latq', coord_data)
-    call register_variable_attribute(fileObjWrite, 'latq', 'units', G%y_axis_units)
-    call register_variable_attribute(fileObjWrite, 'latq', 'long_name', 'Latitude')
-  endif
-
-  if (.not. variable_exists(fileObjWrite, 'lonq')) then
-    coord_data=>G%gridLonB(G%IsgB:G%IegB)
-    call register_field(fileObjWrite, 'lonq', 'double', dimensions=(/'lonq'/))
-    call write_data(fileObjWrite,'lonq', coord_data)
-    call register_variable_attribute(fileObjWrite, 'lonq', 'units', G%x_axis_units)
-    call register_variable_attribute(fileObjWrite, 'lonq', 'long_name', 'Longitude') 
-  endif
-
-  ! register the field variables and attributes
-  do i=1,nFlds_used
-    if (.not. variable_exists(fileObjWrite, trim(vars(i)%name))) then 
-      num_dims = 0
-      dim_names(:) = ""
-      call get_horizontal_grid_logic(vars(i)%hor_grid, use_lath, use_lonh, use_latq, use_lonq)
-
-      if (use_lonh) then
-        num_dims = num_dims+1
-        dim_names(num_dims)(1:len_trim('lonh')) = 'lonh'
-      elseif (use_lonq) then
-        num_dims = num_dims+1 
-        dim_names(num_dims)(1:len_trim('lonq')) = 'lonq'
-      endif
-
-      if (use_lath) then
-        num_dims = num_dims+1
-        dim_names(num_dims)(1:len_trim('lath')) = 'lath'
-      elseif (use_latq) then
-        num_dims = num_dims+1
-        dim_names(num_dims)(1:len_trim('latq')) ='latq'
-      endif
-
-      call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
-      call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
-      call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
-    endif
-  enddo
-
-  ! write the fields, including the coordinate variables
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
-  call write_data(fileObjWrite, vars(1)%name, out_q)
-
+  call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
-  call write_data(fileObjWrite, vars(2)%name, out_q)
-
-  call write_data(fileObjWrite, vars(3)%name, G%geoLatT)
-  call write_data(fileObjWrite, vars(4)%name, G%geoLonT)
+  call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
+  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
+  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(5)%name, out_h)
-
+  call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(6)%name, out_q)
+  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
+
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(7)%name, out_v)
-
+  call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(8)%name, out_u)
+  call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
 
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(9)%name, out_u)
-
+  call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(10)%name, out_v)
+  call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call write_data(fileObjWrite, vars(11)%name, out_h)
-
+  call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(12)%name, out_h)
+  call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
 
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(13)%name, out_q)
-
+  call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(14)%name, out_q)
+  call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(15)%name, out_h)
-
+  call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(16)%name, out_q)
+  call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
 
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(17)%name, out_v)
-
+  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call write_data(fileObjWrite, vars(18)%name, out_u)
-
-  call write_data(fileObjWrite, vars(19)%name, G%mask2dT)
+  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
+  call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
 
   if (G%bathymetry_at_vel) then
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call write_data(fileObjWrite, vars(20)%name, out_u)
-
+    call write_field(unit, fields(20), G%Domain%mpp_domain, out_u)
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call write_data(fileObjWrite, vars(21)%name, out_u)
-
+    call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call write_data(fileObjWrite, vars(22)%name, out_v)
-
+    call write_field(unit, fields(22), G%Domain%mpp_domain, out_v)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call write_data(fileObjWrite, vars(23)%name, out_v)
+    call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
   endif
-
-  ! close the file
-  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
 
 end subroutine write_ocean_geometry_file
 

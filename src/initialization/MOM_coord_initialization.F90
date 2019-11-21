@@ -9,14 +9,9 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : fieldtype, file_exists
-use MOM_io, only : slasher, vardesc, var_desc
-use MOM_io, only : FmsNetcdfFile_t, open_file, close_file, MOM_read_data, write_data
-use MOM_io, only : register_variable_attribute, get_var_dimension_features
-use MOM_io, only : axis_data_type, MOM_get_diagnostic_axis_data, register_axis
-use MOM_io, only : register_field, variable_exists, dimension_exists
-use MOM_io, only : check_if_open
+use MOM_io, only : create_file, fieldtype, file_exists
+use MOM_io, only : MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -286,14 +281,13 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, &
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   filename = trim(slasher(inputdir))//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
-  if (.not.file_exists(filename)) call MOM_error(FATAL, &
-      " set_coord_from_TS_profile: Unable to find " //trim(filename))
 
-  ! read in data
   call MOM_read_data(filename,"PTEMP",T0(:))
   call MOM_read_data(filename,"SALT",S0(:))
 
-  ! These statements set the interface reduced gravities.
+  if (.not.file_exists(filename)) call MOM_error(FATAL, &
+      " set_coord_from_TS_profile: Unable to open " //trim(filename))
+!    These statements set the interface reduced gravities.           !
   g_prime(1) = g_fs
   do k=1,nz ; Pref(k) = P_ref ; enddo
   call calculate_density(T0, S0, Pref, Rlay, 1, nz, eqn_of_state, scale=US%kg_m3_to_R)
@@ -401,7 +395,6 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
-
   nz = GV%ke
 
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
@@ -420,9 +413,9 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   filename = trim(inputdir)//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
-      " set_coord_from_file: Unable to find "//trim(filename))
+      " set_coord_from_file: Unable to open "//trim(filename))
 
-  call MOM_read_data(filename, coord_var, Rlay)
+  call read_axis_data(filename, coord_var, Rlay)
   do k=1,nz ; Rlay(k) = US%kg_m3_to_R*Rlay(k) ; enddo
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo
@@ -522,90 +515,19 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   character(len=*),      intent(in)    :: directory  !< The directory into which to place the file.
   ! Local variables
   character(len=240) :: filepath
-  character(len=200) :: dim_names(4)
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  type(FmsNetcdfFile_t) :: fileObjWrite ! FMS file object returned by call to open_file
-  type(axis_data_type) :: axis_data_CS ! structure for coordinate variable metadata
-  !integer :: unit
-  integer :: i, j
-  integer :: num_dims ! counter for variable dimensions
-  integer :: total_axes ! counter for all coordinate axes in file
-  integer, dimension(4) :: dim_lengths
-  logical :: fileOpenSuccess ! If true, the filename passed to open_file was opened sucessfully
-  logical :: axis_found ! If true, the axis is registered to the file
+  integer :: unit
 
   filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
   vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
-  ! allocate the axis data and attribute types for the vertical grid file
-  !>@NOTE the user will need to increase the allocatable axis_data_CS array sizes to accommodate 
-  !! new axes
-  allocate(axis_data_CS%axis(2))
-  allocate(axis_data_CS%data(2))
+  call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  ! open the file
-  if (.not. check_if_open(fileObjWrite)) &
-    fileOpenSuccess = open_file(fileObjWrite, filepath, "overwrite", is_restart=.false.)
-  ! loop through the variables, and get the dimension names and lengths for the vertical grid file
-  total_axes=0
-
-  do i=1,size(vars)
-    num_dims=0
-
-    call get_var_dimension_features(vars(i)%hor_grid, vars(i)%z_grid, vars(i)%t_grid, &
-                                    dim_names, dim_lengths, num_dims,GV=GV)
-    if (num_dims <= 0) &
-        call MOM_error(FATAL,"MOM_coord_initialization:write_vertgrid_file: num_dims is an invalid value.")
-
-    ! register the variable dimensions to the file if the corresponding global axes are not registered
-    do j=1,num_dims
-      if (.not.(dimension_exists(fileObjWrite, dim_names(j),broadcast=.true.))) then
-        total_axes=total_axes+1
-        call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(j), total_axes, GV=GV)
-        call register_axis(fileObjWrite, trim(dim_names(j)), dim_lengths(j))
-      endif
-    enddo
-  enddo
-
-  ! register and write the coordinate variables (axes) to the file
-  do i=1,total_axes
-    if (.not.(variable_exists(fileObjWrite, trim(axis_data_CS%axis(i)%name)))) then
-      if (associated(axis_data_CS%data(i)%p)) then
-        call register_field(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                   "double", dimensions=(/trim(axis_data_CS%axis(i)%name)/))
-
-        call write_data(fileObjWrite, trim(axis_data_CS%axis(i)%name), axis_data_CS%data(i)%p)
-
-        call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                               'long_name',axis_data_CS%axis(i)%longname)
-
-        call register_variable_attribute(fileObjWrite, trim(axis_data_CS%axis(i)%name), &
-                                               'units',trim(axis_data_CS%axis(i)%units))
-      endif
-    endif
-  enddo
-
-  do i=1,size(vars)
-    if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
-      ! register the field
-      call register_field(fileObjWrite, vars(i)%name, "double", dimensions=dim_names(1:num_dims))
-      ! register the variable attributes
-      call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
-      call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
-    endif
-  enddo
-
-  ! write the variables to the file
-  call write_data(fileObjWrite, vars(1)%name, GV%Rlay(1:GV%ke))
-  call write_data(fileObjWrite, vars(2)%name, US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(1:GV%ke))
-
-  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
-
-  deallocate(axis_data_CS%axis)
-  deallocate(axis_data_CS%data)
+  call write_field(unit, fields(1), US%R_to_kg_m3*GV%Rlay(:))
+  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
 
 end subroutine write_vertgrid_file
 
