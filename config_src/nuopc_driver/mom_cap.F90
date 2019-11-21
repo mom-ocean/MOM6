@@ -708,12 +708,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
-             Ice_ocean_boundary% runoff (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% calving (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% runoff_hflx (isc:iec,jsc:jec),     &
-             Ice_ocean_boundary% calving_hflx (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% rofl_flux (isc:iec,jsc:jec),       &
-             Ice_ocean_boundary% rofi_flux (isc:iec,jsc:jec))
+             Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),       &
+             Ice_ocean_boundary% frunoff (isc:iec,jsc:jec))
 
   Ice_ocean_boundary%u_flux          = 0.0
   Ice_ocean_boundary%v_flux          = 0.0
@@ -731,12 +729,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
   Ice_ocean_boundary%p               = 0.0
-  Ice_ocean_boundary%runoff          = 0.0
-  Ice_ocean_boundary%calving         = 0.0
-  Ice_ocean_boundary%runoff_hflx     = 0.0
-  Ice_ocean_boundary%calving_hflx    = 0.0
-  Ice_ocean_boundary%rofl_flux       = 0.0
-  Ice_ocean_boundary%rofi_flux       = 0.0
+  Ice_ocean_boundary%lrunoff_hflx    = 0.0
+  Ice_ocean_boundary%frunoff_hflx    = 0.0
+  Ice_ocean_boundary%lrunoff         = 0.0
+  Ice_ocean_boundary%frunoff         = 0.0
 
   ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
   call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
@@ -780,11 +776,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
-
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide")
+  !These are not currently used and changing requires a nuopc dictionary change
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
