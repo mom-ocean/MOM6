@@ -1276,7 +1276,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_end(id_clock_diabatic)
   else   ! complement of "if (.not.CS%adiabatic)"
 
-    call cpu_clock_begin(id_clock_diabatic)
+    call cpu_clock_begin(id_clock_adiabatic)
     call adiabatic(h, tv, fluxes, US%T_to_s*dtdia, G, GV, US, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_adiabatic)
