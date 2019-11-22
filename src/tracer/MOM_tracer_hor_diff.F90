@@ -35,11 +35,10 @@ public tracer_hordiff, tracer_hor_diff_init, tracer_hor_diff_end
 
 !> The ocntrol structure for along-layer and epineutral tracer diffusion
 type, public :: tracer_hor_diff_CS ; private
-  real    :: dt             !< The baroclinic dynamics time step [s].
-  real    :: KhTr           !< The along-isopycnal tracer diffusivity [m2 s-1].
-  real    :: KhTr_Slope_Cff !< The non-dimensional coefficient in KhTr formula
-  real    :: KhTr_min       !< Minimum along-isopycnal tracer diffusivity [m2 s-1].
-  real    :: KhTr_max       !< Maximum along-isopycnal tracer diffusivity [m2 s-1].
+  real    :: KhTr           !< The along-isopycnal tracer diffusivity [L2 T-1 ~> m2 s-1].
+  real    :: KhTr_Slope_Cff !< The non-dimensional coefficient in KhTr formula [nondim]
+  real    :: KhTr_min       !< Minimum along-isopycnal tracer diffusivity [L2 T-1 ~> m2 s-1].
+  real    :: KhTr_max       !< Maximum along-isopycnal tracer diffusivity [L2 T-1 ~> m2 s-1].
   real    :: KhTr_passivity_coeff !< Passivity coefficient that scales Rd/dx (default = 0)
                                   !! where passivity is the ratio between along-isopycnal
                                   !! tracer mixing and thickness mixing [nondim]
@@ -101,7 +100,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
-  real,                       intent(in)    :: dt      !< time step [s]
+  real,                       intent(in)    :: dt      !< time step [T ~> s]
   type(MEKE_type),            pointer       :: MEKE    !< MEKE type
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
   type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
@@ -153,11 +152,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real :: I_numitts  ! The inverse of the number of iterations, num_itts.
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
                      ! layer for this iteration [nondim].
-  real :: Idt        ! The inverse of the time step [s-1].
+  real :: Idt        ! The inverse of the time step [T-1 ~> s-1].
   real :: h_neglect  ! A thickness that is so small it is usually lost
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: Kh_loc     ! The local value of Kh [L2 T-1 ~> m2 s-1].
-  real :: dt_in_T    ! The timestep [T ~> s]
   real :: Res_Fn     ! The local value of the resolution function [nondim].
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing [nondim].
   real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points.
@@ -178,8 +176,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   call cpu_clock_begin(id_clock_diffuse)
 
   ntr = Reg%ntr
-  dt_in_T = US%s_to_T*dt
-  Idt = 1.0/dt
+  Idt = 1.0 / dt
   h_neglect = GV%H_subroundoff
 
   if (CS%Diffuse_ML_interior .and. CS%first_call) then ; if (is_root_pe()) then
@@ -248,48 +245,48 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
-        khdt_x(I,j) = dt_in_T*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+        khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie
-        khdt_y(i,J) = dt_in_T*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+        khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
       enddo ; enddo
     elseif (Resoln_scaled) then
       !$OMP parallel do default(shared) private(Res_fn)
       do j=js,je ; do I=is-1,ie
         Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
         Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-        khdt_x(I,j) = dt_in_T*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
+        khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
       enddo ; enddo
       !$OMP parallel do default(shared) private(Res_fn)
       do J=js-1,je ;  do i=is,ie
         Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
         Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-        khdt_y(i,J) = dt_in_T*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
+        khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
       enddo ; enddo
     else  ! Use a simple constant diffusivity.
       if (CS%id_KhTr_u > 0) then
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
           Kh_u(I,j) = CS%KhTr
-          khdt_x(I,j) = dt_in_T*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+          khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
-          khdt_x(I,j) = dt_in_T*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+          khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
         enddo ; enddo
       endif
       if (CS%id_KhTr_v > 0) then
         !$OMP parallel do default(shared)
         do J=js-1,je ;  do i=is,ie
           Kh_v(i,J) = CS%KhTr
-          khdt_y(i,J) = dt_in_T*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+          khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do J=js-1,je ;  do i=is,ie
-          khdt_y(i,J) = dt_in_T*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+          khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
         enddo ; enddo
       endif
     endif ! VarMix
@@ -302,7 +299,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
           if (khdt_x(I,j) > khdt_max) then
             khdt_x(I,j) = khdt_max
             if (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)) > 0.0) &
-              Kh_u(I,j) = khdt_x(I,j) / (dt_in_T*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+              Kh_u(I,j) = khdt_x(I,j) / (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
           endif
         enddo ; enddo
       else
@@ -319,7 +316,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
           if (khdt_y(i,J) > khdt_max) then
             khdt_y(i,J) = khdt_max
             if (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)) > 0.0) &
-              Kh_v(i,J) = khdt_y(i,J) / (dt_in_T*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+              Kh_v(i,J) = khdt_y(i,J) / (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
           endif
         enddo ; enddo
       else
@@ -487,7 +484,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
-    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, GV, &
+    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, GV, US, &
                                   CS, tv, num_itts)
     call cpu_clock_end(id_clock_epimix)
   endif
@@ -546,11 +543,11 @@ end subroutine tracer_hordiff
 !! Multiple iterations are used (if necessary) so that there is no limit on the
 !! acceptable time increment.
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
-                                    GV, CS, tv, num_itts)
+                                    GV, US, CS, tv, num_itts)
   type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness [H ~> m or kg m-2]
-  real,                                     intent(in)    :: dt         !< time step
+  real,                                     intent(in)    :: dt         !< time step [T ~> s]
   type(tracer_type),                        intent(inout) :: Tr(:)      !< tracer array
   integer,                                  intent(in)    :: ntr        !< number of tracers
   real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: khdt_epi_x !< Zonal epipycnal diffusivity times
@@ -559,15 +556,16 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: khdt_epi_y !< Meridional epipycnal diffusivity times
                                                            !! a time step and the ratio of the open face width over
                                                            !! the distance between adjacent tracer points [L2 ~> m2]
+  type(unit_scale_type),                    intent(in)    :: US !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),                 intent(inout) :: CS         !< module control structure
   type(thermo_var_ptrs),                    intent(in)    :: tv         !< thermodynamic structure
   integer,                                  intent(in)    :: num_itts   !< number of iterations (usually=1)
 
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
-    Rml_max  ! The maximum coordinate density within the mixed layer [kg m-3].
+    Rml_max  ! The maximum coordinate density within the mixed layer [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G), max(1,GV%nk_rho_varies)) :: &
-    rho_coord ! The coordinate density that is used to mix along [kg m-3].
+    rho_coord ! The coordinate density that is used to mix along [R ~> kg m-3].
 
   ! The naming mnemnonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
   ! These are 1-D arrays of pointers to 2-d arrays to minimize memory usage.
@@ -591,7 +589,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
 
   real, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
-    rho_srt, & ! The density of each layer of the sorted columns [kg m-3].
+    rho_srt, & ! The density of each layer of the sorted columns [R ~> kg m-3].
     h_srt      ! The thickness of each layer of the sorted columns [H ~> m or kg m-2].
   integer, dimension(SZI_(G), SZK_(G), SZJ_(G)) :: &
     k0_srt     ! The original k-index that each layer of the sorted column
@@ -622,9 +620,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     nPv          ! The number of epipycnal pairings at each v-point.
   real :: h_exclude    ! A thickness that layers must attain to be considered
                        ! for inclusion in mixing [H ~> m or kg m-2].
-  real :: Idt        ! The inverse of the time step [s-1].
+  real :: Idt        ! The inverse of the time step [T-1 ~> s-1].
   real :: I_maxitt   ! The inverse of the maximum number of iterations.
-  real :: rho_pair, rho_a, rho_b  ! Temporary densities [kg m-3].
+  real :: rho_pair, rho_a, rho_b  ! Temporary densities [R ~> kg m-3].
   real :: Tr_min_face  ! The minimum and maximum tracer concentrations
   real :: Tr_max_face  ! associated with a pairing [Conc]
   real :: Tr_La, Tr_Lb ! The 4 tracer concentrations that might be
@@ -653,7 +651,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB
-  Idt = 1.0/dt
+  Idt = 1.0 / dt
   nkmb = GV%nk_rho_varies
 
   if (num_itts <= 1) then
@@ -669,7 +667,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
     call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
-                         rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state)
+                         rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state, scale=US%kg_m3_to_R)
   enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2

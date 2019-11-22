@@ -52,8 +52,8 @@ type, public :: idealized_hurricane_CS ; private
   real    :: max_windspeed        !< Maximum wind speeds [m s-1]
   real    :: hurr_translation_spd !< Hurricane translation speed [m s-1]
   real    :: hurr_translation_dir !< Hurricane translation speed [m s-1]
-  real    :: gustiness            !< Gustiness (optional, used in u*) [m s-1]
-  real    :: Rho0                 !< A reference ocean density [kg m-3]
+  real    :: gustiness            !< Gustiness (optional, used in u*) [R L Z T-1 ~> Pa]
+  real    :: Rho0                 !< A reference ocean density [R ~> kg m-3]
   real    :: Hurr_cen_Y0          !< The initial y position of the hurricane
                                   !!  This experiment is conducted in a Cartesian
                                   !!  grid and this is assumed to be in meters [m]
@@ -90,15 +90,12 @@ character(len=40)  :: mdl = "idealized_hurricane" !< This module's name.
 contains
 
 !> Initializes wind profile for the SCM idealized hurricane example
-subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
-  type(time_type), &
-       intent(in) :: Time       !< Model time
-  type(ocean_grid_type), &
-       intent(in) :: G          !< Grid structure
-  type(param_file_type), &
-       intent(in) :: param_file !< Input parameter structure
-  type(idealized_hurricane_CS), &
-       pointer    :: CS         !< Parameter container
+subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
+  type(time_type),               intent(in) :: Time   !< Model time
+  type(ocean_grid_type),         intent(in) :: G      !< Grid structure
+  type(unit_scale_type),         intent(in) :: US     !< A dimensional unit scaling type
+  type(param_file_type),         intent(in) :: param_file !< Input parameter structure
+  type(idealized_hurricane_CS),  pointer    :: CS     !< Parameter container for this module
 
   real :: DP, C
 
@@ -178,10 +175,10 @@ subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, do_not_log=.true.)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
                  "The background gustiness in the winds.", units="Pa", &
-                 default=0.00, do_not_log=.true.)
+                 default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, do_not_log=.true.)
 
 
   if (CS%BR_BENCH) then
@@ -193,7 +190,6 @@ subroutine idealized_hurricane_wind_init(Time, G, param_file, CS)
   CS%Holland_A = (CS%rad_max_wind)**CS%Holland_B
   CS%Holland_AxBxDP = CS%Holland_A*CS%Holland_B*DP
 
-  return
 end subroutine idealized_hurricane_wind_init
 
 !> Computes the surface wind for the idealized hurricane test cases
@@ -269,9 +265,8 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
         YY = LAT - YC
         XX = LON - XC
       endif
-      call idealized_hurricane_wind_profile(&
-         CS,f,YY,XX,Uocn,Vocn,TX,TY)
-      forces%taux(I,j) = G%mask2dCu(I,j) * TX
+      call idealized_hurricane_wind_profile(CS,f,YY,XX,Uocn,Vocn,TX,TY)
+      forces%taux(I,j) = G%mask2dCu(I,j) * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * TX
     enddo
   enddo
   !> Computes tauy
@@ -292,7 +287,7 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
         XX = LON - XC
       endif
       call idealized_hurricane_wind_profile(CS, f, YY, XX, Uocn, Vocn, TX, TY)
-      forces%tauy(i,J) = G%mask2dCv(i,J) * TY
+      forces%tauy(i,J) = G%mask2dCv(i,J) * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * TY
     enddo
   enddo
 
@@ -300,9 +295,9 @@ subroutine idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
   do j=js,je
     do i=is,ie
       !  This expression can be changed if desired, but need not be.
-      forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
-         sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+      forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
+              sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+                   0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
     enddo
   enddo
 
@@ -433,7 +428,6 @@ subroutine idealized_hurricane_wind_profile(CS, absf, YY, XX, UOCN, VOCN, Tx, Ty
   TX = CS%rho_A * Cd * sqrt(du**2 + dV**2) * dU
   TY = CS%rho_A * Cd * sqrt(du**2 + dV**2) * dV
 
-  return
 end subroutine idealized_hurricane_wind_profile
 
 !> This subroutine is primarily needed as a legacy for reproducing answers.
@@ -579,7 +573,8 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     else
        Cd = 0.0018
     endif
-    forces%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
+    forces%taux(I,j) = CS%rho_a * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                       G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
   enddo ; enddo
   !/BR
   ! See notes above
@@ -597,16 +592,17 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, US, CS)
     else
        Cd = 0.0018
     endif
-    forces%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
+    forces%tauy(I,j) = CS%rho_a * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z * &
+                       G%mask2dCv(I,j) * Cd*du10*dV
   enddo ; enddo
   ! Set the surface friction velocity [m s-1]. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
-       sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
+            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
   enddo ; enddo
-  return
+
 end subroutine SCM_idealized_hurricane_wind_forcing
 
 end module idealized_hurricane

@@ -31,10 +31,9 @@ type, public :: Neverland_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq
-                             !! approximation [kg m-3].
+  real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
-  real :: flux_const         !<  The restoring rate at the surface [m s-1].
+  real :: flux_const         !<  The restoring rate at the surface [Z T-1 ~> m s-1].
   real, dimension(:,:), pointer :: &
     buoy_restore(:,:) => NULL() !< The pattern to restore buoyancy to.
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
@@ -61,7 +60,8 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real :: x, y
   real :: PI
-  real :: tau_max, off
+  real :: tau_max  ! The magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: off
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -78,7 +78,7 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! calculation of ustar - otherwise the lower bound would be Isq.
   PI = 4.0*atan(1.0)
   forces%taux(:,:) = 0.0
-  tau_max = 0.2
+  tau_max = 0.2 * US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   off = 0.02
   do j=js,je ; do I=is-1,Ieq
 !    x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
@@ -104,9 +104,10 @@ subroutine Neverland_wind_forcing(sfc_state, forces, day, G, US, CS)
   !  is always positive.
 ! if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
 !   !  This expression can be changed if desired, but need not be.
-!   forces%ustar(i,j) = US%m_to_Z*US%T_to_s * G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-!      sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-!           0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
+!   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt((CS%gust_const + &
+!           sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+!                0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))) * &
+!            (US%L_to_Z / CS%Rho0) )
 ! enddo ; enddo ; endif
 
 end subroutine Neverland_wind_forcing
@@ -146,7 +147,7 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
+                           ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
   real :: density_restore  ! De
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -195,14 +196,14 @@ subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       ! so that the original (unmodified) version is not accidentally used.
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density [kg m-3] that is being restored toward.
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - sfc_state%sfc_density(i,j))
+                          US%kg_m3_to_R*(density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
@@ -246,7 +247,7 @@ subroutine Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
 ! call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
 !                "The background gustiness in the winds.", units="Pa", &
 !                default=0.02)
@@ -260,8 +261,8 @@ subroutine Neverland_surface_forcing_init(Time, G, US, param_file, diag, CS)
     call get_param(param_file, mdl, "FLUXCONST", CS%flux_const, &
                  "The constant that relates the restoring surface fluxes "//&
                  "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", &
-                 fail_if_missing=.true.)
+                 "velocity).  Note the non-MKS units.", &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
     ! Convert CS%flux_const from m day-1 to m s-1.
     CS%flux_const = CS%flux_const / 86400.0
   endif
