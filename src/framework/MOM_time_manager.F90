@@ -12,6 +12,7 @@ use time_manager_mod, only : set_ticks_per_second , get_ticks_per_second
 use time_manager_mod, only : get_date, set_date, increment_date
 use time_manager_mod, only : days_in_month, month_name
 use time_manager_mod, only : set_calendar_type, get_calendar_type
+use time_manager_mod, only : decrement_time, increment_time
 use time_manager_mod, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, GREGORIAN
 use time_manager_mod, only : NO_CALENDAR
 use time_interp_external_mod, only : init_external_field, time_interp_external, time_interp_external_init
@@ -27,6 +28,7 @@ public :: operator(+), operator(-), operator(*), operator(/)
 public :: operator(>), operator(<), operator(>=), operator(<=)
 public :: operator(==), operator(/=), operator(//)
 public :: get_date, set_date, increment_date, month_name, days_in_month
+public :: decrement_time, increment_time
 public :: JULIAN, NOLEAP, THIRTY_DAY_MONTHS, GREGORIAN, NO_CALENDAR
 public :: set_calendar_type, get_calendar_type
 public :: init_external_field
