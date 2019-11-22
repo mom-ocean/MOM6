@@ -41,7 +41,6 @@ use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
 #endif
 use time_utils_mod,           only: esmf2fms_time
-use data_override_mod,        only: data_override_init, data_override
 
 use, intrinsic :: iso_fortran_env, only: output_unit
 
@@ -689,11 +688,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   ocean_public%is_ocean_pe = .true.
   call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfile))
 
-#ifndef CESMCOUPLED
-! for runoff in EMC 
-  call data_override_init(Ocean_domain_in = Ocean_public%domain) 
-#endif
-
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
   call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
@@ -714,12 +708,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
-             Ice_ocean_boundary% runoff (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% calving (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% runoff_hflx (isc:iec,jsc:jec),     &
-             Ice_ocean_boundary% calving_hflx (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% rofl_flux (isc:iec,jsc:jec),       &
-             Ice_ocean_boundary% rofi_flux (isc:iec,jsc:jec))
+             Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),       &
+             Ice_ocean_boundary% frunoff (isc:iec,jsc:jec))
 
   Ice_ocean_boundary%u_flux          = 0.0
   Ice_ocean_boundary%v_flux          = 0.0
@@ -737,12 +729,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
   Ice_ocean_boundary%p               = 0.0
-  Ice_ocean_boundary%runoff          = 0.0
-  Ice_ocean_boundary%calving         = 0.0
-  Ice_ocean_boundary%runoff_hflx     = 0.0
-  Ice_ocean_boundary%calving_hflx    = 0.0
-  Ice_ocean_boundary%rofl_flux       = 0.0
-  Ice_ocean_boundary%rofi_flux       = 0.0
+  Ice_ocean_boundary%lrunoff_hflx    = 0.0
+  Ice_ocean_boundary%frunoff_hflx    = 0.0
+  Ice_ocean_boundary%lrunoff         = 0.0
+  Ice_ocean_boundary%frunoff         = 0.0
 
   ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
   call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
@@ -786,11 +776,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
-
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_rate"           , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_rate"          , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"       , "will provide")
- !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"      , "will provide")
+  !These are not currently used and changing requires a nuopc dictionary change
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
+  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
 
   !--------- export fields -------------
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask"                 , "will provide")
@@ -1727,8 +1715,6 @@ subroutine ModelAdvance(gcomp, rc)
           file=__FILE__)) &
           return  ! bail out
 
-  call ice_ocn_bnd_from_data(Ice_ocean_boundary, Time, Time_step_coupled) ! for runoff            
-
      !---------------
      ! Update MOM6
      !---------------
@@ -2331,20 +2317,6 @@ subroutine shr_file_getLogUnit(nunit)
   ! having cppdefs in the main program
 end subroutine shr_file_getLogUnit
 #endif
-
-  subroutine ice_ocn_bnd_from_data(x, Time, Time_step_coupled)
-! get forcing data from data_overide
-      type (ice_ocean_boundary_type) :: x
-      type(Time_type), intent(in)    :: Time, Time_step_coupled
-
-      type(Time_type)                :: Time_next
-      character(len=*),parameter  :: subname='(mom_cap:ice_ocn_bnd_from_data)'
-
-      Time_next = Time + Time_step_coupled
-!      call data_override('OCN', 'runoff',  x%runoff  , Time_next)
-      call data_override('OCN', 'runoff',   x%rofl_flux   , Time_next) 
-
-  end subroutine ice_ocn_bnd_from_data
 
 !>
 !! @page nuopc_cap NUOPC Cap
