@@ -137,7 +137,8 @@ type, public :: ODA_CS ; private
   logical :: do_bias_correction !< setting this to true will enable bias adjustment
   real :: correction_multiplier !< non-dimensional factor for bias adjustment [nodim]
   logical :: write_obs !< setting this to true enables writing of profile misfits to file
-  integer :: id_inc_t, id_inc_s !< integer ids for temperature and salinity increments
+  integer :: id_inc_t !< integer ids for temperature increments
+  integer :: id_inc_s !< integer ids for salinity increments
   type(INC_CS) :: INC_CS !< control structure containing field indices
 end type ODA_CS
 
@@ -155,8 +156,8 @@ end type ptr_mpp_domain
   integer :: id_clock_oda_posterior !< timer id for oda_get_posterior
   integer :: id_clock_bias_correction !< timer id for bias correction
   integer :: id_clock_apply_increments !< timer id for oda_apply increments
-  integer :: temp_fid, salt_fid !< profile file handles for temperature and salinity
-
+  integer :: temp_fid !< profile file handles for temperature
+  integer :: salt_fid !< profile file handles for salinity
 contains
 !! initialize analysis grid and ODA-related variables
 !! information for all ensemble members
