@@ -387,12 +387,13 @@ end subroutine init_oda
 
 !> Copy ensemble member tracers to ensemble vector.
 subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
-    type(time_type), intent(in)    :: Time                       !< The current model time
-    type(ocean_grid_type), pointer :: G                          !< domain and grid information for ocean model
-    type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-    type(thermo_var_ptrs),                 intent(in) :: tv      !< A structure pointing to various thermodynamic variables
-    type(ODA_CS), pointer :: CS                                  !< ocean DA control structure
+    type(time_type), intent(in)    :: Time                     !< The current model time
+    type(ocean_grid_type), pointer :: G                        !< domain and grid information for ocean model
+    type(verticalGrid_type),               intent(in)    :: GV !< The ocean's vertical grid structure
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses, in H (usually m or kg m-2)
+    type(thermo_var_ptrs),                 intent(in) :: tv    !< A structure pointing to various thermodynamic
+                                                               !! variables
+    type(ODA_CS), pointer :: CS                                !< ocean DA control structure
 
     integer :: i, j, m, n, ss
     integer :: isc, iec, jsc, jec
@@ -446,8 +447,10 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
     type(time_type), intent(in) :: Time               !< the current model time
     type(ODA_CS), pointer :: CS                       !< ocean DA control structure
     real, dimension(:,:,:), pointer, optional :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-    type(thermo_var_ptrs), pointer, optional :: tv    !< A structure pointing to various thermodynamic variables
-    logical, optional, intent(in) :: increment        !< logical flag to determine if tracer increment or full value are returned
+    type(thermo_var_ptrs), pointer, optional :: tv    !< A structure pointing to various thermodynamic
+                                                      !! variables
+    logical, optional, intent(in) :: increment        !< logical flag to determine if tracer increment
+                                                      !! or full value are returned
 
     integer :: i, j, m
     logical :: used, get_inc
