@@ -822,12 +822,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   enddo ; enddo ; endif
 
   if (CS%ensemble_ocean) then
-    ! update the time for the next analysis step if needed
-    call set_analysis_time(CS%Time,CS%odaCS)
     ! store ensemble vector in odaCS
     call set_prior_tracer(CS%Time, G, GV, CS%h, CS%tv, CS%odaCS)
     ! call DA interface
     call oda(CS%Time,CS%odaCS)
+    ! update the time for the next analysis step if needed
+    call set_analysis_time(CS%Time,CS%odaCS)
   endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
@@ -1162,7 +1162,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
-    call apply_oda_tracer_increments(dtdia,G,tv,h,CS%odaCS)
+    call apply_oda_tracer_increments(dtdia,Time_end_thermo,G,tv,h,CS%odaCS)
   endif
 
   if (update_BBL) then
@@ -2460,7 +2460,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
   if (CS%ensemble_ocean) then
-    call init_oda(Time, G, GV, CS%odaCS)
+    call init_oda(Time, G, GV, US, CS%diag, CS%odaCS)
   endif
 
   !### This could perhaps go here instead of in finish_MOM_initialization?
