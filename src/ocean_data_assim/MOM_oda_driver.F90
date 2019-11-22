@@ -88,9 +88,9 @@ public :: set_analysis_time, oda, save_obs_diff, apply_oda_tracer_increments
 
 !> Control structure that contains tracer ids for temperature and salinity
 type :: INC_CS
-   integer :: fldno = 0
-   integer :: T_id
-   integer :: S_id
+   integer :: fldno = 0 !< integer field identification
+   integer :: T_id !< integer id for temperature
+   integer :: S_id !< integer id for salinity
 end type INC_CS
 
 !> Control structure that contains a transpose of the ocean state across ensemble members.
@@ -134,11 +134,11 @@ type, public :: ODA_CS ; private
   type(remapping_CS) :: remapCS !< ALE control structure for remapping
   type(time_type) :: Time !< Current Analysis time
   type(diag_ctrl), pointer :: diag_cs => NULL() !<Diagnostics control structure
-  logical :: do_bias_correction
-  real :: correction_multiplier
-  logical :: write_obs
-  integer :: id_inc_t, id_inc_s
-  type(INC_CS) :: INC_CS
+  logical :: do_bias_correction !< setting this to true will enable bias adjustment
+  real :: correction_multiplier !< non-dimensional factor for bias adjustment [nodim]
+  logical :: write_obs !< setting this to true enables writing of profile misfits to file
+  integer :: id_inc_t, id_inc_s !< integer ids for temperature and salinity increments
+  type(INC_CS) :: INC_CS !< control structure containing field indices
 end type ODA_CS
 
 !> A structure with a pointer to a domain2d, to allow for the creation of arrays of pointers.
@@ -147,14 +147,15 @@ type :: ptr_mpp_domain
 end type ptr_mpp_domain
 
 
-  integer, parameter :: NO_FILTER = 0, EAKF=1
-  integer :: id_clock_oda_init
-  integer :: id_clock_oda_prior
-  integer :: id_clock_oda_filter
-  integer :: id_clock_oda_posterior
-  integer :: id_clock_bias_correction
-  integer :: id_clock_apply_increments
-  integer :: temp_fid, salt_fid ! profile file handle
+  integer, parameter :: NO_FILTER = 0 !< No filter adjustments
+  integer, parameter :: EAKF = 1 !< Use interfaces to GFDL ensemble adjustment filter
+  integer :: id_clock_oda_init !< timer id for oda_init
+  integer :: id_clock_oda_prior !< timer id for oda_prior
+  integer :: id_clock_oda_filter !< timer id for oda_filter
+  integer :: id_clock_oda_posterior !< timer id for oda_get_posterior
+  integer :: id_clock_bias_correction !< timer id for bias correction
+  integer :: id_clock_apply_increments !< timer id for oda_apply increments
+  integer :: temp_fid, salt_fid !< profile file handles for temperature and salinity
 
 contains
 !! initialize analysis grid and ODA-related variables
