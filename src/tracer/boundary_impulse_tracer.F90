@@ -17,6 +17,7 @@ use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -50,7 +51,7 @@ type, public :: boundary_impulse_tracer_CS ; private
   real, dimension(NTR_MAX)  :: land_val = -1.0 !< A value to use to fill in tracers over land
   real :: kw_eff !< An effective piston velocity used to flux tracer out at the surface
   real :: remaining_source_time !< How much longer (same units as the timestep) to
-                                !! inject the tracer at the surface
+                                !! inject the tracer at the surface [s]
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
@@ -203,7 +204,7 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
 end subroutine initialize_boundary_impulse_tracer
 
 !> Apply source or sink at boundary and do vertical diffusion
-subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
+subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, &
                      tv, debug, evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -221,8 +222,9 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
- type(boundary_impulse_tracer_CS),  pointer :: CS !< The control structure returned by a previous
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(boundary_impulse_tracer_CS),  pointer :: CS !< The control structure returned by a previous
                                               !! call to register_boundary_impulse_tracer.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various
                                               !! thermodynamic variables
@@ -230,7 +232,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied [m]
+                                              !! fluxes can be applied [H ~> m or kg m-2]
 
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -257,7 +259,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
     call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,1), dt, fluxes, h_work, &
-      evap_CFL_limit, minimum_forcing_depth)
+                                        evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
   else
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
@@ -269,7 +271,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
       do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo
-      CS%remaining_source_time = CS%remaining_source_time-dt
+      CS%remaining_source_time = CS%remaining_source_time-US%T_to_s*dt
     else
       do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 0.0

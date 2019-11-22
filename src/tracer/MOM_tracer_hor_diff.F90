@@ -139,7 +139,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     Kh_u          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     khdt_y, &     ! The value of Khtr*dt times the open face width divided by
-                  ! the distance between adjacent tracer points [L2].
+                  ! the distance between adjacent tracer points [L2 ~> m2].
     Coef_y, &     ! The coefficients relating meridional tracer differences
                   ! to time-integrated fluxes [H L2 ~> m3 or kg].
     Kh_v          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].

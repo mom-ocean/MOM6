@@ -148,8 +148,8 @@ type, public:: diabatic_CS; private
   real    :: Kd_min_tr               !< A minimal diffusivity that should always be
                                      !! applied to tracers, especially in massless layers
                                      !! near the bottom [Z2 T-1 ~> m2 s-1].
-  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
-                                           !! fluxes are applied [m].
+  real    :: minimum_forcing_depth   !< The smallest depth over which heat and freshwater
+                                     !! fluxes are applied [H ~> m or kg m-2].
   real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
                                      !! evaporated in one time-step [nondim].
   integer :: halo_TS_diff = 0        !< The temperature, salinity and thickness halo size that
@@ -258,7 +258,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                     G, GV, US, CS, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness [H ~> m or kg m-2]
@@ -274,6 +273,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(cont_diag_ptrs),                      intent(inout) :: CDp       !< points to terms in continuity equations
   real,                                      intent(in)    :: dt        !< time increment [T ~> s]
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
+  type(unit_scale_type),                     intent(in)    :: US        !< A dimensional unit scaling type
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
   type(Wave_parameters_CS),        optional, pointer       :: Waves     !< Surface gravity waves
 
@@ -535,7 +535,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
-  real :: Idt     ! The inverse time step [s-1]
+  real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
@@ -1133,10 +1133,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
-                              minimum_forcing_depth = CS%minimum_forcing_depth)
+                              minimum_forcing_depth=CS%minimum_forcing_depth)
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
@@ -1162,16 +1162,16 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     enddo ; enddo ; enddo
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                 evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth = CS%minimum_forcing_depth)
+                                minimum_forcing_depth=CS%minimum_forcing_depth)
   else
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth = CS%minimum_forcing_depth)
+                                minimum_forcing_depth=CS%minimum_forcing_depth)
   endif  ! (CS%mix_boundary_tracers)
 
   call cpu_clock_end(id_clock_tracers)
@@ -1318,7 +1318,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
-  real :: Idt     ! The inverse time step [s-1]
+  real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
@@ -1807,10 +1807,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, ea_s, eb_s, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
                               evap_CFL_limit = CS%evap_CFL_limit, &
-                              minimum_forcing_depth = CS%minimum_forcing_depth)
+                              minimum_forcing_depth=CS%minimum_forcing_depth)
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
@@ -1831,16 +1831,16 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     enddo ; enddo ; enddo
 
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                 evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth = CS%minimum_forcing_depth)
+                                minimum_forcing_depth=CS%minimum_forcing_depth)
   else
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
-                                minimum_forcing_depth = CS%minimum_forcing_depth)
+                                minimum_forcing_depth=CS%minimum_forcing_depth)
   endif  ! (CS%mix_boundary_tracers)
 
   call cpu_clock_end(id_clock_tracers)
@@ -2007,7 +2007,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: dt_mix  ! The amount of time over which to apply mixing [T ~> s]
-  real :: Idt     ! The inverse time step [s-1]
+  real :: Idt     ! The inverse time step [T-1 ~> s-1]
   real :: Idt_accel  ! The inverse time step times rescaling factors [T-1 ~> s-1]
 
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
@@ -2642,7 +2642,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
     enddo
 
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
@@ -2663,11 +2663,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
 
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   else
-    call call_tracer_column_fns(hold, h, ea, eb, fluxes, Hml, US%T_to_s*dt, G, GV, tv, &
+    call call_tracer_column_fns(hold, h, ea, eb, fluxes, Hml, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
 
   endif  ! (CS%mix_boundary_tracers)
@@ -2869,7 +2869,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
   real,              optional, intent(  out) :: evap_CFL_limit !<The largest fraction of a layer that can be
                                                             !! evaporated in one time-step [nondim].
   real,              optional, intent(  out) :: minimum_forcing_depth !< The smallest depth over which heat
-                                                            !! and freshwater fluxes are applied [m].
+                                                            !! and freshwater fluxes are applied [H ~> m or kg m-2].
   type(diabatic_aux_CS), optional, pointer   :: diabatic_aux_CSp !< A pointer to be set to the diabatic_aux
                                                             !! control structure
 
@@ -2885,21 +2885,22 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
 end subroutine extract_diabatic_member
 
 !> Routine called for adiabatic physics
-subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
+subroutine adiabatic(h, tv, fluxes, dt, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G      !< ocean grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(inout) :: h      !< thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv     !< points to thermodynamic fields
   type(forcing),           intent(inout) :: fluxes !< boundary fluxes
-  real,                    intent(in)    :: dt     !< time step [s]
+  real,                    intent(in)    :: dt     !< time step [T ~> s]
   type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(diabatic_CS),       pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: zeros  ! An array of zeros.
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), dt, G, GV, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic
@@ -3348,7 +3349,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "only takes effect when near-surface layers become thin "//&
                  "relative to this scale, in which case the forcing tendencies "//&
                  "scaled down by distributing the forcing over this depth scale.", &
-                 units="m", default=0.001)
+                 units="m", default=0.001, scale=GV%m_to_H)
   call get_param(param_file, mdl, "EVAP_CFL_LIMIT", CS%evap_CFL_limit, &
                  "The largest fraction of a layer than can be lost to forcing "//&
                  "(e.g. evaporation, sea-ice formation) in one time-step. The unused "//&

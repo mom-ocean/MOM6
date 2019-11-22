@@ -26,6 +26,7 @@ use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -182,11 +183,8 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  real :: PI     ! 3.1415926... calculated as 4*atan(1)
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
+                            ! in roundoff and can be neglected [H ~> m or kg-2].
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr ! Heights [Z ~> m].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -275,7 +273,7 @@ end subroutine initialize_RGC_tracer
 !> This subroutine applies diapycnal diffusion and any other column
 !! tracer physics or chemistry to the tracers from this file.
 !! This is a simple example of a set of advected passive tracers.
-subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, CS, &
                               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
@@ -293,12 +291,13 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to any possible
                                               !! forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt !< The amount of time covered by this call [s].
-  type(RGC_tracer_CS),     pointer    :: CS !< The control structure returned by a previous call.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s].
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(RGC_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous call.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can be
                                                !! fluxed out of the top layer in a timestep [nondim].
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                               !! can be applied [m].
+                                               !! can be applied [H ~> m or kg m-2].
 
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
@@ -325,10 +324,10 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do m=1,NTR
       do k=1,nz ;do j=js,je ; do i=is,ie
-             h_work(i,j,k) = h_old(i,j,k)
+        h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-                                       evap_CFL_limit, minimum_forcing_depth, in_flux(:,:,m))
+                                          evap_CFL_limit, minimum_forcing_depth, in_flux(:,:,m))
 
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo

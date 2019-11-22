@@ -164,10 +164,10 @@ type, public :: accel_diag_ptrs
     dv_dt_dia => NULL()    !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
-                           !! not due to any explicit accelerations [m s-1].
+                           !! not due to any explicit accelerations [L T-1 ~> m s-1].
   real, pointer, dimension(:,:,:) :: dv_other => NULL()
-                           !< Meridional velocity changes  due to any other processes that are
-                           !! not due to any explicit accelerations [m s-1].
+                           !< Meridional velocity changes due to any other processes that are
+                           !! not due to any explicit accelerations [L T-1 ~> m s-1].
 
   ! These accelerations are sub-terms included in the accelerations above.
   real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [L T-2 ~> m s-2]
