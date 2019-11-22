@@ -784,7 +784,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_int_in, CS, &
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
                           CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, US, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, US%T_to_s*CS%t_dyn_rel_diag)
+      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -1221,9 +1221,9 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call cpu_clock_begin(id_clock_ALE)
       if (use_ice_shelf) then
         call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
-                      US%T_to_s*dtdia, fluxes%frac_shelf_h)
+                      dtdia, fluxes%frac_shelf_h)
       else
-        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, US%T_to_s*dtdia)
+        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, dtdia)
       endif
 
       if (showCallTree) call callTree_waypoint("finished ALE_main (step_MOM_thermo)")
@@ -1252,7 +1252,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call diag_update_remap_grids(CS%diag)
 
     !### Consider moving this up into the if ALE block.
-    call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, US%T_to_s*dtdia)
+    call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, dtdia)
 
     if (CS%debug) then
       call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2, scale=US%L_T_to_m_s)
@@ -1276,7 +1276,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   else   ! complement of "if (.not.CS%adiabatic)"
 
     call cpu_clock_begin(id_clock_diabatic)
-    call adiabatic(h, tv, fluxes, US%T_to_s*dtdia, G, GV, CS%diabatic_CSp)
+    call adiabatic(h, tv, fluxes, dtdia, G, GV, US, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
@@ -1325,8 +1325,8 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   logical :: do_vertical   !< If enough time has elapsed, do the diabatic tracer sources/sinks
   logical :: adv_converged !< True if all the horizontal fluxes have been used
 
-  real    :: dt_off        ! The offline timestep [T ~> s]
-  integer :: dt_offline, dt_offline_vertical
+  real :: dt_offline          ! The offline timestep for advection [T ~> s]
+  real :: dt_offline_vertical ! The offline timestep for vertical fluxes and remapping [T ~> s]
   logical :: skip_diffusion
   integer :: id_eta_diff_end
 
@@ -1354,7 +1354,6 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call extract_offline_main(CS%offline_CSp, uhtr, vhtr, eatr, ebtr, h_end, accumulated_time, &
                             dt_offline, dt_offline_vertical, skip_diffusion)
   Time_end = increment_date(Time_start, seconds=floor(time_interval+0.001))
-  dt_off = US%s_to_T*REAL(dt_offline)
 
   call enable_averaging(time_interval, Time_end, CS%diag)
 
@@ -1366,14 +1365,14 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   endif
 
   ! Check to see if vertical tracer functions should  be done
-  if ( mod(accumulated_time, dt_offline_vertical) == 0 ) then
+  if ( mod(accumulated_time, floor(US%T_to_s*dt_offline_vertical + 1e-6)) == 0 ) then
     do_vertical = .true.
   else
     do_vertical = .false.
   endif
 
   ! Increment the amount of time elapsed since last read and check if it's time to roll around
-  accumulated_time = mod(accumulated_time + int(time_interval), dt_offline)
+  accumulated_time = mod(accumulated_time + int(time_interval), floor(US%T_to_s*dt_offline+1e-6))
   if (accumulated_time==0) then
     last_iter = .true.
   else
@@ -1406,9 +1405,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
           if (associated(CS%VarMix)) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
-            call calc_slope_functions(CS%h, CS%tv, dt_off, G, GV, US, CS%VarMix)
+            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
           endif
-          call tracer_hordiff(CS%h, dt_off, CS%MEKE, CS%VarMix, G, GV, US, &
+          call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1431,9 +1430,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
           if (associated(CS%VarMix)) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
-            call calc_slope_functions(CS%h, CS%tv, dt_off, G, GV, US, CS%VarMix)
+            call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix)
           endif
-          call tracer_hordiff(CS%h, dt_off, CS%MEKE, CS%VarMix, G, GV, US, &
+          call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1459,7 +1458,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in
     ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
     ! exchange with the atmosphere
-    if (time_interval /= dt_offline) then
+    if (abs(time_interval - US%T_to_s*dt_offline) > 1.0e-6) then
       call MOM_error(FATAL, &
           "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
     endif
@@ -1468,7 +1467,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. skip_diffusion) then
-      call tracer_hordiff(h_end, dt_off, CS%MEKE, CS%VarMix, G, GV, US, &
+      call tracer_hordiff(h_end, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
     endif
 
@@ -2232,7 +2231,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       ! pass to the pointer
       shelf_area => frac_shelf_h
       call ALE_main(G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                    CS%OBC, frac_shelf_h = shelf_area)
+                    CS%OBC, frac_shelf_h=shelf_area)
     else
       call ALE_main( G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC)
     endif

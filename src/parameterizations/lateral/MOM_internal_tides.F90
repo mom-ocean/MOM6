@@ -175,7 +175,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     test
   real, dimension(SZI_(G),SZJ_(G),CS%nFreq,CS%nMode) :: &
     tot_En_mode, & ! energy summed over angles only [R Z3 T-2 ~> J m-2]
-    Ub, &          ! near-bottom horizontal velocity of wave (modal) [m s-1]
+    Ub, &          ! near-bottom horizontal velocity of wave (modal) [L T-1 ~> m s-1]
     Umax           ! Maximum horizontal velocity of wave (modal) [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
     flux_heat_y, &
@@ -191,7 +191,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: I_D_here ! The inverse of the local depth [Z-1 ~> m-1]
   real :: I_rho0  ! The inverse fo the Boussinesq density [R-1 ~> m3 kg-1]
   real :: freq2 ! The frequency squared [T-2 ~> s-2]
-  real :: c_phase ! The phase speed [m s-1]
+  real :: c_phase ! The phase speed [L T-1 ~> m s-1]
   real :: loss_rate  ! An energy loss rate [T-1 ~> s-1]
   real :: Fr2_max
   real :: cn_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
@@ -772,8 +772,8 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   real :: f2              ! The squared Coriolis parameter [T-2 ~> s-2].
   real :: favg            ! The average Coriolis parameter at a point [T-1 ~> s-1].
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [T-1 L-1 ~> s-1 m-1].
-  real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself [m-1].
-  real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself [m-1].
+  real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself [L-1 ~> m-1].
+  real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself [L-1 ~> m-1].
   real :: Angle_size, dt_Angle_size, angle
   real :: Ifreq, Kmag2, I_Kmag
   real :: cn_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
@@ -980,7 +980,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
     cos_angle, sin_angle
   real, dimension(NAngle) :: &
     Cgx_av, Cgy_av, dCgx, dCgy
-  real :: f2   ! The squared Coriolis parameter [s-2].
+  real :: f2   ! The squared Coriolis parameter [T-2 ~> s-2].
   real :: Angle_size, I_Angle_size, angle
   real :: Ifreq ! The inverse of the frequency [T ~> s]
   real :: freq2 ! The frequency squared [T-2 ~> s-2]
@@ -1367,7 +1367,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! Left and right face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    flux_x      ! The internal wave energy flux [J s-1].
+    flux_x      ! The internal wave energy flux [J T-1 ~> J s-1].
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
@@ -1442,7 +1442,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! South and north face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    flux_y      ! The internal wave energy flux [J s-1].
+    flux_y      ! The internal wave energy flux [J T-1 ~> J s-1].
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p

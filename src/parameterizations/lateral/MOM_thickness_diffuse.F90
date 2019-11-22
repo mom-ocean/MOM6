@@ -50,7 +50,7 @@ type, public :: thickness_diffuse_CS ; private
   real    :: FGNV_scale          !< A coefficient scaling the vertical smoothing term in the
                                  !! Ferrari et al., 2010, streamfunction formulation [nondim].
   real    :: FGNV_c_min          !< A minimum wave speed used in the Ferrari et al., 2010,
-                                 !! streamfunction formulation [m s-1].
+                                 !! streamfunction formulation [L T-1 ~> m s-1].
   real    :: N2_floor            !< A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010,
                                  !! streamfunction formulation [T-2 ~> s-2].
   logical :: detangle_interfaces !< If true, add 3-d structured interface height
@@ -831,7 +831,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             hN2_x_PE(I,j,k) = hN2_u(I,K)
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
-            ! Estimate the streamfunction at each interface [m3 s-1].
+            ! Estimate the streamfunction at each interface [Z L2 T-1 ~> m3 s-1].
             Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*US%L_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
@@ -1081,7 +1081,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             hN2_y_PE(i,J,k) = hN2_v(i,K)
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
-            ! Estimate the streamfunction at each interface [m3 s-1].
+            ! Estimate the streamfunction at each interface [Z L2 T-1 ~> m3 s-1].
             Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*US%L_to_Z*Slope)
 
             ! Avoid moving dense water upslope from below the level of
@@ -1299,8 +1299,8 @@ end subroutine thickness_diffuse_full
 !> Tridiagonal solver for streamfunction at interfaces
 subroutine streamfn_solver(nk, c2_h, hN2, sfn)
   integer,               intent(in)    :: nk   !< Number of layers
-  real, dimension(nk),   intent(in)    :: c2_h !< Wave speed squared over thickness in layers [m s-2]
-  real, dimension(nk+1), intent(in)    :: hN2  !< Thickness times N2 at interfaces [m s-2]
+  real, dimension(nk),   intent(in)    :: c2_h !< Wave speed squared over thickness in layers [L2 Z-1 T-2 ~> m s-2]
+  real, dimension(nk+1), intent(in)    :: hN2  !< Thickness times N2 at interfaces [L2 Z-1 T-2 ~> m s-2]
   real, dimension(nk+1), intent(inout) :: sfn  !< Streamfunction [Z L2 T-1 ~> m3 s-1] or arbitrary units
                                                !! On entry, equals diffusivity times slope.
                                                !! On exit, equals the streamfunction.
@@ -1830,7 +1830,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "FGNV_C_MIN", CS%FGNV_c_min, &
                  "A minium wave speed used in the Ferrari et al., 2010, "//&
                  "streamfunction formulation.", &
-                 default=0., units="m s-1", do_not_log=.not.CS%use_FGNV_streamfn)
+                 default=0., units="m s-1", scale=US%m_s_to_L_T, do_not_log=.not.CS%use_FGNV_streamfn)
   call get_param(param_file, mdl, "FGNV_STRAT_FLOOR", strat_floor, &
                  "A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010, "//&
                  "streamfunction formulation, expressed as a fraction of planetary "//&
