@@ -517,7 +517,6 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   character(len=240) :: filepath
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
-  integer :: unit
 
   filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
@@ -526,8 +525,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
 
-  call write_field(unit, fields(1), US%R_to_kg_m3*GV%Rlay(:))
-  call write_field(unit, fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:))
+  call write_field(trim(filepath), fields(1), US%R_to_kg_m3*GV%Rlay(:), "append")
+  call write_field(trim(filepath), fields(2), US%L_T_to_m_s**2*US%m_to_Z*GV%g_prime(:),"append")
 
 end subroutine write_vertgrid_file
 

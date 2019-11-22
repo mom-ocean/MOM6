@@ -621,9 +621,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
 
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
-      call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-                       G=G, GV=GV)
+      !call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+      !                 num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+      !                 G=G, GV=GV)
     else
       call create_file(trim(energypath_nc), vars, &
                        num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
@@ -878,31 +878,31 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif
 
   var = real(CS%ntrunc)
-  call write_field(CS%fileenergy_nc, CS%fields(1), var, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(2), toten, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(3), PE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(4), KE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(5), H_0APE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(6), mass_lay, reday)
+  call write_field(trim(energypath_nc), CS%fields(1), var, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(2), toten,"append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(3), PE, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(4), KE, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(5), H_0APE, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(6), mass_lay, "append", time=reday)
 
-  call write_field(CS%fileenergy_nc, CS%fields(7), mass_tot, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(8), mass_chg, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
-  call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(1), reday)
+  call write_field(trim(energypath_nc), CS%fields(7), mass_tot, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(8), mass_chg, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(9), mass_anom, "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(10), max_CFL(1), "append", time=reday)
+  call write_field(trim(energypath_nc), CS%fields(11), max_CFL(1), "append", time=reday)
   if (CS%use_temperature) then
-    call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(14), 0.001*salt_anom, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(15), Heat, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(16), heat_chg, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(17), heat_anom, reday)
+    call write_field(trim(energypath_nc), CS%fields(12), 0.001*Salt, "append", time=reday)
+    call write_field(trim(energypath_nc), CS%fields(13), 0.001*salt_chg, "append", time=reday)
+    call write_field(trim(energypath_nc), CS%fields(14), 0.001*salt_anom, "append", time=reday)
+    call write_field(trim(energypath_nc), CS%fields(15), Heat, "append", time=reday)
+    call write_field(trim(energypath_nc), CS%fields(16), heat_chg,"append", time=reday)
+    call write_field(trim(energypath_nc), CS%fields(17), heat_anom, "append", time=reday)
     do m=1,nTr_stocks
-      call write_field(CS%fileenergy_nc, CS%fields(17+m), Tr_stocks(m), reday)
+      call write_field(trim(energypath_nc), CS%fields(17+m), Tr_stocks(m), "append", time=reday)
     enddo
   else
     do m=1,nTr_stocks
-      call write_field(CS%fileenergy_nc, CS%fields(11+m), Tr_stocks(m), reday)
+      call write_field(trim(energypath_nc), CS%fields(11+m), Tr_stocks(m), "append", time=reday)
     enddo
   endif
 

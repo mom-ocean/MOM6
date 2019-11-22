@@ -189,23 +189,29 @@ end interface
 
 ! interface to write data to a netcdf file
 interface write_field
-  module procedure write_field_4d_DD
-  module procedure write_field_3d_DD
-  module procedure write_field_2d_DD
+!  module procedure write_field_4d_DD
+!  module procedure write_field_3d_DD
+!  module procedure write_field_2d_DD
   module procedure write_field_1d_DD
-  module procedure write_field_scalar
-  module procedure write_field_noDD
-  module procedure write_field_noDD
-  module procedure write_field_noDD
-  module procedure write_field_noDD
+!  module procedure write_field_scalar
+!  module procedure write_field_noDD
+!  module procedure write_field_noDD
+!  module procedure write_field_noDD
+!  module procedure write_field_noDD
 end interface
 
-! interface to scale data after reading in a field
+!> interface to scale data after reading in a field
 interface scale_data
   module procedure scale_data_4d
   module procedure scale_data_3d
   module procedure scale_data_2d
   module procedure scale_data_1d
+end interface
+
+!> interface to read the most recent time from a netCDF file
+interface read_most_recent_time
+  read_most_recent_time_DD
+  read_most_recent_time_noDD
 end interface
 
 contains
@@ -260,7 +266,7 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
   if (one_file) then
     fileOpenSuccessNoDD=open_file(fileObjNoDD, filename, "write", is_restart=.false.)
   else
-    fileOpenSuccessDD=open_file(fileObjDD, filename, "write", MOM_Domain%mpp_domain, is_restart=.false.)
+    fileOpenSuccessDD=open_file(fileObjDD, filename, "write", Domain%mpp_domain, is_restart=.false.)
   endif
 ! set the time units
   timeUnits=""
@@ -271,7 +277,6 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
   endif
 
   ! allocate the output data variable dimension attributes
-  allocate(num_dims(numVariables))
   allocate(dim_names(numVariables,4))
 
   ! allocate the axis data and attribute types for the file
@@ -305,15 +310,15 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
 
       if (num_dims .le. 0) call MOM_error(FATAL, "MOM_io:create_file: num_dims is an invalid value.")
       ! register the global axes to the file
-      do j=1,output_data%num_dims
-        if (.not.(dimension_exists(fileObjWrite, output_data%dim_names(i,j)))) then
+      do j=1,num_dims
+        if (.not.(dimension_exists(fileObjWrite, dim_names(i,j)))) then
           total_axes=total_axes+1
           if (present(timeUnit)) then
             call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
                                               time_val=(/timeUnit/), time_units=timeUnits)
           else
             call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
-                                              time_val=(/1/), time_units=timeUnits)
+                                              time_val=(/1.0/), time_units=timeUnits)
           endif
 
           call register_axis(fileObjDD, trim(dim_names(i,j)), dim_lengths(j))
@@ -328,7 +333,7 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
         if (present(checksums)) then
           ! convert the checksum to a string
           checksum_char = ''
-          checksum_char = convert_checksum_to_string(check_val(i,1))
+          checksum_char = convert_checksum_to_string(checksums(i,1))
           call register_variable_attribute(fileObjDD, vars(i)%name, "checksum", checksum_char)
         endif
       endif
@@ -381,8 +386,8 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
 
       if (num_dims .le. 0) call MOM_error(FATAL, "MOM_io:create_file: num_dims is an invalid value.")
       ! register the global axes to the file
-      do j=1,output_data%num_dims
-        if (.not.(dimension_exists(fileObjDD, output_data%dim_names(i,j)))) then
+      do j=1,num_dims
+        if (.not.(dimension_exists(fileObjDD, dim_names(i,j)))) then
           total_axes=total_axes+1
           if (present(timeUnit)) then
             call MOM_get_diagnostic_axis_data(axis_data_CS, dim_names(i,j), total_axes, G=G, GV=GV, &
@@ -404,7 +409,7 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
         if (present(checksums)) then
           ! convert the checksum to a string
           checksum_char = ''
-          checksum_char = convert_checksum_to_string(check_val(i,1))
+          checksum_char = convert_checksum_to_string(checksums(i,1))
           call register_variable_attribute(fileObjDD, vars(i)%name, "checksum", checksum_char)
         endif
       endif
@@ -439,6 +444,596 @@ subroutine create_file(filename, vars, numVariables, fields, threading, timeUnit
 
 end subroutine create_file
 
+!> This function uses the fms_io function write_data to write a 1-D domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_1d_DD(filename, fieldname, data, mode, domain, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  type(MOM_domain_type),  intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize, dimUnlimIndex ! size of the unlimited dimension
+  integer, allocatable, dimension(:) :: start, nwrite ! indices for first data value and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+    endif
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+
+end subroutine write_field_1d_DD
+
+!> This function uses the fms_io function write_data to write a 2-D domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_2d_DD(filename, fieldname, data, mode, domain, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:),     intent(inout) :: data !< The 2-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  type(MOM_domain_type),  intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  integer, dimension(2), optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
+  integer, dimension(2), optional, intent(in) :: edgeLengths !< number of data values to read in;
+                                                            !! default values are the variable dimension sizes
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize ! size of the unlimited dimension
+  integer, allocatable, dimension(:) :: start, nwrite ! indices for starting points and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner(i)
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths(i)
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+    endif
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+
+end subroutine write_field_2d_DD
+
+!> This function uses the fms_io function write_data to write a 3-D domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_3d_DD(filename, fieldname, data, mode, domain, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:),     intent(inout) :: data !< The 3-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  type(MOM_domain_type),  intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize ! size of the unlimited dimension
+  integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner(i)
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths(i)
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+end subroutine write_field_3d_DD
+
+!> This function uses the fms_io function write_data to write a 4-D domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_4d_DD(filename, fieldname, data, mode, domain, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:,:),     intent(inout) :: data !< The 4-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  type(MOM_domain_type),  intent(in) :: domain !< MOM domain attribute with the mpp_domain decomposition
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfDomainFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize ! size of the unlimited dimension
+  integer, dimension(4) :: start, nwrite ! indices for first data value and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), domain%mpp_domain, is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner(i)
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths(i)
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+end subroutine write_field_4d_DD
+
+!> This function uses the fms_io function write_data to write a 1-D non-domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_1d_noDD(filename, fieldname, data, mode, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:),     intent(inout) :: data !< The 1-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize, dimUnlimIndex ! size of the unlimited dimension
+  integer, allocatable, dimension(:) :: start, nwrite ! indices for first data value and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+    endif
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+
+end subroutine write_field_1d_noDD
+
+!> This function uses the fms_io function write_data to write a 2-D non-domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_2d_noDD(filename, fieldname, data, mode, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:),     intent(inout) :: data !< The 2-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  integer, dimension(2), optional, intent(in) :: corner !< starting indices of data buffer. Default is 1
+  integer, dimension(2), optional, intent(in) :: edgeLengths !< number of data values to read in;
+                                                            !! default values are the variable dimension sizes
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize ! size of the unlimited dimension
+  integer, allocatable, dimension(:) :: start, nwrite ! indices for starting points and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner(i)
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths(i)
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+    endif
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+
+end subroutine write_field_2d_noDD
+
+!> This function uses the fms_io function write_data to write a 3-D non-domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_3d_noDD(filename, fieldname, data, mode, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:),     intent(inout) :: data !< The 3-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize ! size of the unlimited dimension
+  integer, dimension(3) :: start, nwrite ! indices for first data value and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner(i)
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths(i)
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+end subroutine write_field_3d_noDD
+
+!> This function uses the fms_io function write_data to write a 4-D non-domain-decomposed data field named "fieldname"
+!! to the file "filename" in "write", "overwrite", or "append" mode. It should be called after create_file in the MOM
+!! file write procedure.
+subroutine write_field_4d_noDD(filename, fieldname, data, mode, corner, edgeLengths, time)
+  character(len=*),       intent(in) :: filename !< The name of the file to read
+  character(len=*),       intent(in) :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:,:),     intent(inout) :: data !< The 4-dimensional data array to pass to read_data
+  character(len=*),       intent(in) :: mode !< "write", "overwrite", or "append"
+  integer,      optional, intent(in) :: corner !< starting index of data buffer. Default is 1
+  integer,      optional, intent(in) :: edgeLengths !< number of data values to read in; default is the variable size
+  integer,      optional, intent(in) :: time !< time value to write
+  ! local
+  type(FmsNetcdfFile_t) :: fileObjWrite ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
+  real :: fileTime ! most recent time currently written to file
+  integer :: i, ndims, timeIndex
+  integer :: dimUnlimSize ! size of the unlimited dimension
+  integer, dimension(4) :: start, nwrite ! indices for first data value and number of values to write
+  character(len=40) :: dimUnlimName ! name of the unlimited dimension in the file
+  ! open the file
+  if (.not.(check_if_open(fileObjWrite))) &
+    fileOpenSuccess = open_file(fileObjWrite, filename, lowercase(trim(mode)), is_restart=.false.)
+
+  call get_variable_num_dimensions(fileObjWrite, fieldname, ndims)
+  allocate(start(ndims))
+  allocate(nwrite(ndims))
+
+  dimUnlimIndex = get_variable_unlimited_dimension_index(fileObjWrite, trim(fieldname))
+
+  start(:) = 1
+  nwrite(:) = 1
+  if (present(corner))
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) start(i) = corner(i)
+    enddo
+  endif
+  if (present(edgeLengths)) then
+    do i=1,ndims
+      if (i .ne. dimUnlimIndex) nwrite(i) = edgeLengths(i)
+    enddo
+  else
+    call get_variable_size(fileObjWrite, trim(fieldname), nwrite)
+  endif
+
+  timeIndex=1
+  dimUnlimSize=0
+  dimUnlimName=""
+  ! write the data
+  if (lowercase(trim(mode)) .eq. "append") then
+    if present(time) then
+      ! write the time value if it is not already written to the file
+      fileTime = get_most_recent_file_time(fileObjWrite)
+      if (time .gt. fileTime+EPSILON(time)) then
+        call get_unlimited_dimension_name(fileObjWrite,dimUnlimName)
+        call get_dimension_size(fileObjWrite, trim(dimUnlimName), dimUnlimSize)
+        if (dimUnlimSize .lt. unlimited) timeIndex=dimUnlimSize+1
+
+        call write_data(fileObjWrite, trim(dimUnlimName), (/time/), corner=(/timeIndex/),edge_lengths=(/1/))
+      endif
+      if (dimUnlimIndex .gt. 0) &
+          call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite, &
+                          unlim_dim_level=timeIndex)
+  else
+    call write_data(fileObjWrite, trim(fieldname), data, corner=start, edge_Lengths=nwrite)
+  endif
+  ! close the file
+  if (check_if_open(fileObjWrite)) call close_file(fileObjWrite)
+
+  deallocate(start)
+  deallocate(nwrite)
+end subroutine write_field_4d_noDD
+
 !> This function uses the fms_io function read_data to read 1-D domain-decomposed data field named "fieldname" 
 !! from file "filename".
 subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLengths, timeLevel, scale)
@@ -451,8 +1046,8 @@ subroutine MOM_read_data_1d_DD(filename, fieldname, data, domain, corner, edgeLe
   integer,      optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfDomainFile_t) :: fileObjRead ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i
   integer, dimension(1) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(1) :: dimNames ! variable dimension names
@@ -500,8 +1095,8 @@ subroutine MOM_read_data_2d_DD(filename, fieldname, data, domain, corner, edgeLe
   integer, optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(2) :: dimNames ! variable dimension names
@@ -567,8 +1162,8 @@ subroutine MOM_read_data_3d_DD(filename, fieldname, data, domain, corner, edgeLe
   integer, optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(3) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(3) :: dimNames ! variable dimension names
@@ -634,8 +1229,8 @@ subroutine MOM_read_data_4d_DD(filename, fieldname, data, domain, corner, edgeLe
   integer, optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(4) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(4) :: dimNames ! variable dimension names
@@ -696,8 +1291,8 @@ subroutine MOM_read_data_scalar(filename, fieldname, data)
   real, intent(inout) :: data !< data buffer to pass to read_data
 
   ! local
-  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   ! open the file
   if (.not.(check_if_open(fileObjRead))) &
     fileOpenSuccess = open_file(fileObjRead, filename, "read", is_restart=.false.)
@@ -719,8 +1314,8 @@ subroutine MOM_read_data_1d_noDD(filename, fieldname, data, corner, edgeLengths,
   integer,      optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in) :: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfFile_t) :: fileObjRead ! netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, ndims
   integer, allocatable, dimension(:) :: start, nread ! indices for first data value and number of values to read
   character(len=40), allocatable, dimension(:) :: dimNames ! variable dimension names
@@ -768,8 +1363,8 @@ subroutine MOM_read_data_2d_noDD(filename, fieldname, data, corner, edgeLengths,
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
 
   ! local
-  type(FmsNetcdfFile_t) :: fileObjRead !netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfFile_t) :: fileObjRead !netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(2) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(2) :: dimNames ! variable dimension names
@@ -830,8 +1425,8 @@ subroutine MOM_read_data_3d_noDD(filename, fieldname, data, corner, edgeLengths,
   integer, optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfFile_t) :: fileObjRead !netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfFile_t) :: fileObjRead !netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(3) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(3) :: dimNames ! variable dimension names
@@ -891,8 +1486,8 @@ subroutine MOM_read_data_4d_noDD(filename, fieldname, data, corner, edgeLengths,
   integer, optional, intent(in) :: timeLevel !< time level to read
   real,         optional, intent(in):: scale !< A scaling factor that the field is multiplied by
   ! local
-  type(FmsNetcdfFile_t) :: fileObjRead !netCDF file object returned by call to MOM_open_file
-  logical :: fileOpenSuccess !.true. if call to MOM_open_file is successful
+  type(FmsNetcdfFile_t) :: fileObjRead !netCDF file object returned by call to open_file
+  logical :: fileOpenSuccess !.true. if call to open_file is successful
   integer :: i, dimUnlimIndex
   integer, dimension(4) :: start, nread ! indices for first data value and number of values to read
   character(len=40), dimension(4) :: dimNames ! variable dimension names
@@ -963,11 +1558,10 @@ subroutine write_field_1d_DD(filename, fieldname, data, time, corner, edgeLength
     fileOpenSuccess = open_file(fileObjWrite, filename, "write", domain%mpp_domain, is_restart=.false.)
   if (.not.(fileOpenSuccess)) then
     fileOpenSuccess = open_file(fileObjWrite, filename, "append", domain%mpp_domain, is_restart=.false.)
-    call write_data(fileObjWrite, 'Time', (/time/), corner=(/ntsteps/),edge_lengths=(/1/))
   else
     if (.not.(variable_exists(fileObjWrite, trim(vars(i)%name)))) then
       call register_field(fileObjWrite, vars(i)%name, "double", &
-                          dimensions=output_data%dim_names(i,1:output_data%num_dims))
+                          dimensions=dim_names(i,1:num_dims))
       call register_variable_attribute(fileObjWrite, vars(i)%name, 'units', vars(i)%units)
       call register_variable_attribute(fileObjWrite, vars(i)%name, 'long_name', vars(i)%longname)
     endif
@@ -1001,7 +1595,7 @@ end subroutine write_field_1d_DD
 
 !> register a MOM diagnostic axis to a domain-decomposed file 
 subroutine MOM_register_diagnostic_axis(fileObj, axisName, axisLength)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
   character(len=*), intent(in) :: axisName !< name of the axis to register to file
   integer, intent(in), optional :: axisLength !< length of axis/dimension ;only needed for Layer, Interface, Time,
                                               !! Period
@@ -1021,7 +1615,7 @@ end subroutine MOM_register_diagnostic_axis
 !> @note The user must specify units for variables with longitude/x-axis and/or latitude/y-axis axes to obtain 
 !! the correct domain decomposition for the data buffer. 
 subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPosition, yPosition)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
   character(len=*), intent(in) :: variableName !< name of the variable
   character(len=*), intent(in), optional :: xUnits !< x-axis (longitude) units to search for
   character(len=*), intent(in), optional :: yUnits !< y-axis (latitude) units to search for
@@ -1036,7 +1630,7 @@ subroutine MOM_register_variable_axes(fileObj, variableName, xUnits, yUnits, xPo
   integer, allocatable, dimension(:) :: dimSizes ! variable dimension sizes
  
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:register_variable_axes: The fileObj has "// &
-                                                  "not been opened. Call MOM_open_file(fileObj,...) before "// &
+                                                  "not been opened. Call open_file(fileObj,...) before "// &
                                                   "passing the fileObj argument to this function.")
   xPos=CENTER
   yPos=CENTER
@@ -1073,7 +1667,7 @@ end subroutine MOM_register_variable_axes
 !> set the "start" (corner) and "nread" (edge_lengths) arrays for domain-decomposed netCDF input data buffers
 subroutine MOM_get_nc_corner_edgelengths_DD(fileObj, variableName, corner, edgeLengths, myCorner, myCornerIndices, &
                                             myEdgeLengths, myEdgeLengthIndices)
-  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
   character(len=*), intent(in), optional :: variableName !< name of the Varibl
   integer, allocatable, dimension(:), intent(out) :: corner !< array of corner indices to pass to read_data
   integer, allocatable, dimension(:), intent(out) :: edgeLengths !< array of edge_lengths indices to pass to read_data
@@ -1085,7 +1679,7 @@ subroutine MOM_get_nc_corner_edgelengths_DD(fileObj, variableName, corner, edgeL
   integer :: i, idx, ndims ! counter, index, number of dimensions
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "// &
-                                                  "The fileObj has not been opened. Call MOM_open_file(fileObj,...)"// &
+                                                  "The fileObj has not been opened. Call open_file(fileObj,...)"// &
                                                   "before passing the fileObj argument to this function.")
 
  if (allocated(corner)) deallocate(corner)
@@ -1126,7 +1720,7 @@ end subroutine MOM_get_nc_corner_edgelengths_DD
 !> set the corner (start) and edgeLengths (count) arrays for non-domain-decomposed netCDF input data buffers
 subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edgeLengths, myCorner, myCornerIndices, &
                                             myEdgeLengths, myEdgeLengthIndices)
-  type(FmsNetcdfFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to MOM_open_file
+  type(FmsNetcdfFile_t), intent(inout) :: fileObj !< netCDF file object returned by call to open_file
   character(len=*), intent(in), optional :: variableName !< name of the Varibl
   integer, allocatable, dimension(:), intent(out) :: corner !< array of corner indices to pass to read_data
   integer, allocatable, dimension(:), intent(out) :: edgeLengths !< array of edge_lengths indices to pass to read_data
@@ -1139,7 +1733,7 @@ subroutine MOM_get_nc_corner_edgelengths_noDD(fileObj, variableName, corner, edg
 
   if (.not. check_if_open(fileObj)) call MOM_error(FATAL,"MOM_io:MOM_get_nc_corner_edgelengths_DD: "// &
                                                   "The fileObj has not been opened. Call "// &
-                                                  "MOM_open_file(fileObj,...) before passing the fileObj argument "// &
+                                                  "open_file(fileObj,...) before passing the fileObj argument "// &
                                                   "to this function.")
 
  if (allocated(corner)) deallocate(corner)
@@ -1787,7 +2381,7 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
   ! local
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf file object returned by call to open_file
   integer :: is, ie, js, je, i
   integer :: u_pos, v_pos
   integer, dimension(2) :: start, dim_sizes_u, dim_sizes_v
@@ -1873,7 +2467,7 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   real,         optional, intent(in)    :: scale     !< A scaling factor that the fields are multiplied
                                                      !! by before they are returned.
   ! local
-  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf file object returned by call to MOM_open_file
+  type(FmsNetcdfDomainFile_t) :: fileObjRead !< netcdf file object returned by call to open_file
   integer :: is, ie, js, je, i
   integer :: u_pos, v_pos
   integer, dimension(3) :: start, dim_sizes_u, dim_sizes_v
@@ -2054,6 +2648,46 @@ function convert_checksum_string_to_int(checksum_char) result(checksum_file)
   enddo
 
 end function convert_checksum_string_to_int
+
+!> function to obtain the most recent time in a domain-decomposed netCDF file
+function read_most_recent_time_DD(fileObj) result fileTime
+  type(fmsNetcdfDomainFile_t) fileObj ! netCDF file object returned by open_file
+  ! local
+  real :: fileTime ! most recent time read from netcdf file. If there is no time value, time = 0
+  integer :: dimUnlimSize
+  character(len=40) :: dimUnlimName
+
+  if (.not. check_if_open(fileObj)) &
+   call MOM_error(FATAL, "MOM_io:read_most_recent_time_DD : fileobj must be opened before calling this function")
+
+  call get_unlimited_dimension_name(fileObj,dimUnlimName)
+  call get_dimension_size(fileObj, trim(dimUnlimName), dimUnlimSize)
+  if (dimUnlimSize .le. 0) then
+    fileTime = 0
+  else
+    call read_data(fileObjWrite,trim(dimUnlimName),fileTime, corner=(/dimUnlimSize/), edge_lengths=(/1/))
+  endif
+end function read_most_recent_time_DD
+
+!> function to obtain the most recent time in a non-domain-decomposed netCDF file
+function read_most_recent_time_noDD(fileObj) result fileTime
+  type(fmsNetcdfFile_t) fileObj ! netCDF file object returned by open_file
+  ! local
+  real :: fileTime ! most recent time read from netcdf file. If there is no time value, filetime = 0
+  integer :: dimUnlimSize
+  character(len=40) :: dimUnlimName
+
+  if (.not. check_if_open(fileObj)) &
+   call MOM_error(FATAL, "MOM_io:read_most_recent_time_DD : fileobj must be opened before calling this function")
+  call get_unlimited_dimension_name(fileObj,dimUnlimName)
+  call get_dimension_size(fileObj, trim(dimUnlimName), dimUnlimSize)
+  if (dimUnlimSize .le. 0) then
+    fileTime = 0
+  else
+    call read_data(fileObjWrite,trim(dimUnlimName),fileTime, corner=(/dimUnlimSize/), edge_lengths=(/1/))
+  endif
+end function read_most_recent_time_noDD
+
 
 !> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)

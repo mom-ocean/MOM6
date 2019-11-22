@@ -1187,7 +1187,6 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   real :: Z_to_m_scale ! A unit conversion factor from Z to m.
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1.
   real :: L_to_m_scale ! A unit conversion factor from L to m.
-  integer :: unit
   integer :: file_threading
   integer :: nFlds_used
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -1266,63 +1265,63 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   if (multiple_files) file_threading = MULTIPLE
 
   call create_file(trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, dG=G)
+                   file_threading, dG=G)ls c
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo ; enddo
-  call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
+  call write_field(trim(filepath), fields(1), out_q, "append", G%Domain)
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLonBu(I,J); enddo ; enddo
-  call write_field(unit, fields(2), G%Domain%mpp_domain, out_q)
-  call write_field(unit, fields(3), G%Domain%mpp_domain, G%geoLatT)
-  call write_field(unit, fields(4), G%Domain%mpp_domain, G%geoLonT)
+  call write_field(trim(filepath), fields(2), out_q, "append", G%Domain)
+  call write_field(trim(filepath), fields(3), G%geoLatT, "append", G%Domain)
+  call write_field(trim(filepath), fields(4), G%geoLonT, "append", G%Domain)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = Z_to_m_scale*G%bathyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(5), G%Domain%mpp_domain, out_h)
+  call write_field(trim(filepath), fields(5), out_h, "append", G%Domain)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = s_to_T_scale*G%CoriolisBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(6), G%Domain%mpp_domain, out_q)
+  call write_field(trim(filepath), fields(6), out_q, "append", G%Domain)
 
   !   I think that all of these copies are holdovers from a much earlier
   ! ancestor code in which many of the metrics were macros that could have
   ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dxCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
+  call write_field(trim(filepath), fields(7), out_v, "append", G%Domain)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dyCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
+  call write_field(trim(filepath), fields(8), out_u,"append", G%Domain)
 
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dxCu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
+  call write_field(trim(filepath), fields(9), out_u, "append", G%Domain)
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dyCv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
+  call write_field(trim(filepath), fields(10), out_v, "append", G%Domain)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dxT(i,j); enddo ; enddo
-  call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
+  call write_field(trim(filepath), fields(11), out_h, "append", G%Domain)
   do j=js,je ; do i=is,ie ; out_h(i,j) = L_to_m_scale*G%dyT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
+  call write_field(trim(filepath), fields(12), out_h, "append", G%Domain
 
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = L_to_m_scale*G%dxBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
+  call write_field(trim(filepath), fields(13), out_q, "append", G%Domain)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = L_to_m_scale*G%dyBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
+  call write_field(trim(filepath), fields(14), out_q,"append", G%Domain)
 
   do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
+  call write_field(trim(filepath), fields(15), out_h, "append", G%Domain)
   do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
+  call write_field(trim(filepath), fields(16), out_q, "append", G%Domain)
 
   do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = L_to_m_scale*G%dx_Cv(i,J) ; enddo ; enddo
-  call write_field(unit, fields(17), G%Domain%mpp_domain, out_v)
+  call write_field(trim(filepath), fields(17), out_v, "append", G%Domain)
   do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = L_to_m_scale*G%dy_Cu(I,j) ; enddo ; enddo
-  call write_field(unit, fields(18), G%Domain%mpp_domain, out_u)
-  call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
+  call write_field(trim(filepath), fields(18), out_u, "append", G%Domain)
+  call write_field(trim(filepath), fields(19), G%mask2dT, "append", G%Domain)
 
   if (G%bathymetry_at_vel) then
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dblock_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(20), G%Domain%mpp_domain, out_u)
+    call write_field(trim(filepath), fields(20),out_u, "append", G%Domain)
     do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = Z_to_m_scale*G%Dopen_u(I,j) ; enddo ; enddo
-    call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
+    call write_field(trim(filepath), fields(21), out_u, "append", G%Domain)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dblock_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(22), G%Domain%mpp_domain, out_v)
+    call write_field(trim(filepath), fields(22), out_v, "append", G%Domain)
     do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = Z_to_m_scale*G%Dopen_v(i,J) ; enddo ; enddo
-    call write_field(unit, fields(23), G%Domain%mpp_domain, out_v)
+    call write_field(trim(filepath), fields(23), out_v, "append", G%Domain)
   endif
 
 end subroutine write_ocean_geometry_file

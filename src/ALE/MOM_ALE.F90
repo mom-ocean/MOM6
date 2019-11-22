@@ -1243,7 +1243,6 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   character(len=240) :: filepath
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
-  integer            :: unit
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
@@ -1258,8 +1257,8 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
                     'Layer Center Coordinate Separation','1','i','1')
 
   call create_file(trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(unit, fields(1), ds)
-  call write_field(unit, fields(2), dsi)
+  call write_field(trim(filepath), fields(1), ds, "append")
+  call write_field(trim(filepath), fields(2), dsi, "append")
 
 end subroutine ALE_writeCoordinateFile
 
